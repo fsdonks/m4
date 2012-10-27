@@ -6,22 +6,23 @@
 (defcomponent coords [xy] xy)
 (defcomponent visage [description] description)
 
-(defspec simple-entity 
+(defspec simple-entity []
   [visage (str "The remnant of a lost age, standing alone against the evil that"
                " plagues this land...")
    coords [0 0]
    :playertag :human])
 
 ;Defines an entity that inherits components from the simple-entity
-(defspec complex-entity 
+(defspec complex-entity []
   [build-simple-entity] 
   [visage (str "A much more complicated individual...")
    :playertag :robot
    :goals ['destroy-player]])
 
-;(defspec2 named-entity [name]
-;  [build-simple-entity]
-;  [visage (str "An entity named " name)])
+(defspec named-entity [name]
+  [build-simple-entity]
+  [visage (str "An entity named " name)
+   :uniquename name])
 
 (defn new-player [playername playercount]
   "Defines a new player, extending our simple-entity player spec with an
@@ -30,6 +31,10 @@
   (conj-component 
     (build-simple-entity playername) 
     (->component :playernumber playercount)))
+
+(defspec new-player [playercount]
+  [build-simple-entity]
+  [:playernumber playercount])
 
 (def samplestore 
   (->>
