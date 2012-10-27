@@ -539,44 +539,8 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;                                      expr2)) (partition 2 components)) 
 ;                         (list inlinedcomponents))]))))
 
+
 (defmacro defspec
-  "Allows composition of a set of components into an entity template.  Creates 
-   a function in the current namespace, prefixed with 'build-', taking one arg 
-   - id -  that allows for declaration of entities based on the specification.
-   Currently, components must be declared ahead of time.  Inlined components 
-   can be evaluated ... inline.... as bindings of the form 
-   [:component-name component-data] , where component-name is a keyword.
-   
-   Usage, with defined components and one inline component called playertag:
-
-   (defspec player 
-      [basicstats {:health 30 :agility 30 :strength 30}
-       offense 10
-       visage (str The remnant of a lost age, standing alone against evil)
-       coords {:x 0 :y 0}
-       :playertag :player1]
-       )   
-   Alternately, new specs can be derived from existing specs.  If a vector of 
-   specs is supplied prior to the components, then the specs will be evald, 
-   their components merged, as per merge-entity.  Components with identical 
-   domains will retain the last value in the final spec, which is more or 
-   less how inheritance typically works."
-  ([name specs components]
-    `(defspec ~name 
-       ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
-                                (map #((eval %) (str (quote name))) specs)))) 
-                  components)))
-
-  ([name components]
-    `(defn ~(symbol (str "build-" name)) ~'[id]    
-           (build-entity ~'id 
-             [~@(map (fn [expr]
-                       (if (keyword? (first expr)) 
-                         `(~'->component ~(first expr) ~(second expr)) 
-                         (let [[expr1 expr2] expr]
-                           (list (symbol (str '-> (str expr1))) 
-                                 expr2)))) (partition 2 components))]))))
-(defmacro defspec2
   "Allows composition of a set of components into an entity template.  Creates 
    a function in the current namespace, prefixed with 'build-', taking at least
    one argument - id -  that allows for declaration of entities based on the 
@@ -609,7 +573,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    domains will retain the last value in the final spec, which is more or 
    less how inheritance typically works."
   ([name args specs components]
-    `(defspec2 ~name ~args
+    `(defspec ~name ~args
        ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
                                 (map #((eval %) (str (quote name))) specs)))) 
                   components)))
