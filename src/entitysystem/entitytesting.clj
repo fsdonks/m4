@@ -18,7 +18,11 @@
   [visage (str "A much more complicated individual...")
    :playertag :robot
    :goals ['destroy-player]])
-  
+
+;(defspec2 named-entity [name]
+;  [build-simple-entity]
+;  [visage (str "An entity named " name)])
+
 (defn new-player [playername playercount]
   "Defines a new player, extending our simple-entity player spec with an
    additional playernumber component.  Note, playernumber is defined inline.  
