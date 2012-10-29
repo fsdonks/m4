@@ -218,6 +218,10 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;structure.
 
 
+(defprotocol IEntity 
+  "A protocol for defining fundamental operations on entities."
+  (entity-name [e] "Get the unique name of entity e")
+  (entity-components [e] "Get the unique components that define entity e"))
 
 ;We define a useful container for entities.  We use this as an initial and 
 ;intermediate form for querying and computation, but the entity is "really" 
@@ -225,8 +229,43 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;it's useful to have a logical association of an entity to its components, 
 ;particularly when creating entities, or when inspecting them.  We use this 
 ;to get a reified form of the entity as needed.
-(defrecord entity [name components]) 
+(defrecord entity [name components]
+  IEntity 
+  (entity-name [e] name)
+  (entity-components [e] components)) 
 
+;is there a reason for this? 
+;maybe you cut down on the number of ways an entity can be defined for 
+;now...
+;only maps and records...
+
+;(defn get-key [plist k]
+;  (loop [xs plist]
+;    (when (seq xs)
+;      (if (= (first xs) k)
+;        [k (second xs)]
+;        (recur (rest (rest plist)))))))
+;
+;(defn get-keys [plist]
+;  (map first (partition 2 plist)))
+;
+;(defn get-vals [plist]
+;  (map second (partition 2 plist)))
+;
+;(defn add-property [plist k v]
+;  (reduce conj plist [k v]))
+
+(extend-protocol IEntity
+  nil 
+  (entity-name [n] nil)
+  (entity-components [n] nil)
+
+  clojure.lang.PersistentHashMap
+  (entity-name [m] (get m :name))
+  (entity-components [m] (cond (contains? m :components) (get m :components)
+                               (contains? m :domains) (get m :domains)
+                               :else (dissoc m :name))))
+  
 (defn conj-component
   "Conjoings the component to components in ent ."
   [ent component]
@@ -255,9 +294,10 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defn entity-from-map [m]
   "Allows shorthand definition of entities from simple map structures.
    Keys in the map correspond to component domains of the entity."
-  (let [entname (get m :name)
-        cs (map keyval->component (dissoc m :name))]
-    (->entity entname cs)))
+  (let [entname (get m :name)]
+    (->entity entname 
+              (reduce #(assoc %1 (:domain %2) %2) {}
+                      (map keyval->component (dissoc m :name))))))
                   
 (defn entity->components
   "Retrieve the component data associated with an entity."
