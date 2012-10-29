@@ -152,7 +152,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
         (get-components [db] (:components @state))
         (get-domains [db] (keys (:components @state))))))
 
-;While we're at it...let's allow regular maps to recognize our entitiystore 
+;While we're at it...let's allow regular maps to recognize our entitystore 
 ;functions...
 (defn make-mapstore [entities components] 
   {:entities entities :components components})
@@ -198,6 +198,27 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;heterogenous data across a component.
 (defrecord component [domain data]) 
 
+;The original design for entities had something like this...
+;#entity{:name "Tom" :components {:age {:domain :age :data 31}
+;                                 :height {:domain :height :data 60}}}
+
+;The problem with this organization is that we have redundant information.
+;We could represent entities a bit flatter....
+;#entity{:name "Tom" 
+;        :age 31
+;        :height 60}
+;Still use components, but entities are just flat associations...
+;All entities implicitly have :name or :id component.
+;Still get O(1) access...
+;What does that do for components? 
+;The entity's component domains are encoded implicitly in the keys. 
+;I think it's "nice" to have implicit entity specifications...
+
+;Allows us to extend the notion of "entity" any any arbitrary associative
+;structure.
+
+
+
 ;We define a useful container for entities.  We use this as an initial and 
 ;intermediate form for querying and computation, but the entity is "really" 
 ;stored across entries in the entity store's component tables.  Still, 
@@ -218,6 +239,26 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
               (reduce (fn [acc {:keys [domain] :as component}] 
                         (assoc acc domain component)) {} components)))
 
+(defn keyval->component
+  "Converts key/value pairs into components.  Allows a simple shorthand
+   for composing entities, in that entity components can be contained in 
+   a map."
+  ([k v]
+    (cond (= (type v) component)  v
+          (and (map? v) 
+               (contains? v :domain) 
+               (contains? v :components))
+          (->component (:domain v) (:components v))
+          :else (->component k v)))
+  ([keyval] (keyval->component (first keyval) (fnext keyval))))          
+
+(defn entity-from-map [m]
+  "Allows shorthand definition of entities from simple map structures.
+   Keys in the map correspond to component domains of the entity."
+  (let [entname (get m :name)
+        cs (map keyval->component (dissoc m :name))]
+    (->entity entname cs)))
+                  
 (defn entity->components
   "Retrieve the component data associated with an entity."
   [ent] (vals (:components ent)))
