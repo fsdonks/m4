@@ -579,7 +579,33 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 
 ;It'd also be nice to easily define functions that dispatch on components...
 
+(defn binding->component [expr] 
+   (if (keyword? (first expr)) 
+     `(~'keyval->component ~(first expr) ~(second expr)) 
+     (let [[expr1 expr2] expr]
+       (list (symbol (str '-> (str expr1))) 
+             expr2))))
 
+(defmacro emit-entity-builder [args cs]
+  `(fn [~'id ~@(distinct (remove #{'id} args))]    
+     (~'build-entity ~'id 
+       [~@(map binding->component (partition 2 cs))])))
+
+(defn spec-merger [specs]
+  (fn [id] 
+    (reduce #(apply conj %1 %2) []
+      (:components (merge-entities specs)))))
+
+(defmacro emit-complex-entity-builder [args specs cs]
+  `(let [specbuilder#  (~'spec-merger ~(into [] (map #(let [s (eval %)]
+                                               (if (fn? s) 
+                                                 (s (str (gensym)))
+                                                 s)) specs)))]                             
+     (fn [~'id ~@(distinct (remove #{'id} args))]
+       (let [components# (list ~@(map binding->component (partition 2 cs)))]
+         (~'build-entity ~'id
+             (specbuilder# ~'id))))))
+;           (concat (specbuilder# ~'id) components#))))))
 
 ;macro to define functions for building stock templates for entities
 ;allows us to define namespaced functions to build default entities easily.
@@ -614,26 +640,18 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    specified components.  If no arguments are supplied, a single id arg 
    will be inserted."
   ([args specs components]
-    `(entity-spec ~args
-       ~(concat (reduce #(apply conj %1 %2) [] 
-                        (:components (merge-entities 
-                                       (map #(let [s (eval %)]
-                                                (if (fn? s) 
-                                                  (s (str (gensym)))
-                                                  s)) specs)))) 
-                components)))
+;    (let [cs (concat (reduce #(apply conj %1 %2) [] 
+;                 (:components (merge-entities 
+;                                (map #(let [s (eval %)]
+;                                        (if (fn? s) 
+;                                          (s (str (gensym)))
+;                                          s)) specs)))) 
+;                     components)]
+;       `(~'emit-entity-builder ~args ~cs)))
+       `(~'emit-complex-entity-builder ~args ~specs ~components))
   ([args components]
     (let [args (distinct (remove #{'id} args))]
-      `(fn [~'id ~@args]    
-         (build-entity ~'id 
-           [~@(map (fn [expr] 
-                     (if (keyword? (first expr)) 
-                       `(~'keyval->component ~(first expr) ~(second expr)) 
-                       (let [[expr1 expr2] expr]
-                         (list (symbol (str '-> (str expr1))) 
-                               expr2)))) (partition 2 components))])))))
-
-
+      `(~'emit-entity-builder ~args ~components))))
 
 (defmacro defspec
   "Allows composition of a set of components into an entity template.  Creates 

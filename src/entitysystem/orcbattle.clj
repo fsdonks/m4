@@ -49,7 +49,9 @@
                (str "The " name " defies description!"))])
 
 (defn simple-monster [race & [name]]
-  (monster nil :name (default name race) :race race))
+  (monster nil :name (default name race) 
+               :race race))
+               
 
 (defspec orc [id]
   [(simple-monster :orc)]
@@ -60,7 +62,7 @@
   [(simple-monster :hydra)]
   [:visage "A Malicous hydra!"])
 
-(defspec slime-mold 
+(defspec slime-mold [id] 
   [(simple-monster :slime-mold)]
   [visage "A slime mold!"])
 
