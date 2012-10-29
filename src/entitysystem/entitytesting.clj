@@ -48,7 +48,7 @@
   [& {:keys [store] :or {store samplestore}}]
   (pprint 
     (select-entities store
-                     :from [:playernumber]
-                     :order-by (fn [e] (->> e :components :playernumber :data)))))
+       :from [:playernumber]
+       :order-by (fn [e] (->> e :components :playernumber :data)))))
 
 

@@ -640,8 +640,9 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
          (build-entity ~'id 
            [~@(map (fn [expr] 
                      (if (keyword? (first expr)) 
-                       `(~'->component ~(first expr) ~(second expr)) 
+                       `(~'keyval->component ~(first expr) ~(second expr)) 
                        (let [[expr1 expr2] expr]
                          (list (symbol (str '-> (str expr1))) 
                                expr2)))) (partition 2 components))])))))
+
 
