@@ -584,6 +584,47 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;components for us.  It might behoove us to push this off into a pure data 
 ;representation as well...Actually, the constructor built by defspec actually
 ;"looks" like a record anyway...
+(defmacro entity-spec
+  "Helper macro for composing anonymous entity-building functions.  We can 
+   inline these, or formally define them as with defspec.
+   
+   Formal components declared by defcomponent must be declared ahead of time,
+   but they may be parameterized in the body using arguments supplied by args.
+   Component parameterization is not mutually recursive, thus there is currently 
+   no shared lexical environment between components.
+     
+   Inlined or ad-hoc components  can be evaluated as bindings of the form 
+   [:component-name component-data] , where component-name is a keyword.
+   
+   Usage, with defined components and one inline component called playertag:
+
+   (entity-spec [id h] 
+      [basicstats {:health h :agility 30 :strength 30}
+       offense 10
+       visage (str The remnant of a lost age, standing alone against evil)
+       coords {:x 0 :y 0}
+       :playertag :player1]
+       )   
+   Yields a lambda, (fn [id] ...) which will create entities with the
+   specified components.  If no arguments are supplied, a single id arg 
+   will be inserted."
+  ([args specs components]
+    `(entity-spec ~args
+       ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
+                                (map #((eval %) (str (gensym))) specs)))) 
+                  components)))
+  ([args components]
+    (let [args (distinct (remove #{'id} args))]
+      `(fn [~'id ~@args]    
+         (build-entity ~'id 
+           [~@(map (fn [expr] 
+                     (if (keyword? (first expr)) 
+                       `(~'keyval->component ~(first expr) ~(second expr)) 
+                       (let [[expr1 expr2] expr]
+                         (list (symbol (str '-> (str expr1))) 
+                               expr2)))) (partition 2 components))])))))
+
+
 
 (defmacro defspec
   "Allows composition of a set of components into an entity template.  Creates 
@@ -619,30 +660,84 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    specs is supplied prior to the components, then the specs will be evald, 
    their components merged, as per merge-entity.  Components with identical 
    domains will retain the last value in the final spec, which is more or 
-   less how inheritance typically works.
+   less how inheritance typically works.  If the spec is an anonymous spec, 
+   as defined by entity-spec, then it will work as well.  This should allow 
+   variable means to compose entities, as well as overriding pieces of 
+   entity construction.
 
    An example of another entity leveraging the player spec:  
    (defspec computer-player [aitype name]       
-     [build-player] 
+     [player] 
      [:playertag :computer
       :ai aitype])
    This yields a function, (build-computer-player id aitype name) that 
    produces parameterized computer players."   
   ([name args specs components]
-    `(defspec ~name ~args
-       ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
-                                (map #((eval %) (str (quote name))) specs)))) 
-                  components)))
-
+    `(def ~name (~'spec ~args ~specs ~components)))
   ([name args components]
-    (let [args (distinct (remove #{'id} args))]
-      `(defn ~(symbol (str "build-" name)) [~'id ~@args]    
-         (build-entity ~'id 
-           [~@(map (fn [expr] 
-                     (if (keyword? (first expr)) 
-                       `(~'keyval->component ~(first expr) ~(second expr)) 
-                       (let [[expr1 expr2] expr]
-                         (list (symbol (str '-> (str expr1))) 
-                               expr2)))) (partition 2 components))])))))
+    `(def ~name (~'spec ~args ~components))))
+
+
+;(defmacro defspec
+;  "Allows composition of a set of components into an entity template.  Creates 
+;   a function in the current namespace, prefixed with 'build-', taking at least
+;   one argument - id -  that allows for declaration of entities based on the 
+;   specification.  id will always be the first argument, but callers may 
+;   declare more arguments that will become part of lexical environment of 
+;   the entity building function.  This allows parameterization of entity 
+;   specifications, where component expressions can be further parameterized if 
+;   desired. 
+;   
+;   Formal components declared by defcomponent must be declared ahead of time,
+;   but they may be parameterized in the body using arguments supplied by args.
+;   Component parameterization is not mutually recursive, thus there is currently 
+;   no shared lexical environment between components.
+;     
+;   Inlined or ad-hoc components  can be evaluated as bindings of the form 
+;   [:component-name component-data] , where component-name is a keyword.
+;   
+;   Usage, with defined components and one inline component called playertag:
+;
+;   (defspec player [id] 
+;      [basicstats {:health 30 :agility 30 :strength 30}
+;       offense 10
+;       visage (str The remnant of a lost age, standing alone against evil)
+;       coords {:x 0 :y 0}
+;       :playertag :player1]
+;       )   
+;   Yields a function (build-player id) which will create player entities.
+;   If no arguments are supplied, a single id arg will be inserted.
+;             
+;   Alternately, new specs can be derived from existing specs.  If a vector of 
+;   specs is supplied prior to the components, then the specs will be evald, 
+;   their components merged, as per merge-entity.  Components with identical 
+;   domains will retain the last value in the final spec, which is more or 
+;   less how inheritance typically works.  If the spec is an anonymous spec, 
+;   as defined by entity-spec, then it will work as well.  This should allow 
+;   variable means to compose entities, as well as overriding pieces of 
+;   entity construction.
+;
+;   An example of another entity leveraging the player spec:  
+;   (defspec computer-player [aitype name]       
+;     [player] 
+;     [:playertag :computer
+;      :ai aitype])
+;   This yields a function, (build-computer-player id aitype name) that 
+;   produces parameterized computer players."   
+;  ([name args specs components]
+;    `(defspec ~name ~args
+;       ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
+;                                (map #((eval %) (str (quote name))) specs)))) 
+;                  components)))
+;  ([name args components]
+;    (let [args (distinct (remove #{'id} args))]
+;      `(defn ~name [~'id ~@args]    
+;         (build-entity ~'id 
+;           [~@(map (fn [expr] 
+;                     (if (keyword? (first expr)) 
+;                       `(~'keyval->component ~(first expr) ~(second expr)) 
+;                       (let [[expr1 expr2] expr]
+;                         (list (symbol (str '-> (str expr1))) 
+;                               expr2)))) (partition 2 components))])))))
 
 

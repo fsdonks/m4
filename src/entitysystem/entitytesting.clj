@@ -14,13 +14,13 @@
 
 ;Defines an entity that inherits components from the simple-entity
 (defspec complex-entity []
-  [build-simple-entity] 
+  [simple-entity] 
   [visage (str "A much more complicated individual...")
    :playertag :robot
    :goals ['destroy-player]])
 
 (defspec named-entity [name]
-  [build-simple-entity]
+  [simple-entity]
   [visage (str "An entity named " name)
    :uniquename name])
 
