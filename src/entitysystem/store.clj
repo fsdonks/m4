@@ -474,6 +474,11 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
     `(let [~@(entity-binds (eval ent))]
       ~@body))      
 
+(defn default
+  "If x is nil, returns y.  Used for implementing default values."
+  [& [x y & rest]]
+  (if x x y))
+
 ;I'd like to have a high-level abstraction for querying entities...
 ;If we treat the entity store as a database, our components are tables.
 ;Rows/records are the entities in the component's table.
@@ -610,9 +615,13 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    will be inserted."
   ([args specs components]
     `(entity-spec ~args
-       ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
-                                (map #((eval %) (str (gensym))) specs)))) 
-                  components)))
+       ~(concat (reduce #(apply conj %1 %2) [] 
+                        (:components (merge-entities 
+                                       (map #(let [s (eval %)]
+                                                (if (fn? s) 
+                                                  (s (str (gensym)))
+                                                  s)) specs)))) 
+                components)))
   ([args components]
     (let [args (distinct (remove #{'id} args))]
       `(fn [~'id ~@args]    
@@ -673,9 +682,11 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    This yields a function, (build-computer-player id aitype name) that 
    produces parameterized computer players."   
   ([name args specs components]
-    `(def ~name (~'spec ~args ~specs ~components)))
+    `(def ~name (entity-spec ~args ~specs ~components)))
   ([name args components]
-    `(def ~name (~'spec ~args ~components))))
+    `(def ~name (entity-spec ~args ~components)))
+  ([name components]
+    `(def ~name (entity-spec [] ~components))))
 
 
 ;(defmacro defspec

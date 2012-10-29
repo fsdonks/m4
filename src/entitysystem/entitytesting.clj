@@ -24,22 +24,29 @@
   [visage (str "An entity named " name)
    :uniquename name])
 
+(defspec flying-pig 
+  [:nick "pot bellied terror" 
+   :aged 100 
+   :hitpoints 2000
+   :locomotion 'flyingmotion
+   :temperament :angry!] )
+
 (defn new-player [playername playercount]
   "Defines a new player, extending our simple-entity player spec with an
    additional playernumber component.  Note, playernumber is defined inline.  
    Components are simple data records."
   (conj-component 
-    (build-simple-entity playername) 
+    (simple-entity playername) 
     (->component :playernumber playercount)))
 
 (defspec new-player [playercount]
-  [build-simple-entity]
+  [simple-entity]
   [:playernumber playercount])
 
 (def samplestore 
   (->>
     (conj (map-indexed (fn [idx n] (new-player n idx)) ["tom", "bob"]) 
-          (build-complex-entity "Complicated Entity"))
+          (complex-entity "Complicated Entity"))
        (add-entities emptystore)))
 
 ;execute some queries on the store...

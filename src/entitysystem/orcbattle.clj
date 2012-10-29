@@ -23,8 +23,6 @@
 ;since we're using components....we just get the health component from 
 ;the entity.
 (def nonzero-int (comp inc rand-int))
-(defmacro ->sentence [wordlist]
-  `(apply str (interleave (map str ~wordlist) (repeat \space))))
 
 (defspec player 
   [basicstats {:health 30 :agility 30 :strength 30}
@@ -34,57 +32,35 @@
    coords {:x 0 :y 0}  
    :playertag :player1])
 
-(defspec monster 
-  [basicstats {:health (inc (rand-int 10)) 
-               :agility (inc (rand-int 10))
-               :strength (inc (rand-int 10))}
-   :monster :generic
-   visage "A monster never before seen by the likes of man!"])
+(defn wimpy-stat [] (inc (rand-int 10)))
+(defn strong-stat [] (inc (rand-int 20)))
+(defn super-stat [] (inc (rand-int 30)))
 
-(defspec monster [name race]
-  [basicstats {:health 10
-               :agility 10
-               :strength 10}
-   :race    race
-   :monster name])
+(defn random-stats [& {:keys [health agility strength]}]
+    {:health (default health (wimpy-stat)) 
+     :agility (default agility (wimpy-stat))
+     :strength (default strength (wimpy-stat))})
 
+(defspec monster [id & {:keys [name race stats vis]}]
+  [basicstats (default stats (random-stats))
+   :race      (default race :generic)
+   :monster   true
+   visage     (default vis 
+               (str "The " name " defies description!"))])
 
-(defmacro defmonster 
-  "Monsters will always have a race and a monster component."
-  ([name race description specs components]
-    `(defspec ~name 
-       [build-monster ~@specs]
-       [:monster ~name
-        :race ~race
-        visage ~description
-        ~@components]))
-  ([name race description]
-    `(defmonster ~name ~race ~description nil nil)))
-(defspec orc
-  [build-monster]
+(defn simple-monster [race & [name]]
+  (monster nil :name (default name race) :race race))
+
+(defspec orc [id]
+  [(simple-monster :orc)]
   [:damage-modifier (inc (rand-int 8))
-   :monster :orc 
-   :race :orc 
    visage "A wicked orc!"])
 
-(defspec hydra 
-  [build-monster]
+(defspec hydra [id] 
+  [(simple-monster :hydra)]
   [:visage "A Malicous hydra!"])
 
 (defspec slime-mold 
-  [build-monster]
+  [(simple-monster :slime-mold)]
   [visage "A slime mold!"])
-  
-;this is naive....
-(defn health-system [state0]
-  (reduce (fn [s e] (get-component :basicstats (:entities state))
-
-
-(defspec flying-pig 
-  [nick "pot bellied terror" 
-   aged 100 
-   hitpoints 2000
-   locomotion flyingmotion] (->component :temperament :angry!))
-
-(def red-pig (conj-component (spec-flying-pig :FastRedPig) (->agility 2.5)))
 
