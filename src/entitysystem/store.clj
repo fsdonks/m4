@@ -152,7 +152,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
         (get-components [db] (:components @state))
         (get-domains [db] (keys (:components @state))))))
 
-;While we're at it...let's allow regular maps to recognize our entitiystore 
+;While we're at it...let's allow regular maps to recognize our entitystore 
 ;functions...
 (defn make-mapstore [entities components] 
   {:entities entities :components components})
@@ -198,14 +198,74 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;heterogenous data across a component.
 (defrecord component [domain data]) 
 
+;The original design for entities had something like this...
+;#entity{:name "Tom" :components {:age {:domain :age :data 31}
+;                                 :height {:domain :height :data 60}}}
+
+;The problem with this organization is that we have redundant information.
+;We could represent entities a bit flatter....
+;#entity{:name "Tom" 
+;        :age 31
+;        :height 60}
+;Still use components, but entities are just flat associations...
+;All entities implicitly have :name or :id component.
+;Still get O(1) access...
+;What does that do for components? 
+;The entity's component domains are encoded implicitly in the keys. 
+;I think it's "nice" to have implicit entity specifications...
+
+;Allows us to extend the notion of "entity" any any arbitrary associative
+;structure.
+
+
+(defprotocol IEntity 
+  "A protocol for defining fundamental operations on entities."
+  (entity-name [e] "Get the unique name of entity e")
+  (entity-components [e] "Get the unique components that define entity e"))
+
 ;We define a useful container for entities.  We use this as an initial and 
 ;intermediate form for querying and computation, but the entity is "really" 
 ;stored across entries in the entity store's component tables.  Still, 
 ;it's useful to have a logical association of an entity to its components, 
 ;particularly when creating entities, or when inspecting them.  We use this 
 ;to get a reified form of the entity as needed.
-(defrecord entity [name components]) 
+(defrecord entity [name components]
+  IEntity 
+  (entity-name [e] name)
+  (entity-components [e] components)) 
 
+;is there a reason for this? 
+;maybe you cut down on the number of ways an entity can be defined for 
+;now...
+;only maps and records...
+
+;(defn get-key [plist k]
+;  (loop [xs plist]
+;    (when (seq xs)
+;      (if (= (first xs) k)
+;        [k (second xs)]
+;        (recur (rest (rest plist)))))))
+;
+;(defn get-keys [plist]
+;  (map first (partition 2 plist)))
+;
+;(defn get-vals [plist]
+;  (map second (partition 2 plist)))
+;
+;(defn add-property [plist k v]
+;  (reduce conj plist [k v]))
+
+(extend-protocol IEntity
+  nil 
+  (entity-name [n] nil)
+  (entity-components [n] nil)
+
+  clojure.lang.PersistentHashMap
+  (entity-name [m] (get m :name))
+  (entity-components [m] (cond (contains? m :components) (get m :components)
+                               (contains? m :domains) (get m :domains)
+                               :else (dissoc m :name))))
+  
 (defn conj-component
   "Conjoings the component to components in ent ."
   [ent component]
@@ -218,9 +278,31 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
               (reduce (fn [acc {:keys [domain] :as component}] 
                         (assoc acc domain component)) {} components)))
 
+(defn keyval->component
+  "Converts key/value pairs into components.  Allows a simple shorthand
+   for composing entities, in that entity components can be contained in 
+   a map."
+  ([k v]
+    (cond (= (type v) component)  v
+          (and (map? v) 
+               (contains? v :domain) 
+               (contains? v :components))
+          (->component (:domain v) (:components v))
+          :else (->component k v)))
+  ([keyval] (keyval->component (first keyval) (fnext keyval))))          
+
+(defn entity-from-map [m]
+  "Allows shorthand definition of entities from simple map structures.
+   Keys in the map correspond to component domains of the entity."
+  (let [entname (get m :name)]
+    (->entity entname 
+              (reduce #(assoc %1 (:domain %2) %2) {}
+                      (map keyval->component (dissoc m :name))))))
+                  
 (defn entity->components
   "Retrieve the component data associated with an entity."
   [ent] (vals (:components ent)))
+
 (defn entity->domains
   "Retrieve the domains that the entity is a member of, where 
    domains are the names of components."
@@ -245,11 +327,16 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   [e1 e2] (build-entity (str (:name e1) (:name e2))
                          (concat (entity->components e1)
                                  (entity->components e2))))
+(defn ent-seq? [entcoll]
+  (and (seq entcoll) (= (type (first entcoll)) entity)))
+
 (defn merge-entities 
   "Merges multiple entities.  For overlapping domains, the right-most, or last 
    entity's data is returned in the merge."
   [entcoll] 
-  (reduce merge-entity entcoll))
+  (if (ent-seq? entcoll)
+    (reduce merge-entity entcoll)
+    (throw (Exception. "Expected a collection of entities."))))
                     
 (defn get-info
   "Get a quick summary of the entity, i.e. its components..."
@@ -387,6 +474,11 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
     `(let [~@(entity-binds (eval ent))]
       ~@body))      
 
+(defn default
+  "If x is nil, returns y.  Used for implementing default values."
+  [& [x y & rest]]
+  (if x x y))
+
 ;I'd like to have a high-level abstraction for querying entities...
 ;If we treat the entity store as a database, our components are tables.
 ;Rows/records are the entities in the component's table.
@@ -435,12 +527,39 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    nature of the entity store (e.g. component records are unique relative to the 
    entity).  Returns a (sub)set of the component data."  
   [store & {:keys [from join-by where order-by] :or {from (get-domains store)
-                                                join-by entity-intersection
+                                                join-by :intersection
                                                 where nil
                                                 order-by nil}}]
+  (let [joinfunc (cond (= join-by :intersection) entity-intersection 
+                       (= join-by :union)  entity-union
+                       :else join-by)]                       
   (reduce (fn [acc f] (if (nil? f) acc (f acc))) 
-      (get-entities store (join-by store (if (coll? from) from [from])))
-      [where order-by]))           
+      (get-entities store (joinfunc store (if (coll? from) from [from])))
+      [(when where 
+         (fn [es] (filter where es))) 
+       (when order-by
+         (fn [es] (sort-by order-by es)))])))
+
+(defn select-store [store & {:keys [from join-by where order-by] 
+                             :or {from (get-domains store)
+                                  join-by :intersection
+                                  where nil
+                                  order-by nil}}]
+  (->> (select-entities  store 
+         {:from from :join-by join-by :where where :order-by order-by})
+       (add-entities emptystore)))
+                    
+
+;(defn entities-resembling
+;  "Using the components in entity e as a template, selects entities with 
+;   similar domain membership (shares the same components, but not necessarily 
+;   identical component values)."
+;  [db e]
+;  (select-entities db :from ()
+
+;(defn entities-identical
+;  [db e])
+  
 
 ;a factory for defining component boilerplate for us. 
 (defmacro defcomponent
@@ -448,7 +567,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    general convenience).  Defined components get a namespace-local constructor 
    prefixed with ->  Allows definition of complex constructors for the generic 
    ->component record type.  Args are evaluated in the context of body when 
-   a defined component is evaluated, which allows for parametirizing of 
+   a defined component is evaluated, which allows for parameterizing of 
    components.
 
    Usage:  
@@ -458,6 +577,36 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   `(defn ~(symbol (str "->" name)) ~args 
          (->component ~(keyword name) ~body)))
 
+;It'd also be nice to easily define functions that dispatch on components...
+
+(defn binding->component [expr] 
+   (if (keyword? (first expr)) 
+     `(~'keyval->component ~(first expr) ~(second expr)) 
+     (let [[expr1 expr2] expr]
+       (list (symbol (str '-> (str expr1))) 
+             expr2))))
+
+(defmacro emit-entity-builder [args cs]
+  `(fn [~'id ~@(distinct (remove #{'id} args))]    
+     (~'build-entity ~'id 
+       [~@(map binding->component (partition 2 cs))])))
+
+(defn spec-merger [specs]
+  (fn [id] 
+    (reduce #(apply conj %1 %2) []
+      (:components (merge-entities specs)))))
+
+(defmacro emit-complex-entity-builder [args specs cs]
+  `(let [specbuilder#  (~'spec-merger ~(into [] (map #(let [s (eval %)]
+                                               (if (fn? s) 
+                                                 (s (str (gensym)))
+                                                 s)) specs)))]                             
+     (fn [~'id ~@(distinct (remove #{'id} args))]
+       (let [components# (list ~@(map binding->component (partition 2 cs)))]
+         (~'build-entity ~'id
+             (specbuilder# ~'id))))))
+;           (concat (specbuilder# ~'id) components#))))))
+
 ;macro to define functions for building stock templates for entities
 ;allows us to define namespaced functions to build default entities easily.
 ;I could probably borrow from CLOS here....but I'm not there yet...it'd be 
@@ -466,67 +615,158 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;components for us.  It might behoove us to push this off into a pure data 
 ;representation as well...Actually, the constructor built by defspec actually
 ;"looks" like a record anyway...
-
-(defmacro defspec
-  "Allows composition of a set of components into an entity template.  Creates 
-   a function in the current namespace, prefixed with 'build-', taking one arg 
-   - id -  that allows for declaration of entities based on the specification.
-   Currently, components must be declared ahead of time.  Inlined components 
-   can be evaluated ... inline.... 
+(defmacro entity-spec
+  "Helper macro for composing anonymous entity-building functions.  We can 
+   inline these, or formally define them as with defspec.
+   
+   Formal components declared by defcomponent must be declared ahead of time,
+   but they may be parameterized in the body using arguments supplied by args.
+   Component parameterization is not mutually recursive, thus there is currently 
+   no shared lexical environment between components.
+     
+   Inlined or ad-hoc components  can be evaluated as bindings of the form 
+   [:component-name component-data] , where component-name is a keyword.
    
    Usage, with defined components and one inline component called playertag:
 
-   (defspec player 
+   (entity-spec [id h] 
+      [basicstats {:health h :agility 30 :strength 30}
+       offense 10
+       visage (str The remnant of a lost age, standing alone against evil)
+       coords {:x 0 :y 0}
+       :playertag :player1]
+       )   
+   Yields a lambda, (fn [id] ...) which will create entities with the
+   specified components.  If no arguments are supplied, a single id arg 
+   will be inserted."
+  ([args specs components]
+;    (let [cs (concat (reduce #(apply conj %1 %2) [] 
+;                 (:components (merge-entities 
+;                                (map #(let [s (eval %)]
+;                                        (if (fn? s) 
+;                                          (s (str (gensym)))
+;                                          s)) specs)))) 
+;                     components)]
+;       `(~'emit-entity-builder ~args ~cs)))
+       `(~'emit-complex-entity-builder ~args ~specs ~components))
+  ([args components]
+    (let [args (distinct (remove #{'id} args))]
+      `(~'emit-entity-builder ~args ~components))))
+
+(defmacro defspec
+  "Allows composition of a set of components into an entity template.  Creates 
+   a function in the current namespace, prefixed with 'build-', taking at least
+   one argument - id -  that allows for declaration of entities based on the 
+   specification.  id will always be the first argument, but callers may 
+   declare more arguments that will become part of lexical environment of 
+   the entity building function.  This allows parameterization of entity 
+   specifications, where component expressions can be further parameterized if 
+   desired. 
+   
+   Formal components declared by defcomponent must be declared ahead of time,
+   but they may be parameterized in the body using arguments supplied by args.
+   Component parameterization is not mutually recursive, thus there is currently 
+   no shared lexical environment between components.
+     
+   Inlined or ad-hoc components  can be evaluated as bindings of the form 
+   [:component-name component-data] , where component-name is a keyword.
+   
+   Usage, with defined components and one inline component called playertag:
+
+   (defspec player [id] 
       [basicstats {:health 30 :agility 30 :strength 30}
        offense 10
        visage (str The remnant of a lost age, standing alone against evil)
-       coords {:x 0 :y 0}]
-       (->component  :playertag :player1))
-   
+       coords {:x 0 :y 0}
+       :playertag :player1]
+       )   
+   Yields a function (build-player id) which will create player entities.
+   If no arguments are supplied, a single id arg will be inserted.
+             
    Alternately, new specs can be derived from existing specs.  If a vector of 
    specs is supplied prior to the components, then the specs will be evald, 
    their components merged, as per merge-entity.  Components with identical 
    domains will retain the last value in the final spec, which is more or 
-   less how inheritance typically works."
+   less how inheritance typically works.  If the spec is an anonymous spec, 
+   as defined by entity-spec, then it will work as well.  This should allow 
+   variable means to compose entities, as well as overriding pieces of 
+   entity construction.
+
+   An example of another entity leveraging the player spec:  
+   (defspec computer-player [aitype name]       
+     [player] 
+     [:playertag :computer
+      :ai aitype])
+   This yields a function, (build-computer-player id aitype name) that 
+   produces parameterized computer players."   
+  ([name args specs components]
+    `(def ~name (entity-spec ~args ~specs ~components)))
+  ([name args components]
+    `(def ~name (entity-spec ~args ~components)))
   ([name components]
-    `(defspec name components nil))
-  ([name specs components & inlinedcomponents]       
-      `(defspec ~name ~components 
-         ~@(concat (:components (merge-entities (map #(% name) specs))) 
-                    inlinedcomponents)))
-  ([name components inlinedcomponents]
-    `(defn ~(symbol (str "build-" name)) ~'[id]    
-           (build-entity ~'id 
-             [~@(concat (map (fn [[expr1 expr2]]
-                               (list (symbol (str '-> (str expr1))) 
-                                      expr2)) (partition 2 components)) 
-                         (list inlinedcomponents))]))))
-    
-;; Examples/Tests....
-(comment 
-(defcomponent coords [xy] xy)
-(defcomponent visage [description] description)
+    `(def ~name (entity-spec [] ~components))))
 
-(defspec simple-entity 
-  [visage (str "The remnant of a lost age, standing alone against the evil that"
-               " plagues this land...")
-   coords {:x 0 :y 0}]
-  (->component  :playertag :human))
 
-(defspec complex-entity [build-simple-entity] 
-  [visage (str "A complicated story...")]
-  (->component :playertag :robot))
-  
-(defn new-player [playername playercount] 
-  (conj-component 
-    (build-simple-entity playername) 
-    (->component :playernumber playercount)))
+;(defmacro defspec
+;  "Allows composition of a set of components into an entity template.  Creates 
+;   a function in the current namespace, prefixed with 'build-', taking at least
+;   one argument - id -  that allows for declaration of entities based on the 
+;   specification.  id will always be the first argument, but callers may 
+;   declare more arguments that will become part of lexical environment of 
+;   the entity building function.  This allows parameterization of entity 
+;   specifications, where component expressions can be further parameterized if 
+;   desired. 
+;   
+;   Formal components declared by defcomponent must be declared ahead of time,
+;   but they may be parameterized in the body using arguments supplied by args.
+;   Component parameterization is not mutually recursive, thus there is currently 
+;   no shared lexical environment between components.
+;     
+;   Inlined or ad-hoc components  can be evaluated as bindings of the form 
+;   [:component-name component-data] , where component-name is a keyword.
+;   
+;   Usage, with defined components and one inline component called playertag:
+;
+;   (defspec player [id] 
+;      [basicstats {:health 30 :agility 30 :strength 30}
+;       offense 10
+;       visage (str The remnant of a lost age, standing alone against evil)
+;       coords {:x 0 :y 0}
+;       :playertag :player1]
+;       )   
+;   Yields a function (build-player id) which will create player entities.
+;   If no arguments are supplied, a single id arg will be inserted.
+;             
+;   Alternately, new specs can be derived from existing specs.  If a vector of 
+;   specs is supplied prior to the components, then the specs will be evald, 
+;   their components merged, as per merge-entity.  Components with identical 
+;   domains will retain the last value in the final spec, which is more or 
+;   less how inheritance typically works.  If the spec is an anonymous spec, 
+;   as defined by entity-spec, then it will work as well.  This should allow 
+;   variable means to compose entities, as well as overriding pieces of 
+;   entity construction.
+;
+;   An example of another entity leveraging the player spec:  
+;   (defspec computer-player [aitype name]       
+;     [player] 
+;     [:playertag :computer
+;      :ai aitype])
+;   This yields a function, (build-computer-player id aitype name) that 
+;   produces parameterized computer players."   
+;  ([name args specs components]
+;    `(defspec ~name ~args
+;       ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
+;                                (map #((eval %) (str (quote name))) specs)))) 
+;                  components)))
+;  ([name args components]
+;    (let [args (distinct (remove #{'id} args))]
+;      `(defn ~name [~'id ~@args]    
+;         (build-entity ~'id 
+;           [~@(map (fn [expr] 
+;                     (if (keyword? (first expr)) 
+;                       `(~'keyval->component ~(first expr) ~(second expr)) 
+;                       (let [[expr1 expr2] expr]
+;                         (list (symbol (str '-> (str expr1))) 
+;                               expr2)))) (partition 2 components))])))))
 
-(def samplestore 
-  (->> ["tom", "bob"]
-       (map-indexed (fn [idx n] (new-player n idx)))
-       (add-entities emptystore)))
 
-(doseq [ent (entity-seq samplestore)]
-  (println (get-info ent)))
-)   

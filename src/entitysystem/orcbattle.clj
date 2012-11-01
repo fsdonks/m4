@@ -2,52 +2,67 @@
 ;architecture....
 
 (ns entitysystem.orcbattle 
-  (:use [entitysystem.core
-         DEVS.schedule]))
+  (:use [entitysystem.store]))
 
 (defrecord gamestate [entities monsternum])
 
-(def new-game (->gamestate emptybase 12)) 
+(def new-game (->gamestate emptystore 12)) 
 
 (defcomponent coords [xy] xy)
 (defcomponent basicstats [{:keys [health agility strength] :as stats}] stats)
 (defcomponent offense [n] n)
 (defcomponent actor [race] race)
 (defcomponent timer [init] init)
-(defcomponent events [] (initial-schedule))
+;(defcomponent events [] (initial-schedule))
+;(defcomponent events [] )
 (defcomponent deathcry [description] description)
 (defcomponent visage [description] description) 
+
+;in conrad's version, structs provide accessors automatically. 
+;so you get monster-health for instance.
+;since we're using components....we just get the health component from 
+;the entity.
+(def nonzero-int (comp inc rand-int))
 
 (defspec player 
   [basicstats {:health 30 :agility 30 :strength 30}
    offense 10
    visage (str "The remnant of a lost age, standing alone against the evil that"
                " plagues this land...")
-   coords {:x 0 :y 0}]
-  (->component  :playertag :player1))
+   coords {:x 0 :y 0}  
+   :playertag :player1])
 
-(defspec monster 
-  [basicstats {:health (inc (rand-int 10)) 
-               :agility (inc (rand-int 10))
-               :strength (inc (rand-int 10))}
+(defn wimpy-stat [] (inc (rand-int 10)))
+(defn strong-stat [] (inc (rand-int 20)))
+(defn super-stat [] (inc (rand-int 30)))
 
-(defn evil-orc [] 
-  ((spec-monster)
-    (conj-component 
+(defn random-stats [& {:keys [health agility strength]}]
+    {:health (default health (wimpy-stat)) 
+     :agility (default agility (wimpy-stat))
+     :strength (default strength (wimpy-stat))})
 
-(defn dead? [stats] (<= 0 (:health stats))) 
-(defn active? [stats] (>= 0 (:agility stats))) 
-(defn damage [strength] 
-;this is naive....
-(defn health-system [state0]
-  (reduce (fn [s e] (get-component :basicstats (:entities state))
+(defspec monster [id & {:keys [name race stats vis]}]
+  [basicstats (default stats (random-stats))
+   :race      (default race :generic)
+   :monster   true
+   visage     (default vis 
+               (str "The " name " defies description!"))])
 
+(defn simple-monster [race & [name]]
+  (monster nil :name (default name race) 
+               :race race))
+               
 
-(defspec flying-pig 
-  [nick "pot bellied terror" 
-   aged 100 
-   hitpoints 2000
-   locomotion flyingmotion] (->component :temperament :angry!))
+(defspec orc [id]
+  [(simple-monster :orc)]
+  [:damage-modifier (inc (rand-int 8))
+   visage "A wicked orc!"])
 
-(def red-pig (conj-component (spec-flying-pig :FastRedPig) (->agility 2.5)))
+(defspec hydra [id] 
+  [(simple-monster :hydra)]
+  [:visage "A Malicous hydra!"])
+
+(defspec slime-mold [id] 
+  [(simple-monster :slime-mold)]
+  [visage "A slime mold!"])
 

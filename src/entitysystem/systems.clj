@@ -32,9 +32,6 @@
 ;This makes them amenable to static typing, and allows us to determine where
 ;systems are unrelated (i.e. they operate on independent component data).
 
-
-
-
 ;helper functions...
 (defn get-line
   ([] (deref (future (read-line))))
