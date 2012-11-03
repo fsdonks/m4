@@ -232,7 +232,9 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defrecord entity [name components]
   IEntity 
   (entity-name [e] name)
-  (entity-components [e] components)) 
+  (entity-components [e] components))
+
+(def empty-entity (->entity nil {}))
 
 ;is there a reason for this? 
 ;maybe you cut down on the number of ways an entity can be defined for 
@@ -267,16 +269,19 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
                                :else (dissoc m :name))))
   
 (defn conj-component
-  "Conjoings the component to components in ent ."
+  "Conjoins the component to components in ent ."
   [ent component]
   (assoc-in ent [:components (:domain component)] component)) 
 
+(defn conj-components
+  "Conjoins each component in cs to the components in ent ."
+  [ent cs]
+  (reduce (fn [e c] (conj-component e c)) ent cs))
+
 (defn build-entity
   "Assembles an entity record from one or more component records."
-  [name components] 
-    (->entity name 
-              (reduce (fn [acc {:keys [domain] :as component}] 
-                        (assoc acc domain component)) {} components)))
+  [name components]
+  (conj-components (->entity name {})  components))
 
 (defn keyval->component
   "Converts key/value pairs into components.  Allows a simple shorthand
@@ -612,8 +617,9 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
      (fn [~'id ~@(distinct (remove #{'id} args))]
        (let [components# (list ~@(map binding->component (partition 2 cs)))]
          (~'build-entity ~'id
-             (specbuilder# ~'id))))))
+;             components#)))))
 ;           (concat (specbuilder# ~'id) components#))))))
+           (conj-components (specbuilder# ~'id) components#))))))
 
 ;macro to define functions for building stock templates for entities
 ;allows us to define namespaced functions to build default entities easily.

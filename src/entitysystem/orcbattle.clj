@@ -23,6 +23,36 @@
 ;since we're using components....we just get the health component from 
 ;the entity.
 (def nonzero-int (comp inc rand-int))
+(defn rand-int-between
+  "Returns a random integer between x1 and x2.."
+  [x1 x2]  
+  (+ (rand-int (- (inc x2) x1)) x1))  
+
+(defn wimpy-stat [] (rand-int-between 1 10))
+(defn strong-stat [] (rand-int-between 10 20))
+(defn super-stat [] (rand-int-between 20 30))
+
+(defn random-stats 
+  [& {:keys [health agility strength]}]
+  "Rolls up a set of random statistics for health, agility, and strength.
+   Stats can be overriden using key arguments."
+    {:health (default health (wimpy-stat)) 
+     :agility (default agility (wimpy-stat))
+     :strength (default strength (wimpy-stat))})
+
+(defn fighter-stats []
+  (random-stats :health   (strong-stat) 
+                :strength (super-stat)))
+
+(defn rogue-stats []
+  (random-stats :health   (wimpy-stat) 
+                :strength (wimpy-stat)
+                :agility  (super-stat)))
+
+(defn boss-stats []
+  (random-stats :health (super-stat)
+                :strength (strong-stat)
+                :agility (strong-stat)))
 
 (defspec player 
   [basicstats {:health 30 :agility 30 :strength 30}
@@ -32,14 +62,6 @@
    coords {:x 0 :y 0}  
    :playertag :player1])
 
-(defn wimpy-stat [] (inc (rand-int 10)))
-(defn strong-stat [] (inc (rand-int 20)))
-(defn super-stat [] (inc (rand-int 30)))
-
-(defn random-stats [& {:keys [health agility strength]}]
-    {:health (default health (wimpy-stat)) 
-     :agility (default agility (wimpy-stat))
-     :strength (default strength (wimpy-stat))})
 
 (defspec monster [id & {:keys [name race stats vis]}]
   [basicstats (default stats (random-stats))
@@ -53,7 +75,7 @@
                :race race))
                
 (defspec orc [id]
-  [(monster id :stats (if (odd? id) () ()))]
+  [(monster id :stats (brawler-stats))]
   [:damage-modifier (inc (rand-int 8))
    visage "A wicked orc!"])
 
