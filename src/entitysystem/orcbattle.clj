@@ -52,9 +52,8 @@
   (monster nil :name (default name race) 
                :race race))
                
-
 (defspec orc [id]
-  [(simple-monster :orc)]
+  [(monster id :stats (if (odd? id) () ()))]
   [:damage-modifier (inc (rand-int 8))
    visage "A wicked orc!"])
 

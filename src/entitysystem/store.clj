@@ -328,7 +328,10 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
                          (concat (entity->components e1)
                                  (entity->components e2))))
 (defn ent-seq? [entcoll]
-  (and (seq entcoll) (= (type (first entcoll)) entity)))
+  (and (not (empty? entcoll))
+       (or  (coll? (first entcoll))  
+         (= (type (first entcoll)) entity))))
+            
 
 (defn merge-entities 
   "Merges multiple entities.  For overlapping domains, the right-most, or last 
@@ -594,13 +597,18 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defn spec-merger [specs]
   (fn [id] 
     (reduce #(apply conj %1 %2) []
-      (:components (merge-entities specs)))))
+      (:components (merge-entities 
+                     (map (fn [s] (if (fn? s) (s id) s)) specs))))))
 
+;specs are either [symbol]
+;or [(entity-builder args)]
+;where symbol is a function of one arg, ID, 
+;entity-builder is a function of more than one arg, to be threaded an ID...
+;
 (defmacro emit-complex-entity-builder [args specs cs]
-  `(let [specbuilder#  (~'spec-merger ~(into [] (map #(let [s (eval %)]
-                                               (if (fn? s) 
-                                                 (s (str (gensym)))
-                                                 s)) specs)))]                             
+  `(let [specbuilder#  (~'spec-merger
+                         (list ~@(for [s specs] 
+                                   (if (coll? s) `(~'fn [~'id]  ~s) `(list ~s ~'id)))))]                             
      (fn [~'id ~@(distinct (remove #{'id} args))]
        (let [components# (list ~@(map binding->component (partition 2 cs)))]
          (~'build-entity ~'id
