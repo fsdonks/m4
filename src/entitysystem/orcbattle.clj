@@ -32,15 +32,15 @@
 (defn strong-stat [] (rand-int-between 10 20))
 (defn super-stat [] (rand-int-between 20 30))
 
-(defn random-stats 
-  [& {:keys [health agility strength]}]
+(defn random-stats
   "Rolls up a set of random statistics for health, agility, and strength.
    Stats can be overriden using key arguments."
+  [& {:keys [health agility strength]}]
     {:health (default health (wimpy-stat)) 
      :agility (default agility (wimpy-stat))
      :strength (default strength (wimpy-stat))})
 
-(defn fighter-stats []
+(defn brawler-stats []
   (random-stats :health   (strong-stat) 
                 :strength (super-stat)))
 
@@ -74,7 +74,9 @@
   (monster nil :name (default name race) 
                :race race))
                
-(defspec orc [id]
+(defspec orc
+  "Orcs are simple monsters...vicious in nature."
+  [id]
   [(monster id :stats (brawler-stats))]
   [:damage-modifier (inc (rand-int 8))
    visage "A wicked orc!"])

@@ -616,10 +616,8 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
                                    (if (coll? s) `(~'fn [~'id]  ~s) `(list ~s ~'id)))))]                             
      (fn [~'id ~@(distinct (remove #{'id} args))]
        (let [components# (list ~@(map binding->component (partition 2 cs)))]
-         (~'build-entity ~'id
-;             components#)))))
-;           (concat (specbuilder# ~'id) components#))))))
-           (conj-components (specbuilder# ~'id) components#))))))
+           (build-entity ~'id (concat (specbuilder# ~'id) 
+                                      components#))))))
 
 ;macro to define functions for building stock templates for entities
 ;allows us to define namespaced functions to build default entities easily.
@@ -654,14 +652,6 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    specified components.  If no arguments are supplied, a single id arg 
    will be inserted."
   ([args specs components]
-;    (let [cs (concat (reduce #(apply conj %1 %2) [] 
-;                 (:components (merge-entities 
-;                                (map #(let [s (eval %)]
-;                                        (if (fn? s) 
-;                                          (s (str (gensym)))
-;                                          s)) specs)))) 
-;                     components)]
-;       `(~'emit-entity-builder ~args ~cs)))
        `(~'emit-complex-entity-builder ~args ~specs ~components))
   ([args components]
     (let [args (distinct (remove #{'id} args))]
@@ -698,89 +688,31 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    If no arguments are supplied, a single id arg will be inserted.
              
    Alternately, new specs can be derived from existing specs.  If a vector of 
-   specs is supplied prior to the components, then the specs will be evald, 
-   their components merged, as per merge-entity.  Components with identical 
-   domains will retain the last value in the final spec, which is more or 
-   less how inheritance typically works.  If the spec is an anonymous spec, 
-   as defined by entity-spec, then it will work as well.  This should allow 
-   variable means to compose entities, as well as overriding pieces of 
-   entity construction.
+   specs is supplied prior to the components, then a spec-merging function is 
+   created to initialize each entity.  The merging function will merge each 
+   spec into a new entity (possibly causing side-effects), before adding the 
+   components below.  Components with identical domains will retain the last 
+   value in the final spec, which is more or less how inheritance typically 
+   works.  If the spec is an anonymous spec, as defined by entity-spec, then it 
+   will work as well.  This should allow variable means to compose entities, 
+   as well as overriding pieces of entity construction.
 
    An example of another entity leveraging the player spec:  
    (defspec computer-player [aitype name]       
      [player] 
      [:playertag :computer
       :ai aitype])
-   This yields a function, (build-computer-player id aitype name) that 
+   This yields a function, (computer-player id aitype name) that 
    produces parameterized computer players."   
+  ([name docstring args specs components]
+    `(do 
+       (def
+          ^{:doc ~docstring}
+         ~name (entity-spec ~args ~specs ~components))))
+       ;(with-meta (var ~name) (assoc (meta (var ~name)) :doc ~docstring))))
   ([name args specs components]
     `(def ~name (entity-spec ~args ~specs ~components)))
   ([name args components]
     `(def ~name (entity-spec ~args ~components)))
   ([name components]
     `(def ~name (entity-spec [] ~components))))
-
-
-;(defmacro defspec
-;  "Allows composition of a set of components into an entity template.  Creates 
-;   a function in the current namespace, prefixed with 'build-', taking at least
-;   one argument - id -  that allows for declaration of entities based on the 
-;   specification.  id will always be the first argument, but callers may 
-;   declare more arguments that will become part of lexical environment of 
-;   the entity building function.  This allows parameterization of entity 
-;   specifications, where component expressions can be further parameterized if 
-;   desired. 
-;   
-;   Formal components declared by defcomponent must be declared ahead of time,
-;   but they may be parameterized in the body using arguments supplied by args.
-;   Component parameterization is not mutually recursive, thus there is currently 
-;   no shared lexical environment between components.
-;     
-;   Inlined or ad-hoc components  can be evaluated as bindings of the form 
-;   [:component-name component-data] , where component-name is a keyword.
-;   
-;   Usage, with defined components and one inline component called playertag:
-;
-;   (defspec player [id] 
-;      [basicstats {:health 30 :agility 30 :strength 30}
-;       offense 10
-;       visage (str The remnant of a lost age, standing alone against evil)
-;       coords {:x 0 :y 0}
-;       :playertag :player1]
-;       )   
-;   Yields a function (build-player id) which will create player entities.
-;   If no arguments are supplied, a single id arg will be inserted.
-;             
-;   Alternately, new specs can be derived from existing specs.  If a vector of 
-;   specs is supplied prior to the components, then the specs will be evald, 
-;   their components merged, as per merge-entity.  Components with identical 
-;   domains will retain the last value in the final spec, which is more or 
-;   less how inheritance typically works.  If the spec is an anonymous spec, 
-;   as defined by entity-spec, then it will work as well.  This should allow 
-;   variable means to compose entities, as well as overriding pieces of 
-;   entity construction.
-;
-;   An example of another entity leveraging the player spec:  
-;   (defspec computer-player [aitype name]       
-;     [player] 
-;     [:playertag :computer
-;      :ai aitype])
-;   This yields a function, (build-computer-player id aitype name) that 
-;   produces parameterized computer players."   
-;  ([name args specs components]
-;    `(defspec ~name ~args
-;       ~(concat (reduce #(apply conj %1 %2) [] (:components (merge-entities 
-;                                (map #((eval %) (str (quote name))) specs)))) 
-;                  components)))
-;  ([name args components]
-;    (let [args (distinct (remove #{'id} args))]
-;      `(defn ~name [~'id ~@args]    
-;         (build-entity ~'id 
-;           [~@(map (fn [expr] 
-;                     (if (keyword? (first expr)) 
-;                       `(~'keyval->component ~(first expr) ~(second expr)) 
-;                       (let [[expr1 expr2] expr]
-;                         (list (symbol (str '-> (str expr1))) 
-;                               expr2)))) (partition 2 components))])))))
-
-
