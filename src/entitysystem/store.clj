@@ -558,10 +558,9 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defn binding->component [expr] 
    (if (keyword? (first expr)) 
      `(~'keyval->component ~(first expr) ~(second expr))
-     expr))
+      expr))
 ;     (let [[expr1 expr2] expr]
-;       (list (symbol (str '-> (str expr1))) 
-;             expr2))))
+;       (list expr1 expr2))))
 
 (defmacro emit-entity-builder [args cs]
   `(fn [~'id ~@(distinct (remove #{'id} args))]    
@@ -583,11 +582,13 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   `(let [specbuilder#  (~'spec-merger
                          (list ~@(for [s specs] 
 ;                                   (if (coll? s) `(~'fn [~'id]  ~s) `(list ~s ~'id)))))]
-                                        (if (coll? s) `(~'fn [~'id]  ~s) s))))]                             
+                                   (if (coll? s) `(~'fn [~'id]  ~s) s))))]                             
      (fn [~'id ~@(distinct (remove #{'id} args))]
        (let [components# (list ~@(map binding->component (partition 2 cs)))]
-           (build-entity ~'id (concat (specbuilder# ~'id) 
-                                      components#))))))
+           (build-entity ~'id (specbuilder# ~'id)))))) 
+         
+;           (build-entity ~'id (concat (specbuilder# ~'id) 
+;                                      components#))))))
 
 ;macro to define functions for building stock templates for entities
 ;allows us to define namespaced functions to build default entities easily.

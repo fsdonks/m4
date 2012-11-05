@@ -19,17 +19,21 @@
    :playertag :robot
    :goals ['destroy-player]])
 
+(defentity complex-entity [id]
+  [simple-entity] [])
+
+
 (defentity named-entity [name]
   [simple-entity]
   [visage (str "An entity named " name)
    :uniquename name])
 
-(defentity flying-pig 
+(defentity flying-pig [id]
   [:nick "pot bellied terror" 
    :aged 100 
    :hitpoints 2000
    :locomotion 'flyingmotion
-   :temperament :angry!] )
+   :temperament :angry!])
 
 (defn new-player [playername playercount]
   "Defines a new player, extending our simple-entity player spec with an
