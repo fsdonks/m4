@@ -8,15 +8,32 @@
 
 (def new-game (->gamestate emptystore 12)) 
 
-(defcomponent coords [xy] xy)
-(defcomponent basicstats [{:keys [health agility strength] :as stats}] stats)
-(defcomponent offense [n] n)
-(defcomponent actor [race] race)
-(defcomponent timer [init] init)
+(defcomponent coords
+  "A simple set of 2D coordinates."
+  [xy] xy)
+(defcomponent basicstats 
+  "Stats that all active entities share."
+  [{:keys [health agility strength] :as stats}] 
+  stats)
+(defcomponent offense
+  "Entities that are capable of offense."
+  [x] x)
+(defcomponent race 
+  "Entities that have a race."
+  [race] race)
+(defcomponent timer
+  "A timer with an initial time."
+  [init] init)
+(defcomponent deathcry
+  "Entities that evoke a cry when they perish."
+  [description] description)
+(defcomponent visage
+  "A text description of the entity."
+  [description] description) 
+
 ;(defcomponent events [] (initial-schedule))
 ;(defcomponent events [] )
-(defcomponent deathcry [description] description)
-(defcomponent visage [description] description) 
+
 
 ;in conrad's version, structs provide accessors automatically. 
 ;so you get monster-health for instance.
@@ -54,16 +71,16 @@
                 :strength (strong-stat)
                 :agility (strong-stat)))
 
-(defspec player 
+(defentity player [id]
+  "A simple template for human players."
   [basicstats {:health 30 :agility 30 :strength 30}
    offense 10
    visage (str "The remnant of a lost age, standing alone against the evil that"
                " plagues this land...")
    coords {:x 0 :y 0}  
-   :playertag :player1])
+   :playertag (keyword (str "player" id))])
 
-
-(defspec monster [id & {:keys [name race stats vis]}]
+(defentity monster [id & {:keys [name race stats vis]}]
   [basicstats (default stats (random-stats))
    :race      (default race :generic)
    :monster   true
@@ -74,18 +91,28 @@
   (monster nil :name (default name race) 
                :race race))
                
-(defspec orc
-  "Orcs are simple monsters...vicious in nature."
+(defentity orc
+  "Orcs are simple monsters...vicious in nature.
+   Creates a random orc."
   [id]
   [(monster id :stats (brawler-stats))]
   [:damage-modifier (inc (rand-int 8))
    visage "A wicked orc!"])
 
-(defspec hydra [id] 
+(defentity hydra
+  "Hydras are multi-headed beasts that can regenerate health.
+   Creates a random hydra."
+  [id] 
   [(simple-monster :hydra)]
-  [:visage "A Malicous hydra!"])
+  [:visage "A Malicous hydra!"
+   :specials {:regeneration 1}])
 
-(defspec slime-mold [id] 
+(defentity slime-mold
+  "Slime-molds are weak monsters that slow down prey, feasting 
+   after starvation or suffocation takes hold.
+   Creates a random slime-mold."
+  [id]
   [(simple-monster :slime-mold)]
-  [visage "A slime mold!"])
+  [visage "A slime mold!"
+   :specials {:drain :agility} ])
 

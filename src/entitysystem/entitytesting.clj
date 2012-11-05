@@ -6,25 +6,25 @@
 (defcomponent coords [xy] xy)
 (defcomponent visage [description] description)
 
-(defspec simple-entity []
+(defentity simple-entity [id]
   [visage (str "The remnant of a lost age, standing alone against the evil that"
                " plagues this land...")
    coords [0 0]
    :playertag :human])
 
 ;Defines an entity that inherits components from the simple-entity
-(defspec complex-entity []
+(defentity complex-entity [id]
   [simple-entity] 
   [visage (str "A much more complicated individual...")
    :playertag :robot
    :goals ['destroy-player]])
 
-(defspec named-entity [name]
+(defentity named-entity [name]
   [simple-entity]
   [visage (str "An entity named " name)
    :uniquename name])
 
-(defspec flying-pig 
+(defentity flying-pig 
   [:nick "pot bellied terror" 
    :aged 100 
    :hitpoints 2000
@@ -39,7 +39,7 @@
     (simple-entity playername) 
     (->component :playernumber playercount)))
 
-(defspec new-player [playercount]
+(defentity new-player [playercount]
   [simple-entity]
   [:playernumber playercount])
 

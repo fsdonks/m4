@@ -183,8 +183,6 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 	  (get-components [db] (with-store db components))
 	  (get-domains [db] (with-store db (keys components))))
 
-
-
 (def emptystore (->EntityStore {} {}))
 (defn make-mutable 
   "Create an empty mutable entity store, or derive one from an existing 
@@ -197,26 +195,6 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;we'll follow that practice, but nothing is technically stopping us from having
 ;heterogenous data across a component.
 (defrecord component [domain data]) 
-
-;The original design for entities had something like this...
-;#entity{:name "Tom" :components {:age {:domain :age :data 31}
-;                                 :height {:domain :height :data 60}}}
-
-;The problem with this organization is that we have redundant information.
-;We could represent entities a bit flatter....
-;#entity{:name "Tom" 
-;        :age 31
-;        :height 60}
-;Still use components, but entities are just flat associations...
-;All entities implicitly have :name or :id component.
-;Still get O(1) access...
-;What does that do for components? 
-;The entity's component domains are encoded implicitly in the keys. 
-;I think it's "nice" to have implicit entity specifications...
-
-;Allows us to extend the notion of "entity" any any arbitrary associative
-;structure.
-
 
 (defprotocol IEntity 
   "A protocol for defining fundamental operations on entities."
@@ -235,27 +213,6 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   (entity-components [e] components))
 
 (def empty-entity (->entity nil {}))
-
-;is there a reason for this? 
-;maybe you cut down on the number of ways an entity can be defined for 
-;now...
-;only maps and records...
-
-;(defn get-key [plist k]
-;  (loop [xs plist]
-;    (when (seq xs)
-;      (if (= (first xs) k)
-;        [k (second xs)]
-;        (recur (rest (rest plist)))))))
-;
-;(defn get-keys [plist]
-;  (map first (partition 2 plist)))
-;
-;(defn get-vals [plist]
-;  (map second (partition 2 plist)))
-;
-;(defn add-property [plist k v]
-;  (reduce conj plist [k v]))
 
 (extend-protocol IEntity
   nil 
@@ -569,7 +526,16 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;  [db e])
   
 
-;a factory for defining component boilerplate for us. 
+;a factory for defining component boilerplate for us.
+;(defn component-body [args body]
+;  (if (empty? body)
+;    (if (= 1 (count args))
+;      (if (map? (first args)) 
+;        (:as (first args))
+;        (first args))      
+;    (into [] args))
+;  body))
+
 (defmacro defcomponent
   "Macro to define a new component (for use in specifying entity templates and 
    general convenience).  Defined components get a namespace-local constructor 
@@ -580,19 +546,22 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 
    Usage:  
   (defcomponent basicstats [{:keys [health agility strength] :as stats}] stats)"
-  
-  [name args body]
-  `(defn ~(symbol (str "->" name)) ~args 
-         (->component ~(keyword name) ~body)))
+  ([name args body]                       
+    `(defn ~name ~args 
+       (->component ~(keyword name) ~body)))
+  ([name docstring args body]
+    `(defn ~name ~docstring ~args 
+       (->component ~(keyword name) ~body))))
 
 ;It'd also be nice to easily define functions that dispatch on components...
 
 (defn binding->component [expr] 
    (if (keyword? (first expr)) 
-     `(~'keyval->component ~(first expr) ~(second expr)) 
-     (let [[expr1 expr2] expr]
-       (list (symbol (str '-> (str expr1))) 
-             expr2))))
+     `(~'keyval->component ~(first expr) ~(second expr))
+     expr))
+;     (let [[expr1 expr2] expr]
+;       (list (symbol (str '-> (str expr1))) 
+;             expr2))))
 
 (defmacro emit-entity-builder [args cs]
   `(fn [~'id ~@(distinct (remove #{'id} args))]    
@@ -613,7 +582,8 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defmacro emit-complex-entity-builder [args specs cs]
   `(let [specbuilder#  (~'spec-merger
                          (list ~@(for [s specs] 
-                                   (if (coll? s) `(~'fn [~'id]  ~s) `(list ~s ~'id)))))]                             
+;                                   (if (coll? s) `(~'fn [~'id]  ~s) `(list ~s ~'id)))))]
+                                        (if (coll? s) `(~'fn [~'id]  ~s) s))))]                             
      (fn [~'id ~@(distinct (remove #{'id} args))]
        (let [components# (list ~@(map binding->component (partition 2 cs)))]
            (build-entity ~'id (concat (specbuilder# ~'id) 
@@ -652,12 +622,62 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    specified components.  If no arguments are supplied, a single id arg 
    will be inserted."
   ([args specs components]
-       `(~'emit-complex-entity-builder ~args ~specs ~components))
+    (if (empty? specs)
+      `(~'emit-entity-builder ~args ~components)
+      `(~'emit-complex-entity-builder ~args ~specs ~components)))
   ([args components]
-    (let [args (distinct (remove #{'id} args))]
-      `(~'emit-entity-builder ~args ~components))))
+      `(~'emit-entity-builder ~args ~components)))
 
-(defmacro defspec
+(defn entity-doc
+  "Function for auto-documenting entity constructors."
+  [{:keys [args specs components] :as m} ]
+  (str "A function for generating" 
+       (when (:name m) (str " " (:name m) " ")) "entities. "
+       "From " args " to an entity with components " 
+       (into [] (map #(keyword (first %))
+            (partition 2 components)))
+       (if (empty? specs) nil (str "inheriting from " specs))))
+
+(defn valid-spec?
+  "Determines if map m has the minimal keys necessary for an entity 
+   specification."
+  [m]
+  (and (every? (partial contains? m) [:args :components])))
+
+
+(let [proc (fn [acc x] 
+       (cond (string? x) (assoc acc :doc x)                
+             (coll? x) (cond (= (first x) 'str) (assoc acc :doc x)
+                             (not (:args acc)) (assoc acc :args x)
+                             (not (:specs acc)) (assoc acc :specs x)
+                             :else (assoc acc :components x))
+             :else 
+             (throw (Exception. (str "Unexpected argument type " x)))))
+      base {:args '[id] :specs [] :components []}
+      add-doc (fn [m]
+                (let [d (get m :doc)] 
+                        (assoc m :doc (str d \newline (entity-doc m)))))]
+  (defn entitydec 
+    [args & [name]]
+    "Parses entity declarations.  Helper for defentity.
+     Processes a list of args, converting into a corresponding entity 
+     specification.  Allows flexibility for having optional args.  Supports 
+     things like docstrings and such.  Args are of the form 
+     [args? docstring? specs? components], where ? indicates
+     optional arguments."
+    (add-doc (merge (if name (assoc base :name name) base) 
+                   ((fn [m] 
+                      (if (and (contains? m :specs) 
+                               (not (contains? m :components)))
+                        (-> (assoc m :components (get m :specs))
+                          (dissoc :specs))
+                        m))
+                     (if (valid-spec? args) 
+                       args 
+                       (reduce proc {} args)))))))
+
+
+(defmacro defentity
   "Allows composition of a set of components into an entity template.  Creates 
    a function in the current namespace, prefixed with 'build-', taking at least
    one argument - id -  that allows for declaration of entities based on the 
@@ -704,15 +724,72 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
       :ai aitype])
    This yields a function, (computer-player id aitype name) that 
    produces parameterized computer players."   
-  ([name docstring args specs components]
-    `(do 
-       (def
-          ^{:doc ~docstring}
-         ~name (entity-spec ~args ~specs ~components))))
-       ;(with-meta (var ~name) (assoc (meta (var ~name)) :doc ~docstring))))
-  ([name args specs components]
-    `(def ~name (entity-spec ~args ~specs ~components)))
-  ([name args components]
-    `(def ~name (entity-spec ~args ~components)))
-  ([name components]
-    `(def ~name (entity-spec [] ~components))))
+  ([name & opts+sigs]
+    (let [m (entitydec opts+sigs name)]
+     (if (valid-spec? m)
+       (let [{:keys [doc args specs components]} m]
+         `(def ~(with-meta name (assoc (meta name) :doc doc)) 
+            (entity-spec ~args ~specs ~components)))
+         (throw (Exception. "Entity spec is invalid!"))))))
+
+;(defmacro defspec
+;  "Allows composition of a set of components into an entity template.  Creates 
+;   a function in the current namespace, prefixed with 'build-', taking at least
+;   one argument - id -  that allows for declaration of entities based on the 
+;   specification.  id will always be the first argument, but callers may 
+;   declare more arguments that will become part of lexical environment of 
+;   the entity building function.  This allows parameterization of entity 
+;   specifications, where component expressions can be further parameterized if 
+;   desired. 
+;   
+;   Formal components declared by defcomponent must be declared ahead of time,
+;   but they may be parameterized in the body using arguments supplied by args.
+;   Component parameterization is not mutually recursive, thus there is currently 
+;   no shared lexical environment between components.
+;     
+;   Inlined or ad-hoc components  can be evaluated as bindings of the form 
+;   [:component-name component-data] , where component-name is a keyword.
+;   
+;   Usage, with defined components and one inline component called playertag:
+;
+;   (defspec player [id] 
+;      [basicstats {:health 30 :agility 30 :strength 30}
+;       offense 10
+;       visage (str The remnant of a lost age, standing alone against evil)
+;       coords {:x 0 :y 0}
+;       :playertag :player1]
+;       )   
+;   Yields a function (build-player id) which will create player entities.
+;   If no arguments are supplied, a single id arg will be inserted.
+;             
+;   Alternately, new specs can be derived from existing specs.  If a vector of 
+;   specs is supplied prior to the components, then a spec-merging function is 
+;   created to initialize each entity.  The merging function will merge each 
+;   spec into a new entity (possibly causing side-effects), before adding the 
+;   components below.  Components with identical domains will retain the last 
+;   value in the final spec, which is more or less how inheritance typically 
+;   works.  If the spec is an anonymous spec, as defined by entity-spec, then it 
+;   will work as well.  This should allow variable means to compose entities, 
+;   as well as overriding pieces of entity construction.
+;
+;   An example of another entity leveraging the player spec:  
+;   (defspec computer-player [aitype name]       
+;     [player] 
+;     [:playertag :computer
+;      :ai aitype])
+;   This yields a function, (computer-player id aitype name) that 
+;   produces parameterized computer players."   
+;  ([name docstring args specs components]
+;    `(def ~(with-meta name (assoc (meta name) :doc docstring)) 
+;       (entity-spec ~args ~specs ~components)))
+;  ([name args specs components]
+;    `(def ~name (entity-spec ~args ~specs ~components)))
+;  ([name args components]
+;    `(def ~name (entity-spec ~args ~components)))
+;  ([name components]
+;    `(def ~name (entity-spec [] ~components))))
+         
+           
+      
+
+
