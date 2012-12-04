@@ -11,6 +11,7 @@
 (defcomponent coords
   "A simple set of 2D coordinates."
   [xy] xy)
+
 (defcomponent basicstats 
   "Stats that all active entities share."
   [{:keys [health agility strength] :as stats}] 
@@ -90,14 +91,24 @@
 (defn simple-monster [race & [name]]
   (monster nil :name (default name race) 
                :race race))
-               
+
 (defentity orc
   "Orcs are simple monsters...vicious in nature.
    Creates a random orc."
-  [id]
-  [(monster id :stats (brawler-stats))]
+  [id & {:keys [orcstats] :or {orcstats (brawler-stats)}}]
+  [(monster id :stats orcstats)]
   [:damage-modifier (inc (rand-int 8))
    visage "A wicked orc!"])
+
+(defentity rogue
+  "Rogues are agile enemies with weak attacks.  They have 
+   the ability to snare opponents in a net, paralyzing them 
+   for a round.  Creates a random rogue."
+  [id & [net-probability]]
+  [(monster id)]
+  [:immobilizer (default net-probability  0.1) 
+   visage "An evil rogue!"])
+  
 
 (defentity hydra
   "Hydras are multi-headed beasts that can regenerate health.
