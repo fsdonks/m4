@@ -567,9 +567,9 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
      (~'build-entity ~'id 
        [~@(map binding->component (partition 2 cs))])))
 
-(defn spec-merger [specs]
-  (fn [id]
-      (merge-entities (map (fn [s] (if (fn? s) (s id) s)) specs) :id id)))
+;(defn spec-merger [specs]
+;  (fn [id]
+;      (merge-entities (map (fn [s] (if (fn? s) (s id) s)) specs) :id id)))
 
 
 (defn spec-merger [args specs]

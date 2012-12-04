@@ -4,21 +4,26 @@
 (ns entitysystem.orcbattle 
   (:use [entitysystem.store]))
 
+;A record to hold the gamestate....we only really 
+;need to keep track of our entities (via an entity store) 
+;and the cap on the total number of monsters.
 (defrecord gamestate [entities monsternum])
-
 (def new-game (->gamestate emptystore 12)) 
 
+;Component definitions....these are building blocks for domains of interest 
+;in our game (or simulation...depending on your point of view).....
 (defcomponent coords
   "A simple set of 2D coordinates."
   [xy] xy)
-
 (defcomponent basicstats 
   "Stats that all active entities share."
   [{:keys [health agility strength] :as stats}] 
   stats)
-(defcomponent offense
+(defcomponent combatstats
   "Entities that are capable of offense."
-  [x] x)
+  [{:keys [offense defense] :as stats}] 
+  {:offense offense 
+   :defense defense})
 (defcomponent race 
   "Entities that have a race."
   [race] race)
@@ -36,10 +41,8 @@
 ;(defcomponent events [] )
 
 
-;in conrad's version, structs provide accessors automatically. 
-;so you get monster-health for instance.
-;since we're using components....we just get the health component from 
-;the entity.
+;Utility functions for things like entity stats and 
+;other minor stuff...
 (def nonzero-int (comp inc rand-int))
 (defn rand-int-between
   "Returns a random integer between x1 and x2.."
@@ -72,16 +75,47 @@
                 :strength (strong-stat)
                 :agility (strong-stat)))
 
+;Entity definitions for the player and a stable of monster archetypes.
+
+;We will use these as templates and vary them accordingly.
+;Rather than defining classes and using OOP style inheritance, encapsulation, 
+;blah....the defentity macro simply provides a convenient way for building 
+;functions that package components together in a high-level fashion.  At the 
+;end of the day, all of the "entities" we define are really just a collection 
+;of the components defined above, with the ability to extend the definitions 
+;trivially via inline component definitions, inline or anonymous entity specs, 
+;and deriving from previous entity definitions.  
+(defentity prop [id & {:keys [description coordinates]
+                       :or {description "It defies description"
+                            coordinates {:x 0 :y 0}}}]
+  "The simplest set of components that define entities that have a position."
+  [coords coordinates
+   visage description])
+    
+(defentity combatant [id & {:keys [offense defense] 
+                            :or {offense 10 defense 0}}]
+  "A basic set of components indicating an entity's ability to engage
+   in combat, and to what extent."
+  [combatstats {:offense offense :defense defense}
+   :offensive (> offense 0)
+   :defensive (> defense 0)])   
+
 (defentity player [id]
-  "A simple template for human players."
-  [basicstats {:health 30 :agility 30 :strength 30}
-   offense 10
-   visage (str "The remnant of a lost age, standing alone against the evil that"
-               " plagues this land...")
-   coords {:x 0 :y 0}  
+  "A simple template for human players.  The initial game only anticipates one
+   human player, or one player-controlled entity, but the advent of components
+   means that we may extend control to multiple entities, or allow the player 
+   to take control of enemies (perhaps with a skill)..."
+  [combatant
+   (prop :description 
+         (str "The remnant of a lost age, standing alone against the evil that"
+               " plagues this land..."))]
+  [basicstats  {:health 30   :agility 30 :strength 30}
    :playertag (keyword (str "player" id))])
 
 (defentity monster [id & {:keys [name race stats vis]}]
+  "A generic monster, with possibly random stats.  Useful for prototyping, and
+   provides a base set of components that may be easily over-ridden in other 
+   entity definitions."
   [basicstats (default stats (random-stats))
    :race      (default race :generic)
    :monster   true
@@ -92,13 +126,13 @@
 (defn simple-monster [race & [stats &rest]]
   (monster nil :race race
                :stats stats))
-
 (defentity orc
   "Orcs are simple monsters...vicious in nature.
    Creates a random orc."
   [id & {:keys [orcstats] :or {orcstats (brawler-stats)}}]
-  [(simple-monster :orc orcstats)]
-  [:damage-modifier (inc (rand-int 8))
+  [(simple-monster :orc orcstats)
+   combatant]
+  [:damage-modifier (inc (rand-int 8))  
    visage "A wicked orc!"])
 
 (defentity rogue
@@ -108,15 +142,17 @@
   [id & {:keys [net-probability roguestats] 
          :or   {net-probability 0.1 
                 roguestats (rogue-stats)}}]
-  [(simple-monster :rogue roguestats)]
-  [:effects {:paralyze (default net-probability  0.1)} 
+  [(simple-monster :rogue roguestats)
+   combatant]
+  [:effects {:paralyze (default net-probability  0.1)}
    visage "An evil rogue!"])
   
 (defentity hydra
   "Hydras are multi-headed beasts that can regenerate health.
    Creates a random hydra."
   [id] 
-  [(simple-monster :hydra)]
+  [(simple-monster :hydra)
+   combatant]
   [visage "A Malicous hydra!"
    :effects {:regeneration 1}])
 
@@ -125,8 +161,10 @@
    after starvation or suffocation takes hold.
    Creates a random slime-mold."
   [id]
-  [(simple-monster :slime-mold)]
+  [(simple-monster :slime-mold)
+   combatant]
   [visage "A slime mold!"
    :effects {:drain :agility}])
+
 
 
