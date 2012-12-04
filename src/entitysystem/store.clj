@@ -286,21 +286,21 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    the union of domains from both entities.  The component data in each domain 
    corresponds to the last component data found.  This means entity2's data will 
    be returned in cases where the domains overlap."
-  [e1 e2] (build-entity (str (:name e1) (:name e2))
-                         (concat (entity->components e1)
-                                 (entity->components e2))))
+  [e1 e2 & {:keys [id] :or {id :merged-entity}}] 
+  (build-entity (str (:name e1) (:name e2))
+                (concat (entity->components e1)
+                        (entity->components e2))))
 (defn ent-seq? [entcoll]
   (and (not (empty? entcoll))
        (or  (coll? (first entcoll))  
          (= (type (first entcoll)) entity))))
             
-
 (defn merge-entities 
   "Merges multiple entities.  For overlapping domains, the right-most, or last 
    entity's data is returned in the merge."
-  [entcoll] 
+  [entcoll & {:keys [id] :or {id :merged-entity}}] 
   (if (ent-seq? entcoll)
-    (reduce merge-entity entcoll)
+    (reduce (fn [e1 e2] (merge-entity e1 e2 id)) entcoll)
     (throw (Exception. "Expected a collection of entities."))))
                     
 (defn get-info
@@ -568,10 +568,16 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
        [~@(map binding->component (partition 2 cs))])))
 
 (defn spec-merger [specs]
-  (fn [id] 
-    (reduce #(apply conj %1 %2) []
-      (:components (merge-entities 
-                     (map (fn [s] (if (fn? s) (s id) s)) specs))))))
+  (fn [id]
+      (merge-entities (map (fn [s] (if (fn? s) (s id) s)) specs) :id id)))
+
+
+;(defn spec-merger [specs]
+;  (fn [id] 
+;    (reduce #(apply conj %1 %2) []
+;      (:components (merge-entities 
+;                     (map (fn [s] (if (fn? s) (s id) s)) specs))))))
+
 
 ;specs are either [symbol]
 ;or [(entity-builder args)]
@@ -584,11 +590,10 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;                                   (if (coll? s) `(~'fn [~'id]  ~s) `(list ~s ~'id)))))]
                                    (if (coll? s) `(~'fn [~'id]  ~s) s))))]                             
      (fn [~'id ~@(distinct (remove #{'id} args))]
-       (let [components# (list ~@(map binding->component (partition 2 cs)))]
-           (build-entity ~'id (specbuilder# ~'id)))))) 
-         
-;           (build-entity ~'id (concat (specbuilder# ~'id) 
-;                                      components#))))))
+;           (build-entity ~'id (specbuilder# ~'id))))))
+;       (specbuilder# ~'id))))
+       (conj-components (specbuilder# ~'id)  
+                        (list ~@(map binding->component (partition 2 cs)))))))
 
 ;macro to define functions for building stock templates for entities
 ;allows us to define namespaced functions to build default entities easily.
