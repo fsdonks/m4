@@ -86,17 +86,18 @@
    :race      (default race :generic)
    :monster   true
    visage     (default vis 
-               (str "The " name " defies description!"))])
+               (str "The " name " defies description!"))
+   :enemy     true])
 
-(defn simple-monster [race & [name]]
-  (monster nil :name (default name race) 
-               :race race))
+(defn simple-monster [race & [stats &rest]]
+  (monster nil :race race
+               :stats stats))
 
 (defentity orc
   "Orcs are simple monsters...vicious in nature.
    Creates a random orc."
   [id & {:keys [orcstats] :or {orcstats (brawler-stats)}}]
-  [(monster id :stats orcstats)]
+  [(simple-monster :orc orcstats)]
   [:damage-modifier (inc (rand-int 8))
    visage "A wicked orc!"])
 
@@ -104,19 +105,20 @@
   "Rogues are agile enemies with weak attacks.  They have 
    the ability to snare opponents in a net, paralyzing them 
    for a round.  Creates a random rogue."
-  [id & [net-probability]]
-  [(monster id)]
-  [:immobilizer (default net-probability  0.1) 
+  [id & {:keys [net-probability roguestats] 
+         :or   {net-probability 0.1 
+                roguestats (rogue-stats)}}]
+  [(simple-monster :rogue roguestats)]
+  [:effects {:paralyze (default net-probability  0.1)} 
    visage "An evil rogue!"])
   
-
 (defentity hydra
   "Hydras are multi-headed beasts that can regenerate health.
    Creates a random hydra."
   [id] 
   [(simple-monster :hydra)]
-  [:visage "A Malicous hydra!"
-   :specials {:regeneration 1}])
+  [visage "A Malicous hydra!"
+   :effects {:regeneration 1}])
 
 (defentity slime-mold
   "Slime-molds are weak monsters that slow down prey, feasting 
@@ -125,5 +127,6 @@
   [id]
   [(simple-monster :slime-mold)]
   [visage "A slime mold!"
-   :specials {:drain :agility} ])
+   :effects {:drain :agility}])
+
 
