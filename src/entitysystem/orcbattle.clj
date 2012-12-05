@@ -144,7 +144,7 @@
                 roguestats (rogue-stats)}}]
   [(simple-monster :rogue roguestats)
    combatant]
-  [:effects {:paralyze (default net-probability  0.1)}
+  [:effects {:paralyze net-probability}
    visage "An evil rogue!"])
   
 (defentity hydra
@@ -166,5 +166,12 @@
   [visage "A slime mold!"
    :effects {:drain :agility}])
 
+(defentity testent
+  "A test entity"
+  [id]
+  [(simple-monster :test)
+   combatant]
+  [])
+ 
 
 

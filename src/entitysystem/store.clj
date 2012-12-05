@@ -287,7 +287,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    corresponds to the last component data found.  This means entity2's data will 
    be returned in cases where the domains overlap."
   [e1 e2 & {:keys [id] :or {id :merged-entity}}] 
-  (build-entity (str (:name e1) (:name e2))
+  (build-entity id
                 (concat (entity->components e1)
                         (entity->components e2))))
 (defn ent-seq? [entcoll]
@@ -300,7 +300,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
    entity's data is returned in the merge."
   [entcoll & {:keys [id] :or {id :merged-entity}}] 
   (if (ent-seq? entcoll)
-    (reduce (fn [e1 e2] (merge-entity e1 e2 id)) entcoll)
+    (reduce (fn [e1 e2] (merge-entity e1 e2 :id id)) entcoll)
     (throw (Exception. "Expected a collection of entities."))))
                     
 (defn get-info
