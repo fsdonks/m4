@@ -565,7 +565,8 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defmacro emit-entity-builder [args cs]
   `(fn [~'id ~@(distinct (remove #{'id} args))]    
      (~'build-entity ~'id 
-       [~@(map binding->component (partition 2 cs))])))
+       [~@(map binding->component 
+               (partition 2 (filter (complement nil?) cs)))])))
 
 ;(defn spec-merger [specs]
 ;  (fn [id]
@@ -575,13 +576,12 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defn spec-merger [args specs]
   `(fn ~args
      (merge-entities (map (fn ~'[s]  
-                            (if (fn? ~'s) (~'s ~@args) ~'s)) ~specs) :id ~'id)))
-
-;(defn spec-merger [specs]
-;  (fn [id] 
-;    (reduce #(apply conj %1 %2) []
-;      (:components (merge-entities 
-;                     (map (fn [s] (if (fn? s) (s id) s)) specs))))))
+                            (if (fn? ~'s) (~'s ~'id) ~'s)) ~specs) :id ~'id)))
+;(defn spec-merger [args specs]
+;  `(fn ~args
+;     (merge-entities (map (fn ~'[s]  
+;                            (if (fn? ~'s) (~'s ~@args) ~'s)) ~specs) :id ~'id)))
+;
 
 (defn flatten-args [args]
   (loop [acc []
@@ -606,7 +606,8 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
     `(let [specbuilder#  (eval (spec-merger (quote ~flatargs) (quote ~specs)))]             
        (fn ~newargs
          (conj-components (specbuilder# ~@flatargs)  
-            (list ~@(map binding->component (partition 2 cs))))))))
+            (list ~@(map binding->component 
+                         (partition 2 (filter (complement nil?) cs)))))))))
 
 
 ;(defmacro emit-complex-entity-builder [args specs cs]
@@ -678,18 +679,20 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   "Determines if map m has the minimal keys necessary for an entity 
    specification."
   [m]
-  (and (every? (partial contains? m) [:args :components])))
-
+  (and (contains? m :args)
+       (or (contains? m :specs) 
+           (contains? m :components))))
 
 (let [proc (fn [acc x] 
-       (cond (string? x) (assoc acc :doc x)                
+       (cond (string? x) (assoc acc :doc x)
+             (map? x)    (merge acc x)
              (coll? x) (cond (= (first x) 'str) (assoc acc :doc x)
-                             (not (:args acc)) (assoc acc :args x)
-                             (not (:specs acc)) (assoc acc :specs x)
+                             (empty? (:args acc)) (assoc acc :args x)
+                             (empty? (:specs acc)) (assoc acc :specs x)
                              :else (assoc acc :components x))
              :else 
              (throw (Exception. (str "Unexpected argument type " x)))))
-      base {:args '[id] :specs [] :components []}
+      base {:args [] :specs [] :components []}
       add-doc (fn [m]
                 (let [d (get m :doc)] 
                         (assoc m :doc (str d \newline (entity-doc m)))))]
@@ -702,15 +705,51 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
      [args? docstring? specs? components], where ? indicates
      optional arguments."
     (add-doc (merge (if name (assoc base :name name) base) 
-                   ((fn [m] 
-                      (if (and (contains? m :specs) 
-                               (not (contains? m :components)))
-                        (-> (assoc m :components (get m :specs))
-                          (dissoc :specs))
-                        m))
+;                   ((fn [m] 
+;                      (if (and (contains? m :specs) 
+;                               (not (contains? m :components)))
+;                        (-> (assoc m :components (get m :specs))
+;                          (dissoc :specs))
+;                        m))
                      (if (valid-spec? args) 
                        args 
-                       (reduce proc {} args)))))))
+                       (reduce proc base args))))))
+    ;    (add-doc (merge (if name (assoc base :name name) base) 
+;                     (if (valid-spec? args) 
+;                       args 
+;                       (reduce proc {} args))))))
+
+;(let [proc (fn [acc x] 
+;       (cond (string? x) (assoc acc :doc x)
+;             (map? x)    (merge acc x)
+;             (coll? x) (cond (= (first x) 'str) (assoc acc :doc x)
+;                             (not (:args acc)) (assoc acc :args x)
+;                             (not (:specs acc)) (assoc acc :specs x)
+;                             :else (assoc acc :components x))
+;             :else 
+;             (throw (Exception. (str "Unexpected argument type " x)))))
+;      base {:args '[id] :specs [] :components []}
+;      add-doc (fn [m]
+;                (let [d (get m :doc)] 
+;                        (assoc m :doc (str d \newline (entity-doc m)))))]
+;  (defn entitydec 
+;    [args & [name]]
+;    "Parses entity declarations.  Helper for defentity.
+;     Processes a list of args, converting into a corresponding entity 
+;     specification.  Allows flexibility for having optional args.  Supports 
+;     things like docstrings and such.  Args are of the form 
+;     [args? docstring? specs? components], where ? indicates
+;     optional arguments."
+;    (add-doc (merge (if name (assoc base :name name) base) 
+;                   ((fn [m] 
+;                      (if (and (contains? m :specs) 
+;                               (not (contains? m :components)))
+;                        (-> (assoc m :components (get m :specs))
+;                          (dissoc :specs))
+;                        m))
+;                     (if (valid-spec? args) 
+;                       args 
+;                       (reduce proc {} args)))))))
 
 
 (defmacro defentity

@@ -105,23 +105,25 @@
    human player, or one player-controlled entity, but the advent of components
    means that we may extend control to multiple entities, or allow the player 
    to take control of enemies (perhaps with a skill)..."
-  [combatant
-   (prop :description 
-         (str "The remnant of a lost age, standing alone against the evil that"
-               " plagues this land..."))]
-  [basicstats  {:health 30   :agility 30 :strength 30}
-   :playertag (keyword (str "player" id))])
+  {:specs [combatant
+           (prop id :description 
+                 (str "The remnant of a lost age, standing alone against the evil that"
+                      " plagues this land..."))]
+   :components 
+    [basicstats  {:health 30   :agility 30 :strength 30}
+     :playertag (keyword (str "player" id))]})
 
 (defentity monster [id & {:keys [name race stats vis]}]
   "A generic monster, with possibly random stats.  Useful for prototyping, and
    provides a base set of components that may be easily over-ridden in other 
    entity definitions."
-  [basicstats (default stats (random-stats))
-   :race      (default race :generic)
-   :monster   true
-   visage     (default vis 
-               (str "The " name " defies description!"))
-   :enemy     true])
+  {:components
+   [basicstats (default stats (random-stats))
+    :race      (default race :generic)
+    :monster   true
+    visage     (default vis 
+                 (str "The " name " defies description!"))
+    :enemy     true]})
 
 (defn simple-monster [race & [stats &rest]]
   (monster nil :race race
@@ -161,17 +163,25 @@
    after starvation or suffocation takes hold.
    Creates a random slime-mold."
   [id]
-  [(simple-monster :slime-mold)
-   combatant]
-  [visage "A slime mold!"
-   :effects {:drain :agility}])
+  {:specs  [(simple-monster :slime-mold)
+            combatant]
+   :components  [visage "A slime mold!"
+                 :effects {:drain :agility}]})
 
 (defentity testent
   "A test entity"
   [id]
-  [(simple-monster :test)
-   combatant]
-  [])
+  {:specs [(simple-monster :test)
+           combatant]})
  
+(defentity slime-rogue [id] 
+  "A slime molde with roguish aspects" 
+  {:specs [rogue slime-mold (monster id :race :slime-rogue 
+                                        :vis "A roguish slime-mold!")]})
+(defentity slime-orc [id] 
+  "An orc with paralyzing capabilities..."
+  {:specs [slime-mold 
+           orc]})
+   
 
 
