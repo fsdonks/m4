@@ -43,41 +43,55 @@
 (def #^:dynamic *processors* (atom {})) ;a db of processors
 (defn add-processor [p]
   (swap! *processors* (assoc (process-name p) p)))
-(defn get-processors [] @*processors*)
+;(defn get-processors [] @*processors*)
+;
+;(defn add-value
+;  "Defines a process that has no preconditions, and adds a resource under name
+;   to the process state."
+;  [name x]
+;  (->processor name nil #{name} (fn [state] (assoc state name x))))
+;
+;(defn read-file
+;  "Defines a process that checks file existence as a precondition, and adds 
+;   a resource under name to the process state."
+;  [path & {:keys [name] :or {name path}}]
+;  (->processor name nil {:file-exists? path}
+;               (fn [state] (assoc state name x))))
+;(defn read-lines 
+;  "Defines a process that checks file existence as a precondition, and adds a 
+;   resource under name to the process state."
+;  [name x]
+;  (->processor name nil {:key-exists? name}))
+;
+;(defn in-directory [path proc]
+;  (->processor :in-directory {:directory-exists? path} nil 
+;     (fn [state] (process proc (assoc state :dir path)))))  
 
-(defn add-value
-  "Defines a process that has no preconditions, and adds a resource under name
-   to the process state."
-  [name x]
-  (->processor name nil #{name} (fn [state] (assoc state name x))))
+(defn build-folders!
+  "Builds the structure for a set of folders defined by folderspec, in root 
+   directory defined by the path rootdir.  A folderspec is simply a map where 
+   nested maps represent subdirectories ala 
+   {:output {} :input {}}, which expands to rootdir/output, rootdir/input"
+  [rootdir folderspec]
+  (io/map->folders! folderspec (io/as-directory rootdir) :condensed? false))  
 
-(defn read-file
-  "Defines a process that checks file existence as a precondition, and adds 
-   a resource under name to the process state."
-  [path & {:keys [name] :or {name path}}]
-  (->processor name nil {:file-exists? path}
-               (fn [state] (assoc state name x))))
-(defn read-lines 
-  "Defines a process that checks file existence as a precondition, and adds a 
-   resource under name to the process state."
-  [name x]
-  (->processor name nil {:key-exists? name}))
-
-(defn in-directory [path proc]
-  (->processor :in-directory {:directory-exists? path} nil 
-     (fn [state] (process proc (assoc state :dir path)))))  
-
+(def readme {"readme.txt" "Insert comments here."})
+ 
 ;a sample of compiling an audit trail from a marathon run.
-(defprocess compute-trends [rootdir]
-  (with-dir rootdir
-    (reading-files [trends (relative-path rootdir ["DemandTrends.txt"]) 
-                    titles (relative-path rootdir ["TitleDef.txt"])]
-       (with-path (relative-path *dir* ["Output"]) [highpath ["highwater.txt"]
-                                                    fillpath ["fillstats.txt"]]
-         (do         
-           (compute-highwater trends titles highpath)
-           (compute-fillstats highpath titles fillpath))))))
-
+(comment 
+	(defprocess compute-trends [rootdir]
+	  (let [readme {"readme.txt" "Insert comments here."}        
+	        folderspec {"Output" readme 
+	                    "Input"  readme}]
+	  (with-dir rootdir
+	    (reading-files [trends (relative-path rootdir ["DemandTrends.txt"]) 
+	                    titles (relative-path rootdir ["TitleDef.txt"])]
+	       (with-path (relative-path *dir* ["Output"]) [highpath ["highwater.txt"]
+	                                                    fillpath ["fillstats.txt"]]
+	         (do         
+	           (compute-highwater trends titles highpath)
+	           (compute-fillstats highpath titles fillpath)))))))
+)
 
   
   

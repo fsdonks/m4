@@ -383,6 +383,13 @@
   "Return a sequence of all files and folders that are children of path."
   [path] (seq (.listFiles (io/file path))))
 
+(defn find-files
+  "Return a lazy seq of all files under root where filterf returns true.
+   filterf :: File -> Boolean"
+  [root filterf]
+  (let [fs (file-seq (clojure.java.io/file root))]
+    (filter filterf fs)))
+
 (defn make-file!
   "Creates a new file at filepath.  New file is empty."
   [filepath]
