@@ -1,16 +1,4 @@
-(ns marathon.port.data.demandstore)
-
-(defrecord demandstore [name demandmap infeasible-demands 
-                        unfilledq  activations deactivations 
-                        eligbledemands changed demandtraffic 
-                        tryfill loginfeasibles tags 
-                        fillables verbose tlastdeactivation]) 
-(defn empty-demandstore [] 
-  (demandstore. "DemandStore" {} {} 
-                 nil {} {} 
-                 {} {} true 
-                 false  {"Sinks" {}} {} 
-                 false false -1))
+(ns marathon.data.demandstore)
 
 ;Option Explicit
 ;'TOM Change 17 DEC 2010
@@ -66,54 +54,15 @@
 ;Public eligibleDemands As Dictionary 'Dynamic set of active demands eligible for follow-on supply.
 ;
 ;Public changed As Dictionary 'Dynamic set of active demands that changed fill count during the course of the day.
-;
-;'Tom Change 4 August 2011
-;
-;Public demandtraffic As Boolean
-;Public TryFill As Boolean 'boolean flag that acts as a logic gate to determine if we should even try
-;                          'to fill demands.  Triggered by the StockWatcher observer, upon recieving
-;                          'New Stock events.
-;
-;'TOM Change 13 Jan 2011 -> HACK
-;Public loginfeasibles As Boolean
-;'Tom change 15 Mar 2011
-;Public tags As GenericTags
-;Public fillables As Dictionary
-;
-;Private tmptags As Dictionary
-;Private msg As String
-;
-;Public Verbose As Boolean
-;Public tlastdeactivation As Single
-;
-;Implements IVolatile
-;
-;Private Sub Class_Initialize()
-;'Purpose of this collection is to serve as a Q (ideally a priority q, but for now just a collection)
-;'We'll use this to capture unfilled demand. Drastically reduce our runtime because we won't LOOK
-;'to fill any demand if unfillq.count = 0
-;'Futhermore, we'll get information for only specific unfilled demands. No need to look wastefully.
-;'TOM Change 18 Dec 2010 -> Moved to DemandManager Initialization
-;
-;Set UnfilledQ = New Dictionary
-;Set demandmap = New Dictionary
-;Set DemandIndex = New Dictionary
-;Set activations = New Dictionary
-;Set deactivations = New Dictionary
-;Set activedemands = New Dictionary
-;
-;Set changed = New Dictionary
-;
-;loginfeasibles = True
-;
-;name = "DemandManager"
-;
-;Set tags = New GenericTags
-;tags.addTag "Sinks"
-;
-;Set fillables = New Dictionary
-;tlastdeactivation = -1
-;End Sub
+(defrecord demandstore [name demandmap infeasible-demands 
+                        unfilledq  activations deactivations 
+                        eligbledemands changed demandtraffic 
+                        tryfill loginfeasibles tags 
+                        fillables verbose tlastdeactivation])
 
-
-
+(defn empty-demandstore [] 
+  (demandstore. "DemandStore" {} {} 
+                 nil {} {} 
+                 {} {} true 
+                 false  {"Sinks" {}} {} 
+                 false false -1))
