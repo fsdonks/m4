@@ -1,4 +1,5 @@
 (ns util.record)
+
 ;stolen from stack overflow
 (defn static? [field]
   (java.lang.reflect.Modifier/isStatic
@@ -85,17 +86,22 @@
    name and the fieldmap.  If default values specified by the fieldmap, they 
    get used, otherwise fields are nil.  Allows fine-grained control over the 
    creation of records."
-  [name fieldmap]
+  [name fieldmap fields]
   (let [keymap  (into {} (map (fn [k] 
                                 [(symbol (subs (str k) 1)) k]) 
                               (keys fieldmap)))
         defaults (reduce (fn [acc k] 
                            (assoc acc k (get fieldmap (get keymap k)))) {}
-                         (keys keymap))
-        args {:keys (into [] (reverse (keys keymap))) :or defaults}]
+                         fields)
+        args {:keys fields :or defaults}]
     `(defn ~(symbol (str "make-" name)) [& ~args] 
-       (~(symbol (str "->" name)) ~@(get args :keys)))))
-    
+       (~(symbol (str "->" name)) ~@fields))))
+
+
+(defn with-record [r  & update-keys]
+  (merge r 
+       (apply hash-map update-keys)))
+
 (defn- parse-record-opts
   "Parses a list of opts+specs to extract doc strings, fields, and specs.
    Not currently used....intended to allow documentation support in defrecord+"
@@ -124,12 +130,14 @@
    nice to include type hinting and all that...but i'm not there yet..."
   [name [& fields] & opts+specs]
   (let [rawfields (into [] (map (fn [x] (if (coll? x) (first x) x)) fields))
-        default-constructor (make-constructor name (parse-fields fields))]
+        default-constructor (make-constructor name 
+                                              (parse-fields fields) 
+                                              rawfields)]
     `(do
        (defrecord ~name ~rawfields ~@opts+specs)
        ~default-constructor)))
-    
-    
+  
+
                   
   
   

@@ -1,8 +1,10 @@
 ;This is a -currently- centralized set of data definitions used by 
-;marathon.  The latest version in 
+;marathon.  The initial port is from Marathon v 3.7602983. 
 (ns marathon.data
-  (use [util.record :only [defrecord+]]))
+  (use [util.record :only [defrecord+ with-record]]
+       [util.metaprogramming :only [defmany keyvals->constants]]))
 
+;Container to store all the data associated with demand entities. 
 (defrecord+ demandstore [[name "DemandStore"] 
                          [demandmap  {}]
                          [infeasible-demands {}] 
@@ -18,9 +20,11 @@
                          fillables 
                          verbose 
                          tlastdeactivation])
-
 (def empty-demandstore (make-demandstore)) 
 
+;Container to store all the data associated with matching supply to demand, 
+;namely substitution rules, scoping (both in and out of scope) for the current
+;run, and any other associated data.
 (defrecord+ fillstore [[name "FillStore"] 
                        fillgraph 
                        fillfunction 
@@ -30,6 +34,9 @@
                        allgraphs])
 (def empty-fillstore (make-fillstore))
 
+
+
+;may be vestigial.
 (def dstreams {"LocationWatch", "xl"
                "GhostWatch", "xl"
                "Ghosts", "xl"
@@ -41,6 +48,11 @@
                "EmpiricalSummary", "xl"
                "NominalSummary", "xl"})
 
+;Container to store all the data associated with output, particularly in the 
+;form of effectful (i.e. non-pure) logging and statistics.  Typically, the 
+;outputstore will maintain a set of files, as well as output-specific observers
+;that record logs and statistics as the simulation progresses.  This may change
+;in the near future.
 (defrecord+ outputstore [[name "Outputstore"] 
                          [observers {}] 
                          [filestreams {}] 
@@ -70,62 +82,51 @@
 
 ;policies defined by more than one atomic policy.
 (defrecord+ policycomposite [name 
-                             subscribers 
+                             subscribers ;probably drop this field....
                              activepolicy 
                              activeperiod
                              policies])
-;Policy store.
-;This is for centralizing control over rotational policy, as well as substition policy.
+
+(defrecord+ policyatomic [name 
+                          subscribers ;probably drop this field....
+                          activepolicy 
+                          activeperiod
+                          policies])
+
+;This is for centralizing control over rotational policy, as well as substition 
+;policy. 
 ;We maintain all the data structures necessary for managing this stuff.
 ;    Also manage all feasible locations through this object.
-
 (defrecord+ policystore   [[name "PolicyStore"] 
-                          [locationmap {}] 
-                          [positions {}] 
-                          [locations {}] 
-                          [locationindex {}] 
-                          [policies {}] 
-                          [periods {}]
-                          [highest {}] 
-                          policytraffic  
-                          rules  
-                          rulegraph 
-                          ruledelim 
-                          activeperiod 
-                          [periodchanges {}]
-                          schedules 
-                          [composites {}] 
-                          [permanents {}] 
-                          canghost])
+                           [locationmap {}] 
+                           [positions {}] 
+                           [locations {}] 
+                           [locationindex {}] 
+                           [policies {}] 
+                           [periods {}]
+                           [highest {}] 
+                           policytraffic  
+                           rules  
+                           rulegraph 
+                           ruledelim 
+                           activeperiod 
+                           [periodchanges {}]
+                           schedules 
+                           [composites {}] 
+                           [permanents {}] 
+                           canghost])
 
 ;Substitutions are going to be managed as a special object...
 ;These are general states used to describe information about the location.
 ;We can actually store all kinds of details about the location in the actual
 ;Graph node's data. Since the structure contains variants, we could have more
 ;useful, descriptive
-;I opted to change these to string constants, since they're more declarative and require no conversion
-;These are our unit's states.
-;We can add more, or even parse custom states as needed.
-
-;--PORT--Replace all const usage with keywords.... :Bogging :Dwelling, etc. 
-
-(defmacro defmany
-  "Define multiple definitions inline.  Takes a collection of bindings, and 
-   converts them into def expressions."
-  [bindings]
-    `(do ~@(->> (partition 2 bindings)
-             (map (fn [b] `(def ~(first b) ~(second b)))))))
-(defn keyvals->constants
-  "Given a map of {symbol val} or {:symbol val}, 
-   creates def bindings for each symbol."
-  [m]
-  (let [as-symbol (fn [k] 
-                    (cond (symbol? k) k
-                          (keyword? k) (symbol (subs (str k) 1))
-                          :else (throw (Exception. "unknown symbol type"))))]
-    (eval `(defmany ~(flatten (for [[k v] m] [(as-symbol k) v]))))))
+;I opted to change these to string constants, since they're more declarative 
+;and require no conversion
 
 
+;Constants used for policy definition, among other things.  Imported from the 
+;original VBA implementation for the policystore. 
 ;Might re-think this, for now it's a way of porting the existing implementation
 (def policyconstants 
   {:Bogging "Bogging"
@@ -135,7 +136,6 @@
    :Deployable "Deployable"
    :AC12 "AC12" 
    :AC13 "AC13" 
-   ;not a good thing. I need to fix this with
    :RC14 "RC14" 
    :RC15 "RC15" 
    :AC11 "AC11"
@@ -153,10 +153,9 @@
    :Overlapping "Overlapping"
    :SubSymbol  "{>"
    :EquivSymbol "="})
-(keyvals->constants policyconstants)
-           
-(def Equivalance :Equivalance)
-(def Substitution :Substitution) 
+(keyvals->constants policyconstants) ;make the constants first class symbols.
+;inherited from substitution rules, may be vestigial.
+(keyvals->constants {:Equivalence :Equivalence :Substitution :Substitution})
 
 ;TOM Note 6 April 2011 ->
     ;I re-factored much of the guts of this class into a GenericEventStream 
@@ -172,7 +171,6 @@
 ;event-step framework, is that we;re calling handlers from a class directly, 
 ;rather than queuing events in a priorityQ (lose some robustness, since we can 
 ;have multiple handlers with their own state subscribing to events.
-
   
 ;Creating a bandwith for message enumerations.  Right now, each message has a 
 ;bandwith of ~100. from the msgbands, by convention, all simulation messages 
@@ -203,160 +201,180 @@
 ;and logging events) . Since we;re working with objects and references, we can 
 ;do this now.
 
+;May be vestigial.
 (def msgbands {:simulation 1 :supply 2 :demand 3 :policy 4 :trending 5})
 
-;Basic events ported from Marathon.
-(def events 
-    {:spawnunit "Spawning Unit",
-		 :neverDeployed "Never Deployed",
-		 :supplyUpdate "Supply Update",
-		 :CycleCompleted "Cycle Completed",
-		 :AddedPeriod "Added Period",
-		 :Terminate "Terminating",
-		 :extendedBOG "Extended BOG",
-		 :sample "Sampling",
-		 :scheduleDemand "Scheduling Demand",
-		 :MoveUnit "Moving Unit",
-		 :UnitChangedPolicy "Unit Changed Policy",
-		 :outofstock "out of Stock",
-		 :DemandFillChanged "Demand Fill Changed",
-		 :NewFollowOn "New Follow On",
-		 :GhostReturned "Ghost Returned",
-		 :RequestFill "Requesting Fill",
-		 :NewDeployable "New Deployable Stock",
-		 :Deployable "Deployable",
-		 :AwaitingPolicyChange "Awaiting Policy Change",
-		 :LocationSwap "Location Swap",
-		 :policychange "Policy Change",
-		 :StockRequired "Stock Required",
-		 :CannotFillDemand "Cannot Fill Demand",
-		 :UpdateRequest "UpdateRequest",
-		 :CycleStarted "Cycle Started",
-		 :MoreSRCAvailable "More SRC Available",
-		 :FollowingOn "Follow On",
-		 :deploy "Deploying Unit",
-		 :Initialize "Initializing",
-		 :OverlappingUnit "Overlapping Unit",
-		 :InfeasibleDemand "Infeasible Demand",
-		 :LocationDecrement "Location Decrement",
-		 :ActivateDemand "Activating Demand",
-		 :ScopedSupply "Scoped Supply",
-		 :NewSRCAvailable "New SRC Stock",
-		 :PositionUnit "Positioned Unit",
-		 :EndofDay "End of Day",
-		 :demandupdate "DemandUpdate",
-		 :NotDeployable "Not Deployable",
-		 :UnitMoved "Unit Moved",
-		 :GhostDeployed "Ghost Deployed",
-		 :periodChange "Period Change",
-		 :BeginDay "Begin Day",
-		 :AddedUnit "Added Unit",
-		 :DeActivateDemand "DeActivating Demand",
-		 :AddedDemand "Added Demand",
-		 :all "Generic",
-		 :FillDemand "Filling Demand",
-		 :SpawnGhost "Spawn Ghost",
-		 :ScopedDemand "Scoped Demand",
-		 :LocationIncrement "Location Increment",
-		 :SpawnedTransient "Spawned Transient Unit",
-		 :CanFillDemand "Can Fill Demand",
-		 :DisengageUnit "Sending Unit Home"})
+;ported from VBA (no...I did not do it by hand...not entirely :) )
+(def default-events
+  {:Simulation
+   {:Terminate "Terminating",
+    :WatchPolicy "WatchPolicy",
+    :sample "Sampling",
+    :WatchParameters "WatchParameters",
+    :WatchGUI "WatchGUI",
+    :UpdateRequest "UpdateRequest",
+    :Initialize "Initializing",
+    :WatchDemand "WatchDemand",
+    :EndofDay "End of Day",
+    :WatchTime "WatchTime",
+    :BeginDay "Begin Day",
+    :WatchFill "WatchFill",
+    :PauseSimulation "PauseSimulation",
+    :WatchSupply "WatchSupply"}
+   :Generic {:all "Generic"}
+   :Supply
+   {:spawnunit "Spawning Unit",
+    :neverDeployed "Never Deployed",
+    :supplyUpdate "Supply Update",
+    :CycleCompleted "Cycle Completed",
+    :MoveUnit "Moving Unit",
+    :firstDeployment "First Deployment",
+    :UnitChangedPolicy "Unit Changed Policy",
+    :outofstock "out of Stock",
+    :NewFollowOn "New Follow On",
+    :NewDeployable "New Deployable Stock",
+    :Deployable "Deployable",
+    :updateAllUnits "Update All Units",
+    :AwaitingPolicyChange "Awaiting Policy Change",
+    :CycleStarted "Cycle Started",
+    :MoreSRCAvailable "More SRC Available",
+    :FollowingOn "Follow On",
+    :deploy "Deploying Unit",
+    :ScopedSupply "Scoped Supply",
+    :NewSRCAvailable "New SRC Stock",
+    :PositionUnit "Positioned Unit",
+    :NotDeployable "Not Deployable",
+    :UnitPromoted "Unit Promoted",
+    :UnitMoved "Unit Moved",
+    :AddedUnit "Added Unit",
+    :FillDemand "Filling Demand",
+    :SpawnGhost "Spawn Ghost",
+    :SpawnedTransient "Spawned Transient Unit"}
+   :Demand
+   {:extendedBOG "Extended BOG",
+    :scheduleDemand "Scheduling Demand",
+    :DemandFillChanged "Demand Fill Changed",
+    :RequestFill "Requesting Fill",
+    :StockRequired "Stock Required",
+    :CannotFillDemand "Cannot Fill Demand",
+    :OverlappingUnit "Overlapping Unit",
+    :InfeasibleDemand "Infeasible Demand",
+    :ActivateDemand "Activating Demand",
+    :demandupdate "DemandUpdate",
+    :DeActivateDemand "DeActivating Demand",
+    :AddedDemand "Added Demand",
+    :ScopedDemand "Scoped Demand",
+    :CanFillDemand "Can Fill Demand",
+    :DisengageUnit "Sending Unit Home"}
+   :Policy
+   {:periodChange "Period Change",
+    :AddedPeriod "Added Period",
+    :policychange "Policy Change"}
+   :Trending
+   {:UnitNotUtilized "Unit Not Utilized",
+    :NewHighWaterMark "New High Water Mark",
+    :GetCycleSamples "Getting Cycle Samples",
+    :GhostReturned "Ghost Returned",
+    :GhostDeployed "Ghost Deployed",
+    :LocationSwap "Location Swap",
+    :LocationDecrement "Location Decrement",
+    :LocationIncrement "Location Increment"}})
 
-(defn addEvent [name description grouping eventmap]
-  (assoc eventmap (keyword name) description))
-
-(defn add-events [tgt specs]
-  (reduce #(apply addEvent %) tgt specs))
-
-(defn grouped-event [name message group]
-  [group [name message]])
-
-(defn grouped-events [xs] (map #(apply grouped-event %) xs))
-(defn merge-events [grouprecs]
-  (reduce (fn [acc [group [k v]]]
-            (assoc-in acc [(keyword group) k] v)) {} grouprecs))
-(def adapt-events (comp merge-events grouped-events))
-
-;events added 9 Dec 2012, from v3.7602983 
-;the following event definitions were slightly modified from the vba marathon 
-;stuff.
-(def default-events 
-  (merge 
-    [(adapt-events  ;system events 
-       [[:all, "Generic", "Generic"]
-        [:Initialize, "Initializing", "Simulation"]
-        [:Terminate, "Terminating", "Simulation"]
-        [:sample, "Sampling", "Simulation"]
-        [:EndofDay, "End of Day", "Simulation"]
-        [:BeginDay, "Begin Day", "Simulation"]
-        [:UpdateRequest, "UpdateRequest", "Simulation"]    
-        [:WatchSupply, "WatchSupply", "Simulation"]
-        [:WatchDemand, "WatchDemand", "Simulation"]
-        [:WatchPolicy, "WatchPolicy", "Simulation"]
-        [:WatchTime, "WatchTime", "Simulation"]
-        [:WatchParameters, "WatchParameters", "Simulation"]
-        [:WatchFill, "WatchFill", "Simulation"]
-        [:PauseSimulation, "PauseSimulation", "Simulation"]
-        [:WatchGUI, "WatchGUI", "Simulation"]])
-     (adapt-events ;supply events
-       [[:spawnunit, "Spawning Unit", "Supply"]
-        [:deploy, "Deploying Unit", "Supply"]
-        [:MoveUnit, "Moving Unit", "Supply"]
-        [:FillDemand, "Filling Demand", "Supply"]
-        [:NewDeployable, "New Deployable Stock", "Supply"]
-        [:NewSRCAvailable, "New SRC Stock", "Supply"]
-        [:MoreSRCAvailable, "More SRC Available", "Supply"]
-        [:NotDeployable, "Not Deployable", "Supply"]
-        [:Deployable, "Deployable", "Supply"]
-        [:outofstock, "out of Stock", "Supply"]
-        [:CycleCompleted, "Cycle Completed", "Supply"]
-        [:CycleStarted, "Cycle Started", "Supply"]
-        [:SpawnGhost, "Spawn Ghost", "Supply"]
-        [:supplyUpdate, "Supply Update", "Supply"]
-        [:ScopedSupply, "Scoped Supply", "Supply"]
-        [:AddedUnit, "Added Unit", "Supply"]
-        [:PositionUnit, "Positioned Unit", "Supply"]
-        [:UnitChangedPolicy, "Unit Changed Policy", "Supply"]
-        [:AwaitingPolicyChange, "Awaiting Policy Change", "Supply"]
-        [:SpawnedTransient, "Spawned Transient Unit", "Supply"]
-        [:neverDeployed, "Never Deployed", "Supply"]
-        [:NewFollowOn, "New Follow On", "Supply"]
-        [:FollowingOn, "Follow On", "Supply"]
-        [:UnitMoved, "Unit Moved", "Supply"]
-        [:firstDeployment, "First Deployment", "Supply"]
-        [:updateAllUnits, "Update All Units", "Supply"]
-        [:UnitPromoted, "Unit Promoted", "Supply"]])     
-     (adapt-events ;demand-events 
-       [[:RequestFill, "Requesting Fill", "Demand"]
-        [:scheduleDemand, "Scheduling Demand", "Demand"]
-        [:ActivateDemand, "Activating Demand", "Demand"]
-        [:DeActivateDemand, "DeActivating Demand", "Demand"]
-        [:DisengageUnit, "Sending Unit Home", "Demand"]
-        [:InfeasibleDemand, "Infeasible Demand", "Demand"]
-        [:extendedBOG, "Extended BOG", "Demand"]
-        [:demandupdate, "DemandUpdate", "Demand"]
-        [:ScopedDemand, "Scoped Demand", "Demand"]
-        [:CannotFillDemand, "Cannot Fill Demand", "Demand"]
-        [:CanFillDemand, "Can Fill Demand", "Demand"]
-        [:StockRequired, "Stock Required", "Demand"]
-        [:AddedDemand, "Added Demand", "Demand"]
-        [:DemandFillChanged, "Demand Fill Changed", "Demand"]
-        [:OverlappingUnit, "Overlapping Unit", "Demand"]])
-     (adapt-events ;policy-events
-       [[:policychange, "Policy Change", "Policy"]
-        [:AddedPeriod, "Added Period", "Policy"]
-        [:periodChange, "Period Change", "Policy"]])     
-     (adapt-events ;trending-events 
-       [[:LocationIncrement, "Location Increment", "Trending"]
-        [:LocationDecrement, "Location Decrement", "Trending"]
-        [:LocationSwap, "Location Swap", "Trending"]
-        [:GhostDeployed, "Ghost Deployed", "Trending"]
-        [:GhostReturned, "Ghost Returned", "Trending"]
-        [:GetCycleSamples, "Getting Cycle Samples", "Trending"]
-        [:NewHighWaterMark, "New High Water Mark", "Trending"]
-        [:UnitNotUtilized, "Unit Not Utilized", "Trending"]])]))
-     
 (defrecord+ managerofevents [[name "EventManager"]
                              [userevents default-events] 
                              evtstream 
                              streams])  
+
+;cyclerecord
+;Provides a container for an invidual unit's cycle information.  Specifically, 
+;the policy followed, the unit in the cycle, the component of the unit, the 
+;accumulated state during the cycle (bog, mob, dwell, etc.), start and end 
+;of the cycle, transitions in the cycle, and more...
+(defrecord+ cyclerecord 
+  [UICname    ;As String ;;Associated uic
+   src        ;As String
+   component  ;As String   
+   policyname ;As String ;;Associated policy
+   tstart     ;As Single ;cycle start
+   tfinal     ;As Single ;expected cycle end
+   duration   ;As Single ;actual cycle length   
+   availableTime  ;As Single ;time spent in available pool
+   deployableTime ;As Single ;time spent deployable.
+   DurationExpected  ;As Single ;expected cycle length
+   bog         ;As Single ;experienced BOG (units of time, days)
+   bogbudget   ;As Single
+   BOGExpected ;As Single ;expected BOG (units of time, days)
+   dwell       ;As Single ;expected Dwell (units of time, days)
+   DwellExpected ;As Single ;experienced dwell
+   MOBexpected   ;As Single ;mobilization time expected, if any.
+   mob           ;As Single
+   deployments   ;As Long ;count of deployments
+   followons     ;As Long ;count of follow-on deployments
+   BDRExpected   ;As Single ;expected BOG/Dwell ratio
+   Traversals]) ;As Collection ;record of state traversal, good for verification
+
+;Note -> this may be a little vestigial, or easily revamped; for instance, 
+;we can provide uic, src, and component and we're fine...
+(defn ^cyclerecord cycle-NewCycle
+  "Creates a new cycle, at time t, defined by the bogtime, dwelltime, etc. 
+   characteristics, patterned off of cycle c, which provides the name of the 
+   uic, the src, and the component."
+  [cyclerec t bogtime dwelltime policyduration & [MOBtime  ghost  bogbudget]]
+    (with-record cyclerec
+      :BOGExpected  bogtime
+      :bogbudget (if (zero? bogbudget) bogtime bogbudget)
+      :BDRExpected =  (/ 1 (/ (+ MOBtime bogbudget)  
+                              (-  policyduration (+ bogbudget  MOBtime))))
+      :DurationExpected  policyduration
+      :DwellExpected  dwelltime
+      :MOBexpected  MOBtime
+      :tstart t
+      :tfinal (+ t policyduration)))
+
+(defn ^cyclerecord cycle-modify 
+  "Modifies oldcycle, assumably in the context of a policy change.  Returns the 
+   result of the modification, as a new cycle."
+  [cyclerec bogtime dwelltime policyduration & [MOBtime bogbudget]]
+  (if (and (> dwelltime 1095)  (zero? MOBtime) (not (= :inf dwelltime))
+           (throw (Exception. "Expected dwell time is abnormal...")))     
+    (with-record cyclerec
+      :BOGExpected  bogtime
+      :BDRExpected (/ 1 (/ (+ bogtime MOBtime) 
+                           ( - policyduration (+ bogtime  MOBtime))))
+      :DurationExpected policyduration
+      :DwellExpected  dwelltime
+      :MOBexpected = MOBtime
+      :bogbudget = bogbudget)))
+
+(defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]
+  (let [trav  (str t "_"  startlocation  "_" endlocation)
+        ts (get :Traversals cyclerec)] 
+    (with-record cyclerec 
+      :Traversals (conj trav ts))))
+
+(defn BDR
+  "Computes the BOG:Dwell ratio for a cycle."
+  [bog mob dwell availableTime MOBexpected BOGExpected DurationExpected 
+   & [conventional]]  
+  (let [res 
+        (cond (and  (> bog  0) (> dwell 0))
+              (/ (+ bog mob)  dwell)
+              (and (> dwell 0) 
+                   (> availableTime 0))
+              (/ availableTime dwell)
+              :else 
+              (/ (+ MOBexpected  BOGExpected) (- DurationExpected 
+                                                 (+ MOBexpected BOGExpected))))]
+    (if conventional 
+      (/ 1 res) 
+      res)))
+
+(defn cycle-BDR
+  "Computes the BOG:Dwell ratio from a cyclerecord."
+  [cyclerec & [conventional]]
+  (let [{:keys [bog mob dwell availableTime 
+                MOBexpected BOGExpected DurationExpected]} cyclerec]
+    (BDR bog mob dwell availableTime 
+         MOBexpected BOGExpected DurationExpected conventional)))
+  
+

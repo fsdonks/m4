@@ -1,4 +1,22 @@
-(ns marathon.data.demandstore)
+(in-ns marathon.data)
+
+(rec/defrecord+ demandstore [[name "DemandStore"] 
+                         [demandmap  {}]
+                         [infeasible-demands {}] 
+                         unfilledq 
+                         [activations {}]
+                         [deactivations {}]
+                         [eligbledemands {}]
+                         [changed true]
+                         demandtraffic  
+                         tryfill  
+                         loginfeasibles 
+                         [tags {"Sinks" {}}]
+                         fillables 
+                         verbose 
+                         tlastdeactivation])
+
+(def empty-demandstore (make-demandstore)) 
 
 ;Option Explicit
 ;'TOM Change 17 DEC 2010
@@ -54,15 +72,3 @@
 ;Public eligibleDemands As Dictionary 'Dynamic set of active demands eligible for follow-on supply.
 ;
 ;Public changed As Dictionary 'Dynamic set of active demands that changed fill count during the course of the day.
-(defrecord demandstore [name demandmap infeasible-demands 
-                        unfilledq  activations deactivations 
-                        eligbledemands changed demandtraffic 
-                        tryfill loginfeasibles tags 
-                        fillables verbose tlastdeactivation])
-
-(defn empty-demandstore [] 
-  (demandstore. "DemandStore" {} {} 
-                 nil {} {} 
-                 {} {} true 
-                 false  {"Sinks" {}} {} 
-                 false false -1))
