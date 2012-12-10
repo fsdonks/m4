@@ -1,7 +1,7 @@
 ;This is a -currently- centralized set of data definitions used by 
 ;marathon.  The latest version in 
 (ns marathon.data
-  (use [util.record]))
+  (use [util.record :only [defrecord+]]))
 
 (defrecord+ demandstore [[name "DemandStore"] 
                          [demandmap  {}]
@@ -204,6 +204,7 @@
 ;do this now.
 
 (def msgbands {:simulation 1 :supply 2 :demand 3 :policy 4 :trending 5})
+
 ;Basic events ported from Marathon.
 (def events 
     {:spawnunit "Spawning Unit",
@@ -263,96 +264,99 @@
 
 (defn addEvent [name description grouping eventmap]
   (assoc eventmap (keyword name) description))
+
 (defn add-events [tgt specs]
-  (reduce #(apply addEvent %) tgt specs)) 
-(def system-events 
-  (add-events {}
-     ['all, "Generic", "Generic"]
-     ['Initialize, "Initializing", "Simulation"]
-     ['Terminate, "Terminating", "Simulation"]
-     ['sample, "Sampling", "Simulation"]
-     ['EndofDay, "End of Day", "Simulation"]
-     ['BeginDay, "Begin Day", "Simulation"]
-     ['UpdateRequest, "UpdateRequest", "Simulation"]    
-     ['WatchSupply, "WatchSupply", "Simulation"]
-     ['WatchDemand, "WatchDemand", "Simulation"]
-     ['WatchPolicy, "WatchPolicy", "Simulation"]
-     ['WatchTime, "WatchTime", "Simulation"]
-     ['WatchParameters, "WatchParameters", "Simulation"]
-     ['WatchFill, "WatchFill", "Simulation"]
-     ['PauseSimulation, "PauseSimulation", "Simulation"]
-     ['WatchGUI, "WatchGUI", "Simulation"]))
+  (reduce #(apply addEvent %) tgt specs))
 
-(def supply-events 
-  (add-events {}
-     [[ 'spawnunit, "Spawning Unit", "Supply"]
-      [ 'deploy, "Deploying Unit", "Supply"]
-      [ 'MoveUnit, "Moving Unit", "Supply"]
-      [ 'FillDemand, "Filling Demand", "Supply"]
-      [ 'NewDeployable, "New Deployable Stock", "Supply"]
-      [ 'NewSRCAvailable, "New SRC Stock", "Supply"]
-      [ 'MoreSRCAvailable, "More SRC Available", "Supply"]
-      [ 'NotDeployable, "Not Deployable", "Supply"]
-      [ 'Deployable, "Deployable", "Supply"]
-      [ 'outofstock, "out of Stock", "Supply"]
-      [ 'CycleCompleted, "Cycle Completed", "Supply"]
-      [ 'CycleStarted, "Cycle Started", "Supply"]
-      [ 'SpawnGhost, "Spawn Ghost", "Supply"]
-      [ 'supplyUpdate, "Supply Update", "Supply"]
-      [ 'ScopedSupply, "Scoped Supply", "Supply"]
-      [ 'AddedUnit, "Added Unit", "Supply"]
-      [ 'PositionUnit, "Positioned Unit", "Supply"]
-      [ 'UnitChangedPolicy, "Unit Changed Policy", "Supply"]
-      [ 'AwaitingPolicyChange, "Awaiting Policy Change", "Supply"]
-      [ 'SpawnedTransient, "Spawned Transient Unit", "Supply"]
-      [ 'neverDeployed, "Never Deployed", "Supply"]
-      [ 'NewFollowOn, "New Follow On", "Supply"]
-      [ 'FollowingOn, "Follow On", "Supply"]
-      [ 'UnitMoved, "Unit Moved", "Supply"]
-      [ 'firstDeployment, "First Deployment", "Supply"]
-      [ 'updateAllUnits, "Update All Units", "Supply"]
-      [ 'UnitPromoted, "Unit Promoted", "Supply"]]))
+(defn grouped-event [name message group]
+  [group [name message]])
 
-(def demand-events 
-  (add-events {}
-    [['RequestFill, "Requesting Fill", "Demand"]
-     ['scheduleDemand, "Scheduling Demand", "Demand"]
-     ['ActivateDemand, "Activating Demand", "Demand"]
-     ['DeActivateDemand, "DeActivating Demand", "Demand"]
-     ['DisengageUnit, "Sending Unit Home", "Demand"]
-     ['InfeasibleDemand, "Infeasible Demand", "Demand"]
-     ['extendedBOG, "Extended BOG", "Demand"]
-     ['demandupdate, "DemandUpdate", "Demand"]
-     ['ScopedDemand, "Scoped Demand", "Demand"]
-     ['CannotFillDemand, "Cannot Fill Demand", "Demand"]
-     ['CanFillDemand, "Can Fill Demand", "Demand"]
-     ['StockRequired, "Stock Required", "Demand"]
-     ['AddedDemand, "Added Demand", "Demand"]
-     ['DemandFillChanged, "Demand Fill Changed", "Demand"]
-     ['OverlappingUnit, "Overlapping Unit", "Demand"]]))
+(defn grouped-events [xs] (map #(apply grouped-event %) xs))
+(defn merge-events [grouprecs]
+  (reduce (fn [acc [group [k v]]]
+            (assoc-in acc [(keyword group) k] v)) {} grouprecs))
+(def adapt-events (comp merge-events grouped-events))
 
-(def policy-events 
-  (add-events {}
-    [['policychange, "Policy Change", "Policy"]
-     ['AddedPeriod, "Added Period", "Policy"]
-     ['periodChange, "Period Change", "Policy"]]))
- 
-(def trending-events 
-  (add-events {}
-    [['LocationIncrement, "Location Increment", "Trending"]
-     ['LocationDecrement, "Location Decrement", "Trending"]
-     ['LocationSwap, "Location Swap", "Trending"]
-     ['GhostDeployed, "Ghost Deployed", "Trending"]
-     ['GhostReturned, "Ghost Returned", "Trending"]
-     ['GetCycleSamples, "Getting Cycle Samples", "Trending"]
-     ['NewHighWaterMark, "New High Water Mark", "Trending"]
-     ['UnitNotUtilized, "Unit Not Utilized", "Trending"]]))
-
-
+;events added 9 Dec 2012, from v3.7602983 
+;the following event definitions were slightly modified from the vba marathon 
+;stuff.
+(def default-events 
+  (merge 
+    [(adapt-events  ;system events 
+       [[:all, "Generic", "Generic"]
+        [:Initialize, "Initializing", "Simulation"]
+        [:Terminate, "Terminating", "Simulation"]
+        [:sample, "Sampling", "Simulation"]
+        [:EndofDay, "End of Day", "Simulation"]
+        [:BeginDay, "Begin Day", "Simulation"]
+        [:UpdateRequest, "UpdateRequest", "Simulation"]    
+        [:WatchSupply, "WatchSupply", "Simulation"]
+        [:WatchDemand, "WatchDemand", "Simulation"]
+        [:WatchPolicy, "WatchPolicy", "Simulation"]
+        [:WatchTime, "WatchTime", "Simulation"]
+        [:WatchParameters, "WatchParameters", "Simulation"]
+        [:WatchFill, "WatchFill", "Simulation"]
+        [:PauseSimulation, "PauseSimulation", "Simulation"]
+        [:WatchGUI, "WatchGUI", "Simulation"]])
+     (adapt-events ;supply events
+       [[:spawnunit, "Spawning Unit", "Supply"]
+        [:deploy, "Deploying Unit", "Supply"]
+        [:MoveUnit, "Moving Unit", "Supply"]
+        [:FillDemand, "Filling Demand", "Supply"]
+        [:NewDeployable, "New Deployable Stock", "Supply"]
+        [:NewSRCAvailable, "New SRC Stock", "Supply"]
+        [:MoreSRCAvailable, "More SRC Available", "Supply"]
+        [:NotDeployable, "Not Deployable", "Supply"]
+        [:Deployable, "Deployable", "Supply"]
+        [:outofstock, "out of Stock", "Supply"]
+        [:CycleCompleted, "Cycle Completed", "Supply"]
+        [:CycleStarted, "Cycle Started", "Supply"]
+        [:SpawnGhost, "Spawn Ghost", "Supply"]
+        [:supplyUpdate, "Supply Update", "Supply"]
+        [:ScopedSupply, "Scoped Supply", "Supply"]
+        [:AddedUnit, "Added Unit", "Supply"]
+        [:PositionUnit, "Positioned Unit", "Supply"]
+        [:UnitChangedPolicy, "Unit Changed Policy", "Supply"]
+        [:AwaitingPolicyChange, "Awaiting Policy Change", "Supply"]
+        [:SpawnedTransient, "Spawned Transient Unit", "Supply"]
+        [:neverDeployed, "Never Deployed", "Supply"]
+        [:NewFollowOn, "New Follow On", "Supply"]
+        [:FollowingOn, "Follow On", "Supply"]
+        [:UnitMoved, "Unit Moved", "Supply"]
+        [:firstDeployment, "First Deployment", "Supply"]
+        [:updateAllUnits, "Update All Units", "Supply"]
+        [:UnitPromoted, "Unit Promoted", "Supply"]])     
+     (adapt-events ;demand-events 
+       [[:RequestFill, "Requesting Fill", "Demand"]
+        [:scheduleDemand, "Scheduling Demand", "Demand"]
+        [:ActivateDemand, "Activating Demand", "Demand"]
+        [:DeActivateDemand, "DeActivating Demand", "Demand"]
+        [:DisengageUnit, "Sending Unit Home", "Demand"]
+        [:InfeasibleDemand, "Infeasible Demand", "Demand"]
+        [:extendedBOG, "Extended BOG", "Demand"]
+        [:demandupdate, "DemandUpdate", "Demand"]
+        [:ScopedDemand, "Scoped Demand", "Demand"]
+        [:CannotFillDemand, "Cannot Fill Demand", "Demand"]
+        [:CanFillDemand, "Can Fill Demand", "Demand"]
+        [:StockRequired, "Stock Required", "Demand"]
+        [:AddedDemand, "Added Demand", "Demand"]
+        [:DemandFillChanged, "Demand Fill Changed", "Demand"]
+        [:OverlappingUnit, "Overlapping Unit", "Demand"]])
+     (adapt-events ;policy-events
+       [[:policychange, "Policy Change", "Policy"]
+        [:AddedPeriod, "Added Period", "Policy"]
+        [:periodChange, "Period Change", "Policy"]])     
+     (adapt-events ;trending-events 
+       [[:LocationIncrement, "Location Increment", "Trending"]
+        [:LocationDecrement, "Location Decrement", "Trending"]
+        [:LocationSwap, "Location Swap", "Trending"]
+        [:GhostDeployed, "Ghost Deployed", "Trending"]
+        [:GhostReturned, "Ghost Returned", "Trending"]
+        [:GetCycleSamples, "Getting Cycle Samples", "Trending"]
+        [:NewHighWaterMark, "New High Water Mark", "Trending"]
+        [:UnitNotUtilized, "Unit Not Utilized", "Trending"]])]))
+     
 (defrecord+ managerofevents [[name "EventManager"]
-                            [userevents events] 
-                            evtstream 
-                            streams])
-  
-
-
+                             [userevents default-events] 
+                             evtstream 
+                             streams])  

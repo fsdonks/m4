@@ -92,7 +92,7 @@
         defaults (reduce (fn [acc k] 
                            (assoc acc k (get fieldmap (get keymap k)))) {}
                          (keys keymap))
-        args {:keys (into [] (keys keymap)) :or defaults}]
+        args {:keys (into [] (reverse (keys keymap))) :or defaults}]
     `(defn ~(symbol (str "make-" name)) [& ~args] 
        (~(symbol (str "->" name)) ~@(get args :keys)))))
     
