@@ -126,6 +126,20 @@
   ([path] (clear-folders! 
             (fn [f] (not (.isDirectory f))) path)))
 
+(defn build-folders!
+  "Builds the structure for a set of folders defined by folderspec, in root 
+   directory defined by the path rootdir.  A folderspec is simply a map where 
+   nested maps represent subdirectories ala 
+   {:output {} :input {}}, which expands to rootdir/output, rootdir/input"
+  [rootdir folderspec]
+  (map->folders! folderspec (io/as-directory rootdir) :condensed? false))  
+
+;an empty readme-file, to be used with folder spec in map->folders! 
+(def readme {"readme.txt" "Insert comments here."})
+;an empty, to be used with folder spec in map->folders! 
+(def blankfile {"blank.txt" "blank!"})
+ 
+
 (defmacro with-temp-dir
   "Evaluats body inside a context in which *tmpdir* is bound to a path that 
    references a newly-created directory in the system's temporary directories.

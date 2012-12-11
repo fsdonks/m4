@@ -67,20 +67,11 @@
 ;  (->processor :in-directory {:directory-exists? path} nil 
 ;     (fn [state] (process proc (assoc state :dir path)))))  
 
-(defn build-folders!
-  "Builds the structure for a set of folders defined by folderspec, in root 
-   directory defined by the path rootdir.  A folderspec is simply a map where 
-   nested maps represent subdirectories ala 
-   {:output {} :input {}}, which expands to rootdir/output, rootdir/input"
-  [rootdir folderspec]
-  (io/map->folders! folderspec (io/as-directory rootdir) :condensed? false))  
-
-(def readme {"readme.txt" "Insert comments here."})
  
 ;a sample of compiling an audit trail from a marathon run.
 (comment 
 	(defprocess compute-trends [rootdir]
-	  (let [readme {"readme.txt" "Insert comments here."}        
+	  (let [readme io/readme        
 	        folderspec {"Output" readme 
 	                    "Input"  readme}]
 	  (with-dir rootdir
