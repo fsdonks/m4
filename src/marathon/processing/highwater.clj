@@ -1,4 +1,5 @@
 (ns marathon.processing.highwater
+  (:use [util.record :only [defrecord+ with-record merge-from]])
   (:require [util [io :as io] 
                   [table :as tbl]]))
              
@@ -24,9 +25,29 @@
          (when coll
            (chunks keyf (keyf (first coll)) [] coll))))
 
-(defrecord trend [t Quarter SRC TotalRequired TotalFilled Overlapping
-                  Deployed DemandName Vignette DemandGroup])
+;(defrecord trend [t Quarter SRC TotalRequired TotalFilled Overlapping
+;                  Deployed DemandName Vignette DemandGroup])
 
+;Note -> we're maintaining backward compatibility with the older version
+;of trend here.  We didn't always capture the AC/RC/NG/Ghost, etc. fill data.
+;Newer versions may have that information.  In order to process older datasets,
+;we want to keep these fields optional.
+(defrecord+ trend [t 
+                   Quarter 
+                   SRC 
+                   TotalRequired 
+                   TotalFilled 
+                   Overlapping
+                   Deployed 
+                   DemandName 
+                   Vignette 
+                   DemandGroup
+                   OITitle
+                   [ACFilled 0] 
+                   [RCFilled 0] 
+                   [NGFilled 0] 
+                   [GhostFilled 0] 
+                   [OtherFilled 0]])
 
 (defmacro record-headers
   "Returns a vector of the field names from a record."
@@ -35,6 +56,7 @@
   `(vec (map str (first (:arglists (meta #'~rname)))))))
 
 (def headers (record-headers trend))
+(def fieldkeys (vec (map keyword headers)))
 
 (defn Qtrend
   "A Qtrend is a type alias for a tuple of Quarter, an Int, and a
@@ -45,10 +67,14 @@
 
 (defn readTrend
   "convert a list of stringified fields into a trend"
-  [coll]
-  (apply ->trend (map tbl/parse-string-nonscientific 
-                      (tbl/split-by-tab coll))))
-
+  [coll & {:keys [fieldnames] :or {fieldnames fieldkeys}}]
+  (let [vs (vec (map tbl/parse-string-nonscientific 
+                        (tbl/split-by-tab coll)))]
+    (if (= fieldnames fieldkeys) ;default fields
+    (apply ->trend (map tbl/parse-string-nonscientific 
+                        (tbl/split-by-tab coll)))
+    (apply make-trend (flatten (seq (zipmap fieldnames vs)))))))
+  
 ;; trendString :: Trend -> String
 ;; trendString (Trend t q s req filled lapping dep dem vig group)
 ; tabLine [(show t), (show q), s, (show req) , (show filled), (show lapping),
@@ -59,7 +85,10 @@
 ;trendList Is = map readTrend Is
 (defn trendList
   "convert a nested list of trend fields into a list of trends."
-  [coll] (map readTrend coll))
+  [coll & [fieldnames]]
+  (if fieldnames 
+    (map (fn [c] (readTrend c :fieldnames fieldnames)) coll) ;if fieldnames provided, use.
+    (map readTrend coll))) ;else, use default fieldnames.
 
 ;asQuarter:: (Integral a)=> a -> a
 ;asQuarter t = 1 + (quot t 90)
@@ -152,12 +181,21 @@
    to a list of QTrends ... "
   [trends]
   (map getHighTrends (concat (groupByQuarter trends))))
+
 ; --We don't need the header from our input file.
 ; readTrends = trendList . drop 1
-(def readTrends (comp trendList (partial drop 1)))
+(defn readTrends
+  "Where xs is a tab delimited line sequence, and the first value of 
+   xs is a row of headers, returns a lazy seq of trend records using the 
+   headers in the first row."
+  [xs]
+  (let [fields (vec (map keyword (tbl/split-by-tab (first xs))))]
+    (trendList (rest xs) fields)))
+;    (comp trendList (partial drop 1)))
+  
 ; addHeaders trs = (tabLine headers) :trs
 (defn addHeaders [trends] (cons (str (tabLine headers) \newline) trends))
-(def workdir "C:\\Users\\thomas.spoon\\Documents\\trendtest\\")
+(def workdir "C:\\Users\\tom\\Documents\\Marathon_NIPR\\")
 (def batchdir 
   "C:\\Users\\thomas.spoon\\Documents\\TAA 15-19\\Unconstrained Runs")
 (def testfile (io/relative-path workdir ["bcttrends.txt"]))
@@ -165,24 +203,45 @@
 (def testout (io/relative-path workdir ["hw.txt"]))
 (def bigout (io/relative-path workdir ["highwater.txt"]))
 
+(def testlookup 
+  {"SRC1" {:SRC "SRC1", :OITitle "Little SRC", :STR 5}
+   "SRC2" {:SRC "SRC2", :OITitle "Medium SRC", :STR 10}
+   "SRC3" {:SRC "SRC3", :OITitle "Big SRC",    :STR 20}})
+
 ;this version is -120 seconds, take about 1 gb of ram.
-(defn main [infile outfile]
+(defn main
+  "Given an input file and an output file, compiles the highwater trends from
+   demandtrends.  If  lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
+   supplied, then the supplied field values will be merged with the entries 
+   prior to writing.  We typically use this for passing in things like 
+   OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
+   This pattern will probably be extracted into a higher order postprocess 
+   function or macro...."
+  [infile outfile & {:keys [lookup-map primarykey] 
+                     :or {lookup-map nil primarykey :SRC}}]
   (with-open [lazyin (clojure.java.io/reader infile)
-              lazyout (clojure.java.io/writer (make-file! outfile))]
+              lazyout (clojure.java.io/writer (io/make-file! outfile))]
     (binding [*out* lazyout]
       (do (println (tabLine headers))
           (doseq [q (->> (line-seq lazyin)
                       (readTrends)
-                      (highWaterMarks))
-                  t (map trendString q)]
-            (print t))))))
+                      (highWaterMarks))]
+            (let [merged (if lookup-map 
+                           (map 
+                             (fn [x] 
+                               (merge-from x 
+                                   (get lookup-map (get x primarykey))))
+                             q)
+                           q)]
+              (doseq [t  (map trendString merged)]
+                (print t))))))))
 
 
 ;This is a process, I'd like to move it to a higher level script....
 (defn findDemandTrendPaths
   "Sniff out paths to demand trends files from root."
   [root]
-  (map fpath (io/find-files root #(= (io/fname %) "DemandTrends.txt"))))
+  (map io/fpath (io/find-files root #(= (io/fname %) "DemandTrends.txt"))))
 
 (defn batchpaths [root]
   (map #(io/relative-path (io/as-directory root) %)
@@ -194,20 +253,24 @@
 (defn batch
   "Computes high water for for each p in path. dumps a corresponding highwater.
    in the same directory, overwriting."
-  [paths]
+  [paths & {:keys [lookup-map primarykey]}]
   (for [source paths]
-    (let [target (relative-path 
-                   (as-directory (io/fdir source)) ["highwater.txt"])]
+    (let [target (io/relative-path 
+                   (io/as-directory (io/fdir source)) ["highwater.txt"])]
       (if (io/fexists? (clojure.java.io/file source))
         (do (println (str "Computing HighWater : " source" -> " target))
-            (main source target))
+            (main source target 
+                  :lookup-map lookup-map 
+                  :primarykey primarykey))
         (println (str "Source file: " source" does not exist!"))))))
 
 (defn batch-from
   "Compiles a batch of highwater trends, from demand trends, from all demand 
    trends files in folders or subfolders from root."
-  [root]
-  (batch (findDemandTrendPaths root)))
+  [root & {:keys [lookup-map primarykey]}]
+  (batch (findDemandTrendPaths root) 
+         :lookup-map lookup-map 
+         :primarykey primarykey))
 
 ;this version is as fast, but takes 3 GB of ram ....
 ; (defn main2 [infile outfile]

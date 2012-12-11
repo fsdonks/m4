@@ -3,8 +3,15 @@
 ;Uses map as a container.
 (ns util.table
   (:require [clojure [string :as strlib]]
-            [clojure [set :as setlib]]))
+            [clojure [set :as setlib]]
+            [util [clipboard :as board]]))
 			
+(defprotocol ITable 
+  (table-fields [x] "get a vector of fields for table x")
+  (table-records [x] "get a vector of records from table x"))  
+
+(defn tabular? [x] (satisfies? ITable x))
+
 (defn parse-string 
 	"Parses a string, trying various number formats.  Note, scientific numbers,
 	 or strings with digits sandwiching an E or an e will be parsed as numbers,
@@ -59,7 +66,7 @@
 
 (defn records->table 
 	"Takes a sequence of maps (records) and returns a tabular representation 
-     of the records.  Infers the field names for the table from the first 
+   of the records.  Infers the field names for the table from the first 
 	 record.  Assumes every record has identical fieldnames."
 	[recs]
 	{:fields (vec (keys (first recs)))
@@ -86,6 +93,12 @@
 (defmethod as-table java.lang.String [t] (tabdelimited->table t))
 (defmethod as-table clojure.lang.PersistentArrayMap [t] t)
 
+(defn copy-table!
+  "Copies a table from the system clipboard, assuming that the clipboard
+   contains a string of tab-delimited text."
+  [& [parsemode]]
+  (tabdelimited->table (board/copy!) :parsemode (or parsemode :no-science)))
+  
 ;it'd be nice to have simple sql-like operators....
 ;we've already got select 
 ;in SQL, we use
