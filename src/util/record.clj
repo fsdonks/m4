@@ -102,6 +102,21 @@
   (merge r 
        (apply hash-map update-keys)))
 
+(defn merge-from
+  "Similar semantics to clojure.core/merge, except that it only 
+   merges keys that already exist in m.  Thus, the first map m effectively
+   constrains the fields that may be merged.  Used to update records 
+   in a safe manner that does not violate their fields, thus causing a 
+   conversion from the record type to a generic hashmap."
+  [m & ms]
+  (let [fields (set (keys m))]
+    (reduce (fn [acc m2]
+              (reduce (fn [m1 k] (assoc m1 k (get m2 k))) 
+                      acc
+                      (clojure.set/intersection fields (set (keys m2)))))
+            m ms)))
+                
+
 (defn- parse-record-opts
   "Parses a list of opts+specs to extract doc strings, fields, and specs.
    Not currently used....intended to allow documentation support in defrecord+"
