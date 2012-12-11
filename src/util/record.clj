@@ -151,7 +151,36 @@
     `(do
        (defrecord ~name ~rawfields ~@opts+specs)
        ~default-constructor)))
-  
+
+;(defmacro query-with [m querydef]
+;  `(let [m# ~m
+;         ?# (fn [k v] (get m k))]
+;     (apply (fn [& {:keys [~'add-fields ~'by ~'as]}]
+;              (when ~'add-fields 
+;                (
+;
+;
+;(query m
+;	'{:select [:ACStr :RCStr :NGStr :GhostStr :OtherStr]
+;    :by (let [strength (? :STR)
+;              as-Filled (fn [k] (keyword 
+;                                  (str (subs (str k) 0 1) "Filled")))] 
+;          (fn [k v] (* strength (? (as-Filled k)))))})
+;
+;(query m
+;	'{:select [:ACStr :RCStr :NGStr :GhostStr :OtherStr]
+;    :as }
+;    
+;
+;
+;
+;(fn [{:keys [STR TotalRequired] :as m}]
+;  (let [? (fn [f] (get m f))]  
+;    {:ACFilled (* STR (? :ACFilled)) 
+;     :RCFilled (* STR (? :NGFilled))
+;     :GhostFilled (* STR (? :GhostFilled)) 
+;     :OtherFilled (* STR (? :OtherFilled))}))
+    
 
                   
   
