@@ -285,7 +285,7 @@
    OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
    This pattern will probably be extracted into a higher order postprocess 
    function or macro...."
-  [infile outfile & [entry-processor]]
+  [infile outfile & {:keys [entry-processor]}]
     (with-open [lazyin (clojure.java.io/reader infile)
                 lazyout (clojure.java.io/writer (io/make-file! outfile))]
       (binding [*out* lazyout]
@@ -293,9 +293,9 @@
           (doseq [q (->> (line-seq lazyin)
                       (readTrends)
                       (highWaterMarks))]
-              (doseq [t  (->> (if entry-processor 
-                                (map entry-processor q) q) 
-                           (map trendString))]
+              (doseq [t (->> (if entry-processor
+                               (map entry-processor q) q)
+                          (map trendString))]
                 (print t)))))))
 
 ;(defn main
@@ -353,14 +353,15 @@
         (println (str "Source file: " source" does not exist!"))))))
 
 (defn get-entry-processor [root]
-  (let [definitionpath  (io/relative-path 
-                       (io/as-directory (io/fdir root)) ["SRCdefinitions.txt"])
-        srcfile (clojure.java.io/file definitionpath)]    
-    (if (io/fexists? srcfile)
+  (let [filepath  (io/relative-path 
+                       (io/as-directory root) ["SRCdefinitions.txt"])
+        srcfile (clojure.java.io/file filepath)]    
+    (if (io/fexists? filepath)
       (->> (tbl/tabdelimited->table (slurp srcfile) :parsemode :noscience)
         (tbl/record-seq))
       identity)))
-        
+
+
 
 
 (defn batch-from
@@ -369,6 +370,8 @@
   [root & {:keys [entry-processor]}]
   (batch (findDemandTrendPaths root) 
          :entry-processor entry-processor))
+
+
 
 ;this version is as fast, but takes 3 GB of ram ....
 ; (defn main2 [infile outfile]
