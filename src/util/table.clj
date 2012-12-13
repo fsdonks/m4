@@ -4,22 +4,9 @@
 (ns util.table
   (:require [clojure [string :as strlib]]
             [clojure [set :as setlib]]
-            [util [clipboard :as board]]))
+            [util [clipboard :as board]])
+  (:use [util.vector])) ;might fold these functions back in later...
 
-(defn vec-filter
-  "Vector-specific filter operation.  Since we're using vectors for our
-   tables, this should be optimized a bit.  Not sure if it'll pay off though."
-  [f v]
-  (persistent! (reduce conj! (transient []) (filter f v))))  
-
-(defn vec-vals
-  "Returns an in-order vector of the values of persistent map m.
-   Coercing vals into a vector using "
-  [m]
-  (vec (reverse (vals m))))
-
-(defn transient-vector? [v]
-  (= type v clojure.lang.PersistentVector$TransientVector))
 
 
 (defprotocol ITable 
@@ -207,32 +194,6 @@
   (reduce (fn [acc [j x]] (assoc acc j (conj (get acc j) x)))
           columns (map-indexed vector rowvector)))
 
-(defn- transient-columns
-  "Returns a transient set of columns"
-  [cols]
-  (reduce (fn [acc v] (conj! acc (transient v)))
-                  (transient []) cols))
-
-(defn- persistent-columns!
-  "Persists the columns from a transient state."
-  [tcols]
-  (reduce (fn [acc tc]  (conj acc (persistent! tc))) [] (persistent! tcols)))
-
-
-(defn transpose
-  "Changes rows to columns.  Faster, using transients."
-  [rowvectors]
-  (let [colcount (count (first rowvectors))
-        res 
-        (reduce (fn [tcols row] 
-                  (reduce (fn [cols [j fld]]  
-                            (assoc! cols j (conj! (get cols j) fld)))
-                          tcols 
-                          (map-indexed vector row)))
-                (reduce conj! (transient []) 
-                        (take colcount (repeatedly (fn []  (transient [])))))
-                rowvectors)]
-    (persistent-columns! res)))
 
 (defn- conj-row! [transientcolumns rowvector]
   (reduce (fn [acc [j x]] (assoc! acc j (conj! (get acc j) x)))
@@ -282,51 +243,7 @@
     (make-table (vec (reverse (table-fields t)))
                 (vec (reverse (table-columns t))))))
 
-(defn field-comparer [fld & {:keys [f] :or {keyfunc identity}}]
-  (fn [rec1 rec2] 
-         (compare (keyfunc (get rec1 fld))
-                  (keyfunc (get rec2 fld)))))
 
-(defn ordering->fieldcomp
-  ([field keyfunc ordering]
-     [(field-comparer field :keyfunc keyfunc) ordering])
-  ([field ordering] 
-    [(field-comparer field) ordering])
-  ([spec-or-field] (if (coll? spec-or-field)
-                     (if (fn? (first spec-or-field))
-                       [(first spec-or-field) (or (second spec-or-field)
-                                                  :ascending)]
-                       (case (count spec-or-field)
-                         1 (ordering->fieldcomp (first spec-or-field)
-                                                :ascending)
-                         2 (ordering->fieldcomp (first spec-or-field) 
-                                                (second spec-or-field))
-                         3 (ordering->fieldcomp (first spec-or-field) 
-                                                (second spec-or-field)
-                                                (nth spec-or-field 2))
-                         (throw (Exception. 
-                                  (str "Too many elements in spec, 3 max"
-                                       spec-or-field)))))
-                     (ordering->fieldcomp spec-or-field :ascending))))
-                                                                              
-(defn compound-field-comparer
-  "Given a sequence of field orderings, where values are 
-   either atoms (typically keywords or string), or pairs of 
-   [fieldname :ascending|:descending], compares records in 
-   order, as with compare."
-  [orderings]
-  (let [comparers (map ordering->fieldcomp orderings)]                                                                                                                                                                                     
-    (fn [record1 record2] 
-      (loop [cs comparers]
-        (if (empty? cs)
-          0
-          (let [[c order] (first cs)
-                res (c record1 record2)]
-            (if (zero? res)
-              (recur (rest cs))              
-              (case order 
-                :ascending res
-                (* res -1)))))))))
                             
 (defn order-by
   "Similar to the SQL clause.  Given a sequence of orderings, sorts the 
@@ -375,16 +292,16 @@
 )
 
 
-(defn join-tables
-  "Given a field or a list of fields, joins each table that shares the field."
-  [fields tbls]
-  (let [valid-tables (->> (filter #(clojure.set/intersect 
-                                     (set fields) (set (table-fields %))))
-                          (sort-by table-count))]
-    (when valid-tables 
-      (let [fieldvals (table-rows
-
-                          
+;(defn join-tables
+;  "Given a field or a list of fields, joins each table that shares the field."
+;  [fields tbls]
+;  (let [valid-tables (->> (filter #(clojure.set/intersect 
+;                                     (set fields) (set (table-fields %))))
+;                          (sort-by table-count))]
+;    (when valid-tables 
+;      (let [fieldvals (table-rows
+;
+;                          
   
 
 ;(defn join? [keyspec]

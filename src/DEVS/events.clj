@@ -1,5 +1,5 @@
 (ns DEVS.events
-  (:use [util.generators :only [unfold generate]]))
+  (:use [util.general :only [unfold generate]]))
 
 ;Events are descriptions of ways to compute new values from initial values.  
 ;They are inputs to functions that consume such information to map an 

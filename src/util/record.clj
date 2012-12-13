@@ -1,4 +1,5 @@
-(ns util.record)
+(ns util.record
+  (:require [util [generators :as gen]]))
 
 ;stolen from stack overflow
 (defn static? [field]
@@ -151,6 +152,71 @@
     `(do
        (defrecord ~name ~rawfields ~@opts+specs)
        ~default-constructor)))
+
+(defn field-comparer [fld & {:keys [keyfunc] :or {keyfunc identity}}]
+  (fn [rec1 rec2] 
+         (compare (keyfunc (get rec1 fld))
+                  (keyfunc (get rec2 fld)))))
+
+(defn ordering->fieldcomp
+  "Parses a field ordering into a field comparer, where field orderings are
+   of the form:
+     :field  
+   | [comparison-function :ascending|:descending],
+   | [fieldname comparison-function :ascending|:descending]     
+   | [fieldname :ascending|:descending]
+  
+   and field comparers take the form: 
+   [comparisonfunction :ascending|:descending]"  
+  ([field keyfunc ordering]
+     [(field-comparer field :keyfunc keyfunc) ordering])
+  ([field ordering] 
+    [(field-comparer field) ordering])
+  ([spec-or-field] (if (coll? spec-or-field)
+                     (if (fn? (first spec-or-field))
+                       [(first spec-or-field) (or (second spec-or-field)
+                                                  :ascending)]
+                       (case (count spec-or-field)
+                         1 (ordering->fieldcomp (first spec-or-field)
+                                                :ascending)
+                         2 (ordering->fieldcomp (first spec-or-field) 
+                                                (second spec-or-field))
+                         3 (ordering->fieldcomp (first spec-or-field) 
+                                                (second spec-or-field)
+                                                (nth spec-or-field 2))
+                         (throw (Exception. 
+                                  (str "Too many elements in spec, 3 max"
+                                       spec-or-field)))))
+                     (ordering->fieldcomp spec-or-field :ascending))))
+                             
+(defn compound-field-comparer
+  "Given a sequence of field orderings, where values are  either atoms 
+   of the form:
+   :field  
+   | [comparison-function :ascending|:descending],
+   | [fieldname comparison-function :ascending|:descending]     
+   | [fieldname :ascending|:descending]
+ 
+   creates a function that compares two records sequentially using the 
+   orderings, as with util.general/compare-many.  Short circuits as soon as a valid 
+   comparison is found."
+  [orderings]
+  (let [comparers (map ordering->fieldcomp orderings)]                                                                                                                                                                                     
+    (fn [record1 record2] 
+      (loop [cs comparers]
+        (if (empty? cs)
+          0
+          (let [[c order] (first cs)
+                res (c record1 record2)]
+            (if (zero? res)
+              (recur (rest cs))              
+              (case order 
+                :ascending res
+                (* res -1)))))))))
+
+       
+          
+
 
 ;(defmacro query-with [m querydef]
 ;  `(let [m# ~m
