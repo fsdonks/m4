@@ -25,22 +25,31 @@
       state
      (recur  nextstate (f nextstate)))))
 
-(defn compare-many
-  "Given a sequence of [f & [:ascending|:descending]], where f is a function of 
+
+(defn serial-comparer
+  "Given a sequence of functions [f & rest], where f is a function of 
    two arguments that maps to comparison values: 
       |0   -> x = y 
       |< 0 -> x < y
       |> 0 -> x > y     
-   returns a function of two arguments that applies each comparison in turn, 
+   composes a function of two arguments that applies each comparison in turn, 
    terminating early if a non-equal comparison is found."
   [comparers]
-  (fn [x y]
-    (->> (gen/generate (fn [[res compfuncs]] ;halting function  
-                         (or (not (zero? res)) 
-                             (empty? compfuncs)))          
-                       (fn [[res compfuncs]] ;state transition function
-                         (let [[f order] (first compfuncs)
-                               result (f x y)]
-                           [(if (= order :ascending) result (* result -1))                      
-                            (rest compfuncs)])))
-      (first))))
+  (fn [x y] 
+    (loop [cs comparers]
+      (if (empty? cs)
+          0
+          (let [res ((first cs) x y)]
+            (if (zero? res)
+              (recur (rest cs))
+              res))))))              
+
+(defn orient-comparer
+  "If direction is descending, wraps f in a function that negates its comparison 
+   result."
+  [f direction]
+  (if (= direction :descending)
+      (fn [x y] (* -1  (f x y)))
+      f))
+  
+

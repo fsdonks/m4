@@ -1,5 +1,5 @@
 (ns util.record
-  (:require [util [generators :as gen]]))
+  (:use [util.general :only [serial-comparer orient-comparer]]))
 
 ;stolen from stack overflow
 (defn static? [field]
@@ -153,29 +153,44 @@
        (defrecord ~name ~rawfields ~@opts+specs)
        ~default-constructor)))
 
-(defn field-comparer [fld & {:keys [keyfunc] :or {keyfunc identity}}]
-  (fn [rec1 rec2] 
-         (compare (keyfunc (get rec1 fld))
-                  (keyfunc (get rec2 fld)))))
+(defn field-comparer
+  "Builds a comparison function that extracts a fld from two records
+   and, if keyfunc is provided, applies keyfunc to the values, comparing the 
+   resulting keys with clojure.core/compare.   If no key function is provided, 
+   the raw field values are compared.
+   
+   Note: fields are pretty general: this fn only relies on 
+   clojure.core/get, so anything that can be treated by get can be used as a 
+   source of fields.  That includes vectors, which are treated as associations 
+   between numeric fields (indices) and values by clojure.core/get." 
+  [fld & {:keys [keyfunc]}]
+  (if keyfunc
+    (fn [rec1 rec2] 
+      (compare (keyfunc (get rec1 fld))
+               (keyfunc (get rec2 fld))))
+    (fn [rec1 rec2] 
+      (compare (get rec1 fld)
+               (get rec2 fld)))))
 
-(defn ordering->fieldcomp
-  "Parses a field ordering into a field comparer, where field orderings are
+(defn- ordering->fieldcomp
+  "Parses a field ordering into field comparer f, where field orderings are
    of the form:
      :field  
-   | [comparison-function :ascending|:descending],
+   | [comparison-function :ascending|:descending]
    | [fieldname comparison-function :ascending|:descending]     
    | [fieldname :ascending|:descending]
-  
-   and field comparers take the form: 
-   [comparisonfunction :ascending|:descending]"  
-  ([field keyfunc ordering]
-     [(field-comparer field :keyfunc keyfunc) ordering])
-  ([field ordering] 
-    [(field-comparer field) ordering])
+
+   and f::a->a->comparison.  Returns a function f, which is either a properly 
+   oriented field comparison function, or an oriented record-comparison 
+   function - if caller passed in a custom comparison function in the spec."  
+  ([field keyfunc ordering] (orient-comparer 
+                              (field-comparer field :keyfunc keyfunc) ordering))
+  ([field ordering]  (orient-comparer (field-comparer field) ordering))
   ([spec-or-field] (if (coll? spec-or-field)
                      (if (fn? (first spec-or-field))
-                       [(first spec-or-field) (or (second spec-or-field)
-                                                  :ascending)]
+                       (orient-comparer 
+                         (first spec-or-field) (or (second spec-or-field)
+                                                   :ascending))
                        (case (count spec-or-field)
                          1 (ordering->fieldcomp (first spec-or-field)
                                                 :ascending)
@@ -189,7 +204,7 @@
                                        spec-or-field)))))
                      (ordering->fieldcomp spec-or-field :ascending))))
                              
-(defn compound-field-comparer
+(defn serial-field-comparer
   "Given a sequence of field orderings, where values are  either atoms 
    of the form:
    :field  
@@ -198,24 +213,10 @@
    | [fieldname :ascending|:descending]
  
    creates a function that compares two records sequentially using the 
-   orderings, as with util.general/compare-many.  Short circuits as soon as a valid 
-   comparison is found."
+   orderings, as with util.general/compare-many.  Short circuits as soon as a 
+   valid comparison is found."
   [orderings]
-  (let [comparers (map ordering->fieldcomp orderings)]                                                                                                                                                                                     
-    (fn [record1 record2] 
-      (loop [cs comparers]
-        (if (empty? cs)
-          0
-          (let [[c order] (first cs)
-                res (c record1 record2)]
-            (if (zero? res)
-              (recur (rest cs))              
-              (case order 
-                :ascending res
-                (* res -1)))))))))
-
-       
-          
+  (serial-comparer (map ordering->fieldcomp orderings)))                                                                                                                                                                                     
 
 
 ;(defmacro query-with [m querydef]

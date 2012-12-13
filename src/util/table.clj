@@ -5,23 +5,42 @@
   (:require [clojure [string :as strlib]]
             [clojure [set :as setlib]]
             [util [clipboard :as board]])
-  (:use [util.vector])) ;might fold these functions back in later...
+  (:use [util.vector]
+        [util.record :only [serial-field-comparer]])) 
 
-
+;note-> a field is just a table with one field/column....
+;thus a table is a set of joined fields....
 
 (defprotocol ITable 
   (table-fields [x] "Get a vector of fields for table x")
-  (table-columns [x] "Get a nested vector of the columns for table x"))
+  (table-columns [x] "Get a nested vector of the columns for table x")
 
-(defprotocol IQueryable 
-  (select-fields  [x fieldspecs] 
-                  "Select a subset of fields from the queryable."))
+(defn tabular? [x] (satisfies? ITable x))
+  
+(defprotocol IUnOrdered
+  (-unordered? [x] 
+   "Helper protocol to indicate that table fields are not ordered."))
+
+(defprotocol ITableMaker 
+  (-make-table [x fields columns] "Allows types to define constructors."))
+
+(defprotocol IFieldDropper
+  (-drop-field [x fieldname] "Allows types to implement fast drop operations."))
+
+(declare empty-table 
+         -conj-field
+         -disj-field 
+         -conj-maptable 
+         -conj-vectable 
+         -conj-column-table)
 
 (defrecord column-table [fields columns]
   ITable 
-  (table-fields [x]  fields)
-  (table-columns [x] columns))
-  
+    (table-fields [x]  fields)
+    (table-columns [x] columns)
+  ITableMaker
+    (-make-table [x fields columns] (make-table fields columns)))
+
 (defn find-where [items v]
   (let [valid? (set items)]
     (->> (map-indexed (fn [i x] (when (valid? x) [i x])) v)
@@ -98,6 +117,55 @@
                               (vec (map second fieldvecs))))))
     
 (def empty-table (make-table [] [] ))
+(defn ordered-table?
+  "Indicates if tbl implements table fields in an unordered fashion."
+  [tbl]
+  (not (satisfies? IUnOrdered tbl)))
+
+(defn enumerate-fields
+  "Returns a sequence of [fld [column-values]]"
+  [flds cols] 
+  (for [[id f] (map-indexed vector flds)] [f (get cols id)]))
+
+(extend-protocol  ITable
+  nil
+    (table-fields [x] nil)
+    (table-columns [x] nil)
+  clojure.lang.PersistentArrayMap
+    (table-fields [x] (vec (keys x)))
+    (table-columns [x] (vec (vals x)))
+  clojure.lang.PersistentHashMap
+    (table-fields [x] (vec (keys x)))
+    (table-columns [x] (vec (vals x)))
+  clojure.lang.PersistentVector
+    (table-fields [x] (vec (map first x)))
+    (table-columns [x] (vec (map #(get % 1) x)))
+
+(extend-protocol ITableMaker
+  nil
+    (-make-table [x fields columns] (make-table fields columns)) 
+  clojure.lang.PersistentArrayMap
+    (-make-table [x fields columns] 
+       (#(into {} (reverse (enumerate-fields %1 %2))) fields columns))
+  clojure.lang.PersistentHashMap
+    (-make-table [x fields columns] 
+       (#(into {} (reverse (enumerate-fields %1 %2))) fields columns))
+  clojure.lang.PersistentVector
+    (-make-table [x fields columns]  
+       (comp vec enumerate-fields) fields columns))
+
+(extend-protocol IFieldDropper
+  clojure.lang.PersistentArrayMap
+    (-drop-field [x fieldname] (dissoc x fieldname))
+  clojure.lang.PersistentHashMap
+    (-drop-field [x fieldname] (dissoc x fieldname))                 
+
+(extend-protocol IUnOrdered 
+  clojure.lang.PersistentHashMap
+    (-unordered? [x] true)
+  clojure.lang.PersistentArrayMap
+    (-unordered? [x] true))
+
 (defn count-rows [tbl]
   (count (first (table-columns tbl))))
 
@@ -109,6 +177,15 @@
 (defn has-field? 
   [fname tbl] (has-fields? [fname] tbl))
 
+(defn get-field
+  "Returns the fieldspec for the field associated with fname, if any.
+   Field entry is in the form of {:fieldname [& column-values]}"
+  [fname tbl]
+  (when (has-field? fname tbl)
+    (assoc {} fname (->> (find-where #{fname} (table-fields tbl))
+                      (ffirst) 
+                      (get (table-columns tbl))))))
+ 
 (defn conj-field 
   "Conjoins a field, named fname with values col, onto table tbl.
    If no column values are provided, conjoins a normalized column of 
@@ -116,13 +193,13 @@
    If the field already exists, it will be shadowed by the new field."
   ([[fname & [col]] tbl] 
     (if-not (has-field? fname tbl) 
-       (make-table 
+       (-make-table
          (conj (table-fields tbl) fname) 
          (conj (table-columns tbl) 
                (normalize-column col (count-rows tbl))))
        (let [flds  (table-fields tbl)
              idx (ffirst (find-where #{fname} flds))]
-         (make-table 
+         (-make-table
            flds 
            (assoc (table-columns tbl) idx 
                   (normalize-column col (count-rows tbl)))))))) 
@@ -131,6 +208,10 @@
   "Conjoins multiple fieldspecs into tbl, where each field is defined by a  
    vector of [fieldname & [columnvalues]]"
   [fieldspecs tbl]
+  (if (tabular? fieldspecs)
+    (let [fieldspecs (enumerate-fields 
+                       (table-fields fieldspecs) 
+                       (table-columns (fieldspecs)))]
   (reduce (fn [newtbl fldspec] 
             (conj-field (fieldspec->field fldspec) newtbl)) tbl fieldspecs))
 
@@ -143,19 +224,44 @@
               (if (keep-set fld)
                 (conj-field fld (get cols j) newtbl)
                 newtbl))
-            empty-table
+            (-make-table tbl nil nil)
             (map-indexed vector (table-fields tbl)))))
 
 (defn drop-field
-  "Returns a tbl where fld is removed."
+  "Returns a tbl where fld is removed.  Structures that implement IFieldDropper
+   for effecient removal are preferred, otherwise we build a table without 
+   the dropped fields."
   [fld tbl]
-  (drop-fields [fld] tbl))
+  (if (satisfies? IFieldDropper tbl)
+    (-drop-field tbl fld )
+    (drop-fields [fld] tbl)))
 
-(extend-type util.table.column-table
-  IQueryable
-  (select-fields [x fieldspecs] 
-   (let [keepflds (set fieldspecs)] 
-     (drop-fields (filter #(not (keepflds %)) (table-fields x)) x))))
+(defn tbl->map
+  "Extracts a map representation of a table, where keys are 
+   fields, and values are column values."
+  [tbl] 
+  (if (map? tbl) tbl
+    (let [cols (table-columns tbl)]
+      (reduce (fn [fldmap [j fld]]  (assoc fldmap fld (get cols j))) {} 
+              (reverse (map-indexed vector (table-fields tbl))))))) 
+
+(defn map->table [m] 
+  (conj-fields (seq m) (empty-table)))
+
+;(defn order-fields-by
+;  "Returns a tbl where the fields are re-arranged to conform with the ordering 
+;   specified by fieldnames.  Resorts to a default ordered table representation."
+;  [fieldnames tbl]
+;  (assert (= (set flds) (set (table-fields tbl))) 
+;          (str "Fields do not intersect!"  flds (table-fields tbl)))
+;  (let [fieldmap (tbl->map tbl)]
+;    (reduce #(conj-field %2 %1) empty-table  
+
+(extend-protocol  IQueryable 
+  util.table.column-table
+    (select-fields [x fieldspecs] 
+       (let [keepflds (set fieldspecs)] 
+         (drop-fields (filter #(not (keepflds %)) (table-fields x)) x))))
 
 (defn valid-row?
   "Ensures n is within the bounds of tbl."
@@ -242,8 +348,6 @@
             (records->table))]
     (make-table (vec (reverse (table-fields t)))
                 (vec (reverse (table-columns t))))))
-
-
                             
 (defn order-by
   "Similar to the SQL clause.  Given a sequence of orderings, sorts the 
@@ -255,7 +359,7 @@
    "
   [orderings tbl]
   (let [t (->> (table-records tbl)
-            (sort (compound-field-comparer orderings))
+            (sort (serial-field-comparer orderings))
             (records->table))]
     (make-table (vec (reverse (table-fields t)))
                 (vec (reverse (table-columns t))))))
@@ -276,6 +380,9 @@
 (comment   
   (def mytable  (conj-fields [[:first ["tom" "bill"]]
                               [:last  ["spoon" "shatner"]]] empty-table))
+  (def mymaptable {:first ["tom" "bill"]
+                   :last  ["spoon" "shatner"]})
+  
   (def othertable (->> empty-table 
                     (conj-fields [[:first ["bilbo"]]
                                   [:last  ["baggins"]]])))
@@ -283,26 +390,26 @@
   (def query (->> [mytable othertable]
                (concat-tables)
                (conj-field 
-                 [:age (take 3 (repeatedly (fn [] (rand-int 65))))])))
+                 [:age [31 65 400]])))
   
   (def sortingtable (->> query 
                       (conj-field [:xcoord [2 2 55]])
                       (conj-field [:home   ["USA" "Canada" "Shire"]])))
-  
+  (def closest-geezer (->> sortingtable
+                        (order-by [:xcoord
+                                   [:age :descending]])))    
 )
 
 
-;(defn join-tables
-;  "Given a field or a list of fields, joins each table that shares the field."
-;  [fields tbls]
-;  (let [valid-tables (->> (filter #(clojure.set/intersect 
-;                                     (set fields) (set (table-fields %))))
-;                          (sort-by table-count))]
-;    (when valid-tables 
-;      (let [fieldvals (table-rows
-;
-;                          
-  
+(defn join-tables
+  "Given a field or a list of fields, joins each table that shares the field."
+  [fields tbls]
+  (let [valid-tables (->> (filter #(clojure.set/intersection 
+                                     (set fields) (set (table-fields %))))
+                          (sort-by count-rows))]
+    (when valid-tables 
+      (let [fieldvals (table-rows (select-fields fields (first valid-tables)))]
+        fieldvals))))                           
 
 ;(defn join? [keyspec]
 ;  (if (atom? keyspec)
@@ -338,7 +445,6 @@
 
 
 
-(defn tabular? [x] (satisfies? ITable x))
 
 (defn parse-string 
 	"Parses a string, trying various number formats.  Note, scientific numbers,
@@ -367,6 +473,8 @@
 (defn pair [a b] [a b])
 (def re-tab (re-pattern (str \tab)))
 (def split-by-tab #(strlib/split % re-tab))
+
+;older table abstraction, based on maps and records...
 (def empty-table {:fields [] :records []})
 
 (defn tabdelimited->table 
