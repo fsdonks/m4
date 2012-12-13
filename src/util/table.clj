@@ -27,27 +27,148 @@
   (table-columns [x] "Get a nested vector of the columns for table x"))
 
 (defprotocol IQueryable 
-  (select-fields  [x fieldspecs] "Select a subset of fields from the queryable."))
+  (select-fields  [x fieldspecs] 
+                  "Select a subset of fields from the queryable."))
 
 (defrecord column-table [fields columns]
   ITable 
   (table-fields [x]  fields)
-  (table-columns [x] columns)
-  IQueryable
-  (select-fields [x fieldspecs] 
-                 (let [idxs (reduce (fn [acc [i fld]]
-                                        (if (f fld)
-                                          (conj acc i)
-                                          acc)) [] (map-indexed vector fields))
-                       flds (set (map #(get fields %) idxs))]
-                   (->column-table (vec-filter flds fields)
-                                   (vec (map #(get columns %) idxs))))))
+  (table-columns [x] columns))
+  
+(defn find-where [items v]
+  (let [valid? (set items)]
+    (->> (map-indexed (fn [i x] (when (valid? x) [i x])) v)
+         (filter #(not (nil? %))))))
 
-(defn make-table [fields columns]
-  (->column-table fields columns))
+(defn fieldspec->field
+  "Converts a field specifier into a field specification used internally.
+   Fields may be specified using any sequence of [fieldname & [column-values]]
+   or using maps {fieldname [columnvalues]}"
+  [fieldspec]
+  (let [rawfield
+        (cond (map? fieldspec)  ((juxt (comp first keys) (comp first vals)) 
+                                  fieldspec)
+              (coll? fieldspec) ((juxt first second) fieldspec)                             
+              :else (throw (Exception. (str "invalid field spec" fieldspec))))
+        fieldvec (vec rawfield)]     
+    (if (nil? (second fieldvec))
+      (assoc fieldvec 1 [])
+      fieldvec)))
 
+(defn empty-columns [n] (vec (map (fn [_] []) (range n))))
+(defn normalized?
+  "Returns true if every column in the table has the same number of rows."
+  [tbl]
+  (every? 
+    (fn [col] (= (count col) 
+                 (count (first (table-columns tbl))))) 
+    (rest (table-columns tbl))))
+
+(defn nil-column [n] 
+  (persistent!  
+    (reduce conj! (transient []) (take n (repeat nil))))) 
+
+(defn normalize-column [col n]
+  (cond (empty? col) (nil-column n)
+        (vector? col) (if (zero? n)
+                        col
+                        (let [colcount (count col)]
+                          (cond 
+                            (= colcount n)  col
+                            (> colcount n) (subvec col 0 n)
+                            :else (persistent!
+                                    (reduce conj! (transient col) 
+                                            (nil-column (- n (count col))))))))
+        :else (normalize-column (vec col) n)))
+
+(defn normalize-columns [cols]
+  (loop [maxcount (count (first cols))
+         remaining (rest cols)
+         dirty? false]
+    (if (empty? remaining)
+      (if dirty?
+        (vec (map (fn [c] (normalize-column c maxcount)) cols))
+        cols)        
+      (let [nextcount (count (first remaining))]
+        (if (= nextcount maxcount)
+          (recur maxcount (rest remaining) dirty?)
+          (recur (max maxcount nextcount) (rest remaining) true))))))
+
+(defn make-table 
+  "Constructs a new table either directly from a vector of fields and 
+   vector of columns, or from a collection of field-specs, of the form
+   [[field1 & [column1-values...]]
+    [field2 & [column2-values...]]]  or 
+   {:field1 [column1-values] 
+    :field2 [column2-values]} "
+  ([fields columns]
+    (->column-table fields (normalize-columns columns)))
+  ([fieldspecs] (let [fieldvecs (->> (if (map? fieldspecs) 
+                                       (reverse fieldspecs)
+                                       fieldspecs)
+                                  (map fieldspec->field))]
+                  (make-table (vec (map first fieldvecs)) 
+                              (vec (map second fieldvecs))))))
+    
+(def empty-table (make-table [] [] ))
 (defn count-rows [tbl]
   (count (first (table-columns tbl))))
+
+(defn has-fields?
+  "Determines if every field in fnames exists in tbl as well."
+  [fnames tbl]
+  (every? (set (table-fields tbl)) fnames))
+
+(defn has-field? 
+  [fname tbl] (has-fields? [fname] tbl))
+
+(defn conj-field 
+  "Conjoins a field, named fname with values col, onto table tbl.
+   If no column values are provided, conjoins a normalized column of 
+   nils.  If values are provided, they are normalized to fit the table.
+   If the field already exists, it will be shadowed by the new field."
+  ([[fname & [col]] tbl] 
+    (if-not (has-field? fname tbl) 
+       (make-table 
+         (conj (table-fields tbl) fname) 
+         (conj (table-columns tbl) 
+               (normalize-column col (count-rows tbl))))
+       (let [flds  (table-fields tbl)
+             idx (ffirst (find-where #{fname} flds))]
+         (make-table 
+           flds 
+           (assoc (table-columns tbl) idx 
+                  (normalize-column col (count-rows tbl)))))))) 
+
+(defn conj-fields
+  "Conjoins multiple fieldspecs into tbl, where each field is defined by a  
+   vector of [fieldname & [columnvalues]]"
+  [fieldspecs tbl]
+  (reduce (fn [newtbl fldspec] 
+            (conj-field (fieldspec->field fldspec) newtbl)) tbl fieldspecs))
+
+(defn drop-fields
+  "Returns a tbl where the column associated with fld is no longer present."
+  [flds tbl]
+  (let [keep-set (clojure.set/difference (set (table-fields tbl)) (set flds))
+        cols     (table-columns tbl)]
+    (reduce (fn [newtbl [j fld]]
+              (if (keep-set fld)
+                (conj-field fld (get cols j) newtbl)
+                newtbl))
+            empty-table
+            (map-indexed vector (table-fields tbl)))))
+
+(defn drop-field
+  "Returns a tbl where fld is removed."
+  [fld tbl]
+  (drop-fields [fld] tbl))
+
+(extend-type util.table.column-table
+  IQueryable
+  (select-fields [x fieldspecs] 
+   (let [keepflds (set fieldspecs)] 
+     (drop-fields (filter #(not (keepflds %)) (table-fields x)) x))))
 
 (defn valid-row?
   "Ensures n is within the bounds of tbl."
@@ -129,9 +250,9 @@
   "Interprets a sequence of records as a table, where fields are the keys of 
    the records, and rows are the values."
   [recs]
-  (let [flds (vec (keys (first recs)))]
+  (let [flds (vec (reverse (keys (first recs))))]
     (make-table flds (conj-rows (vec (map (fn [_] []) flds))
-                                (map vals recs)))))
+                                (map (comp vals reverse) recs)))))
 
 (defn filter-rows
   "Returns a subset of rows where f is true.  f is a function of 
@@ -147,42 +268,156 @@
    values."
   (records->table (filter f (table-records tbl))))
 
+(defn negate [n] (* n -1))
+
+(defn order-with 
+    "Returns a new table, where the rows of tbl have been ordered according to 
+     function f, where f is of type ::record->key, where record is a map 
+     where the keys correspond to tbl fields, and the values correspond to row  
+     values."
+    [f tbl]
+  (let [t (->> (table-records tbl)
+            (sort-by f)
+            (records->table))]
+    (make-table (vec (reverse (table-fields t)))
+                (vec (reverse (table-columns t))))))
+
+(defn field-comparer [fld & {:keys [f] :or {keyfunc identity}}]
+  (fn [rec1 rec2] 
+         (compare (keyfunc (get rec1 fld))
+                  (keyfunc (get rec2 fld)))))
+
+(defn ordering->fieldcomp
+  ([field keyfunc ordering]
+     [(field-comparer field :keyfunc keyfunc) ordering])
+  ([field ordering] 
+    [(field-comparer field) ordering])
+  ([spec-or-field] (if (coll? spec-or-field)
+                     (if (fn? (first spec-or-field))
+                       [(first spec-or-field) (or (second spec-or-field)
+                                                  :ascending)]
+                       (case (count spec-or-field)
+                         1 (ordering->fieldcomp (first spec-or-field)
+                                                :ascending)
+                         2 (ordering->fieldcomp (first spec-or-field) 
+                                                (second spec-or-field))
+                         3 (ordering->fieldcomp (first spec-or-field) 
+                                                (second spec-or-field)
+                                                (nth spec-or-field 2))
+                         (throw (Exception. 
+                                  (str "Too many elements in spec, 3 max"
+                                       spec-or-field)))))
+                     (ordering->fieldcomp spec-or-field :ascending))))
+                                                                              
+(defn compound-field-comparer
+  "Given a sequence of field orderings, where values are 
+   either atoms (typically keywords or string), or pairs of 
+   [fieldname :ascending|:descending], compares records in 
+   order, as with compare."
+  [orderings]
+  (let [comparers (map ordering->fieldcomp orderings)]                                                                                                                                                                                     
+    (fn [record1 record2] 
+      (loop [cs comparers]
+        (if (empty? cs)
+          0
+          (let [[c order] (first cs)
+                res (c record1 record2)]
+            (if (zero? res)
+              (recur (rest cs))              
+              (case order 
+                :ascending res
+                (* res -1)))))))))
+                            
+(defn order-by
+  "Similar to the SQL clause.  Given a sequence of orderings, sorts the 
+   table accordingly.  orderings are of the form :
+   :field, 
+   [comparison-function :ascending|:descending],
+   [fieldname comparison-function :ascending|:descending]     
+   [fieldname :ascending|:descending]    
+   "
+  [orderings tbl]
+  (let [t (->> (table-records tbl)
+            (sort (compound-field-comparer orderings))
+            (records->table))]
+    (make-table (vec (reverse (table-fields t)))
+                (vec (reverse (table-columns t))))))
+
 (defn concat-tables
-  "Concatenates two or more tables.  Concatenation assumes that "
+  "Concatenates two or more tables.  Concatenation operates like union-select
+   in SQL, in that fields between all tables must be identical [including 
+   positionally].  Returns a single table that is the result of merging all 
+   rows together."
   [tbls]
   (let [flds (table-fields (first tbls))]
-  (assert (every? (= (table-fields %) flds) tbls) "Table fields "
+    (assert (every? #(= (table-fields %) flds) tbls))
+     (->> (mapcat (fn [tbl] (table-rows tbl)) tbls)
+       ((comp vec distinct))
+       (conj-rows (empty-columns (count flds)))
+       (make-table flds))))
 
-(defn join? [keyspec]
-  (if (atom? keyspec)
-    (fn [tbls]
-      (filter-
-        
-(defn inner-join
-  "Simple join between two foreign fields.
-   key-spec is either an atom (typically a keyword), or 
-   a vector of atoms that define fields to be joined on.
-   Returns a table that is the union of records from  
-   all tables where the specified fields in the key-spec are 
-   equal."
-  [key-spec tables]
-
+(comment   
+  (def mytable  (conj-fields [[:first ["tom" "bill"]]
+                              [:last  ["spoon" "shatner"]]] empty-table))
+  (def othertable (->> empty-table 
+                    (conj-fields [[:first ["bilbo"]]
+                                  [:last  ["baggins"]]])))
+  (def conctable (concat-tables [mytable othertable]))
+  (def query (->> [mytable othertable]
+               (concat-tables)
+               (conj-field 
+                 [:age (take 3 (repeatedly (fn [] (rand-int 65))))])))
   
+  (def sortingtable (->> query 
+                      (conj-field [:xcoord [2 2 55]])
+                      (conj-field [:home   ["USA" "Canada" "Shire"]])))
+  
+)
+
+
+(defn join-tables
+  "Given a field or a list of fields, joins each table that shares the field."
+  [fields tbls]
+  (let [valid-tables (->> (filter #(clojure.set/intersect 
+                                     (set fields) (set (table-fields %))))
+                          (sort-by table-count))]
+    (when valid-tables 
+      (let [fieldvals (table-rows
+
+                          
+  
+
+;(defn join? [keyspec]
+;  (if (atom? keyspec)
+;    (fn [tbls]
+;      (filter-
+;        
+;(defn inner-join
+;  "Simple join between two foreign fields.
+;   key-spec is either an atom (typically a keyword), or 
+;   a vector of atoms that define fields to be joined on.
+;   Returns a table that is the union of records from  
+;   all tables where the specified fields in the key-spec are 
+;   equal."
+;  [key-spec tables]
+;
+;  
   
   
 
 ;protocol-derived functions 
-(defn select
-  "A small adaptation of Peter Seibel's excellent mini SQL language from 
-   Practical Common Lisp.  This should make life a little easier when dealing 
-   with abstract tables...."  
-  [& {:keys [columns from join-by where unique order-by] 
-      :or {columns true
-           join-by :intersection
-           unique true 
-           where nil
-           order-by nil}}]
-  
+
+;(defn select
+;  "A small adaptation of Peter Seibel's excellent mini SQL language from 
+;   Practical Common Lisp.  This should make life a little easier when dealing 
+;   with abstract tables...."  
+;  [& {:keys [columns from join-by where unique order-by] 
+;      :or {columns true
+;           join-by :intersection
+;           unique true 
+;           where nil
+;           order-by nil}}]
+;  
 
 
 
