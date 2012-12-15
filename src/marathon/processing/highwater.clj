@@ -203,38 +203,127 @@
 (def testout (io/relative-path workdir ["hw.txt"]))
 (def bigout (io/relative-path workdir ["highwater.txt"]))
 
+
+(defn intersect-fields
+  "Given a lookup-map of {primarykeyval {fieldname expr}}, and a primary key, 
+   returns a function that intersects fields from lookup-map and a record.  
+   The resulting value should be identical to the record (field-wise), except 
+   field values may be changed or computed by the intersection. "
+  [lookup-map primarykey]  
+  (fn [record] 
+    (merge-from record 
+      (get lookup-map (get record primarykey)))))
+
+;this is a simple query....
 (def testlookup 
   {"SRC1" {:SRC "SRC1", :OITitle "Little SRC", :STR 5}
    "SRC2" {:SRC "SRC2", :OITitle "Medium SRC", :STR 10}
    "SRC3" {:SRC "SRC3", :OITitle "Big SRC",    :STR 20}})
 
+;;Want to describe computed fields easily....
+;;To be done later...
+;(map-fields 
+; {:fields  [ACFilled RCFilled NGFilled GhostFilled OtherFilled] <- many fields...
+;  :fn (let [strength (get env :STR)] 
+;        (fn [fld] (* (get env field) strength)))})
+;
+;
+;(add-fields [m]
+; (with-slots [STR TotalRequired] {:STR 10 :TotalRequired 3}
+;   (->> (merge m {:RequiredSTR (* STR TotalRequired)
+;                  :FilledSTR   (* STR TotalFilled)  }))
+;   (map-fields (fn [k v] (* str v))  
+;       [:ACFilled :RCFilled :NGFilled :GhostFilled :OtherFilled])))
+;
+;(query m
+;	{:add-fields [:ACStr :RCStr :NGStr :GhostStr :OtherStr]
+;	 :by (let [strength (? :STR)
+;	           as-Filled (fn [k] (keyword 
+;	                               (str (subs (str k) 0 1) "Filled")))] 
+;	       (fn [k v] (* strength (? (as-Filled k)))))})
+;
+;(fn [{:keys [STR TotalRequired] :as m}]
+;  (let [? (fn [f] (get m f))]  
+;    {:ACFilled (* STR (? :ACFilled)) 
+;     :RCFilled (* STR (? :NGFilled))
+;     :GhostFilled (* STR (? :GhostFilled)) 
+;     :OtherFilled (* STR (? :OtherFilled))}))
+    
+
+;These operations will be replaced with more abstract SQL-like operations, 
+;once I get a library for it built....
+
+(defn src-lookup [srcmap]
+  (fn [m] 
+    (intersect-fields m srcmap :SRC)))
+
+(defn compute-strengths
+  "Adds a few computed fields to our entry."
+  [m]
+  (let [? (fn [f] (get m f))
+        strength (? :STR)]  
+    {:ACStr (*  strength (? :ACFilled)) 
+     :RCStr (* strength (? :NGFilled))
+     :GhostStr (* strength (? :GhostFilled)) 
+     :OtherStr (* strength (? :OtherFilled))
+     :TotalStr (* strength (? :TotalFilled))
+     :RequiredStr (* strength (? :TotalRequired))})) 
+                    
+(defn append-src-data
+  "Produces an entry processor that tacks on strength, OITitle, and computes 
+   compo-specific strengths."
+  [srcmap]
+  (comp compute-strengths (src-lookup srcmap))) 
+                                      
 ;this version is -120 seconds, take about 1 gb of ram.
+;Look at swapping out non-cached streams with lazy sequences.
 (defn main
   "Given an input file and an output file, compiles the highwater trends from
-   demandtrends.  If  lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
+   demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
    supplied, then the supplied field values will be merged with the entries 
    prior to writing.  We typically use this for passing in things like 
    OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
    This pattern will probably be extracted into a higher order postprocess 
    function or macro...."
-  [infile outfile & {:keys [lookup-map primarykey] 
-                     :or {lookup-map nil primarykey :SRC}}]
-  (with-open [lazyin (clojure.java.io/reader infile)
-              lazyout (clojure.java.io/writer (io/make-file! outfile))]
-    (binding [*out* lazyout]
-      (do (println (tabLine headers))
+  [infile outfile & {:keys [entry-processor]}]
+    (with-open [lazyin (clojure.java.io/reader infile)
+                lazyout (clojure.java.io/writer (io/make-file! outfile))]
+      (binding [*out* lazyout]
+        (do (println (tabLine headers))
           (doseq [q (->> (line-seq lazyin)
                       (readTrends)
                       (highWaterMarks))]
-            (let [merged (if lookup-map 
-                           (map 
-                             (fn [x] 
-                               (merge-from x 
-                                   (get lookup-map (get x primarykey))))
-                             q)
-                           q)]
-              (doseq [t  (map trendString merged)]
-                (print t))))))))
+              (doseq [t (->> (if entry-processor
+                               (map entry-processor q) q)
+                          (map trendString))]
+                (print t)))))))
+
+;(defn main
+;  "Given an input file and an output file, compiles the highwater trends from
+;   demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
+;   supplied, then the supplied field values will be merged with the entries 
+;   prior to writing.  We typically use this for passing in things like 
+;   OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
+;   This pattern will probably be extracted into a higher order postprocess 
+;   function or macro...."
+;  [infile outfile & {:keys [lookup-map primarykey] 
+;                     :or {lookup-map nil primarykey :SRC}}]
+;  (with-open [lazyin (clojure.java.io/reader infile)
+;              lazyout (clojure.java.io/writer (io/make-file! outfile))]
+;    (binding [*out* lazyout]
+;      (do (println (tabLine headers))
+;          (doseq [q (->> (line-seq lazyin)
+;                      (readTrends)
+;                      (highWaterMarks))]
+;            (let [merged (if lookup-map 
+;                           (map 
+;                             (fn [x] 
+;                               (merge-from x 
+;                                   (get lookup-map (get x primarykey))))
+;                             q)
+;                           q)]
+;              (doseq [t  (map trendString merged)]
+;                (print t))))))))
 
 
 ;This is a process, I'd like to move it to a higher level script....
@@ -253,24 +342,36 @@
 (defn batch
   "Computes high water for for each p in path. dumps a corresponding highwater.
    in the same directory, overwriting."
-  [paths & {:keys [lookup-map primarykey]}]
+  [paths & {:keys [entry-processor]}]
   (for [source paths]
     (let [target (io/relative-path 
                    (io/as-directory (io/fdir source)) ["highwater.txt"])]
       (if (io/fexists? (clojure.java.io/file source))
         (do (println (str "Computing HighWater : " source" -> " target))
             (main source target 
-                  :lookup-map lookup-map 
-                  :primarykey primarykey))
+                  :entry-processor entry-processor))
         (println (str "Source file: " source" does not exist!"))))))
+
+(defn get-entry-processor [root]
+  (let [filepath  (io/relative-path 
+                       (io/as-directory root) ["SRCdefinitions.txt"])
+        srcfile (clojure.java.io/file filepath)]    
+    (if (io/fexists? filepath)
+      (->> (tbl/tabdelimited->table (slurp srcfile) :parsemode :noscience)
+        (tbl/record-seq))
+      identity)))
+
+
+
 
 (defn batch-from
   "Compiles a batch of highwater trends, from demand trends, from all demand 
    trends files in folders or subfolders from root."
-  [root & {:keys [lookup-map primarykey]}]
+  [root & {:keys [entry-processor]}]
   (batch (findDemandTrendPaths root) 
-         :lookup-map lookup-map 
-         :primarykey primarykey))
+         :entry-processor entry-processor))
+
+
 
 ;this version is as fast, but takes 3 GB of ram ....
 ; (defn main2 [infile outfile]

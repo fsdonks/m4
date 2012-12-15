@@ -1,4 +1,5 @@
-(ns util.record)
+(ns util.record
+  (:use [util.general :only [serial-comparer orient-comparer]]))
 
 ;stolen from stack overflow
 (defn static? [field]
@@ -151,7 +152,102 @@
     `(do
        (defrecord ~name ~rawfields ~@opts+specs)
        ~default-constructor)))
-  
+
+(defn field-comparer
+  "Builds a comparison function that extracts a fld from two records
+   and, if keyfunc is provided, applies keyfunc to the values, comparing the 
+   resulting keys with clojure.core/compare.   If no key function is provided, 
+   the raw field values are compared.
+   
+   Note: fields are pretty general: this fn only relies on 
+   clojure.core/get, so anything that can be treated by get can be used as a 
+   source of fields.  That includes vectors, which are treated as associations 
+   between numeric fields (indices) and values by clojure.core/get." 
+  [fld & {:keys [keyfunc]}]
+  (if keyfunc
+    (fn [rec1 rec2] 
+      (compare (keyfunc (get rec1 fld))
+               (keyfunc (get rec2 fld))))
+    (fn [rec1 rec2] 
+      (compare (get rec1 fld)
+               (get rec2 fld)))))
+
+(defn- ordering->fieldcomp
+  "Parses a field ordering into field comparer f, where field orderings are
+   of the form:
+     :field  
+   | [comparison-function :ascending|:descending]
+   | [fieldname comparison-function :ascending|:descending]     
+   | [fieldname :ascending|:descending]
+
+   and f::a->a->comparison.  Returns a function f, which is either a properly 
+   oriented field comparison function, or an oriented record-comparison 
+   function - if caller passed in a custom comparison function in the spec."  
+  ([field keyfunc ordering] (orient-comparer 
+                              (field-comparer field :keyfunc keyfunc) ordering))
+  ([field ordering]  (orient-comparer (field-comparer field) ordering))
+  ([spec-or-field] (if (coll? spec-or-field)
+                     (if (fn? (first spec-or-field))
+                       (orient-comparer 
+                         (first spec-or-field) (or (second spec-or-field)
+                                                   :ascending))
+                       (case (count spec-or-field)
+                         1 (ordering->fieldcomp (first spec-or-field)
+                                                :ascending)
+                         2 (ordering->fieldcomp (first spec-or-field) 
+                                                (second spec-or-field))
+                         3 (ordering->fieldcomp (first spec-or-field) 
+                                                (second spec-or-field)
+                                                (nth spec-or-field 2))
+                         (throw (Exception. 
+                                  (str "Too many elements in spec, 3 max"
+                                       spec-or-field)))))
+                     (ordering->fieldcomp spec-or-field :ascending))))
+                             
+(defn serial-field-comparer
+  "Given a sequence of field orderings, where values are  either atoms 
+   of the form:
+   :field  
+   | [comparison-function :ascending|:descending],
+   | [fieldname comparison-function :ascending|:descending]     
+   | [fieldname :ascending|:descending]
+ 
+   creates a function that compares two records sequentially using the 
+   orderings, as with util.general/compare-many.  Short circuits as soon as a 
+   valid comparison is found."
+  [orderings]
+  (serial-comparer (map ordering->fieldcomp orderings)))                                                                                                                                                                                     
+
+
+;(defmacro query-with [m querydef]
+;  `(let [m# ~m
+;         ?# (fn [k v] (get m k))]
+;     (apply (fn [& {:keys [~'add-fields ~'by ~'as]}]
+;              (when ~'add-fields 
+;                (
+;
+;
+;(query m
+;	'{:select [:ACStr :RCStr :NGStr :GhostStr :OtherStr]
+;    :by (let [strength (? :STR)
+;              as-Filled (fn [k] (keyword 
+;                                  (str (subs (str k) 0 1) "Filled")))] 
+;          (fn [k v] (* strength (? (as-Filled k)))))})
+;
+;(query m
+;	'{:select [:ACStr :RCStr :NGStr :GhostStr :OtherStr]
+;    :as }
+;    
+;
+;
+;
+;(fn [{:keys [STR TotalRequired] :as m}]
+;  (let [? (fn [f] (get m f))]  
+;    {:ACFilled (* STR (? :ACFilled)) 
+;     :RCFilled (* STR (? :NGFilled))
+;     :GhostFilled (* STR (? :GhostFilled)) 
+;     :OtherFilled (* STR (? :OtherFilled))}))
+    
 
                   
   
