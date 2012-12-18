@@ -48,31 +48,20 @@
 (declare empty-table 
          -conj-field
          -disj-field
-         make-table)
+         make-table
+         table->map)
 
 
-(defn find-where [items v]
+(defn find-where
+  "Similar to clojure.core/some...except it returns the indices where any member 
+   of items can be found.  Used to quickly address entries in a vector."
+  [items v]
   (let [valid? (set items)]
     (->> (map-indexed (fn [i x] (when (valid? x) [i x])) v)
          (filter #(not (nil? %))))))
 
-;(defn fieldspec->field
-;  "Converts a field specifier into a field specification used internally.
-;   Fields may be specified using any sequence of [fieldname & [column-values]]
-;   or using maps {fieldname [columnvalues]}"
-;  [fieldspec]
-;  (let [rawfield
-;        (cond (map? fieldspec)  ((juxt (comp first keys) (comp first vals)) 
-;                                  fieldspec)
-;              (coll? fieldspec) ((juxt first second) fieldspec)                             
-;              :else (throw (Exception. (str "invalid field spec" fieldspec))))
-;        fieldvec (vec rawfield)]     
-;    (if (nil? (second fieldvec))
-;      (assoc fieldvec 1 [])
-;      fieldvec)))
-
-(defn empty-columns [n] (vec (map (fn [_] []) (range n))))
-(defn normalized?
+(defn- empty-columns [n] (vec (map (fn [_] []) (range n))))
+(defn- normalized?
   "Returns true if every column in the table has the same number of rows."
   [tbl]
   (every? 
@@ -80,11 +69,11 @@
                  (count (first (table-columns tbl))))) 
     (rest (table-columns tbl))))
 
-(defn nil-column [n] 
+(defn- nil-column [n] 
   (persistent!  
     (reduce conj! (transient []) (take n (repeat nil))))) 
 
-(defn normalize-column [col n]
+(defn- normalize-column [col n]
   (cond (empty? col) (nil-column n)
         (vector? col) (if (zero? n)
                         col
@@ -97,7 +86,7 @@
                                             (nil-column (- n (count col))))))))
         :else (normalize-column (vec col) n)))
 
-(defn normalize-columns [cols]
+(defn- normalize-columns [cols]
   (loop [maxcount (count (first cols))
          remaining (rest cols)
          dirty? false]
@@ -191,7 +180,8 @@
   [fnames tbl]
   (every? (set (table-fields tbl)) fnames))
 
-(defn has-field? 
+(defn has-field?
+  "Determines if tbl has a field entry for fname."
   [fname tbl] (has-fields? [fname] tbl))
 
 (defn get-field
@@ -260,9 +250,10 @@
   (let [res (drop-fields (clojure.set/difference (set (table-fields tbl))  
                                                  (set fieldnames)) 
                          tbl)]    
-    (order-fields-by (if (vector? fieldnames) fieldnames (vec fieldnames)) res)))
+    (order-fields-by 
+      (if (vector? fieldnames) fieldnames (vec fieldnames)) res)))
 
-(defn tbl->map
+(defn table->map
   "Extracts a map representation of a table, where keys are 
    fields, and values are column values. This is an unordered table."
   [tbl] 
@@ -283,7 +274,7 @@
    table representation.  If orderfunc is a vector of fields, like [:a :b :c],
    rather than applying the function, the fields will be extracted in order."
   [orderfunc tbl]  
-  (let [fieldmap (tbl->map tbl)
+  (let [fieldmap (table->map tbl)
         ordered-fields 
         (cond (vector? orderfunc)  (do (assert (= (set orderfunc) 
                                                   (set (table-fields tbl))) 
@@ -388,8 +379,7 @@
    :field, 
    [comparison-function :ascending|:descending],
    [fieldname comparison-function :ascending|:descending]     
-   [fieldname :ascending|:descending]    
-   "
+   [fieldname :ascending|:descending]"
   [orderings tbl]
   (let [t (->> (table-records tbl)
             (sort (serial-field-comparer orderings))
@@ -486,7 +476,6 @@
 (def split-by-tab #(strlib/split % re-tab))
 
 ;older table abstraction, based on maps and records...
-;(def empty-table {:fields [] :records []})
 
 (defn tabdelimited->table 
   "Return a map-based table abstraction from reading a string of tabdelimited 
@@ -510,40 +499,6 @@
       (->> (conj-rows (empty-columns (count (table-fields tbl))) 
                       (map parse-rec (rest lines)))
         (assoc tbl :columns))))
-;    {:fields (vec (map (if keywordize-fields? 
-;                         keyword
-;                         identity) (split-by-tab (first lines ))))                 
-;     :records (persistent! 
-;                (reduce (fn [rs l] (conj! rs (parse-rec l))) (transient []) 
-;                      (rest lines )))}))
-
-;(defn tabdelimited->table 
-;  "Return a map-based table abstraction from reading a string of tabdelimited 
-;   text.  The default string parser tries to parse an item as a number.  In 
-;   cases where there is an E in the string, parsing may return a number or 
-;   infinity.  Set the :parsemode key to any value to anything other than 
-;   :scientific to avoid parsing scientific numbers."
-;   [s & {:keys [parsemode keywordize-fields?] 
-;         :or   {parsemode :scientific
-;                keywordize-fields? true}}]
-;  (let [lines (strlib/split-lines s )
-;        parsef (if (= parsemode :scientific) 
-;                 parse-string 
-;                 parse-string-nonscientific)
-;        parse-rec (comp vec #(map parsef %) split-by-tab)]
-;    {:fields (vec (map (if keywordize-fields? 
-;                         keyword
-;                         identity) (split-by-tab (first lines ))))                 
-;     :records (persistent! 
-;                (reduce (fn [rs l] (conj! rs (parse-rec l))) (transient []) 
-;                      (rest lines )))}))
-					  
-;(defn record-seq 
-;	"Returns a sequence of records from the underlying table representation.
-;	 Like a database, all records have identical fieldnames."
-;	[{:keys [fields records] :as table}]
-;  (for [r records]
-;    (into {} (map pair fields r))))
 
 (defn record-seq 
 	"Returns a sequence of records from the underlying table representation.
@@ -552,14 +507,6 @@
 	[tbl]
  (table-records tbl))
 
-;(defn records->table 
-;	"Takes a sequence of maps (records) and returns a tabular representation 
-;   of the records.  Infers the field names for the table from the first 
-;	 record.  Assumes every record has identical fieldnames."
-;	[recs]
-;	{:fields (vec (keys (first recs)))
-;	 :records (vec (map (comp vec vals) recs))})	
-
 (defn records->table 
 	"Takes a sequence of maps (records) and returns a tabular representation 
    of the records.  Infers the field names for the table from the first 
@@ -567,11 +514,6 @@
    Rerouted to use the new API.  map->table"
 	[recs]
   (map->table recs))
-;
-;(defn get-record 
-;	"Fetches the nth record from a tabular map."
-;	[{:keys [fields records] :as table} n]
-;	(into {} (map pair fields (nth records n))))
 
 (defn get-record 
 	"Fetches the nth record from a tabular map.  
@@ -582,21 +524,9 @@
 (defn field->string [f] (cond (string? f) f
                               (keyword? f) (str (subs (str f) 1))
                               :else (str f)))
-                               
-;(defn record-count [t] (count (:records t)))
 (defn record-count [t] (count-rows t))
-;(defn get-fields [t] (:fields t))
 (defn get-fields [t] (table-fields t))
 (defn last-record [t] (get-record t (dec (record-count t))))
-;(defn table->tabdelimited 
-;  "Render a table into a tab delimited representation."
-;  [{:keys [fields records]} & {:keys [stringify-fields?]
-;                               :or {stringify-fields? true}}]
-;  (reduce 
-;    (fn [acc rec] (str (apply str acc (interleave rec (repeat \tab))) \newline))
-;    "" (concat (if stringify-fields? 
-;                 [(vec (map field->string fields))] 
-;                 [fields]) records)))
 
 (defn table->tabdelimited 
   "Render a table into a tab delimited representation.
