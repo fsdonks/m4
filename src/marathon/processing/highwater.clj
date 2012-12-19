@@ -1,5 +1,5 @@
 (ns marathon.processing.highwater
-  (:use [util.record :only [defrecord+ with-record merge-from]])
+  (:use [util.record :only [defrecord+ with-record merge-from record-headers]])
   (:require [util [io :as io] 
                   [table :as tbl]]))
              
@@ -48,12 +48,6 @@
                    [NGFilled 0] 
                    [GhostFilled 0] 
                    [OtherFilled 0]])
-
-(defmacro record-headers
-  "Returns a vector of the field names from a record."
-  [recname]
-  (let [rname (symbol (str "->" recname))]
-  `(vec (map str (first (:arglists (meta #'~rname)))))))
 
 (def headers (record-headers trend))
 (def fieldkeys (vec (map keyword headers)))
@@ -248,7 +242,9 @@
 ;     :RCFilled (* STR (? :NGFilled))
 ;     :GhostFilled (* STR (? :GhostFilled)) 
 ;     :OtherFilled (* STR (? :OtherFilled))}))
-    
+
+;conj-fields 
+
 
 ;These operations will be replaced with more abstract SQL-like operations, 
 ;once I get a library for it built....
@@ -360,8 +356,6 @@
       (->> (tbl/tabdelimited->table (slurp srcfile) :parsemode :noscience)
         (tbl/record-seq))
       identity)))
-
-
 
 
 (defn batch-from

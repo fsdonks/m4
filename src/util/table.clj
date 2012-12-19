@@ -105,7 +105,7 @@
     (table-columns [x] columns)
   ITableMaker
     (-make-table [x fields columns] 
-       (->column-table fields (normalize-columns columns))))
+       (column-table. fields (normalize-columns columns))))
 
 (defn make-table 
   "Constructs a new table either directly from a vector of fields and 
@@ -243,16 +243,6 @@
     (-drop-field tbl fld )
     (drop-fields [fld] tbl)))
 
-(defn select-fields
-  "Returns a table with only fieldnames selected.  The table returned by the 
-   select statement will have field names in the order specified by fieldnames."
-  [fieldnames tbl]
-  (let [res (drop-fields (clojure.set/difference (set (table-fields tbl))  
-                                                 (set fieldnames)) 
-                         tbl)]    
-    (order-fields-by 
-      (if (vector? fieldnames) fieldnames (vec fieldnames)) res)))
-
 (defn table->map
   "Extracts a map representation of a table, where keys are 
    fields, and values are column values. This is an unordered table."
@@ -286,6 +276,17 @@
                 (throw (Exception. "Ordering function must be vector or fn")))]
     (reduce (fn [newtbl fld] (conj-field [fld (get fieldmap fld)] newtbl))  
             empty-table ordered-fields)))
+
+(defn select-fields
+  "Returns a table with only fieldnames selected.  The table returned by the 
+   select statement will have field names in the order specified by fieldnames."
+  [fieldnames tbl]
+  (let [res (drop-fields (clojure.set/difference (set (table-fields tbl))  
+                                                 (set fieldnames)) 
+                         tbl)]    
+    (order-fields-by 
+      (if (vector? fieldnames) fieldnames (vec fieldnames)) res)))
+
 
 (defn valid-row?
   "Ensures n is within the bounds of tbl."
@@ -410,7 +411,7 @@
       (let [fieldvals (table-rows (select-fields fields (first valid-tables)))]
         fieldvals))))
 
-(defn view-table [tbl] (pprint (table-records tbl)))
+(defn view-table [tbl] (clojure.pprint/pprint (table-records tbl)))
 
 ;(defn join? [keyspec]
 ;  (if (atom? keyspec)
