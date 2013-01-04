@@ -51,7 +51,6 @@
          make-table
          table->map)
 
-
 (defn find-where
   "Similar to clojure.core/some...except it returns the indices where any member 
    of items can be found.  Used to quickly address entries in a vector."
@@ -255,7 +254,8 @@
 (defn map->table
   "Converts a map representation of a table into an ordered table."
   [m] 
-  (conj-fields (seq m) (empty-table)))
+  (assert (map? m))
+  (conj-fields (seq m) empty-table))
 
 (defn order-fields-by
   "Returns a tbl where the fields are re-arranged to conform with the ordering 
@@ -508,13 +508,6 @@
 	[tbl]
  (table-records tbl))
 
-(defn records->table 
-	"Takes a sequence of maps (records) and returns a tabular representation 
-   of the records.  Infers the field names for the table from the first 
-	 record.  Assumes every record has identical fieldnames.
-   Rerouted to use the new API.  map->table"
-	[recs]
-  (map->table recs))
 
 (defn get-record 
 	"Fetches the nth record from a tabular map.  
