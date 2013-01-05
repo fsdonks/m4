@@ -48,38 +48,19 @@
 (declare empty-table 
          -conj-field
          -disj-field
-         make-table)
+         make-table
+         table->map)
 
-(defrecord column-table [fields columns]
-  ITable 
-    (table-fields [x]  fields)
-    (table-columns [x] columns)
-  ITableMaker
-    (-make-table [x fields columns] 
-       (->column-table fields (normalize-columns columns))))
-
-(defn find-where [items v]
+(defn find-where
+  "Similar to clojure.core/some...except it returns the indices where any member 
+   of items can be found.  Used to quickly address entries in a vector."
+  [items v]
   (let [valid? (set items)]
     (->> (map-indexed (fn [i x] (when (valid? x) [i x])) v)
          (filter #(not (nil? %))))))
 
-;(defn fieldspec->field
-;  "Converts a field specifier into a field specification used internally.
-;   Fields may be specified using any sequence of [fieldname & [column-values]]
-;   or using maps {fieldname [columnvalues]}"
-;  [fieldspec]
-;  (let [rawfield
-;        (cond (map? fieldspec)  ((juxt (comp first keys) (comp first vals)) 
-;                                  fieldspec)
-;              (coll? fieldspec) ((juxt first second) fieldspec)                             
-;              :else (throw (Exception. (str "invalid field spec" fieldspec))))
-;        fieldvec (vec rawfield)]     
-;    (if (nil? (second fieldvec))
-;      (assoc fieldvec 1 [])
-;      fieldvec)))
-
-(defn empty-columns [n] (vec (map (fn [_] []) (range n))))
-(defn normalized?
+(defn- empty-columns [n] (vec (map (fn [_] []) (range n))))
+(defn- normalized?
   "Returns true if every column in the table has the same number of rows."
   [tbl]
   (every? 
@@ -87,11 +68,11 @@
                  (count (first (table-columns tbl))))) 
     (rest (table-columns tbl))))
 
-(defn nil-column [n] 
+(defn- nil-column [n] 
   (persistent!  
     (reduce conj! (transient []) (take n (repeat nil))))) 
 
-(defn normalize-column [col n]
+(defn- normalize-column [col n]
   (cond (empty? col) (nil-column n)
         (vector? col) (if (zero? n)
                         col
@@ -104,7 +85,7 @@
                                             (nil-column (- n (count col))))))))
         :else (normalize-column (vec col) n)))
 
-(defn normalize-columns [cols]
+(defn- normalize-columns [cols]
   (loop [maxcount (count (first cols))
          remaining (rest cols)
          dirty? false]
@@ -116,6 +97,14 @@
         (if (= nextcount maxcount)
           (recur maxcount (rest remaining) dirty?)
           (recur (max maxcount nextcount) (rest remaining) true))))))
+
+(defrecord column-table [fields columns]
+  ITable 
+    (table-fields [x]  fields)
+    (table-columns [x] columns)
+  ITableMaker
+    (-make-table [x fields columns] 
+       (column-table. fields (normalize-columns columns))))
 
 (defn make-table 
   "Constructs a new table either directly from a vector of fields and 
@@ -190,7 +179,8 @@
   [fnames tbl]
   (every? (set (table-fields tbl)) fnames))
 
-(defn has-field? 
+(defn has-field?
+  "Determines if tbl has a field entry for fname."
   [fname tbl] (has-fields? [fname] tbl))
 
 (defn get-field
@@ -229,7 +219,7 @@
                            (table-fields fieldspecs) 
                            (table-columns fieldspecs))
                          fieldspecs)]
-    (reduce conj-field tbl fieldspecs)))
+    (reduce #(conj-field %2 %1) tbl fieldspecs)))
 
 (defn drop-fields
   "Returns a tbl where the column associated with fld is no longer present."
@@ -238,9 +228,9 @@
         cols     (table-columns tbl)]
     (reduce (fn [newtbl [j fld]]
               (if (keep-set fld)
-                (conj-field fld (get cols j) newtbl)
+                (conj-field [fld (get cols j)] newtbl)
                 newtbl))
-            (-make-table tbl nil nil)
+            (-make-table tbl [] [])
             (map-indexed vector (table-fields tbl)))))
 
 (defn drop-field
@@ -252,14 +242,7 @@
     (-drop-field tbl fld )
     (drop-fields [fld] tbl)))
 
-(defn select-fields
-  "Returns a table with only fieldnames selected."
-  [fieldnames tbl]
-  (drop-fields (clojure.set/difference (set (table-fields tbl))  
-                                       (set fieldnames)) 
-                                       tbl))
-
-(defn tbl->map
+(defn table->map
   "Extracts a map representation of a table, where keys are 
    fields, and values are column values. This is an unordered table."
   [tbl] 
@@ -271,7 +254,8 @@
 (defn map->table
   "Converts a map representation of a table into an ordered table."
   [m] 
-  (conj-fields (seq m) (empty-table)))
+  (assert (map? m))
+  (conj-fields (seq m) empty-table))
 
 (defn order-fields-by
   "Returns a tbl where the fields are re-arranged to conform with the ordering 
@@ -280,7 +264,7 @@
    table representation.  If orderfunc is a vector of fields, like [:a :b :c],
    rather than applying the function, the fields will be extracted in order."
   [orderfunc tbl]  
-  (let [fieldmap (tbl->map tbl)
+  (let [fieldmap (table->map tbl)
         ordered-fields 
         (cond (vector? orderfunc)  (do (assert (= (set orderfunc) 
                                                   (set (table-fields tbl))) 
@@ -291,7 +275,18 @@
               :else 
                 (throw (Exception. "Ordering function must be vector or fn")))]
     (reduce (fn [newtbl fld] (conj-field [fld (get fieldmap fld)] newtbl))  
-            (-make-table tbl nil nil) ordered-fields)))
+            empty-table ordered-fields)))
+
+(defn select-fields
+  "Returns a table with only fieldnames selected.  The table returned by the 
+   select statement will have field names in the order specified by fieldnames."
+  [fieldnames tbl]
+  (let [res (drop-fields (clojure.set/difference (set (table-fields tbl))  
+                                                 (set fieldnames)) 
+                         tbl)]    
+    (order-fields-by 
+      (if (vector? fieldnames) fieldnames (vec fieldnames)) res)))
+
 
 (defn valid-row?
   "Ensures n is within the bounds of tbl."
@@ -385,8 +380,7 @@
    :field, 
    [comparison-function :ascending|:descending],
    [fieldname comparison-function :ascending|:descending]     
-   [fieldname :ascending|:descending]    
-   "
+   [fieldname :ascending|:descending]"
   [orderings tbl]
   (let [t (->> (table-records tbl)
             (sort (serial-field-comparer orderings))
@@ -415,32 +409,9 @@
                           (sort-by count-rows))]
     (when valid-tables 
       (let [fieldvals (table-rows (select-fields fields (first valid-tables)))]
-        fieldvals))))                           
+        fieldvals))))
 
-(comment   
-  (def mytable  (conj-fields [[:first ["tom" "bill"]]
-                              [:last  ["spoon" "shatner"]]] empty-table))
-  (def mymaptable {:first ["tom" "bill"]
-                   :last  ["spoon" "shatner"]})
-  
-  (def othertable (->> empty-table 
-                    (conj-fields [[:first ["bilbo"]]
-                                  [:last  ["baggins"]]])))
-  (def conctable (concat-tables [mytable othertable]))
-  (def query (->> [mytable othertable]
-               (concat-tables)
-               (conj-field 
-                 [:age [31 65 400]])))
-  
-  (def sortingtable (->> query 
-                      (conj-field [:xcoord [2 2 55]])
-                      (conj-field [:home   ["USA" "Canada" "Shire"]])))
-  (def closest-geezer (->> sortingtable
-                        (order-by [:xcoord
-                                   [:age :descending]])))
-                                  
-                                  
-)
+(defn view-table [tbl] (clojure.pprint/pprint (table-records tbl)))
 
 ;(defn join? [keyspec]
 ;  (if (atom? keyspec)
@@ -506,7 +477,6 @@
 (def split-by-tab #(strlib/split % re-tab))
 
 ;older table abstraction, based on maps and records...
-(def empty-table {:fields [] :records []})
 
 (defn tabdelimited->table 
   "Return a map-based table abstraction from reading a string of tabdelimited 
@@ -521,50 +491,47 @@
         parsef (if (= parsemode :scientific) 
                  parse-string 
                  parse-string-nonscientific)
-        parse-rec (comp vec #(map parsef %) split-by-tab)]
-    {:fields (vec (map (if keywordize-fields? 
-                         keyword
-                         identity) (split-by-tab (first lines ))))                 
-     :records (persistent! 
-                (reduce (fn [rs l] (conj! rs (parse-rec l))) (transient []) 
-                      (rest lines )))}))
-					  
+        parse-rec (comp vec #(map parsef %) split-by-tab)
+        tbl (->column-table 
+              (vec (map (if keywordize-fields? 
+                          keyword
+                          identity) (split-by-tab (first lines ))))
+              [])]
+      (->> (conj-rows (empty-columns (count (table-fields tbl))) 
+                      (map parse-rec (rest lines)))
+        (assoc tbl :columns))))
+
 (defn record-seq 
 	"Returns a sequence of records from the underlying table representation.
-	 Like a database, all records have identical fieldnames."
-	[{:keys [fields records] :as table}]
-  (for [r records]
-    (into {} (map pair fields r))))
+	 Like a database, all records have identical fieldnames.
+   Re-routed to use the new table-records function built on the ITable lib."
+	[tbl]
+ (table-records tbl))
 
-(defn records->table 
-	"Takes a sequence of maps (records) and returns a tabular representation 
-   of the records.  Infers the field names for the table from the first 
-	 record.  Assumes every record has identical fieldnames."
-	[recs]
-	{:fields (vec (keys (first recs)))
-	 :records (vec (map (comp vec vals) recs))})	
-  
+
 (defn get-record 
-	"Fetches the nth record from a tabular map."
-	[{:keys [fields records] :as table} n]
-	(into {} (map pair fields (nth records n))))
+	"Fetches the nth record from a tabular map.  
+   Rerouted to use the new API.  nth-record."
+	[tbl n]
+ (nth-record tbl n))
 
 (defn field->string [f] (cond (string? f) f
                               (keyword? f) (str (subs (str f) 1))
                               :else (str f)))
-                               
-(defn record-count [t] (count (:records t)))
-(defn get-fields [t] (:fields t))
+(defn record-count [t] (count-rows t))
+(defn get-fields [t] (table-fields t))
 (defn last-record [t] (get-record t (dec (record-count t))))
+
 (defn table->tabdelimited 
-  "Render a table into a tab delimited representation."
-  [{:keys [fields records]} & {:keys [stringify-fields?]
+  "Render a table into a tab delimited representation.
+   Rerouted to use the new API."
+  [tbl & {:keys [stringify-fields?]
                                :or {stringify-fields? true}}]
   (reduce 
     (fn [acc rec] (str (apply str acc (interleave rec (repeat \tab))) \newline))
     "" (concat (if stringify-fields? 
-                 [(vec (map field->string fields))] 
-                 [fields]) records)))
+                 [(vec (map field->string (table-fields tbl)))] 
+                 [(table-fields tbl)]) (table-rows tbl))))
 
 (defmulti as-table
   "Generic function to create abstract tables."
@@ -583,6 +550,38 @@
   "Copes a table from the system clipboard.  Does not keywordize anything..."
   (copy-table! :no-science false))
   
+(comment   ;testing....
+  (def mytable  (conj-fields [[:first ["tom" "bill"]]
+                              [:last  ["spoon" "shatner"]]] empty-table))
+  (def mymaptable {:first ["tom" "bill"]
+                   :last  ["spoon" "shatner"]})
+  
+  (def othertable (->> empty-table 
+                    (conj-fields [[:first ["bilbo"]]
+                                  [:last  ["baggins"]]])))
+  (def conctable (concat-tables [mytable othertable]))
+  (def query (->> [mytable othertable]
+               (concat-tables)
+               (conj-field 
+                 [:age [31 65 400]])))
+  
+  (def sortingtable (->> query 
+                      (conj-field [:xcoord [2 2 55]])
+                      (conj-field [:home   ["USA" "Canada" "Shire"]])))
+  (def closest-geezer (->> sortingtable
+                        (order-by [:xcoord
+                                   [:age :descending]])))
+  (defn compound-query [] 
+    (->> closest-geezer 
+      (select-fields [:home :first :last])
+      (vector {:home ["PA"]
+               :first ["Barry"]
+               :last ["Groves"]})
+      (map #(order-fields-by [:home :first :last] %))
+      (concat-tables)                                              
+      view-table))  
+                                  
+)
   
 
 ;it'd be nice to have simple sql-like operators....

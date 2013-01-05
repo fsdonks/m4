@@ -353,7 +353,10 @@
   (map->folders! folderspec (as-directory rootdir) :condensed? false))  
 
 ;an empty readme-file, to be used with folder spec in map->folders! 
-(def readme {"readme.txt" "Insert comments here."})
+(defn readme [& [txt]]
+  "Creates a readme file, with optional text included."
+  {"readme.txt" (or txt "Insert comments here.")})
+
 ;an empty, to be used with folder spec in map->folders! 
 (def blankfile {"blank.txt" "blank!"})
 

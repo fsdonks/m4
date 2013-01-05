@@ -6,6 +6,12 @@
   (java.lang.reflect.Modifier/isStatic
    (.getModifiers field)))
 
+(defmacro record-headers
+  "Returns a vector of the field names from a record type."
+  [recname]
+  (let [rname (symbol (str "->" recname))]
+  `(vec (map str (first (:arglists (meta #'~rname)))))))
+
 (defn get-record-field-names [record]
   (->> record
        .getDeclaredFields
