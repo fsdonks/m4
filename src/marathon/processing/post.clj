@@ -5,9 +5,10 @@
 (ns marathon.processing.post
   (:require [util [io :as io]]
             [marathon.processing 
+             [excel :as xl]
              [highwater :as highwater] 
-             [fillrates :as fill]
-             [frontend :as gui]]))
+             [fillrates :as fill]]))
+
 
 (declare compute-highwater compute-fillrates build-audit-trail)
 
@@ -88,17 +89,23 @@
 
 ;some defaults for post processing.
 
+(def default-process [compute-highwater 
+                      compute-fillrates 
+                      compute-fillstats 
+                      build-audit-trail])
+
 (defn marathon-project
   "Defines a marathon project structure.  The default work to be done is to 
    compute summary trends for a typical run."
   [rootdir & {:keys [folderspec processes]
-              :or {folderspec {"Output" readme}
-                   processes default-processing}}]
+              :or {folderspec {"Output" (io/readme)}
+                   processes default-process}}]
+  :not-implemented)
 
 (defn build-audit-trail 
   "Compiles an audit trail from Marathon output."
   [project-path all-input-tables demandtrends-path fillstats-path]
-  [(log (str "Building audit trail from project in " project-path))])
+  [(proc-log (str "Building audit trail from project in " project-path))])
 
 ;A map of paths to resources, relative to a project-path.
 (def default-paths {:deployments ["Deployments.txt"]
@@ -117,9 +124,10 @@
 (def sample-env 
   {:paths {:project-path "the root path"
            :deployments ["A relative path to deployments"]}
-   :tables {:res-name #column-table{:fields [:field1] :columns [["tom"]]}}
+   :tables {:res-name {:fields [:field1] :columns [["tom"]]}}
    :some-resource "blah"
    :resource-2 "blee"})
+
 (defn project-path
   "Fetch the project path, or the root folder where the project is located."
   [prj] (get-in prj [:paths :project-path]))
@@ -129,51 +137,80 @@
    associated with resname."
   [prj resname]
   (io/relative-path 
-    (project-path prj) (get-in env [:paths resname])))
+    (project-path prj) (get-in prj [:paths resname])))
  
 (defn get-input-paths
   "Given a path to a Marathon Project, acquires paths to input tables.
    Depending on the processing we're doing, we may not need every table, so 
    we only locate the paths, saving on memory in the process."
-  [project-path & {:keys [files] :or {files default-files}}]
-  (
+  [project-path & {:keys [paths] :or {files default-paths}}]
+  :not-implemented)
   
 (defn compute-highwater 
   "Computes the highwater statistics from marathon output."
-  [project-path SRCdefinitions demandtrends-path]
-  [(log "computing highwater statistics...")
+  [prj SRCdefinitions demandtrends-path]
+  [(proc-log "computing highwater statistics...")
    (proc (fn [env] 
            (reduce (fn [env p] (do (highwater/batch p)
-                                 (assoc-in e [:highwater-outputs p] p))) 
-                   env highwater-paths)))])
+                                 (assoc-in env [:highwater-outputs p] p))) 
+                   prj (get-path prj :highwater-paths))))])
+
 (defn compute-fillstats
   "Computes the fill statistics from Marathon output."
-  [project-path SRCdefinitions highwater-path]
-  [(log "Computing fill statistics...")
+  [prj SRCdefinitions highwater-path]
+  [(proc-log "Computing fill statistics...")
    (proc (fn [env] 
            (do (highwater/batch highwater-path)
-             (assoc-in e [:fillstats-path p] p))))]) 
-
-(def default-process [compute-highwater 
-                      compute-fillrates 
-                      compute-fillstats 
-                      build-audit-trail])
+             (assoc-in env [:fillstats-path prj] prj))))]) 
 
 ;a sample of compiling an audit trail from a marathon run.
-(comment 
-	(defn compute-trends [rootdir]
-	  (let [readme {"readme.txt" "Insert comments here."}        
-	        folderspec {"Output" readme 
-	                    "Input"  readme}]
-	  (with-dir rootdir
-	    (reading-files [trends (relative-path rootdir ["DemandTrends.txt"]) 
-	                    titles (relative-path rootdir ["TitleDef.txt"])]
-        (with-path (relative-path *dir* ["Output"]) [highpath ["highwater.txt"]
-                                                     fillpath ["fillstats.txt"]]
-          (do         
-	           (compute-highwater trends titles highpath)
-	           (compute-fillstats highpath titles fillpath)))))))
-)
+(comment
+
+;Trying to solve the immediate problem of wrapping a marathon project that's 
+;based in an Excel workbook (and also based in surrounding text files.)
+
+;Given a Marathon workbook, we know that these are the tables we'll care about
+;during auditing.
+(def marathon-workbook-schema  
+  {:deployments "Deployments"
+   :in-scope "InScope"
+   :out-of-scope "OutOfScope"                       
+   :supply-records "SupplyRecords"
+   :demand-records "DemandRecords"
+   :period-records "PeriodRecords"
+   :relation-records "RelationRecords"
+   :src-tag-records "SRCTagRecords"
+   :parameters "Parameters"})
+ 
+(defn get-marathon-tables
+  "Given a workbook schema, extract each worksheet into a util.table for 
+   further processing."
+  [wb & {:keys [tables] :or {tables marathon-workbook-schema}}] 
+  nil)
+  
+;  (defn compute-trends [rootdir]
+;	  (let [readme {"readme.txt" "Insert comments here."}        
+;	        folderspec {"Output" readme 
+;	                    "Input"  readme}]
+;	  (with-dir rootdir
+;	    (reading-files [trends (relative-path rootdir ["DemandTrends.txt"]) 
+;	                    titles (relative-path rootdir ["TitleDef.txt"])]
+;        (with-path (relative-path *dir* ["Output"]) [highpath ["highwater.txt"]
+;                                                     fillpath ["fillstats.txt"]]
+;          (do         
+;	           (compute-highwater trends titles highpath)
+;	           (compute-fillstats highpath titles fillpath)))))))
+;
+; (let [martables (marathon-tables (wb->tables runbook))
+;       inputs    (get-inputs martables)
+;       outputs   (get-outputs martables)
+;       computed  {:highwater (compute-highwater outputs)
+;                  :fillrates (compute-fillrates outputs)
+;                  :fillstates (compute-fillstats outputs)}]
+;   (build-audit-trail inputs (clean-outputs outputs))      
+ )
+
+
 
 
 ;(defn process-env
