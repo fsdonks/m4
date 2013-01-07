@@ -3,7 +3,7 @@
 ;the processor (and any others) should be able to apply post processing to a 
 ;given path. 
 (ns marathon.processing.post
-  (:require [util [io :as io]]
+  (:require [util [io :as io] [table :as tbl]]
             [marathon.processing 
              [excel :as xl]
              [highwater :as highwater] 
@@ -166,28 +166,60 @@
 ;a sample of compiling an audit trail from a marathon run.
 (comment
 
+;testing...copied from marathon.processing.excel 
+(def wbpath   
+  "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\MPI_3.76029832.xlsm")
+(def outpath "C:\\Users\\thomas.spoon\\Documents\\newWB.xlsx")
+
+(def wb (as-workbook wbpath))
+
 ;Trying to solve the immediate problem of wrapping a marathon project that's 
 ;based in an Excel workbook (and also based in surrounding text files.)
 
 ;Given a Marathon workbook, we know that these are the tables we'll care about
 ;during auditing.
 (def marathon-workbook-schema  
-  {:deployments "Deployments"
-   :in-scope "InScope"
-   :out-of-scope "OutOfScope"                       
-   :supply-records "SupplyRecords"
-   :demand-records "DemandRecords"
-   :period-records "PeriodRecords"
+  {:deployments      "Deployments"
+   :in-scope         "InScope"
+   :out-of-scope     "OutOfScope"                       
+   :supply-records   "SupplyRecords"
+   :demand-records   "DemandRecords"
+   :period-records   "PeriodRecords"
    :relation-records "RelationRecords"
-   :src-tag-records "SRCTagRecords"
-   :parameters "Parameters"})
+   :src-tag-records  "SRCTagRecords"
+   :parameters       "Parameters"})
  
 (defn get-marathon-tables
   "Given a workbook schema, extract each worksheet into a util.table for 
    further processing."
-  [wb & {:keys [tables] :or {tables marathon-workbook-schema}}] 
+  [wb & {:keys [tables] :or {tables marathon-workbook-schema}}]  
   nil)
-  
+
+(defn get-marathon-inputs [wbpath]
+  "Extract a map of canonical tables to a map with the same name."
+  (let [wb (xl/as-workbook wbpath)]
+    (into {} (for [[nm sheetname] (seq marathon-workbook-schema)]
+               [nm (xl/sheet->table (xl/as-sheet sheetname wb))])))) 
+
+(defn derive-titles
+  "Derive the OITitles from a set of tables."
+  [tables]
+  (let [title-set (comp distinct vals (partial tbl/get-field "OITitle"))
+        valid-table? (fn [t] (and (contains? tables t)
+                                  (tbl/has-field? "OITitle" (get tables t))))]
+    (cond (valid-table? :demand-records) 
+            (title-set (:demand-records tables))
+          (valid-table? :supply-records)
+            (title-set (:demand-records tables))
+         :else (throw (Exception. "No valid table to derive titles from!")))))
+              
+
+                
+        
+
+  (->> (tbl/select-fields  
+
+
 ;  (defn compute-trends [rootdir]
 ;	  (let [readme {"readme.txt" "Insert comments here."}        
 ;	        folderspec {"Output" readme 
