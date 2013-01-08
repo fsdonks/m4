@@ -6,7 +6,7 @@
             [clojure [set :as setlib]]
             [util [clipboard :as board]])
   (:use [util.vector]
-        [util.record :only [serial-field-comparer]])) 
+        [util.record :only [serial-field-comparer key-function]])) 
 
 ;note-> a field is just a table with one field/column....
 ;thus a table is a set of joined fields....
@@ -36,11 +36,11 @@
     (field-name [x] nil)
     (field-vals [x] nil)
   clojure.lang.PersistentArrayMap
-    (field-name [x] (comp first keys) x)
-    (field-vals [x] (comp first vals) x)
+    (field-name [x] ((comp first keys) x))
+    (field-vals [x] ((comp first vals) x))
   clojure.lang.PersistentHashMap
-    (field-name [x] (comp first keys) x)
-    (field-vals [x] (comp first keys) x)
+    (field-name [x] ((comp first keys) x))
+    (field-vals [x] ((comp first vals) x))
   clojure.lang.PersistentVector
     (field-name [x] (first  x))
     (field-vals [x] (or (second x) [])))
@@ -277,16 +277,20 @@
     (reduce (fn [newtbl fld] (conj-field [fld (get fieldmap fld)] newtbl))  
             empty-table ordered-fields)))
 
+(defn all-fields? [fieldnames] 
+  (or (= fieldnames :*) (= fieldnames :all)))
+
 (defn select-fields
   "Returns a table with only fieldnames selected.  The table returned by the 
    select statement will have field names in the order specified by fieldnames."
   [fieldnames tbl]
-  (let [res (drop-fields (clojure.set/difference (set (table-fields tbl))  
-                                                 (set fieldnames)) 
-                         tbl)]    
+  (if (all-fields? fieldnames) 
+    tbl
+    (let [res (drop-fields (clojure.set/difference (set (table-fields tbl))
+                                                   (set fieldnames))  
+                           tbl)]    
     (order-fields-by 
-      (if (vector? fieldnames) fieldnames (vec fieldnames)) res)))
-
+      (if (vector? fieldnames) fieldnames (vec fieldnames)) res))))
 
 (defn valid-row?
   "Ensures n is within the bounds of tbl."
@@ -401,17 +405,15 @@
        (conj-rows (empty-columns (count flds)))
        (make-table flds))))
 
-(defn join-tables
-  "Given a field or a list of fields, joins each table that shares the field."
-  [fields tbls]
-  (let [valid-tables (->> (filter #(clojure.set/intersection 
-                                     (set fields) (set (table-fields %))))
-                          (sort-by count-rows))]
-    (when valid-tables 
-      (let [fieldvals (table-rows (select-fields fields (first valid-tables)))]
-        fieldvals))))
-
 (defn view-table [tbl] (clojure.pprint/pprint (table-records tbl)))
+(defn select-distinct
+  "Select only distinct records from the table.  This treats each record as a 
+   tuple, and performs a set union on all the records.  The resulting table is 
+   returned (likely a subset of the original table).  Used to build lookup 
+   tables for intermediate queries."
+  [tbl]
+  (make-table (table-fields tbl) 
+              (transpose (vec (distinct (table-rows tbl))))))
 
 ;(defn join? [keyspec]
 ;  (if (atom? keyspec)
@@ -428,25 +430,78 @@
 ;  [key-spec tables]
 ;
 ;  
-  
-  
 
+(defn join-tables
+  "Given a field or a list of fields, joins each table that shares the field."
+  [fields tbls]
+  (let [valid-tables (->> (filter #(clojure.set/intersection 
+                                     (set fields) (set (table-fields %))))
+                          (sort-by count-rows))]
+    (when valid-tables 
+      (let [fieldvals (table-rows (select-fields fields (first valid-tables)))]
+        fieldvals))))
+
+(defn join-on
+  "Given a field or a list of fields, joins each table that shares the field."
+  [fields tbl1 tbl2]  
+  (let [lookup (partial group-records (key-function fields))
+        l (lookup tbl1)
+        r (lookup tbl2)
+        joins (clojure.set/intersection (set (keys l)) (set (keys r)))]
+    (persistent! 
+      (reduce (fn [acc k] (->> (for [x  (get l k)
+                                     y  (get r k)]
+                                 (merge x y))
+                            (reduce conj! acc))) (transient #{}) joins))))    
+  
 ;protocol-derived functions 
 
-;(defn select
-;  "A small adaptation of Peter Seibel's excellent mini SQL language from 
-;   Practical Common Lisp.  This should make life a little easier when dealing 
-;   with abstract tables...."  
-;  [& {:keys [columns from join-by where unique order-by] 
-;      :or {columns true
-;           join-by :intersection
-;           unique true 
-;           where nil
-;           order-by nil}}]
-;  
+(defn- process-if [pred f x] (if pred (f x) x))
 
+(defn database? [xs]  
+  (and (seq xs) (every? tabular? xs)))
 
+(defn- select-
+  "A small adaptation of Peter Seibel's excellent mini SQL language from 
+   Practical Common Lisp.  This should make life a little easier when dealing 
+   with abstract tables...."  
+  [columns from where unique orderings]
+  (if (and (not (database? from)) (tabular? from)) ;simple selection....
+    (->> (select-fields columns from) ;extract the fields.
+      (process-if where (partial filter-records where))
+      (process-if unique select-distinct)
+      (process-if order-by (partial order-by orderings)))))
 
+(defn select 
+  "Allows caller to compose simple SQL-like queries on abstract tables.  
+   Joins are implemented but not supported just yet.  The :from key for the 
+   select query is intended to be a table, specifically something supporting 
+   ITabular."
+  [& {:keys [fields from where unique orderings]
+      :or   {fields :* from nil where nil
+             unique true orderings nil }}]
+  (select- fields from where unique orderings)) 
+
+(defn group-records 
+  "Convenience function, like group-by, but applies directly to ITabular
+   structures.  Allows an optional aggregator function that can be run on 
+   each group, allowing domain aggregation queries and the like.  If no 
+   aggregator is supplied via the :aggregator key argument, acts identical to 
+   clojure.core/group-by"
+  [keygen table & {:keys [aggregator] :or {aggregator identity}}]
+  (let [get-key (key-function keygen)]
+    (let [groups 
+          (->> (select :unique true :from table)
+            (record-seq)
+            (group-by get-key))]
+      (into {} (map (fn [[k v]] [k (aggregator v)]) (seq groups))))))
+  
+(defn make-lookup-table
+  "Creates a lookup table from a table and a list of fields.  If more than one
+   field is specified, composes the field values into a vector, creating a 
+   compound key.  If more than one result is returned, returns the first 
+   value in the grouped vectors."
+  [fields table] (group-records fields table :aggregator first))
 
 (defn parse-string 
 	"Parses a string, trying various number formats.  Note, scientific numbers,
@@ -454,9 +509,9 @@
 	 possibly as Double/POSITIVE_INFINITY, i.e. Infinity."
 	[value]	
   (try (Integer/parseInt value)
-	(catch NumberFormatException _
-	  (try (Double/parseDouble value)
-		(catch NumberFormatException _ value)))))
+    (catch NumberFormatException _
+      (try (Double/parseDouble value)
+        (catch NumberFormatException _ value)))))
 
 (def scientific-reg 
 	"A regular expression gleefully borrowed from Stack Overflow.  Matches 
@@ -518,6 +573,7 @@
 (defn field->string [f] (cond (string? f) f
                               (keyword? f) (str (subs (str f) 1))
                               :else (str f)))
+
 (defn record-count [t] (count-rows t))
 (defn get-fields [t] (table-fields t))
 (defn last-record [t] (get-record t (dec (record-count t))))
@@ -549,7 +605,7 @@
 (defn copy-table-literal! []
   "Copes a table from the system clipboard.  Does not keywordize anything..."
   (copy-table! :no-science false))
-  
+
 (comment   ;testing....
   (def mytable  (conj-fields [[:first ["tom" "bill"]]
                               [:last  ["spoon" "shatner"]]] empty-table))
@@ -580,6 +636,24 @@
       (map #(order-fields-by [:home :first :last] %))
       (concat-tables)                                              
       view-table))  
+
+  (defn join-test []
+    (let [names ["Able" "Baker" "Charlie"]
+          professions {:name names
+                       :profession [:soldier :farmer :baker]}
+          instruments {:name (conj names "Dan") 
+                       :instrument [:rifle :plow :oven :guitar]}]
+      (join-on :name professions instruments)))
+                  
+  
+  (defn select-example []
+    (->> closest-geezer 
+      (select :fields [:home :first :last]
+              :ordering [[:home :descending]]
+              :from)
+      (conj-field [:instruments [:guitar :fiddle]]))) 
+      
+              
                                   
 )
   

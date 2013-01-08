@@ -89,6 +89,8 @@
 
 ;some defaults for post processing.
 
+(declare compute-fillstats) 
+
 (def default-process [compute-highwater 
                       compute-fillrates 
                       compute-fillstats 
@@ -171,7 +173,7 @@
   "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\MPI_3.76029832.xlsm")
 (def outpath "C:\\Users\\thomas.spoon\\Documents\\newWB.xlsx")
 
-(def wb (as-workbook wbpath))
+(def wb (xl/as-workbook wbpath))
 
 ;Trying to solve the immediate problem of wrapping a marathon project that's 
 ;based in an Excel workbook (and also based in surrounding text files.)
@@ -179,16 +181,29 @@
 ;Given a Marathon workbook, we know that these are the tables we'll care about
 ;during auditing.
 (def marathon-workbook-schema  
-  {:deployments      "Deployments"
-   :in-scope         "InScope"
-   :out-of-scope     "OutOfScope"                       
-   :supply-records   "SupplyRecords"
-   :demand-records   "DemandRecords"
-   :period-records   "PeriodRecords"
-   :relation-records "RelationRecords"
-   :src-tag-records  "SRCTagRecords"
-   :parameters       "Parameters"})
- 
+  {:deployments      "Deployments"     ;output
+   :in-scope         "InScope"         ;output 
+   :out-of-scope     "OutOfScope"      ;output                     
+   :supply-records   "SupplyRecords"   ;input
+   :demand-records   "DemandRecords"   ;input
+   :period-records   "PeriodRecords"   ;input
+   :relation-records "RelationRecords" ;input
+   :src-tag-records  "SRCTagRecords"   ;input
+   :parameters       "Parameters"})    ;input
+
+;Current process flow -> to build an audit trail from a run:
+;The run is performed (currently requires user intervention).
+;Extract auditable tables from Marathon Workbook: 
+;  {:deployments      "Deployments"     ;output
+;   :in-scope         "InScope"         ;output 
+;   :out-of-scope     "OutOfScope"      ;output                     
+;   :supply-records   "SupplyRecords"   ;input
+;   :demand-records   "DemandRecords"   ;input
+;   :period-records   "PeriodRecords"   ;input
+;   :relation-records "RelationRecords" ;input
+;   :src-tag-records  "SRCTagRecords"   ;input
+;   :parameters       "Parameters"})    ;input
+
 (defn get-marathon-tables
   "Given a workbook schema, extract each worksheet into a util.table for 
    further processing."
@@ -200,24 +215,62 @@
   (let [wb (xl/as-workbook wbpath)]
     (into {} (for [[nm sheetname] (seq marathon-workbook-schema)]
                [nm (xl/sheet->table (xl/as-sheet sheetname wb))])))) 
+  
+;derive SRCDefinition {SRC, OITitle, STR}
+;  derive  OITitles from supply records or other table.
+;  derive STR from strength table, or supply records? 
 
 (defn derive-titles
   "Derive the OITitles from a set of tables."
   [tables]
-  (let [title-set (comp distinct vals (partial tbl/get-field "OITitle"))
+  (let [src-lookup (tbl/make-lookup-table "SRC")                      
         valid-table? (fn [t] (and (contains? tables t)
-                                  (tbl/has-field? "OITitle" (get tables t))))]
-    (cond (valid-table? :demand-records) 
-            (title-set (:demand-records tables))
-          (valid-table? :supply-records)
-            (title-set (:demand-records tables))
+                                  (tbl/has-fields? ["SRC" "OITitle"] 
+                                                  (get tables t))))]
+    (cond (valid-table? :titles) ;if we already have titles, done.
+            (tbl/select-distinct (:titles tables))
+          (valid-table? :demand-records)  ;look in demand records 
+            (make-lookup (:demand-records tables))
+          (valid-table? :supply-records) ;finally supply records.
+            (make-lookup (:supply-records tables))
          :else (throw (Exception. "No valid table to derive titles from!")))))
-              
 
-                
-        
+(defn derive-strengths
+  "Derive strengths from a set of tables.  STR should reside in SupplyRecords"
+  [tables]
+  (let [make-lookup (fn [tb] (tbl/select :from tb 
+                                         :fields ["SRC" "OITitle"]
+                                         :unique true))        
+        valid-table? (fn [t] (and (contains? tables t)
+                                  (tbl/has-fields? ["SRC" "OITitle"] 
+                                                  (get tables t))))]
+    (cond (valid-table? :titles) ;if we already have titles, done.
+            (tbl/select-distinct (:titles tables))
+          (valid-table? :demand-records)  ;look in demand records 
+            (make-lookup (:demand-records tables))
+          (valid-table? :supply-records) ;finally supply records.
+            (make-lookup (:supply-records tables))
+         :else (throw (Exception. "No valid table to derive titles from!")))))
 
-  (->> (tbl/select-fields  
+;with-table [deployments]
+;  Conj columns to deployments:  
+;    Join ["SRC"] [deployments SRCDefinitions] ;adds OITitle, STR.
+;    conj-field "Dwell Years" (fn [record] (assoc record "Dwell Years"
+;                                                        (* 365 (? "Dwell"))))
+;   
+
+;(defn build-SRC-definition
+;  "Build a lookup table of {SRC, OITitle, STR}."
+;  [tables]
+;  (assert (every? (partial contains? tables) []))  
+                            
+;(defn add-deployment-fields
+;  "Given a deployments table, add a couple of fields for the deployment.
+;   Specifically, we want to add a computed field for each deploytable, where 
+;   "
+;  [deploytable srcdeftable]
+
+  
 
 
 ;  (defn compute-trends [rootdir]

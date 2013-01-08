@@ -225,6 +225,15 @@
   (serial-comparer (map ordering->fieldcomp orderings)))                                                                                                                                                                                     
 
 
+;A function for generating keys from records or associative structures.
+(defmulti key-function class)
+(defmethod key-function :default [f] (fn [rec] (f rec)))
+(defmethod key-function clojure.lang.Keyword [x] (fn [rec] (get rec x)))
+(defmethod key-function java.lang.String [x] (fn [rec] (get rec x)))
+(defmethod key-function clojure.lang.PersistentVector [x]
+  (let [keyfs (apply juxt (map key-function x))]
+    (fn [rec]  (keyfs rec))))
+
 ;(defmacro query-with [m querydef]
 ;  `(let [m# ~m
 ;         ?# (fn [k v] (get m k))]
