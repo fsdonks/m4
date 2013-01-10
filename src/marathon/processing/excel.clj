@@ -167,13 +167,41 @@
       (let [textpath (io/relative-path rootdir [(str nm ".txt")])]
         (io/hock textpath (tbl/table->tabdelimited t))))))  
 
+(defn xlsx->tables
+  "Extract one or more worksheets from an xls or xlsx workbook as a map of 
+   tables, where each sheet is rendered as a contiguous table, with first row 
+   equal to field names."
+  [wbpath & {:keys [sheetnames] :or {sheetnames :all}}]
+  (wb->tables (load-workbook wbpath) :sheetnames sheetnames))  
+
+(defn xlsx->wb
+  "API wrapper for docjure/load-workbook.  Loads an excel workbook from 
+   a given workbook path."
+  [wbpath] 
+  (load-workbook wbpath))
+
+(defmulti as-workbook class)
+(defmethod as-workbook java.lang.String [wb] (load-workbook wb))
+(defmethod as-workbook org.apache.poi.xssf.usermodel.XSSFWorkbook [wb]
+  wb)
+
+(defmethod as-workbook :default [wb] 
+  (throw (Exception. (str "Method not implemented for type " (type wb)))))
+
+(defmulti as-sheet (fn [sheet wb] (class sheet)))
+(defmethod as-sheet java.lang.String [sheet wb] 
+  (select-sheet sheet (as-workbook wb)))
+
+(defmethod as-sheet :default [sheet wb] 
+  (throw (Exception. (str "Method not implemented for type " (type sheet)))))
+
 (comment 
 ;testing  
 (def wbpath   
   "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\MPI_3.76029832.xlsm")
 (def outpath "C:\\Users\\thomas.spoon\\Documents\\newWB.xlsx")
 
-(def wb (load-workbook wbpath))
+(def wb (as-workbook wbpath))
 (def tables ["Deployments"
              "DemandTrends" 
              "InScope"

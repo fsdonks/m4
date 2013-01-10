@@ -92,7 +92,7 @@
                                (map timef)))
         timef (case time-unit
                 :day identity
-                :year # (/ % 365)
+                :year #(/ % 365)
                 :quarter #(/ % 90))
         components ($group-by "Component" deployset)]
     (for [kv (sort-by #(first (vals (key %))) components)]
