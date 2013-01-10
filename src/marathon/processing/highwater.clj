@@ -204,9 +204,13 @@
    The resulting value should be identical to the record (field-wise), except 
    field values may be changed or computed by the intersection. "
   [lookup-map primarykey]  
-  (fn [record] 
-    (merge-from record 
-      (get lookup-map (get record primarykey)))))
+  (fn [record]
+    (let [pkey (get record primarykey 
+                (throw (Exception. (str "Record has no key for " primarykey))))
+          fields (get lookup-map pkey                       
+                      (throw (Exception. 
+                               (str "Lookup-table has no key for " pkey))))] 
+    (merge-from record fields))))
 
 ;this is a simple query....
 (def testlookup 

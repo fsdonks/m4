@@ -323,10 +323,8 @@
 (defn build-audit-trail
   "Given a set of cleaned tables, we apply the processes necessary to build an 
    audit-trail from the data.  The audit trail is just a map of tables."
-  [clean-tables & {:keys [post-processes] :or 
-                   {post-processes [:compute-highwater
-                                    :compute-fillstats]}}]
-  (compute-highwater trends   titles highpath)
+  [clean-tables] 
+  (compute-highwater trends titles highpath)
   (compute-fillstats highpath titles fillpath))  
 
 
