@@ -20,77 +20,9 @@
     e
     (merge io/common-paths {:current-dir io/*current-dir*})))
 
-(defprotocol IProcess 
-  (do-process [p & env] 
-  "Applies post processing to an environment.  A process is a function, where 
-   process :: Env -> Env, where Env is a map of keyvals, typically containing 
-   the path and any other structure accumulated during processing (which may 
-   be useful downstream).  If no args are specified, the default process is 
-   to compute highwater results, fillrates, and build an audit trail."))
-
-;This will probably be adapted further, currently not used.  The idea is to 
-;define inputs for processes, as well as outputs, to allow for a GPS-type 
-;system of goal-programming, in which pre and post-conditions, combined with 
-;a map of actions, will allow the processor to figure out how to accomplish 
-;a set of goals.
-(defprotocol IConditionalProcess
-  (pre-conditions [p env] "A set of pre-conditions to execute p.")
-  (post-conditions [p env] "A set of post-conditions that p will impart."))
-
-(extend-protocol IProcess
-  nil ;a nil process returns the environment, if any.
-    (do-process [p & env] (first env))
-  clojure.lang.PersistentVector ;vectors are seen as a serial set of processes. 
-    (do-process [p & env] 
-      (reduce (fn [env proc] (if-let [res (proc env)] res env))           
-              (get-environment (first env)) p))
-  clojure.lang.PersistentArrayMap ;maps are seen as independent processes.  
-    (do-process [p & env]
-      (let [ps (seq p)] ;execute processes in parallel
-        (->> (pmap (fn [[pname proc]] (fn [env] (proc env))) ps) 
-          (reduce (fn [env f] (merge env (f env))) ;returning a merged env
-                  (get-environment (first env)))))))
-
-;process combinators.
-(defn proc
-  "Build a sequential process from one or more items."
-  [& itms] (vec itms))
-
-(defn proc-parallel
-  "Build a parallel process from one or more items."
-  [& itms] (into {} (map-indexed vector itms)))
-
-(defn proc-effect
-  "Convert a function of no args, f, into a process by making it into 
-   a function that takes an environment argument."
-  [thunk] 
-  [(fn [env] (do (thunk) env))]) 
-
-(defn proc-map 
-  "Map function f to env"
-  [f]
-  [(fn [env] (f env))])
-
-(defn proc-if
-  "Apply process p when pred holds."
-  [pred p] 
-  [(fn [env] (if (pred env) (p env) env))])  
-
-(defn proc-log
-  "Prints a simple message to the console, for logging."
-  [msg ]
-  (proc-effect (println msg)))
-
-(defn proc-read-file
-  [{:keys [resname path]}]
-  "Reads a file from path, binding merging the result into the environment."
-  (fn [env] (merge env {resname (slurp path)})))    
-
-
 ;some defaults for post processing.
 
 (declare compute-fillstats) 
-
 (def default-process [compute-highwater 
                       compute-fillrates 
                       compute-fillstats 
@@ -104,10 +36,10 @@
                    processes default-process}}]
   :not-implemented)
 
-(defn build-audit-trail 
-  "Compiles an audit trail from Marathon output."
-  [project-path all-input-tables demandtrends-path fillstats-path]
-  [(proc-log (str "Building audit trail from project in " project-path))])
+;(defn build-audit-trail 
+;  "Compiles an audit trail from Marathon output."
+;  [project-path all-input-tables demandtrends-path fillstats-path]
+;  [(proc-log (str "Building audit trail from project in " project-path))])
 
 ;A map of paths to resources, relative to a project-path.
 (def default-paths {:deployments ["Deployments.txt"]
@@ -147,7 +79,22 @@
    we only locate the paths, saving on memory in the process."
   [project-path & {:keys [paths] :or {files default-paths}}]
   :not-implemented)
-  
+
+(defn add-table
+  "Adds a table to the project."
+  [prj table-name table]
+  (assert tbl/tabular? table)
+  (assoc-in [:tables table-name] table))
+
+(defn add-tables
+  "Add a sequence of named tables to the project. 
+   Typically, we use a map of {tablename table} here, 
+   but any sequence of [tablename table] will work."
+  [prj tables] 
+  (reduce (fn [p [nm table]]
+            (add-table p nm table))
+          (seq tables)))
+
 (defn compute-highwater 
   "Computes the highwater statistics from marathon output."
   [prj SRCdefinitions demandtrends-path]
@@ -175,6 +122,19 @@
 
 (def wb (xl/as-workbook wbpath))
 
+;A map of paths to resources, relative to a project-path.
+(def default-paths {:deployments ["Deployments.txt"]
+                    :demand-trends ["DemandTrends.txt"] 
+                    :in-scope ["InScope.txt"]
+                    :out-of-scope ["OutOfScope.txt"]
+                    :demand-records ["DemandRecords.txt"]
+                    :parameters ["Parameters.txt"]
+                    :period-records ["PeriodRecords.txt"]
+                    :relation-records ["RelationRecords.txt"]
+                    :src-tag-records ["SRCTagRecords.txt"]
+                    :supply-records ["SupplyRecords.txt"] 
+                    :titles ["Titles.txt"]})
+
 ;Trying to solve the immediate problem of wrapping a marathon project that's 
 ;based in an Excel workbook (and also based in surrounding text files.)
 
@@ -191,6 +151,15 @@
    :src-tag-records  "SRCTagRecords"   ;input
    :parameters       "Parameters"})    ;input
 
+;These are canonical outputs from a VBA Marathon run for capacity analysis. 
+(def marathon-text-file-output 
+  {:cycle-records  "cycles.txt" 
+   :event-log      "EventLog.csv"
+   :demand-trends  "DemandTrends.txt"
+   :sand-trends    "SandTrends.txt"
+   :locations      "locations.txt"
+   })       
+
 ;Current process flow -> to build an audit trail from a run:
 ;The run is performed (currently requires user intervention).
 ;Extract auditable tables from Marathon Workbook: 
@@ -204,13 +173,7 @@
 ;   :src-tag-records  "SRCTagRecords"   ;input
 ;   :parameters       "Parameters"})    ;input
 
-(defn get-marathon-tables
-  "Given a workbook schema, extract each worksheet into a util.table for 
-   further processing."
-  [wb & {:keys [tables] :or {tables marathon-workbook-schema}}]  
-  nil)
-
-(defn get-marathon-inputs [wbpath]
+(defn marathon-book->marathon-tables [wbpath]
   "Extract a map of canonical tables to a map with the same name."
   (let [wb (xl/as-workbook wbpath)]
     (into {} (for [[nm sheetname] (seq marathon-workbook-schema)]
@@ -219,9 +182,11 @@
 ;derive SRCDefinition {SRC, OITitle, STR}
 ;  derive  OITitles from supply records or other table.
 ;  derive STR from strength table, or supply records? 
+;
 
 (defn derive-titles
-  "Derive the OITitles from a set of tables."
+  "Derive the OITitles from a set of tables.  If a :titles table already exists, 
+   we will use it."
   [tables]
   (let [src-lookup (tbl/make-lookup-table "SRC")                      
         valid-table? (fn [t] (and (contains? tables t)
@@ -236,41 +201,83 @@
          :else (throw (Exception. "No valid table to derive titles from!")))))
 
 (defn derive-strengths
-  "Derive strengths from a set of tables.  STR should reside in SupplyRecords"
+  "Derive strengths from a set of tables.  STR should reside in SupplyRecords.
+   If a :strength table already exists, we will use it."
   [tables]
   (let [make-lookup (fn [tb] (tbl/select :from tb 
-                                         :fields ["SRC" "OITitle"]
+                                         :fields ["SRC" "STR"]
                                          :unique true))        
         valid-table? (fn [t] (and (contains? tables t)
-                                  (tbl/has-fields? ["SRC" "OITitle"] 
+                                  (tbl/has-fields? ["SRC" "STR"] 
                                                   (get tables t))))]
-    (cond (valid-table? :titles) ;if we already have titles, done.
-            (tbl/select-distinct (:titles tables))
-          (valid-table? :demand-records)  ;look in demand records 
-            (make-lookup (:demand-records tables))
+    (cond (valid-table? :strength)
+             (tbl/select-distinct (:titles tables))
           (valid-table? :supply-records) ;finally supply records.
-            (make-lookup (:supply-records tables))
-         :else (throw (Exception. "No valid table to derive titles from!")))))
+             (make-lookup (:supply-records tables))
+          :else (throw (Exception. "No valid table to derive titles from!")))))
 
-;with-table [deployments]
-;  Conj columns to deployments:  
-;    Join ["SRC"] [deployments SRCDefinitions] ;adds OITitle, STR.
-;    conj-field "Dwell Years" (fn [record] (assoc record "Dwell Years"
-;                                                        (* 365 (? "Dwell"))))
-;   
+(defn derive-SRCdef
+  "derive  OITitles from supply records or other table.  derive STR from 
+   strength table, or supply records.  Join OITitles on STR by SRC." 
+  [title-table strength-table]
+  (tbl/select :fields ["SRC" "OITitle" "Strength"]
+              :from (tbl/join-tables ["SRC"] 
+                           [title-table strength-table])))
 
-;(defn build-SRC-definition
-;  "Build a lookup table of {SRC, OITitle, STR}."
-;  [tables]
-;  (assert (every? (partial contains? tables) []))  
-                            
-;(defn add-deployment-fields
-;  "Given a deployments table, add a couple of fields for the deployment.
-;   Specifically, we want to add a computed field for each deploytable, where 
-;   "
-;  [deploytable srcdeftable]
+(defn clean-deployments
+  "Given a table of SRC definitions, with field {SRC OITitle ...},
+   Adds Dwell Years and OITitle information to the deployments table."
+  [src-def-lookup deploy-table] 
+  (let [dwell-years (map #(/ % 365.0) 
+                         (tbl/field-vals (tbl/select-field "DwellYears")))
+        titles (map (fn [src] (-> (get src-def-lookup src)
+                                (get "OITitle"))) 
+                    (tbl/field-vals (tbl/select-field "SRC")))]
+    (tbl/conj-fields {"DwellYears" dwell-years
+                      "OITitle" titles} deploy-table)))                                           
 
-  
+(defn marathon-tables->clean-tables 
+  "Given a map of marathon tables, in the form of ITabular data types, 
+   performs cleaning and post processing to generate a set of tables that 
+   are ready for auditing."
+  [marathon-tables] 
+  (let [titles    (derive-titles marathon-tables)
+        strength  (derive-strngths marathon-tables)
+        src-definitions (derive-SRCdef titles strength)]
+     (merge marathon-tables 
+          {:titles titles 
+           :strength strength 
+           :src-definitions src-definitions
+           :deployments (clean-deployments 
+                          (tbl/make-lookup-table "SRC" src-definitions)
+                          (:deployments marathon-tables))})))
+
+(defn build-audit-trail
+  "Given a set of cleaned tables, we apply the processes necessary to build an 
+   audit-trail from the data.  The audit trail is just a map of tables."
+  [clean-tables & {:keys [post-processes] :or 
+                   {post-processes [:compute-highwater
+                                    :compute-fillstats]}}]
+  (compute-highwater trends   titles highpath)
+  (compute-fillstats highpath titles fillpath))  
+
+
+(defn marathon-workbook->project
+  "Given a path to a Marathon workbook, derives a basic project structure from
+   the workbook."
+  [wbpath]
+  (let [wbname (last (io/list-path wbpath))]
+    {:project-type #{:workbook :text :capacity}
+     :project-name wbname 
+     :paths {:project-path (io/as-directory wbpath)
+             :project-workbook wbname}}))
+
+(defn load-default-tables
+  "Primes the default tables from a workbook into the project."
+  [project]
+  (let [wb (get-path project :workbook)]
+    (add-tables project (marathon-book->marathon-tables wb))))
+
 
 
 ;  (defn compute-trends [rootdir]

@@ -364,6 +364,21 @@
    values."
   (records->table (filter f (table-records tbl))))
 
+
+(defn map-field-indexed
+  "Maps function f to field values drawn from tbl.  f takes arguments akin to 
+   map-indexed, [i v], treating the mapping as an indexed traversal over the 
+   field entries.  Returns a table with the result of the mapping."
+  [field f tbl]
+  (let [newvals (map-indexed f (field-vals (get-field field tbl)))]
+    (conj-field [field (vec newvals)] tbl)))
+
+(defn map-field
+  "Maps function f to field values drawn from tbl, akin to clojure.core/map. 
+  Returns a table with the results of the mapping."
+  [field f tbl]
+  (map-field-indexed field (fn [_ x] (f x)) tbl))
+
 (defn negate [n] (* n -1))
 
 (defn order-with 
@@ -415,31 +430,27 @@
   (make-table (table-fields tbl) 
               (transpose (vec (distinct (table-rows tbl))))))
 
-;(defn join? [keyspec]
-;  (if (atom? keyspec)
-;    (fn [tbls]
-;      (filter-
-;        
-;(defn inner-join
-;  "Simple join between two foreign fields.
-;   key-spec is either an atom (typically a keyword), or 
-;   a vector of atoms that define fields to be joined on.
-;   Returns a table that is the union of records from  
-;   all tables where the specified fields in the key-spec are 
-;   equal."
-;  [key-spec tables]
-;
-;  
+(defn group-records 
+  "Convenience function, like group-by, but applies directly to ITabular
+   structures.  Allows an optional aggregator function that can be run on 
+   each group, allowing domain aggregation queries and the like.  If no 
+   aggregator is supplied via the :aggregator key argument, acts identical to 
+   clojure.core/group-by"
+  [keygen table & {:keys [aggregator] :or {aggregator identity}}]
+  (let [get-key (key-function keygen)]
+    (let [groups 
+          (->> (select-distinct table)
+            (table-records)
+            (group-by get-key))]
+      (into {} (map (fn [[k v]] [k (aggregator v)]) (seq groups))))))
+  
+(defn make-lookup-table
+  "Creates a lookup table from a table and a list of fields.  If more than one
+   field is specified, composes the field values into a vector, creating a 
+   compound key.  If more than one result is returned, returns the first 
+   value in the grouped vectors."
+  [fields table] (group-records fields table :aggregator first))
 
-(defn join-tables
-  "Given a field or a list of fields, joins each table that shares the field."
-  [fields tbls]
-  (let [valid-tables (->> (filter #(clojure.set/intersection 
-                                     (set fields) (set (table-fields %))))
-                          (sort-by count-rows))]
-    (when valid-tables 
-      (let [fieldvals (table-rows (select-fields fields (first valid-tables)))]
-        fieldvals))))
 
 (defn join-on
   "Given a field or a list of fields, joins each table that shares the field."
@@ -453,13 +464,45 @@
                                      y  (get r k)]
                                  (merge x y))
                             (reduce conj! acc))) (transient #{}) joins))))    
-  
+
+(defn join-tables
+  "Given a field or a list of fields, joins each table that shares the field."
+  [fields tbls]
+  (assert (coll? fields))
+  (let [field-set    (set fields) 
+        valid-tables (->> tbls
+                          (filter #(clojure.set/subset?  field-set 
+                                     (set (table-fields %))))
+                          (sort-by count-rows))
+        joiner (partial join-on fields)]
+    (when valid-tables
+       (reduce (fn [l r] (records->table (joiner l r))) valid-tables)))) 
+            
+
 ;protocol-derived functions 
 
 (defn- process-if [pred f x] (if pred (f x) x))
 
 (defn database? [xs]  
   (and (seq xs) (every? tabular? xs)))
+
+; design to support the as syntax.
+; [:age   (fn [i rec] (* 10 i))]
+
+(defmulti computed-field  (fn [x] (if (fn? x) :function (type x))))
+(defmethod computed-field :function [f] (fn [i rec] (f i rec)))
+(defmethod computed-field clojure.lang.Keyword [k]  (fn [i rec] (get rec k)))
+
+;implementation for 'as statements pending....
+
+;(defn parse-as-map [x]
+;  (cond (or (keyword? x) (string? x)) 
+;          {:x (computed-field x)}
+;        (vector? x) (let [[fld v &rest] x]
+;                      {fld (computed-field v)})
+;        :else (throw (Exception. (str "Unsupported type in 'as query" x)))))
+;(defmacro with-computed-fields [fieldmap & body]
+  
 
 (defn- select-
   "A small adaptation of Peter Seibel's excellent mini SQL language from 
@@ -481,27 +524,6 @@
       :or   {fields :* from nil where nil
              unique true orderings nil }}]
   (select- fields from where unique orderings)) 
-
-(defn group-records 
-  "Convenience function, like group-by, but applies directly to ITabular
-   structures.  Allows an optional aggregator function that can be run on 
-   each group, allowing domain aggregation queries and the like.  If no 
-   aggregator is supplied via the :aggregator key argument, acts identical to 
-   clojure.core/group-by"
-  [keygen table & {:keys [aggregator] :or {aggregator identity}}]
-  (let [get-key (key-function keygen)]
-    (let [groups 
-          (->> (select :unique true :from table)
-            (record-seq)
-            (group-by get-key))]
-      (into {} (map (fn [[k v]] [k (aggregator v)]) (seq groups))))))
-  
-(defn make-lookup-table
-  "Creates a lookup table from a table and a list of fields.  If more than one
-   field is specified, composes the field values into a vector, creating a 
-   compound key.  If more than one result is returned, returns the first 
-   value in the grouped vectors."
-  [fields table] (group-records fields table :aggregator first))
 
 (defn parse-string 
 	"Parses a string, trying various number formats.  Note, scientific numbers,
@@ -646,14 +668,63 @@
       (join-on :name professions instruments)))
                   
   
+  (defn join-test2 []
+    (let [names ["Able" "Baker" "Charlie"]
+          professions {:name names
+                       :profession [:soldier :farmer :baker]}
+          instruments {:name (conj names "Dan") 
+                       :instrument [:rifle :plow :oven :guitar]}
+          ages {:name names 
+                :age [20 30 40]}]
+      (join-tables [:name] [professions instruments ages])))
+  
   (defn select-example []
     (->> closest-geezer 
       (select :fields [:home :first :last]
               :ordering [[:home :descending]]
               :from)
-      (conj-field [:instruments [:guitar :fiddle]]))) 
-      
-              
+      (conj-field [:instruments [:guitar :fiddle]])))
+  
+  (defn select-from-join []
+    (let [names ["Able" "Baker" "Charlie"]
+          professions {:name names
+                       :profession [:soldier :farmer :baker]}
+          instruments {:name (conj names "Dan") 
+                       :instrument [:rifle :plow :oven :guitar]}
+          ages {:name names 
+                :age [20 30 40]}]
+      (select :fields [:instrument :profession]
+              :from (join-tables [:name] [professions instruments ages]))))
+  
+  (defn map-field-test []
+    (let [names ["Able" "Baker" "Charlie"]
+          professions {:name names
+                       :profession [:soldier :farmer :baker]}
+          instruments {:name (conj names "Dan") 
+                       :instrument [:rifle :plow :oven :guitar]}
+          ages {:name names 
+                :age [20 30 40]}
+          joined (join-tables [:name] [professions instruments ages])
+          names  (field-vals (get-field :name joined))]
+          
+      (->> joined
+           (map-field :name (fn [x] (.toLowerCase x)))
+           (conj-field {:upper-name (map (fn [x] (.toUpperCase x))
+                                         (field-vals (get-field :name }))))
+
+;  (defn select-as []
+;    (let [names ["Able" "Baker" "Charlie"]
+;          professions {:name names
+;                       :profession [:soldier :farmer :baker]}
+;          instruments {:name (conj names "Dan") 
+;                       :instrument [:rifle :plow :oven :guitar]}
+;          ages {:name names 
+;                :age [20 30 40]}]
+;      (select :fields [:instrument 
+;                       :profession 
+;                       [:age   (fn [i rec] (* 10 i))]
+;                       [:index (fn [i rec] i)]]              
+;              :from (join-tables [:name] [professions instruments ages]))))  
                                   
 )
   
