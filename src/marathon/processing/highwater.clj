@@ -169,6 +169,7 @@
   (fn [m] 
     (intersect-fields m srcmap :SRC)))
 
+
 (defn compute-strengths
   "Adds a few computed fields to our entry."
   [m]
@@ -187,16 +188,19 @@
   [srcmap]
   (comp compute-strengths (src-lookup srcmap))) 
                                       
-(defn file->trends [inpath] (readTrends (line-seq inpath)))
+(defn file->trends [inpath]
+  (with-open [rdr (clojure.java.io/reader inpath)]
+    (vec (readTrends (line-seq inpath)))))
+
 (defn trends->highwater-records
   "Given an lazy sequence of trend records, compiles the highwater trends from
    demandtrends."
   [rawtrends & {:keys [entry-processor]}]
-    (->> (for [q (->> rawtrends
-                   (readTrends)
-                   (highWaterMarks))]
-           (for [trendrec (->> (if entry-processor (map entry-processor q) q))]
-             trendrec))))
+  (for [q (->> rawtrends
+            (readTrends)
+            (highWaterMarks))
+        trendrec (if entry-processor (map entry-processor q) q)]
+    trendrec))
 
 (defn trends->highwater-table
   "Composition that produces an ITable from a lazy sequence of raw demand 

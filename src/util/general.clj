@@ -25,7 +25,7 @@
    are different, a chunk is emitted, with the key prepended as in group-by."
   ([keyf coll]
     (lazy-seq
-      (if-let [res (scan-by keyf coll)]
+      (if-let [res (clump keyf coll)]
         (cons  (first res) (clumps keyf (second res))))))
   ([coll] (clumps identity coll)))
 
