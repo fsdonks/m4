@@ -1,5 +1,6 @@
 (ns marathon.processing.highwater
-  (:use [util.record :only [defrecord+ with-record merge-from record-headers]])
+  (:use [util.record :only [defrecord+ with-record merge-from record-headers]]
+        [util.general :only [clumps]])
   (:require [util [io :as io] 
                   [table :as tbl]]))
              
@@ -7,50 +8,6 @@
 ; --fairly large log file produced during simulation. The log file is in the
 ; --tab-delimited format.
 
-(defn keyed-partition-by
-  "Aux function. Like clojure.core/partition-by, except it lazily produces
-   contiguous chunks from sequence coll, where each member of the coll, when
-   keyf is applied, returns a key. When the keys between different regions
-   are different, a chunk is emitted, with the key prepended as in group-by."
-  [keyf coll]
-  (letfn [(chunks [keyf k0 acc coll]
-                  (if (seq coll)
-                    (let [s (first coll)
-                          k (keyf s)]
-                      (lazy-seq
-                        (if (= k k0)
-                          (chunks keyf k0 (conj acc s) (rest coll))
-                          (cons [k0 acc] (chunks keyf k [] coll)))))
-                    [[k0 acc]]))]
-         (when coll
-           (chunks keyf (keyf (first coll)) [] coll))))
-
-(defn clump
-  "Returns a vector of a: results for which keyf returns an identical value.
-   b: the rest of the unconsumed sequence."
-  ([keyf coll]
-    (when (seq coll) 
-      (let [k0 (keyf (first coll))]
-        (loop [acc (transient [(first coll)])
-               xs (rest coll)]
-          (if (and (seq xs) (= k0 (keyf (first xs))))
-            (recur (conj! acc (first xs)) (rest xs))
-            [[k0 (persistent! acc)] xs])))))
-  ([coll] (clump identity coll)))
-                                
-(defn clumps
-  "Aux function. Like clojure.core/partition-by, except it lazily produces
-   contiguous chunks from sequence coll, where each member of the coll, when
-   keyf is applied, returns a key. When the keys between different regions
-   are different, a chunk is emitted, with the key prepended as in group-by."
-  ([keyf coll]
-    (lazy-seq
-      (if-let [res (scan-by keyf coll)]
-        (cons  (first res) (clumps keyf (second res))))))
-  ([coll] (clumps identity coll)))
-
-;(defrecord trend [t Quarter SRC TotalRequired TotalFilled Overlapping
-;                  Deployed DemandName Vignette DemandGroup])
 
 ;Note -> we're maintaining backward compatibility with the older version
 ;of trend here.  We didn't always capture the AC/RC/NG/Ghost, etc. fill data.
@@ -115,7 +72,7 @@
 (defn groupByQuarter
   "Group a list of Trends by quarters, returning a list of Quarterly Trends."
   [trs]
-  (->> (keyed-partition-by trendQuarter trs)
+  (->> (clumps trendQuarter trs)
     (map (fn [[q trs]] (Qtrend q trs)))))
 
 (defn sampleQuarter
@@ -230,6 +187,24 @@
   [srcmap]
   (comp compute-strengths (src-lookup srcmap))) 
                                       
+(defn file->trends [inpath] (readTrends (line-seq inpath)))
+(defn trends->highwater-records
+  "Given an lazy sequence of trend records, compiles the highwater trends from
+   demandtrends."
+  [rawtrends & {:keys [entry-processor]}]
+    (->> (for [q (->> rawtrends
+                   (readTrends)
+                   (highWaterMarks))]
+           (for [trendrec (->> (if entry-processor (map entry-processor q) q))]
+             trendrec))))
+
+(defn trends->highwater-table
+  "Composition that produces an ITable from a lazy sequence of raw demand 
+   trends, where the table is a fully computed set of highwater records."
+  [rawtrends & {:keys [entry-processor]}]
+  (tbl/records->table
+    (trends->highwater-records rawtrends :entry-processor entry-processor)))
+
 ;this version is -120 seconds, take about 1 gb of ram.
 ;Look at swapping out non-cached streams with lazy sequences.
 (defn main
@@ -245,76 +220,38 @@
                 lazyout (clojure.java.io/writer (io/make-file! outfile))]
       (binding [*out* lazyout]
         (do (println (tabLine headers))
-          (doseq [q (->> (line-seq lazyin)
-                      (readTrends)
-                      (highWaterMarks))]
-              (doseq [t (->> (if entry-processor
-                               (map entry-processor q) q)
-                          (map trendString))]
-                (print t)))))))
+          (doseq [t (-> (file->trends lazyin) 
+                        (trends->highwater-records 
+                          :entry-processor entry-processor))]
+                (print (trendString t)))))))
 
-(defn trends->highwater
-  "Given an input file and an output file, compiles the highwater trends from
-   demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
-   supplied, then the supplied field values will be merged with the entries 
-   prior to writing.  We typically use this for passing in things like 
-   OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
-   This pattern will probably be extracted into a higher order postprocess 
-   function or macro...."
-  [xs {:keys [entry-processor]}]
-  (with-out-str [*out* lazyout]
-    (do (println (tabLine headers))
-      (doseq [q (->> (line-seq )
-                  (readTrends)
-                  (highWaterMarks))]
-        (doseq [t (->> (if entry-processor
-                         (map entry-processor q) q)
-                    (map trendString))]
-          (print t))))))
-
-  
-;(defn map-file
-;  "Maps function f to each line of the file.  Caller can supply a function for
-;   chunking the file, which will be applied to the filestream.  If no function
-;   is supplied, file will be transformed into a lazy sequence of lines via 
-;   line-seq.  Returns the result of lazily mapping f to the file chunks."
-;  [f infile & {:keys [chunk-func] :or {chunk-func line-seq}}]  
-;  (with-open [lazyin (clojure.java.io/reader infile)]
-;    (doall (map f (line-seq lazyin)))))
-;
-;(defn reduce-file
-;  ""
-;  [f outfile infile]
-;  (with-open [lazyout (clojure.java.io/reader infile)]
-;    (f init (doall (line-seq lazyin)))))
+;(defn main
+;  "Given an input file and an output file, compiles the highwater trends from
+;   demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
+;   supplied, then the supplied field values will be merged with the entries 
+;   prior to writing.  We typically use this for passing in things like 
+;   OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
+;   This pattern will probably be extracted into a higher order postprocess 
+;   function or macro...."
+;  [infile outfile & {:keys [entry-processor]}]
+;    (with-open [lazyin (clojure.java.io/reader infile)
+;                lazyout (clojure.java.io/writer (io/make-file! outfile))]
+;      (binding [*out* lazyout]
+;        (do (println (tabLine headers))
+;          (doseq [q (->> (line-seq lazyin)
+;                      (readTrends)
+;                      (highWaterMarks))]
+;              (doseq [t (->> (if entry-processor
+;                               (map entry-processor q) q)
+;                          (map trendString))]
+;                (print t)))))))
 
 
-
-(defn demand->highwater [instream] 
-   (with-open [lazyin (clojure.java.io/reader infile)
-                lazyout (clojure.java.io/writer (io/make-file! outfile))]
-      (binding [*out* lazyout]
-        (do (println (tabLine headers))
-          (doseq [q (->> (line-seq lazyin)
-                      (readTrends)
-                      (highWaterMarks))]
-              (doseq [t (->> (if entry-processor
-                               (map entry-processor q) q)
-                          (map trendString))]
-                (print t)))))))
-(
 ;This is a process, I'd like to move it to a higher level script....
 (defn findDemandTrendPaths
   "Sniff out paths to demand trends files from root."
   [root]
   (map io/fpath (io/find-files root #(= (io/fname %) "DemandTrends.txt"))))
-
-(defn batchpaths [root]
-  (map #(io/relative-path (io/as-directory root) %)
-       [["WithSubsSurges" "DemandTrends.txt"]
-        ["NoSubsSurges" "DemandTrends. txt"]
-        ["WithSubs1418Demand" "DemandTrends. txt"]
-        ["NoSubs1418Demand" "DemandTrends.txt"]]))
 
 (defn batch
   "Computes high water for for each p in path. dumps a corresponding highwater.
@@ -329,23 +266,13 @@
                   :entry-processor entry-processor))
         (println (str "Source file: " source" does not exist!"))))))
 
-(defn get-entry-processor [root]
-  (let [filepath  (io/relative-path 
-                       (io/as-directory root) ["SRCdefinitions.txt"])
-        srcfile (clojure.java.io/file filepath)]    
-    (if (io/fexists? filepath)
-      (->> (tbl/tabdelimited->table (slurp srcfile) :parsemode :noscience)
-        (tbl/record-seq))
-      identity)))
-
-
+ 
 (defn batch-from
   "Compiles a batch of highwater trends, from demand trends, from all demand 
    trends files in folders or subfolders from root."
   [root & {:keys [entry-processor]}]
   (batch (findDemandTrendPaths root) 
          :entry-processor entry-processor))
-
 
 
 ;this version is as fast, but takes 3 GB of ram ....
