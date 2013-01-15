@@ -379,6 +379,7 @@
   [field f tbl]
   (map-field-indexed field (fn [_ x] (f x)) tbl))
 
+
 (defn negate [n] (* n -1))
 
 (defn order-with 
@@ -709,8 +710,16 @@
           
       (->> joined
            (map-field :name (fn [x] (.toLowerCase x)))
-           (conj-field {:upper-name (map (fn [x] (.toUpperCase x))
-                                         (field-vals (get-field :name }))))
+           (conj-field [:upper-name 
+                        (field-vals 
+                          (get-field :name 
+                            (map-field :name (fn [x] (.toUpperCase x)) 
+                               joined)))])
+           (order-fields-by [:age 
+                             :name 
+                             :upper-name 
+                             :profession 
+                             :instrument]))))
 
 ;  (defn select-as []
 ;    (let [names ["Able" "Baker" "Charlie"]

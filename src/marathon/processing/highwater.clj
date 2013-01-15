@@ -25,6 +25,30 @@
          (when coll
            (chunks keyf (keyf (first coll)) [] coll))))
 
+(defn clump
+  "Returns a vector of a: results for which keyf returns an identical value.
+   b: the rest of the unconsumed sequence."
+  ([keyf coll]
+    (when (seq coll) 
+      (let [k0 (keyf (first coll))]
+        (loop [acc (transient [(first coll)])
+               xs (rest coll)]
+          (if (and (seq xs) (= k0 (keyf (first xs))))
+            (recur (conj! acc (first xs)) (rest xs))
+            [[k0 (persistent! acc)] xs])))))
+  ([coll] (clump identity coll)))
+                                
+(defn clumps
+  "Aux function. Like clojure.core/partition-by, except it lazily produces
+   contiguous chunks from sequence coll, where each member of the coll, when
+   keyf is applied, returns a key. When the keys between different regions
+   are different, a chunk is emitted, with the key prepended as in group-by."
+  ([keyf coll]
+    (lazy-seq
+      (if-let [res (scan-by keyf coll)]
+        (cons  (first res) (clumps keyf (second res))))))
+  ([coll] (clumps identity coll)))
+
 ;(defrecord trend [t Quarter SRC TotalRequired TotalFilled Overlapping
 ;                  Deployed DemandName Vignette DemandGroup])
 
@@ -69,14 +93,9 @@
                         (tbl/split-by-tab coll)))
     (apply make-trend (flatten (seq (zipmap fieldnames vs)))))))
   
-;; trendString :: Trend -> String
-;; trendString (Trend t q s req filled lapping dep dem vig group)
-; tabLine [(show t), (show q), s, (show req) , (show filled), (show lapping),
 (defn tabLine [coll] (apply str (interleave coll (repeat \tab))))
 (defn trendString [tr] (str (tabLine (vals tr)) \newline))
 
-; trendList :: [[String]] - > [Trend]
-;trendList Is = map readTrend Is
 (defn trendList
   "convert a nested list of trend fields into a list of trends."
   [coll & [fieldnames]]
@@ -84,37 +103,21 @@
     (map (fn [c] (readTrend c :fieldnames fieldnames)) coll) ;if fieldnames provided, use.
     (map readTrend coll))) ;else, use default fieldnames.
 
-;asQuarter:: (Integral a)=> a -> a
-;asQuarter t = 1 + (quot t 90)
 (defn asQuarter
   "convert a sample time into a quarter"
   [t] (inc (quot t 90)))
-;trendQuarter :: Trend -> Quarter
-;trendQuarter = asQuarter . samplet
+
 (defn trendQuarter
   "Extract the trend's quarter"
   [tr] (asQuarter (:t tr)))
 
-;groupByQuarter :: [Trend] -> [QTrend]
-;groupByQuarter [] = []
-;groupByQuarter (tr:trs) = (qtrend (quarter tr) (tr:sames)):(groupByQuarter diff
-;         where (sames,diffs) = partition (same quarter tr) trs
-;This is wrong. GroupBy will not be lazy ..... it traverses the entire sequence.
-;YOU really want something like chunk-by, i.e. repeatedly take-while.
+
 (defn groupByQuarter
   "Group a list of Trends by quarters, returning a list of Quarterly Trends."
   [trs]
   (->> (keyed-partition-by trendQuarter trs)
     (map (fn [[q trs]] (Qtrend q trs)))))
-; --turn a list of trends into a Map of (src,t), v or a SampleMap
-; --where v is the sum of totalfilled for all trends of src at time t.
-; --Each quarter, we compute a set of samples keyed by the SRC and the
-; --sampletime of the trend, that maps to the total number of units filling
-; --demands for SRC on day t. There are instances where multiple samples for
-; --an SRC occur on the same day in the data, which we handle by summing.
-;sampleQuarter :: QTrend -> SampleMap
-;sampleQuarter (q, ts) = foldl (\acc tr -> conj acc tr) emptymap ts
-;    where conj acc tr Map.insertWith (+) (src tr, samplet tr) (totalfilled tr)
+
 (defn sampleQuarter
   "turn a list of trends into a Map of (src,t), v or a SampleMap
    where v is the sum of totalfilled for all trends of src at time t.
@@ -129,7 +132,6 @@
                    (assoc! acc [SRC t] TotalFilled)))]
     (persistent! (reduce sample (transient {}) ts))))
 
-; maxSamples :: SampleMap -> SRCMap
 (defn maxSamples
   "For each SRC, we want to find a time t, where t has the highest number of uni
    filling demands, relative to every other t in the sample set.
@@ -144,18 +146,14 @@
                    m)
                  (assoc! m s [t newval])))]
     (persistent! (reduce maxf (transient {}) samplemap))))
-; highTrend :: SRCMap -> Trend -> Bool
-; highTrend srcmap Trend{src=s, samplet=t} " I Just(t, -) <- (Map.lookup s srcmap) = True
-; otherwise = False
+
 (defn highTrend
   "highTrend is a filter function, that, given a corresponding map, will tell us
    if a Trend is indeed the highest trend in all the land!"
   [srcmap {:keys [SRC t]}]
   (let [[tbest ] (get srcmap SRC)]
     (= tbest t)))
-;; getHighTrends :: QTrend -> [Trend]
-;; getHighTrends qtrend@(q, trs) = filter (highTrend heightmap) trs
-;       where heightmap = maxSamples . sampleQuarter $ qtrend
+
 (defn getHighTrends
   "getHighTrends ties everything together for trends in a Quarter.
    The high trends are defined as all trends in the quarter, where the
@@ -166,18 +164,12 @@
   (let [heightmap ((comp maxSamples sampleQuarter) qtrend)]
     (filter (partial highTrend heightmap) trends)))
 
-; highWaterMarks :: [Trend] -> [Trend]
-; highWaterMarks trends = concatMap getHighTrends $ groupByQuarter trends
-; I think this is where the original haskell version was boffed.
-;Trying to do too much, violating laziness.
 (defn highWaterMarks
   "We can represent our final computation as a lazy mapping of getHighTrends
    to a list of QTrends ... "
   [trends]
   (map getHighTrends (concat (groupByQuarter trends))))
 
-; --We don't need the header from our input file.
-; readTrends = trendList . drop 1
 (defn readTrends
   "Where xs is a tab delimited line sequence, and the first value of 
    xs is a row of headers, returns a lazy seq of trend records using the 
@@ -185,9 +177,7 @@
   [xs]
   (let [fields (vec (map keyword (tbl/split-by-tab (first xs))))]
     (trendList (rest xs) fields)))
-;    (comp trendList (partial drop 1)))
-  
-; addHeaders trs = (tabLine headers) :trs
+
 (defn addHeaders [trends] (cons (str (tabLine headers) \newline) trends))
 (def workdir "C:\\Users\\tom\\Documents\\Marathon_NIPR\\")
 (def batchdir 
@@ -213,37 +203,6 @@
   {"SRC1" {:SRC "SRC1", :OITitle "Little SRC", :STR 5}
    "SRC2" {:SRC "SRC2", :OITitle "Medium SRC", :STR 10}
    "SRC3" {:SRC "SRC3", :OITitle "Big SRC",    :STR 20}})
-
-;;Want to describe computed fields easily....
-;;To be done later...
-;(map-fields 
-; {:fields  [ACFilled RCFilled NGFilled GhostFilled OtherFilled] <- many fields...
-;  :fn (let [strength (get env :STR)] 
-;        (fn [fld] (* (get env field) strength)))})
-;
-;
-;(add-fields [m]
-; (with-slots [STR TotalRequired] {:STR 10 :TotalRequired 3}
-;   (->> (merge m {:RequiredSTR (* STR TotalRequired)
-;                  :FilledSTR   (* STR TotalFilled)  }))
-;   (map-fields (fn [k v] (* str v))  
-;       [:ACFilled :RCFilled :NGFilled :GhostFilled :OtherFilled])))
-;
-;(query m
-;	{:add-fields [:ACStr :RCStr :NGStr :GhostStr :OtherStr]
-;	 :by (let [strength (? :STR)
-;	           as-Filled (fn [k] (keyword 
-;	                               (str (subs (str k) 0 1) "Filled")))] 
-;	       (fn [k v] (* strength (? (as-Filled k)))))})
-;
-;(fn [{:keys [STR TotalRequired] :as m}]
-;  (let [? (fn [f] (get m f))]  
-;    {:ACFilled (* STR (? :ACFilled)) 
-;     :RCFilled (* STR (? :NGFilled))
-;     :GhostFilled (* STR (? :GhostFilled)) 
-;     :OtherFilled (* STR (? :OtherFilled))}))
-
-;conj-fields 
 
 
 ;These operations will be replaced with more abstract SQL-like operations, 
@@ -294,34 +253,56 @@
                           (map trendString))]
                 (print t)))))))
 
-;(defn main
-;  "Given an input file and an output file, compiles the highwater trends from
-;   demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
-;   supplied, then the supplied field values will be merged with the entries 
-;   prior to writing.  We typically use this for passing in things like 
-;   OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
-;   This pattern will probably be extracted into a higher order postprocess 
-;   function or macro...."
-;  [infile outfile & {:keys [lookup-map primarykey] 
-;                     :or {lookup-map nil primarykey :SRC}}]
-;  (with-open [lazyin (clojure.java.io/reader infile)
-;              lazyout (clojure.java.io/writer (io/make-file! outfile))]
-;    (binding [*out* lazyout]
-;      (do (println (tabLine headers))
-;          (doseq [q (->> (line-seq lazyin)
-;                      (readTrends)
-;                      (highWaterMarks))]
-;            (let [merged (if lookup-map 
-;                           (map 
-;                             (fn [x] 
-;                               (merge-from x 
-;                                   (get lookup-map (get x primarykey))))
-;                             q)
-;                           q)]
-;              (doseq [t  (map trendString merged)]
-;                (print t))))))))
+(defn trends->highwater
+  "Given an input file and an output file, compiles the highwater trends from
+   demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
+   supplied, then the supplied field values will be merged with the entries 
+   prior to writing.  We typically use this for passing in things like 
+   OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
+   This pattern will probably be extracted into a higher order postprocess 
+   function or macro...."
+  [xs {:keys [entry-processor]}]
+  (with-out-str [*out* lazyout]
+    (do (println (tabLine headers))
+      (doseq [q (->> (line-seq )
+                  (readTrends)
+                  (highWaterMarks))]
+        (doseq [t (->> (if entry-processor
+                         (map entry-processor q) q)
+                    (map trendString))]
+          (print t))))))
+
+  
+;(defn map-file
+;  "Maps function f to each line of the file.  Caller can supply a function for
+;   chunking the file, which will be applied to the filestream.  If no function
+;   is supplied, file will be transformed into a lazy sequence of lines via 
+;   line-seq.  Returns the result of lazily mapping f to the file chunks."
+;  [f infile & {:keys [chunk-func] :or {chunk-func line-seq}}]  
+;  (with-open [lazyin (clojure.java.io/reader infile)]
+;    (doall (map f (line-seq lazyin)))))
+;
+;(defn reduce-file
+;  ""
+;  [f outfile infile]
+;  (with-open [lazyout (clojure.java.io/reader infile)]
+;    (f init (doall (line-seq lazyin)))))
 
 
+
+(defn demand->highwater [instream] 
+   (with-open [lazyin (clojure.java.io/reader infile)
+                lazyout (clojure.java.io/writer (io/make-file! outfile))]
+      (binding [*out* lazyout]
+        (do (println (tabLine headers))
+          (doseq [q (->> (line-seq lazyin)
+                      (readTrends)
+                      (highWaterMarks))]
+              (doseq [t (->> (if entry-processor
+                               (map entry-processor q) q)
+                          (map trendString))]
+                (print t)))))))
+(
 ;This is a process, I'd like to move it to a higher level script....
 (defn findDemandTrendPaths
   "Sniff out paths to demand trends files from root."

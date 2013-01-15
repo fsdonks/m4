@@ -252,6 +252,20 @@
                           (tbl/make-lookup-table "SRC" src-definitions)
                           (:deployments marathon-tables))})))
 
+(defn marathon-workbook->project
+  "Given a path to a Marathon workbook, derives a basic project structure from
+   the workbook.  Specifically, we get the path to the original workbook, as 
+   well as an automatic name for the project, all of the tables necessary for 
+   auditing, and a set of paths to (potentially large) outputs from the 
+   simulation."
+  [wbpath]
+  (let [wbname (last (io/list-path wbpath))]   
+    (-> {:project-type #{:workbook :text :capacity}
+          :project-name wbname 
+          :paths {:project-path (io/as-directory wbpath)
+                  :project-workbook wbname}}
+      (add-tables (marathon-book->marathon-tables wbpath)))))
+
 (defn build-audit-trail
   "Given a set of cleaned tables, we apply the processes necessary to build an 
    audit-trail from the data.  The audit trail is just a map of tables."
@@ -261,22 +275,6 @@
   (compute-highwater trends   titles highpath)
   (compute-fillstats highpath titles fillpath))  
 
-
-(defn marathon-workbook->project
-  "Given a path to a Marathon workbook, derives a basic project structure from
-   the workbook."
-  [wbpath]
-  (let [wbname (last (io/list-path wbpath))]
-    {:project-type #{:workbook :text :capacity}
-     :project-name wbname 
-     :paths {:project-path (io/as-directory wbpath)
-             :project-workbook wbname}}))
-
-(defn load-default-tables
-  "Primes the default tables from a workbook into the project."
-  [project]
-  (let [wb (get-path project :workbook)]
-    (add-tables project (marathon-book->marathon-tables wb))))
 
 
 
