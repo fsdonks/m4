@@ -1,3 +1,9 @@
+;This namespace could probably be changed into a more general stream-processing
+;library.  It was built as a single-purpose script, namely to process a large 
+;time series, sampling by quarter, to produce a series of peaks in the data
+;and a much smaller set of data to examine.  There's definitely a general 
+;time-series set of reductions hiding in here somewhere...
+
 (ns marathon.processing.highwater
   (:use [util.record :only [defrecord+ with-record merge-from record-headers]]
         [util.general :only [clumps]])

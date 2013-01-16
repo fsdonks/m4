@@ -83,7 +83,7 @@
   "Adds a table to the project."
   [prj table-name table]
   (assert tbl/tabular? table)
-  (assoc-in [:tables table-name] table))
+  (assoc-in prj [:tables table-name] table))
 
 (defn add-tables
   "Add a sequence of named tables to the project. 
@@ -92,12 +92,12 @@
   [prj tables] 
   (reduce (fn [p [nm table]]
             (add-table p nm table))
-          (seq tables)))
+          prj (seq tables)))
 
 (defn get-table
   "Returns a table local to the project."
   [prj t]
-  (get-in [:tables t] prj))
+  (get-in prj [:tables t]))
 
 ;(defn compute-highwater 
 ;  "Computes the highwater statistics from marathon output."
@@ -257,9 +257,9 @@
   [wbpath]
   (let [wbname (last (io/list-path wbpath))]   
     (-> {:project-type #{:workbook :text :capacity}
-          :project-name wbname 
-          :paths {:project-path (io/as-directory wbpath)
-                  :project-workbook wbname}}
+         :project-name wbname 
+         :paths {:project-path (io/as-directory wbpath)
+                 :project-workbook wbname}}
       (add-tables (marathon-book->marathon-tables wbpath)))))
 
 
@@ -279,12 +279,12 @@
 ;a sample of compiling an audit trail from a marathon run.
 (comment
 
-;testing...copied from marathon.processing.excel 
-(def wbpath   
-  "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\MPI_3.76029832.xlsm")
-(def outpath "C:\\Users\\thomas.spoon\\Documents\\newWB.xlsx")
+(def wbpath
+ "C:\\Users\\tom\\Documents\\Marathon_NIPR\\smallsampling\\MPI_3.76029832.xlsm")
 
-(def wb (xl/as-workbook wbpath))
+;(def outpath "C:\\Users\\thomas.spoon\\Documents\\newWB.xlsx")
+
+(def myproject (marathon-workbook->project wbpath))
 
 ;(defn build-audit-trail
 ;  "Given a set of cleaned tables, we apply the processes necessary to build an 
