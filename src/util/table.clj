@@ -292,6 +292,22 @@
     (order-fields-by 
       (if (vector? fieldnames) fieldnames (vec fieldnames)) res))))
 
+(defn field->string [f] (cond (string? f) f
+                              (keyword? f) (str (subs (str f) 1))
+                              :else (str f)))
+
+(defn keywordize-field-names
+  "Flips the fields to be keywords instead of strings."
+  [t] 
+  (make-table t (reduce #(conj %2 (keyword %1)) [] (table-fields t))
+                (table-columns t)))
+
+(defn stringify-field-names
+  "Flips the fields to be string instead of keywords."
+  [t] 
+  (make-table t (reduce #(conj %2 (field->string %1)) [] (table-fields t))
+                (table-columns t)))
+
 (defn valid-row?
   "Ensures n is within the bounds of tbl."
   [tbl n]  (and (>= n 0) (< n (count-rows tbl))))
@@ -321,6 +337,18 @@
   [tbl]
   (let [flds (reverse (table-fields tbl))]
     (map (fn [n] (nth-record tbl n flds)) (range (count-rows tbl)))))
+
+(defn last-record 
+  "Fetches the last record from table.  Returns nil for empty tables."
+  [tbl]
+  (when (> (count-rows tbl) 0) 
+    (nth-record tbl (dec (count-rows tbl)))))
+
+(defn first-record 
+  "Fetches the first record from table.  Returns nil for empty tables."
+  [tbl]
+  (when (>  (count-rows tbl) 0)
+    (nth-record tbl 0)))
 
 (defn conj-row
   "Conjoins a rowvector on a vector of columns."
@@ -592,10 +620,6 @@
    Rerouted to use the new API.  nth-record."
 	[tbl n]
  (nth-record tbl n))
-
-(defn field->string [f] (cond (string? f) f
-                              (keyword? f) (str (subs (str f) 1))
-                              :else (str f)))
 
 (defn record-count [t] (count-rows t))
 (defn get-fields [t] (table-fields t))

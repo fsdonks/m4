@@ -9,7 +9,6 @@
              [highwater :as highwater] 
              [fillrates :as fill]]))
 
-
 (declare compute-highwater compute-fillrates build-audit-trail)
 
 (defn get-environment
@@ -95,32 +94,28 @@
             (add-table p nm table))
           (seq tables)))
 
-(defn compute-highwater 
-  "Computes the highwater statistics from marathon output."
-  [prj SRCdefinitions demandtrends-path]
-  [(proc-log "computing highwater statistics...")
-   (proc (fn [env] 
-           (reduce (fn [env p] (do (highwater/batch p)
-                                 (assoc-in env [:highwater-outputs p] p))) 
-                   prj (get-path prj :highwater-paths))))])
+(defn get-table
+  "Returns a table local to the project."
+  [prj t]
+  (get-in [:tables t] prj))
 
-(defn compute-fillstats
-  "Computes the fill statistics from Marathon output."
-  [prj SRCdefinitions highwater-path]
-  [(proc-log "Computing fill statistics...")
-   (proc (fn [env] 
-           (do (highwater/batch highwater-path)
-             (assoc-in env [:fillstats-path prj] prj))))]) 
+;(defn compute-highwater 
+;  "Computes the highwater statistics from marathon output."
+;  [prj SRCdefinitions demandtrends-path]
+;  [(proc-log "computing highwater statistics...")
+;   (proc (fn [env] 
+;           (reduce (fn [env p] (do (highwater/batch p)
+;                                 (assoc-in env [:highwater-outputs p] p))) 
+;                   prj (get-path prj :highwater-paths))))])
+;
+;(defn compute-fillstats
+;  "Computes the fill statistics from Marathon output."
+;  [prj SRCdefinitions highwater-path]
+;  [(proc-log "Computing fill statistics...")
+;   (proc (fn [env] 
+;           (do (highwater/batch highwater-path)
+;             (assoc-in env [:fillstats-path prj] prj))))]) 
 
-;a sample of compiling an audit trail from a marathon run.
-(comment
-
-;testing...copied from marathon.processing.excel 
-(def wbpath   
-  "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\MPI_3.76029832.xlsm")
-(def outpath "C:\\Users\\thomas.spoon\\Documents\\newWB.xlsx")
-
-(def wb (xl/as-workbook wbpath))
 
 ;A map of paths to resources, relative to a project-path.
 (def default-paths {:deployments ["Deployments.txt"]
@@ -195,9 +190,9 @@
     (cond (valid-table? :titles) ;if we already have titles, done.
             (tbl/select-distinct (:titles tables))
           (valid-table? :demand-records)  ;look in demand records 
-            (make-lookup (:demand-records tables))
+            (tbl/make-lookup-table (:demand-records tables))
           (valid-table? :supply-records) ;finally supply records.
-            (make-lookup (:supply-records tables))
+            (tbl/make-lookup-table (:supply-records tables))
          :else (throw (Exception. "No valid table to derive titles from!")))))
 
 (defn derive-strengths
@@ -213,7 +208,7 @@
     (cond (valid-table? :strength)
              (tbl/select-distinct (:titles tables))
           (valid-table? :supply-records) ;finally supply records.
-             (make-lookup (:supply-records tables))
+             (tbl/make-lookup-table (:supply-records tables))
           :else (throw (Exception. "No valid table to derive titles from!")))))
 
 (defn derive-SRCdef
@@ -229,10 +224,11 @@
    Adds Dwell Years and OITitle information to the deployments table."
   [src-def-lookup deploy-table] 
   (let [dwell-years (map #(/ % 365.0) 
-                         (tbl/field-vals (tbl/select-field "DwellYears")))
+                         (tbl/field-vals (tbl/get-field "DwellYears" 
+                                                        deploy-table)))
         titles (map (fn [src] (-> (get src-def-lookup src)
                                 (get "OITitle"))) 
-                    (tbl/field-vals (tbl/select-field "SRC")))]
+                    (tbl/field-vals (tbl/get-field "SRC" src-def-lookup)))]
     (tbl/conj-fields {"DwellYears" dwell-years
                       "OITitle" titles} deploy-table)))                                           
 
@@ -242,7 +238,7 @@
    are ready for auditing."
   [marathon-tables] 
   (let [titles    (derive-titles marathon-tables)
-        strength  (derive-strngths marathon-tables)
+        strength  (derive-strengths marathon-tables)
         src-definitions (derive-SRCdef titles strength)]
      (merge marathon-tables 
           {:titles titles 
@@ -266,15 +262,38 @@
                   :project-workbook wbname}}
       (add-tables (marathon-book->marathon-tables wbpath)))))
 
-(defn build-audit-trail
-  "Given a set of cleaned tables, we apply the processes necessary to build an 
-   audit-trail from the data.  The audit trail is just a map of tables."
-  [clean-tables & {:keys [post-processes] :or 
-                   {post-processes [:compute-highwater
-                                    :compute-fillstats]}}]
-  (compute-highwater trends   titles highpath)
-  (compute-fillstats highpath titles fillpath))  
 
+(defn add-highwater 
+  "Computes the highwater tables.  Requires a path to demand-trends in the 
+   project.  Adds highwater under tables.  The final highwater table 
+   should not take too much memory, since it is a reduction of the original
+   demand-trends table."
+  [prj]
+  (let [hw-table (tbl/stringify-field-names 
+                   (highwater/file->highwater-table 
+                     (get-path prj :demand-trends)))]
+    ;join fields from the SRC definition table....
+    (add-table prj :high-water               
+       (tbl/join-on ["SRC"] hw-table (get-table prj :src-definitions)))))
+
+;a sample of compiling an audit trail from a marathon run.
+(comment
+
+;testing...copied from marathon.processing.excel 
+(def wbpath   
+  "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\MPI_3.76029832.xlsm")
+(def outpath "C:\\Users\\thomas.spoon\\Documents\\newWB.xlsx")
+
+(def wb (xl/as-workbook wbpath))
+
+;(defn build-audit-trail
+;  "Given a set of cleaned tables, we apply the processes necessary to build an 
+;   audit-trail from the data.  The audit trail is just a map of tables."
+;  [clean-tables & {:keys [post-processes] :or 
+;                   {post-processes [:compute-highwater
+;                                    :compute-fillstats]}}]
+;  (compute-highwater trends   titles highpath)
+;  (compute-fillstats highpath titles fillpath)) 
 
 
 
