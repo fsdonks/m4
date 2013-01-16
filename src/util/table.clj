@@ -299,14 +299,14 @@
 (defn keywordize-field-names
   "Flips the fields to be keywords instead of strings."
   [t] 
-  (make-table t (reduce #(conj %2 (keyword %1)) [] (table-fields t))
-                (table-columns t)))
+  (make-table  (reduce #(conj %1 (keyword %2)) [] (table-fields t))
+               (table-columns t)))
 
 (defn stringify-field-names
   "Flips the fields to be string instead of keywords."
   [t] 
-  (make-table t (reduce #(conj %2 (field->string %1)) [] (table-fields t))
-                (table-columns t)))
+  (make-table (reduce #(conj %1 (field->string %2)) [] (table-fields t))
+              (table-columns t)))
 
 (defn valid-row?
   "Ensures n is within the bounds of tbl."
@@ -497,6 +497,7 @@
 (defn join-tables
   "Given a field or a list of fields, joins each table that shares the field."
   [fields tbls]
+  (throw (Exception. "Currently not performing correctly, use join-on"))
   (assert (coll? fields))
   (let [field-set    (set fields) 
         valid-tables (->> tbls
