@@ -1,3 +1,6 @@
+;NOTE -> currently this file is under heavy revision, it is a dumping ground, 
+;not intended for compilation and use! 
+
 ;This is a simple set of utilities for defining post processors for data files.
 ;The need originated in Marathon scripting...and resulted in a more general 
 ;library.  Enter the generic processor.
@@ -43,31 +46,74 @@
 (def #^:dynamic *processors* (atom {})) ;a db of processors
 (defn add-processor [p]
   (swap! *processors* (assoc (process-name p) p)))
-;(defn get-processors [] @*processors*)
-;
-;(defn add-value
-;  "Defines a process that has no preconditions, and adds a resource under name
-;   to the process state."
-;  [name x]
-;  (->processor name nil #{name} (fn [state] (assoc state name x))))
-;
-;(defn read-file
-;  "Defines a process that checks file existence as a precondition, and adds 
-;   a resource under name to the process state."
-;  [path & {:keys [name] :or {name path}}]
-;  (->processor name nil {:file-exists? path}
-;               (fn [state] (assoc state name x))))
-;(defn read-lines 
-;  "Defines a process that checks file existence as a precondition, and adds a 
-;   resource under name to the process state."
-;  [name x]
-;  (->processor name nil {:key-exists? name}))
-;
-;(defn in-directory [path proc]
-;  (->processor :in-directory {:directory-exists? path} nil 
-;     (fn [state] (process proc (assoc state :dir path)))))  
 
- 
+(defprotocol IProcess 
+  (do-process [p & env] 
+  "Applies post processing to an environment.  A process is a function, where 
+   process :: Env -> Env, where Env is a map of keyvals, typically containing 
+   the path and any other structure accumulated during processing (which may 
+   be useful downstream).  If no args are specified, the default process is 
+   to compute highwater results, fillrates, and build an audit trail."))
+
+;This will probably be adapted further, currently not used.  The idea is to 
+;define inputs for processes, as well as outputs, to allow for a GPS-type 
+;system of goal-programming, in which pre and post-conditions, combined with 
+;a map of actions, will allow the processor to figure out how to accomplish 
+;a set of goals.
+(defprotocol IConditionalProcess
+  (pre-conditions [p env] "A set of pre-conditions to execute p.")
+  (post-conditions [p env] "A set of post-conditions that p will impart."))
+
+(extend-protocol IProcess
+  nil ;a nil process returns the environment, if any.
+    (do-process [p & env] (first env))
+  clojure.lang.PersistentVector ;vectors are seen as a serial set of processes. 
+    (do-process [p & env] 
+      (reduce (fn [env proc] (if-let [res (proc env)] res env))           
+              (get-environment (first env)) p))
+  clojure.lang.PersistentArrayMap ;maps are seen as independent processes.  
+    (do-process [p & env]
+      (let [ps (seq p)] ;execute processes in parallel
+        (->> (pmap (fn [[pname proc]] (fn [env] (proc env))) ps) 
+          (reduce (fn [env f] (merge env (f env))) ;returning a merged env
+                  (get-environment (first env)))))))
+
+;process combinators.
+(defn proc
+  "Build a sequential process from one or more items."
+  [& itms] (vec itms))
+
+(defn proc-parallel
+  "Build a parallel process from one or more items."
+  [& itms] (into {} (map-indexed vector itms)))
+
+(defn proc-effect
+  "Convert a function of no args, f, into a process by making it into 
+   a function that takes an environment argument."
+  [thunk] 
+  [(fn [env] (do (thunk) env))]) 
+
+(defn proc-map 
+  "Map function f to env"
+  [f]
+  [(fn [env] (f env))])
+
+(defn proc-if
+  "Apply process p when pred holds."
+  [pred p] 
+  [(fn [env] (if (pred env) (p env) env))])  
+
+(defn proc-log
+  "Prints a simple message to the console, for logging."
+  [msg ]
+  (proc-effect (println msg)))
+
+(defn proc-read-file
+  [{:keys [resname path]}]
+  "Reads a file from path, binding merging the result into the environment."
+  (fn [env] (merge env {resname (slurp path)})))    
+
+
 ;a sample of compiling an audit trail from a marathon run.
 (comment 
 	(defprocess compute-trends [rootdir]

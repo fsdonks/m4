@@ -20,77 +20,9 @@
     e
     (merge io/common-paths {:current-dir io/*current-dir*})))
 
-(defprotocol IProcess 
-  (do-process [p & env] 
-  "Applies post processing to an environment.  A process is a function, where 
-   process :: Env -> Env, where Env is a map of keyvals, typically containing 
-   the path and any other structure accumulated during processing (which may 
-   be useful downstream).  If no args are specified, the default process is 
-   to compute highwater results, fillrates, and build an audit trail."))
-
-;This will probably be adapted further, currently not used.  The idea is to 
-;define inputs for processes, as well as outputs, to allow for a GPS-type 
-;system of goal-programming, in which pre and post-conditions, combined with 
-;a map of actions, will allow the processor to figure out how to accomplish 
-;a set of goals.
-(defprotocol IConditionalProcess
-  (pre-conditions [p env] "A set of pre-conditions to execute p.")
-  (post-conditions [p env] "A set of post-conditions that p will impart."))
-
-(extend-protocol IProcess
-  nil ;a nil process returns the environment, if any.
-    (do-process [p & env] (first env))
-  clojure.lang.PersistentVector ;vectors are seen as a serial set of processes. 
-    (do-process [p & env] 
-      (reduce (fn [env proc] (if-let [res (proc env)] res env))           
-              (get-environment (first env)) p))
-  clojure.lang.PersistentArrayMap ;maps are seen as independent processes.  
-    (do-process [p & env]
-      (let [ps (seq p)] ;execute processes in parallel
-        (->> (pmap (fn [[pname proc]] (fn [env] (proc env))) ps) 
-          (reduce (fn [env f] (merge env (f env))) ;returning a merged env
-                  (get-environment (first env)))))))
-
-;process combinators.
-(defn proc
-  "Build a sequential process from one or more items."
-  [& itms] (vec itms))
-
-(defn proc-parallel
-  "Build a parallel process from one or more items."
-  [& itms] (into {} (map-indexed vector itms)))
-
-(defn proc-effect
-  "Convert a function of no args, f, into a process by making it into 
-   a function that takes an environment argument."
-  [thunk] 
-  [(fn [env] (do (thunk) env))]) 
-
-(defn proc-map 
-  "Map function f to env"
-  [f]
-  [(fn [env] (f env))])
-
-(defn proc-if
-  "Apply process p when pred holds."
-  [pred p] 
-  [(fn [env] (if (pred env) (p env) env))])  
-
-(defn proc-log
-  "Prints a simple message to the console, for logging."
-  [msg ]
-  (proc-effect (println msg)))
-
-(defn proc-read-file
-  [{:keys [resname path]}]
-  "Reads a file from path, binding merging the result into the environment."
-  (fn [env] (merge env {resname (slurp path)})))    
-
-
 ;some defaults for post processing.
 
 (declare compute-fillstats) 
-
 (def default-process [compute-highwater 
                       compute-fillrates 
                       compute-fillstats 
@@ -104,10 +36,10 @@
                    processes default-process}}]
   :not-implemented)
 
-(defn build-audit-trail 
-  "Compiles an audit trail from Marathon output."
-  [project-path all-input-tables demandtrends-path fillstats-path]
-  [(proc-log (str "Building audit trail from project in " project-path))])
+;(defn build-audit-trail 
+;  "Compiles an audit trail from Marathon output."
+;  [project-path all-input-tables demandtrends-path fillstats-path]
+;  [(proc-log (str "Building audit trail from project in " project-path))])
 
 ;A map of paths to resources, relative to a project-path.
 (def default-paths {:deployments ["Deployments.txt"]
@@ -320,29 +252,29 @@
                           (tbl/make-lookup-table "SRC" src-definitions)
                           (:deployments marathon-tables))})))
 
+(defn marathon-workbook->project
+  "Given a path to a Marathon workbook, derives a basic project structure from
+   the workbook.  Specifically, we get the path to the original workbook, as 
+   well as an automatic name for the project, all of the tables necessary for 
+   auditing, and a set of paths to (potentially large) outputs from the 
+   simulation."
+  [wbpath]
+  (let [wbname (last (io/list-path wbpath))]   
+    (-> {:project-type #{:workbook :text :capacity}
+          :project-name wbname 
+          :paths {:project-path (io/as-directory wbpath)
+                  :project-workbook wbname}}
+      (add-tables (marathon-book->marathon-tables wbpath)))))
+
 (defn build-audit-trail
   "Given a set of cleaned tables, we apply the processes necessary to build an 
    audit-trail from the data.  The audit trail is just a map of tables."
-  [clean-tables] 
-  (compute-highwater trends titles highpath)
+  [clean-tables & {:keys [post-processes] :or 
+                   {post-processes [:compute-highwater
+                                    :compute-fillstats]}}]
+  (compute-highwater trends   titles highpath)
   (compute-fillstats highpath titles fillpath))  
 
-
-(defn marathon-workbook->project
-  "Given a path to a Marathon workbook, derives a basic project structure from
-   the workbook."
-  [wbpath]
-  (let [wbname (last (io/list-path wbpath))]
-    {:project-type #{:workbook :text :capacity}
-     :project-name wbname 
-     :paths {:project-path (io/as-directory wbpath)
-             :project-workbook wbname}}))
-
-(defn load-default-tables
-  "Primes the default tables from a workbook into the project."
-  [project]
-  (let [wb (get-path project :workbook)]
-    (add-tables project (marathon-book->marathon-tables wb))))
 
 
 

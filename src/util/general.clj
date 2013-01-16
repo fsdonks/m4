@@ -4,6 +4,31 @@
 
 
 ;helper functions....I need these somewhere else, since they're universal.
+
+(defn clump
+  "Returns a vector of a: results for which keyf returns an identical value.
+   b: the rest of the unconsumed sequence."
+  ([keyf coll]
+    (when (seq coll) 
+      (let [k0 (keyf (first coll))]
+        (loop [acc (transient [(first coll)])
+               xs (rest coll)]
+          (if (and (seq xs) (= k0 (keyf (first xs))))
+            (recur (conj! acc (first xs)) (rest xs))
+            [[k0 (persistent! acc)] xs])))))
+  ([coll] (clump identity coll)))
+                                
+(defn clumps
+  "Aux function. Like clojure.core/partition-by, except it lazily produces
+   contiguous chunks from sequence coll, where each member of the coll, when
+   keyf is applied, returns a key. When the keys between different regions
+   are different, a chunk is emitted, with the key prepended as in group-by."
+  ([keyf coll]
+    (lazy-seq
+      (if-let [res (clump keyf coll)]
+        (cons  (first res) (clumps keyf (second res))))))
+  ([coll] (clumps identity coll)))
+
 (defn unfold
   "unfold takes a generating function, f :: state -> state | nil,
    a halting function, halt?:: state -> bool, and an intial state s.  Returns
