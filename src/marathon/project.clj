@@ -1,14 +1,15 @@
 ;project management module
 (ns marathon.project
   (:require  [util [io :as io] [table :as tbl] 
-             [clipboard :as board]]
+                   [clipboard :as board]]
              [clojure [string :as strlib]]))
 
-(defprotocol IResource
-  (load-resource  [r])
-  (read-resource  [r])
-  (write-resource [r])
-  (resource-type  [r]))
+;currently unused.
+;(defprotocol IResource
+;  (load-resource  [r])
+;  (read-resource  [r])
+;  (write-resource [r])
+;  (resource-type  [r]))
 
 ;a list of resources we expect to find in any project.
 (def default-resources [:deployments 
@@ -24,34 +25,22 @@
                         :titles])
 
 ;A map of paths to resources, relative to a project-path.
-(def default-paths [["Deployments.txt"]
-                    ["DemandTrends.txt"] 
-                    ["InScope.txt"]
-                    ["OutOfScope.txt"]
-                    ["DemandRecords.txt"]
-                    ["Parameters.txt"]
-                    ["PeriodRecords.txt"]
-                    ["RelationRecords.txt"]
-                    ["SRCTagRecords.txt"]
-                    ["SupplyRecords.txt"] 
-                    ["Titles.txt"]])
+(def default-paths {:deployments ["Deployments.txt"]
+                    :demand-trends ["DemandTrends.txt"] 
+                    :in-scope ["InScope.txt"]
+                    :out-of-scope ["OutOfScope.txt"]
+                    :demand-records ["DemandRecords.txt"]
+                    :parameters ["Parameters.txt"]
+                    :period-records ["PeriodRecords.txt"]
+                    :relation-records ["RelationRecords.txt"]
+                    :src-tag-records ["SRCTagRecords.txt"]
+                    :supply-records ["SupplyRecords.txt"] 
+                    :titles ["Titles.txt"]})
 
-;canonical resources....
-(def resource-core 
-  {:paths  (zipmap default-resources default-paths)
-   :tables {}})
 
-(defn load-project [path] (io/folders->map (io/as-directory path)))
-(defn save-project [path] (io/map->folders! (io/as-directory path)))
 
-;a sample environment we'll use for structuring our project...
-(def sample-env 
-  {:paths {:project-path "the root path"
-           :deployments ["A relative path to deployments"]}
-   :tables {:the-table (tbl/make-table {:field1 ["tom"]})}
-   :some-resource "blah"
-   :resource-2 "blee"})
-
+;(defn load-project [path] (io/folders->map (io/as-directory path)))
+;(defn save-project [path] (io/map->folders! (io/as-directory path)))
 
 ;projects have names, a version, a set of required resources (dependencies), 
 ;and a resource map, a map of {resource-name resource}, where resource is 
@@ -61,10 +50,8 @@
                     & {:keys [version dependencies paths tables] 
                        :or {version 0.1
                             dependencies nil
-                            paths (-> (zipmap default-resources 
-                                              default-paths)
-                                    (assoc :project-path 
-                                            project-path))
+                            paths (assoc default-paths 
+                                         :project-path project-path)
                             tables {}}}]
   {:name name 
    :version version 
@@ -82,22 +69,108 @@
   [proj]
   (reduce (fn [p k] (dissoc p k)) proj [:paths :tables]))
 
+(defn add-path 
+  "Conjoins a path to resource, resname, in the project under :paths."
+  [prj name path]
+  (assoc-in prj [:paths name] path))
+
+(defn add-file 
+  "Conjoins a simple filename as a relative path under resname."
+  [prj name filename]
+  (assoc-in prj [:paths name] [filename]))
+
 (defn get-path
   "Fetch an absolute path to a resource, as defined by the relative path 
    associated with resname."
   [prj resname]
   (io/relative-path 
     (project-path prj) (get-in prj [:paths resname])))
-   
-(defn conj-path 
-  "Conjoins a path to resource, resname, in the project under :paths."
-  [prj name path]
-  (assoc-in prj [:paths name] path))
+ 
+(defn get-input-paths
+  "Given a path to a Marathon Project, acquires paths to input tables.
+   Depending on the processing we're doing, we may not need every table, so 
+   we only locate the paths, saving on memory in the process."
+  [project-path & {:keys [paths] :or {files default-paths}}]
+  :not-implemented)
 
-(defn conj-file 
-  "Conjoins a simple filename as a relative path under resname."
-  [prj name filename]
-  (assoc-in prj [:paths name] [filename]))
+(defn add-table
+  "Adds a table to the project."
+  [prj table-name table]
+  (assert tbl/tabular? table)
+  (assoc-in prj [:tables table-name] table))
+
+(defn add-tables
+  "Add a sequence of named tables to the project. 
+   Typically, we use a map of {tablename table} here, 
+   but any sequence of [tablename table] will work."
+  [prj tables] 
+  (reduce (fn [p [nm table]]
+            (add-table p nm table))
+          prj (seq tables)))
+
+(defn get-table
+  "Returns a table local to the project."
+  [prj t]
+  (get-in prj [:tables t]))
+
+(defn project-dispatch [obj & options] 
+  (cond (string? obj) (.toLowerCase (io/fext obj))
+        :else (class obj)))
+
+(defmulti load-project 
+  "Method for loading a Marathon project from one or more formats.
+   If obj is a string, it will be parsed as a path, by file
+   extension.  Otherwise, project-dispatches on class." 
+  project-dispatch)
+
+(defmulti save-project 
+  "Method for saving or persisting a Marathon project to a destination.  
+   If obj is a string, it will be parsed as a path, dispatching on 
+   the file extension." 
+  (fn [proj destination & options]
+    (project-dispatch destination)))
+
+(defmethod save-project "clj" [proj destination & {:keys [expanded?] 
+                                                   :or {expanded? false}}]
+  (let [p (add-path proj :project-path destination)]
+    (if expanded? 
+      (do (io/map->folders!  p destination)
+        (io/hock destination (with-out-str 
+                               (doseq [l (map tbl/field->string (keys proj))]
+                                 (println l)))))
+      (io/hock destination (prn p)))))
+
+(defn keyvals->table [kvps & {:keys [string-fields?]}]
+  (let [f (if string-fields? 
+            (fn [f] (cond (string? f) f
+                          (keyword? f) (str (subs (str f) 1))
+                          (coll? f) (str f)
+                          :else f))
+            identity)]
+    (->> tbl/empty-table
+      (tbl/conj-fields  
+        {"key"  (vec (map f (keys kvps)))
+         "val" (vec (map f (vals kvps)))}))))
+            
+(defn project->tables
+  "Method for converting a project representation into a map of ITabular
+   objects, either for insertion into a database, for rendering to a folder, 
+   or for injecting into a workbook.  Anything that benefits from a tabular 
+   representation."
+  [proj & {:keys [string-fields?] :or {string-fields? true}}]
+  (merge {:paths (keyvals->table (:paths proj) :string-fields? 
+                                               string-fields? )
+            :properties (keyvals->table (project-properties proj)
+                                        :string-fields? 
+                                        string-fields? )}
+           (:tables proj)))
+
+;(defn search-project
+;  "Search a project's resources for any items in which expr 
+;   returns true."
+;  [prj expr & {:keys [exhaustive? ]
+;  (
+;  
 
 (defn test-project
   "Perform a sequence of tests on the project to verify its integrity."

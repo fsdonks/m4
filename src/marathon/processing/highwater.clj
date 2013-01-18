@@ -1,3 +1,9 @@
+;This namespace could probably be changed into a more general stream-processing
+;library.  It was built as a single-purpose script, namely to process a large 
+;time series, sampling by quarter, to produce a series of peaks in the data
+;and a much smaller set of data to examine.  There's definitely a general 
+;time-series set of reductions hiding in here somewhere...
+
 (ns marathon.processing.highwater
   (:use [util.record :only [defrecord+ with-record merge-from record-headers]]
         [util.general :only [clumps]])
@@ -169,7 +175,6 @@
   (fn [m] 
     (intersect-fields m srcmap :SRC)))
 
-
 (defn compute-strengths
   "Adds a few computed fields to our entry."
   [m]
@@ -190,16 +195,14 @@
                                       
 (defn file->trends [inpath]
   (with-open [rdr (clojure.java.io/reader inpath)]
-    (vec (readTrends (line-seq inpath)))))
+    (vec (readTrends (line-seq rdr)))))
 
 (defn trends->highwater-records
   "Given an lazy sequence of trend records, compiles the highwater trends from
    demandtrends."
   [rawtrends & {:keys [entry-processor]}]
-  (for [q (->> rawtrends
-            (readTrends)
-            (highWaterMarks))
-        trendrec (if entry-processor (map entry-processor q) q)]
+  (for [q (highWaterMarks rawtrends)
+        trendrec (map (if entry-processor entry-processor identity) q)]
     trendrec))
 
 (defn trends->highwater-table
@@ -209,8 +212,16 @@
   (tbl/records->table
     (trends->highwater-records rawtrends :entry-processor entry-processor)))
 
+(defn file->highwater-table
+  "Given a path to a demand trends file, computes highwater trends and returns
+   an ITable data structure from util.table "
+  [path]
+  (trends->highwater-table (file->trends path)))
+
 ;this version is -120 seconds, take about 1 gb of ram.
 ;Look at swapping out non-cached streams with lazy sequences.
+
+;changed to support using 
 (defn main
   "Given an input file and an output file, compiles the highwater trends from
    demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
@@ -224,10 +235,39 @@
                 lazyout (clojure.java.io/writer (io/make-file! outfile))]
       (binding [*out* lazyout]
         (do (println (tabLine headers))
-          (doseq [t (-> (file->trends lazyin) 
+          (doseq [t (-> (vec (readTrends (line-seq lazyin))) 
                         (trends->highwater-records 
                           :entry-processor entry-processor))]
                 (print (trendString t)))))))
+(comment 
+(defn jog-table [t n]
+  "Duplicates table t, creating a sequence of n records."
+  (let [tmin (:t (tbl/first-record t))
+        tmax (:t (tbl/last-record t))
+        step (- tmax tmin)
+        steps (+ (quot n step) (min (rem n step) 1))
+        modify (fn [i rec]
+                 (let [t (+ (:t rec) (* i step))
+                       q (inc (quot t 90))]
+                 (-> (assoc rec :t t)
+                     (assoc :Quarter q))))                        
+                     
+        stepfn (fn [i] 
+                 (map (partial modify i) 
+                      (tbl/table-records t)))]
+    (->> (mapcat stepfn (range steps))         
+         (take n))))
+
+;simple script to generate large test data.
+(with-open [wtr (clojure.java.io/writer (io/make-file! targetpath))]
+  (binding [*out* wtr]
+    (do (let [fields (tbl/get-fields trends-table)
+              recvals (fn [rec] (reduce (fn [acc v] (conj acc (get rec v))) []
+                                        fields))]
+          (println (tabLine (map tbl/field->string fields)))
+          (doseq [rec (jog-table trends-table 200000)]
+            (println (str (tabLine (recvals rec)))))))))
+)           
 
 ;(defn main
 ;  "Given an input file and an output file, compiles the highwater trends from
@@ -250,7 +290,6 @@
 ;                          (map trendString))]
 ;                (print t)))))))
 
-
 ;This is a process, I'd like to move it to a higher level script....
 (defn findDemandTrendPaths
   "Sniff out paths to demand trends files from root."
@@ -270,6 +309,18 @@
                   :entry-processor entry-processor))
         (println (str "Source file: " source" does not exist!"))))))
 
+;(defn batch2
+;  "Computes high water for for each p in path. dumps a corresponding highwater.
+;   in the same directory, overwriting."
+;  [paths & {:keys [entry-processor]}]
+;  (for [source paths]
+;    (let [target (io/relative-path 
+;                   (io/as-directory (io/fdir source)) ["highwater.txt"])]
+;      (if (io/fexists? (clojure.java.io/file source))
+;        (do (println (str "Computing HighWater : " source" -> " target))
+;            (main2 source target 
+;                  :entry-processor entry-processor))
+;        (println (str "Source file: " source" does not exist!"))))))
  
 (defn batch-from
   "Compiles a batch of highwater trends, from demand trends, from all demand 
@@ -278,6 +329,12 @@
   (batch (findDemandTrendPaths root) 
          :entry-processor entry-processor))
 
+;(defn batch-from2
+;  "Compiles a batch of highwater trends, from demand trends, from all demand 
+;   trends files in folders or subfolders from root."
+;  [root & {:keys [entry-processor]}]
+;  (batch2 (findDemandTrendPaths root) 
+;         :entry-processor entry-processor))
 
 ;this version is as fast, but takes 3 GB of ram ....
 ; (defn main2 [infile outfile]

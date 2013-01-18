@@ -119,7 +119,6 @@
                        [(sheet-name s) (sheet->table s)])))
       (into {}))))
 
-
 (defn tables->workbook
   "Given a map of {tablename0 table0...tablenameN tableN}, renders them 
    to a workbook object, which can be persisted as an xlsx."
@@ -129,12 +128,11 @@
                      [nm (reduce conj [(tbl/table-fields t)]
                                  (tbl/table-rows t))]) (seq tablemap))
         wb (let [[n data] (first specs)]
-             (create-workbook (str n) data))]
+             (create-workbook (tbl/field->string n) data))]
     (do (doseq [[n data] (rest specs)]
-                (let [sheet (add-sheet! wb n)]
+                (let [sheet (add-sheet! wb (tbl/field->string n))]
                   (add-rows! sheet data)))
       wb)))        
-
 
 (defn tables->xlsx
   "Given a map of {tablename0 table0...tablenameN tableN}, renders the
