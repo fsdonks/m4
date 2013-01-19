@@ -40,14 +40,21 @@
   ([] (select-folder (System/getProperty "user.dir"))))
 
 ;again, inspired by the awesome work from Incanter!  
+
+(defn ^JTable ->swing-table [column-names column-vals 
+                           & {:keys [sorted] :or {sorted false}}]
+  (doto (JTable. (Vector. (map #(Vector. %) column-vals))
+                             (Vector. column-names))
+                    (.setAutoCreateRowSorter sorted)))
+  
 (defmulti view (fn [obj & options] (if (tbl/tabular? obj) :ITable (class obj))))
-(defmethod view :ITable [obj & {:keys [title] :or {title "Table"}}]
-   (let [col-names (tbl/get-fields obj)
-         column-vals (tbl/table-rows obj)]
-     (doto (JFrame. title)
-       (.add (JScrollPane. (JTable. (Vector. (map #(Vector. %) column-vals))
-                                    (Vector. col-names))))
-       (.setSize 400 600)
-       (.setVisible true))))  
+(defmethod view :ITable [obj & {:keys [title sorted] 
+                                :or {title "Table" sorted false}}]
+
+  (doto (JFrame. title)
+    (.add (JScrollPane. (->swing-table (tbl/get-fields obj)  
+                                       (tbl/table-rows obj) :sorted sorted)))
+      (.setSize 400 600)
+      (.setVisible true)))
   
 
