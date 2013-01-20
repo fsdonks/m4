@@ -6,7 +6,8 @@
             [clojure [set :as setlib]]
             [util [clipboard :as board]])
   (:use [util.vector]
-        [util.record :only [serial-field-comparer key-function]])) 
+        [util.record :only [serial-field-comparer key-function]]
+        [util.general :only [align-by]])) 
 
 ;note-> a field is just a table with one field/column....
 ;thus a table is a set of joined fields....
@@ -264,13 +265,14 @@
    table representation.  If orderfunc is a vector of fields, like [:a :b :c],
    rather than applying the function, the fields will be extracted in order."
   [orderfunc tbl]  
-  (let [fieldmap (table->map tbl)
+  (let [fieldmap (table->map tbl)        
         ordered-fields 
-        (cond (vector? orderfunc)  (do (assert (= (set orderfunc) 
+        (cond (vector? orderfunc)  (do (assert (clojure.set/subset? 
+                                                  (set orderfunc) 
                                                   (set (table-fields tbl))) 
-                                         (str "Fields do not intersect!"  
+                                         (str "Table is missing fields!"  
                                               orderfunc (table-fields tbl)))
-                                     orderfunc) 
+                                     (align-by orderfunc (table-fields tbl))) 
               (fn? orderfunc) (orderfunc (seq fieldmap))
               :else 
                 (throw (Exception. "Ordering function must be vector or fn")))]

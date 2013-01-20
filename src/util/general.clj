@@ -5,6 +5,28 @@
 
 ;helper functions....I need these somewhere else, since they're universal.
 
+(defn align-by
+  "Given a vector, v, generates a sorting function that compares elements using
+   the following rules: 
+   elements that exist in v have order in v as their key.
+   elements that do not exist in v are conjed onto v after they're found.
+   align-by makes no guarantee that ks even have to exist in coll, only that 
+   if they do, the resulting vector will have values in the same left-
+   to-right order."
+  [ks coll]
+  (let [ordering (atom (reduce (fn [acc kv]
+                           (if (contains? acc (first kv)) 
+                                acc 
+                                (conj acc kv))) {}
+                         (map-indexed (fn [i v] [v i]) ks)))
+        keyfn (fn [x] (if (contains? @ordering x) 
+                        (get @ordering x)
+                        (let [y (inc (count @ordering))]
+                          (do (swap! ordering assoc x y)
+                            y))))]                                                    
+    (vec (sort-by keyfn coll))))
+        
+
 (defn clump
   "Returns a vector of a: results for which keyf returns an identical value.
    b: the rest of the unconsumed sequence."
