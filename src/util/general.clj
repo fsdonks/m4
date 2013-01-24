@@ -5,6 +5,7 @@
 
 ;helper functions....I need these somewhere else, since they're universal.
 
+
 (defn align-by
   "Given a vector, v, generates a sorting function that compares elements using
    the following rules: 
@@ -25,7 +26,26 @@
                           (do (swap! ordering assoc x y)
                             y))))]                                                    
     (vec (sort-by keyfn coll))))
-        
+
+(defn align-fields-by
+  "Similar to align-by, except it operates on maps of key-val pairs, returning 
+   a sorted map."
+  [ks m]
+  (let [ordering (atom (reduce (fn [acc kv]
+                           (if (contains? acc (first kv)) 
+                             acc 
+                             (conj acc kv))) {}
+                               (map-indexed (fn [i v] [v i]) ks)))
+        keyfn (fn [x] (if (contains? @ordering x) 
+                        (get @ordering x)
+                        (let [y (inc (count @ordering))]
+                          (do (swap! ordering assoc x y)
+                            y))))]
+    (into (sorted-map-by (fn [lkey rkey] (compare (keyfn lkey)
+                                                  (keyfn rkey))))
+          (seq m))))
+    
+    
 
 (defn clump
   "Returns a vector of a: results for which keyf returns an identical value.

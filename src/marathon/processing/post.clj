@@ -13,6 +13,10 @@
 
 (declare compute-highwater compute-fillrates build-audit-trail)
 
+(defn process [pre proc post]
+  (fn [env] 
+    (->> env  pre  proc  post)))
+
 (defn get-environment
   "Returns a default starting environment.  If an environment is provided, 
    passes the environment through."
@@ -20,7 +24,6 @@
   (if-let [e env]
     e
     (merge io/common-paths {:current-dir io/*current-dir*})))
-
 
 
 ;Trying to solve the immediate problem of wrapping a marathon project that's 
@@ -39,7 +42,6 @@
 ;   :src-tag-records  "SRCTagRecords"   ;input
 ;   :parameters       "Parameters"})    ;input
 
-
   
 ;derive SRCDefinition {SRC, OITitle, STR}
 ;  derive  OITitles from supply records or other table.
@@ -56,9 +58,11 @@
     (cond (valid-table? :titles) ;if we already have titles, done.
             (tbl/select-distinct (:titles tables))
           (valid-table? :demand-records)  ;look in demand records 
-            (tbl/select :fields ["SRC" "OITitle"] :from (:demand-records tables))
+            (tbl/select :fields ["SRC" "OITitle"] 
+                        :from (:demand-records tables))
           (valid-table? :supply-records) ;finally supply records.
-            (tbl/select :fields ["SRC" "OITitle"] :from  (:supply-records tables))
+            (tbl/select :fields ["SRC" "OITitle"] 
+                        :from  (:supply-records tables))
          :else (throw (Exception. "No valid table to derive titles from!")))))
 
 (defn derive-strengths
@@ -145,35 +149,46 @@
    project.  Adds highwater under tables.  The final highwater table 
    should not take too much memory, since it is a reduction of the original
    demand-trends table."
-  [prj]
+  [prj & {:keys [headers] 
+          :or {headers  (vec (map tbl/field->string 
+                                  highwater/highwater-headers))}}]
   (let [hw-table (tbl/stringify-field-names 
                    (highwater/file->highwater-table 
-                     (get-path prj :demand-trends)))]
+                     (get-path prj :demand-trends)))]       
     ;join fields from the SRC definition table....
-    (add-table prj :high-water               
-       (tbl/records->table 
+    (->> (get-table prj :src-definitions)
          (tbl/join-on ["SRC"] 
-                      hw-table (get-table prj :src-definitions))))))
+                      hw-table)
+         (tbl/records->table)
+         (tbl/order-by [["t" :ascending]                         
+                        ["DemandName" :ascending]])
+         (tbl/order-fields-by headers)
+         (add-table prj :high-water))))                    
 
 (defn audit-marathon-project
-  "Automatically pushes a capacity run through the cleaning/auditing process."
-  [path & {:keys [destination] :or {destination (when (string? path)
-                                                  (io/relative-path 
-                                                    (io/as-directory 
-                                                      (io/fdir path))
-                                                  ["AuditTrail.xlsx"]))}}]
+  "Automatically pushes a capacity run through the cleaning/auditing process.
+   Further processing can be provided via a keyword argument."
+  [path & {:keys [destination processing] 
+           :or {destination (when (string? path)
+                              (io/relative-path 
+                                (io/as-directory 
+                                  (io/fdir path))
+                                ["AuditTrail.xlsx"]))
+                processing nil}}]
   (let [final-func (if destination (fn [prj] (save-project prj destination))
                     identity)]
     (->> (load-project path)
          (clean-project)
          (add-highwater)
-         (final-func))))       
+         (final-func))))      
 
 ;a sample of compiling an audit trail from a marathon run.
 (comment
 
 (def wbpath
- "C:\\Users\\tom\\Documents\\Marathon_NIPR\\smallsampling\\MPI_3.76029832.xlsm")
+"C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling\\MPI_3.760298326.xlsm")
+
+
 (def savepath 
   "C:\\Users\\tom\\Documents\\Marathon_NIPR\\smallsampling\\project.xlsx")
 
@@ -182,71 +197,7 @@
 
 (def myproject (load-project wbpath))
 
-
-;(defn build-audit-trail
-;  "Given a set of cleaned tables, we apply the processes necessary to build an 
-;   audit-trail from the data.  The audit trail is just a map of tables."
-;  [clean-tables & {:keys [post-processes] :or 
-;                   {post-processes [:compute-highwater
-;                                    :compute-fillstats]}}]
-;  (compute-highwater trends   titles highpath)
-;  (compute-fillstats highpath titles fillpath)) 
-
-
-
-;  (defn compute-trends [rootdir]
-;	  (let [readme {"readme.txt" "Insert comments here."}        
-;	        folderspec {"Output" readme 
-;	                    "Input"  readme}]
-;	  (with-dir rootdir
-;	    (reading-files [trends (relative-path rootdir ["DemandTrends.txt"]) 
-;	                    titles (relative-path rootdir ["TitleDef.txt"])]
-;        (with-path (relative-path *dir* ["Output"]) [highpath ["highwater.txt"]
-;                                                     fillpath ["fillstats.txt"]]
-;          (do         
-;	           (compute-highwater trends titles highpath)
-;	           (compute-fillstats highpath titles fillpath)))))))
-;
-; (let [martables (marathon-tables (wb->tables runbook))
-;       inputs    (get-inputs martables)
-;       outputs   (get-outputs martables)
-;       computed  {:highwater (compute-highwater outputs)
-;                  :fillrates (compute-fillrates outputs)
-;                  :fillstates (compute-fillstats outputs)}]
-;   (build-audit-trail inputs (clean-outputs outputs))      
  )
-
-
-;some defaults for post processing.
-
-;(declare compute-fillstats) 
-;(def default-process [compute-highwater 
-;                      compute-fillrates 
-;                      compute-fillstats 
-;                      build-audit-trail])
-
-;(defn build-audit-trail 
-;  "Compiles an audit trail from Marathon output."
-;  [project-path all-input-tables demandtrends-path fillstats-path]
-;  [(proc-log (str "Building audit trail from project in " project-path))])
-
-;(defn compute-highwater 
-;  "Computes the highwater statistics from marathon output."
-;  [prj SRCdefinitions demandtrends-path]
-;  [(proc-log "computing highwater statistics...")
-;   (proc (fn [env] 
-;           (reduce (fn [env p] (do (highwater/batch p)
-;                                 (assoc-in env [:highwater-outputs p] p))) 
-;                   prj (get-path prj :highwater-paths))))])
-;
-;(defn compute-fillstats
-;  "Computes the fill statistics from Marathon output."
-;  [prj SRCdefinitions highwater-path]
-;  [(proc-log "Computing fill statistics...")
-;   (proc (fn [env] 
-;           (do (highwater/batch highwater-path)
-;             (assoc-in env [:fillstats-path prj] prj))))]) 
-
 
 ;(defn process-env
 ;  "Applies post processing to an environment.  A process is a function, where 
@@ -257,7 +208,7 @@
 ;  [& {:keys [processes env] :or {processes default-proceses
 ;                                 env       {:path (io/*current-directory*)}}}]
 ;  (reduce (fn [e p] (p e)) env processes))
-;
+
 ;(defn process-path 
 ;  "Applies post processing to an environment in which the path is bound to 
 ;   rootpath."

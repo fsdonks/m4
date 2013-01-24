@@ -4,25 +4,28 @@
 (ns util.table
   (:require [clojure [string :as strlib]]
             [clojure [set :as setlib]]
-            [util [clipboard :as board]])
+            [util [clipboard :as board]]
+            [util [gui :as gui]])
   (:use [util.vector]
         [util.record :only [serial-field-comparer key-function]]
         [util.general :only [align-by]])) 
 
+
+;Moved generic protocols to util.protocols
 ;note-> a field is just a table with one field/column....
 ;thus a table is a set of joined fields....
 
-(defprotocol ITable 
+(defprotocol ITabular 
   (table-fields [x] "Get a vector of fields for table x")
   (table-columns [x] "Get a nested vector of the columns for table x"))
 
-(defn tabular? [x] (satisfies? ITable x))
+(defn tabular? [x] (satisfies? ITabular x))
   
 (defprotocol IUnOrdered
   (-unordered? [x] 
    "Helper protocol to indicate that table fields are not ordered."))
 
-(defprotocol ITableMaker 
+(defprotocol ITabularMaker 
   (-make-table [x fields columns] "Allows types to define constructors."))
 
 (defprotocol IFieldDropper
@@ -100,10 +103,10 @@
           (recur (max maxcount nextcount) (rest remaining) true))))))
 
 (defrecord column-table [fields columns]
-  ITable 
+  ITabular 
     (table-fields [x]  fields)
     (table-columns [x] columns)
-  ITableMaker
+  ITabularMaker
     (-make-table [x fields columns] 
        (column-table. fields (normalize-columns columns))))
 
@@ -133,7 +136,7 @@
   [flds cols] 
   (for [[id f] (map-indexed vector flds)] [f (get cols id)]))
 
-(extend-protocol  ITable
+(extend-protocol  ITabular
   nil
     (table-fields [x] nil)
     (table-columns [x] nil)
@@ -147,7 +150,7 @@
     (table-fields [x] (vec (map first x)))
     (table-columns [x] (vec (map #(get % 1) x))))
 
-(extend-protocol ITableMaker
+(extend-protocol ITabularMaker
   nil
     (-make-table [x fields columns] (make-table fields columns)) 
   clojure.lang.PersistentArrayMap
@@ -613,7 +616,7 @@
 (defn record-seq 
 	"Returns a sequence of records from the underlying table representation.
 	 Like a database, all records have identical fieldnames.
-   Re-routed to use the new table-records function built on the ITable lib."
+   Re-routed to use the new table-records function built on the ITabular lib."
 	[tbl]
  (table-records tbl))
 
@@ -639,12 +642,19 @@
                  [(vec (map field->string (table-fields tbl)))] 
                  [(table-fields tbl)]) (table-rows tbl))))
 
+
 (defmulti as-table
   "Generic function to create abstract tables."
   (fn [t] (class t)) :default :empty)
 
 (defmethod as-table java.lang.String [t] (tabdelimited->table t))
 (defmethod as-table clojure.lang.PersistentArrayMap [t] t)
+
+(defmulti read-table (fn [t & opts] (class t)))
+(defmethod read-table  java.io.File [t & opts]
+  (let [s (slurp t)]
+    (as-table s)))
+    
 
 (defn copy-table!
   "Copies a table from the system clipboard, assuming that the clipboard
@@ -655,6 +665,15 @@
 (defn copy-table-literal! []
   "Copes a table from the system clipboard.  Does not keywordize anything..."
   (copy-table! :no-science false))
+
+;establishes a simple table-viewer.
+;we can probably create more complicated views later....
+(defmethod gui/view util.table.column-table [obj & {:keys [title sorted] 
+                                :or {title "Table" sorted false}}]
+    (gui/->scrollable-view
+      (gui/->swing-table (get-fields obj)  
+                         (table-rows obj) :sorted sorted)
+      :title title))
 
 (comment   ;testing....
   (def mytable  (conj-fields [[:first ["tom" "bill"]]

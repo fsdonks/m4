@@ -1,7 +1,9 @@
 ;project management module
 (ns marathon.project
-  (:require  [util [io :as io] [table :as tbl] 
-                   [clipboard :as board]]
+  (:require  [util [io :as io] 
+              [table :as tbl] 
+              [clipboard :as board]
+              [general :as general]]
              [clojure [string :as strlib]]))
 
 ;currently unused.
@@ -12,30 +14,33 @@
 ;  (resource-type  [r]))
 
 ;a list of resources we expect to find in any project.
-(def default-resources [:deployments 
-                        :demand-trends  
-                        :in-scope 
-                        :out-of-scope 
-                        :demand-records 
-                        :parameters 
+(def default-resources [:titles
+                        :supply-records
+                        :demand-records
+                        :src-tag-records
                         :period-records 
                         :relation-records 
-                        :src-tag-records 
-                        :supply-records  
-                        :titles])
+                        :in-scope 
+                        :out-of-scope                        
+                        :parameters 
+                        :deployments 
+                        :demand-trends])
+
+(def default-table-order (conj default-resources
+                          :high-water))
 
 ;A map of paths to resources, relative to a project-path.
-(def default-paths {:deployments ["Deployments.txt"]
-                    :demand-trends ["DemandTrends.txt"] 
-                    :in-scope ["InScope.txt"]
-                    :out-of-scope ["OutOfScope.txt"]
-                    :demand-records ["DemandRecords.txt"]
-                    :parameters ["Parameters.txt"]
+(def default-paths {:titles ["Titles.txt"]
+                    :supply-records ["SupplyRecords.txt"]
+                    :demand-records ["DemandRecords.txt"]                      
+                    :src-tag-records ["SRCTagRecords.txt"]
                     :period-records ["PeriodRecords.txt"]
                     :relation-records ["RelationRecords.txt"]
-                    :src-tag-records ["SRCTagRecords.txt"]
-                    :supply-records ["SupplyRecords.txt"] 
-                    :titles ["Titles.txt"]})
+                    :in-scope ["InScope.txt"]
+                    :out-of-scope ["OutOfScope.txt"]
+                    :parameters ["Parameters.txt"]
+                    :deployments ["Deployments.txt"]                    
+                    :demand-trends ["DemandTrends.txt"]})
 
 
 
@@ -157,13 +162,16 @@
    objects, either for insertion into a database, for rendering to a folder, 
    or for injecting into a workbook.  Anything that benefits from a tabular 
    representation."
-  [proj & {:keys [string-fields?] :or {string-fields? true}}]
-  (merge {:paths (keyvals->table (:paths proj) :string-fields? 
+  [proj & {:keys [string-fields? ordering] 
+           :or {string-fields? true
+                ordering default-table-order}}]
+  (->> (merge {:paths (keyvals->table (:paths proj) :string-fields? 
                                                string-fields? )
-            :properties (keyvals->table (project-properties proj)
+               :properties (keyvals->table (project-properties proj)
                                         :string-fields? 
                                         string-fields? )}
-           (:tables proj)))
+              (:tables proj))
+    (general/align-fields-by ordering)))
 
 ;(defn search-project
 ;  "Search a project's resources for any items in which expr 

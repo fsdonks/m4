@@ -35,7 +35,9 @@
                    [NGFilled 0] 
                    [GhostFilled 0] 
                    [OtherFilled 0]])
-
+(def highwater-headers [:t :Quarter :SRC :TotalRequired :TotalFilled :Overlapping 
+                        :Deployed :DemandName :Vignette :DemandGroup :OITitle 
+                        :ACFilled :RCFilled :NGFilled :GhostFilled :OtherFilled])
 (def headers (record-headers trend))
 (def fieldkeys (vec (map keyword headers)))
 

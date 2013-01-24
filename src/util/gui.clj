@@ -7,7 +7,6 @@
 ;stuff, use cljgui, which has a full-featured user interface framework. 
 
 (ns util.gui
-  (:require [util.table :as tbl])
   (:import [javax.swing JFileChooser JTable JScrollPane JFrame]
            [java.util Vector]))
 
@@ -36,7 +35,6 @@
                   (if (= res (. JFileChooser APPROVE_OPTION))
                     (str (.getSelectedFile f))
                     nil)))
-
   ([] (select-folder (System/getProperty "user.dir"))))
 
 ;again, inspired by the awesome work from Incanter!  
@@ -46,15 +44,18 @@
   (doto (JTable. (Vector. (map #(Vector. %) column-vals))
                              (Vector. column-names))
                     (.setAutoCreateRowSorter sorted)))
-  
-(defmulti view (fn [obj & options] (if (tbl/tabular? obj) :ITable (class obj))))
-(defmethod view :ITable [obj & {:keys [title sorted] 
-                                :or {title "Table" sorted false}}]
 
+(defn ^JFrame ->scrollable-view [content & {:keys [title]}] 
   (doto (JFrame. title)
-    (.add (JScrollPane. (->swing-table (tbl/get-fields obj)  
-                                       (tbl/table-rows obj) :sorted sorted)))
-      (.setSize 400 600)
-      (.setVisible true)))
-  
+    (.add (JScrollPane. content))
+    (.setSize 400 600)
+    (.setVisible true)))
+
+;This eff'd up because of a circular dependency.....
+;If call a namespace from another namespace that depends on it...you introduce 
+;a circular dependency, and reval everything in the other namespace....it's 
+;bad....
+
+(defmulti view (fn [obj & options] (class obj)))
+
 
