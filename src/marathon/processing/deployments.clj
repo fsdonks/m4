@@ -59,14 +59,14 @@
   `(let [~@ (mapcat (fn [[alias nm]] (list alias nm)) (partition 2 binds))]
      ~@body))
 
-(def fieldmap {:dwell "DwellBeforeDeploy" :supplysrc "UnitType"
-               :demandsrc "DemandType" :compo "Component"
-               :followon "FollowOn"})
+(def fieldmap {:dwell     "DwellBeforeDeploy" :supplysrc "UnitType"
+               :demandsrc "DemandType"        :compo "Component"
+               :followon  "FollowOn"})
 
 (defn fieldname [s] (get fieldmap s))
 
 ;define some criteria ...
-(def first-deployment? {"FollowOn" "FALSE"})
+(def  first-deployment? {"FollowOn" "FALSE"})
 (defn src? [src] {"UnitType" src})
 (defn demand? [src] {"DemandType" src})
 
