@@ -675,6 +675,10 @@
                          (table-rows obj) :sorted sorted)
       :title title))
 
+(defmethod gui/as-JTable util.table.column-table [obj & {:keys [sorted]}]
+  (gui/->swing-table (get-fields obj)  
+                     (table-rows obj) :sorted sorted))
+
 (comment   ;testing....
   (def mytable  (conj-fields [[:first ["tom" "bill"]]
                               [:last  ["spoon" "shatner"]]] empty-table))
