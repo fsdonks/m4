@@ -86,38 +86,60 @@
 
 (def processing-menu-spec
   {"Clean" "Cleans a run"
-   "HighWater" "Computes HighWater trails"
-   "DeploymentVectors" "Analyzes deployments"
+   "High-Water" "Computes HighWater trails"
+   "Deployment-Vectors" "Analyzes deployments"
    "Charts" "Generate plots."   
    "Custom" "Run a custom script on the project"
    "Eval"   "Evaluate an expression in the context"})
+
+(def scripting-menu-spec
+  {"Load-Script" "Load a clojure script into the environment."
+   "REPL"   "Jack in to a Read Evaluate Print Loop."})
 
 (def preferences-menu-spec
   {"Update" "Check for updates to Marathon."
    "Eval"   "Evaluate an expression in the context"})
 
-(defn hub []
+(defn reactive-menu-system
+  "Given a map of menu specs, builds a menu-system model with an integrated
+   event stream that has a unique event for each menu item selected.  Returns 
+   an event stream that is a union or merge of all the menu events."
+  [specs]
+  (let [menus (reduce (fn [acc [name spec]]
+                        (assoc acc name 
+                               (gui/map->reactive-menu name spec))))]
+    (mvc/make-modelview nil menus 
+      {:menu-events (obs/multimerge-obs (vals menus))})))       
+
+
+(defn hub [& {:keys [project]}]
   (let [project-menu   (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"
                                                 processing-menu-spec)
         main-menu (gui/menu-bar (:view project-menu)
                                 (:view processing-menu))
-        menu-events (obs/merge-obs (-> project-menu :control :event-stream )
+        menu-events (obs/merge-obs (-> project-menu :control :event-stream)
                                     (-> processing-menu :control :event-stream)) 
         textlog (gui/label "Idle")
+        audit   (gui/button "Audit" (fn [_] 
+                                      (obs/notify! menu-events :audit)))
+;        textbox (gui/text-box)
         reflect-selection (->> menu-events 
                             (obs/subscribe  #(gui/change-label textlog %)))]
     (mvc/make-modelview 
-      (agent {:state init-state
-              :routes routes})       
+      (agent {:state (if project {:current-project project} {})
+              :routes (merge default-routes project-routes)})       
       (gui/display (->> (gui/empty-frame "Marathon Project Management")
                      (gui/add-menu main-menu))
                    (gui/stack textlog  
-                        (gui/text-field "Enter an expression...") 
-                        (gui/button "Eval!")))
+                              (gui/text-box) 
+                              audit))
       {:menu-events menu-events})))
                   
-  
+
+
+
+
                
                
