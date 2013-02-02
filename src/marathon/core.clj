@@ -1,12 +1,21 @@
 (ns marathon.core
-  (:require [util.gui :as gui]
+  (:require ;[util.gui :as gui]
             [util.table :as tbl]
-            [clojure [pprint :as pprint]])
-  (:use [marathon.processing.post]
+            [clojure [pprint :as pprint]]
+            [cljgui.components [swing :as gui]]
+            [cljgui [mvc :as mvc]]
+            [cljgui.events [observe :as obs]
+                           [native :as swing-events]])
+  (:use [util.mailbox]
+        [marathon.processing.post]
         [marathon.project]))
 
 (defn notify [msg]
   (fn [] (gui/alert msg)))
+
+(defn not-implemented 
+  ([msg] (fn [] (gui/alert (str msg " Not Implemented"))))
+  ([] (not-implemented "")))
 
 ;project-manager is a simple agent that maintains internal state. 
 ;we design the event handling functions as simple events that the user enters,
@@ -15,141 +24,122 @@
 ;Project-manager then routes tasks, using the currently-loaded project as its 
 ;environment. 
 
-;These are generic routing functions for a service built on message-passing.
-;I could abstract this into a simple library.
 
-(defrecord packet [msg-type msg-data])
-
-
-(defmacro message-handler [& body]
-  `(fn [~'state ~'msg]
-     (let [~'*msg-data* (:msg-data ~'msg)
-           ~'*msg-type* (:msg-type ~'msg)]
-       ~@body)))
-
-(defmacro pass-through [f]
-  `(message-handler (do (~f ~'state) ~'state)))
-
-(defmacro effect [f] 
-  `(message-handler (do (~f) ~'state)))
-
-(defn not-implemented 
-  ([msg] (fn [] (gui/alert (str msg " Not Implemented"))))
-  ([] (not-implemented "")))
-
-(def empty-control-state {:routes {} :state {}})
-
-(defn route-message [{:keys [routes state] :as s} msg]
-  (if-let [f (get routes (:msg-type msg))] ;finds a route if applicable
-    (f state msg)
-    (do ((get s :printer pprint/pprint) 
-          ["Message type unknown" msg]) s))) 
-
-(defn make-mvc [routes init-state]
+(defn project-mvc [routes init-state]
   {:model (agent {:state init-state
                   :routes routes})
    :view nil 
    :control route-message})
 
-(defn send-and-ignore 
-  ([agt msg msgdata]
-    (do (send-off agt route-message (->packet msg msgdata))
-      :sent))
-  ([agt msg] (send-and-ignore agt msg nil)))
-    
-
-(defn mvc->model [mvc]   (deref (:model mvc)))
-(defn mvc->routes [mvc]  (comp (:routes mvc->model) mvc))
-(defn mvc->view [mvc]    (:view mvc))
 
 (def sample-path 
   "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling")
 (def sample 
   "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling\\MPI_3.760298326.xlsm")
 
-;default routes for our project management controller...
-;all we have to do is wire up a gui to send messages to the controller, and 
-;voila...
 
-(def default-routes 
-  {:ping         (effect #(pprint/pprint :pong))
-   :set-routes   (message-handler 
-                   (assoc state 
-                          :routes *msg-data*)) ;state->msg->state
-   :assoc-route  (message-handler  
-                   (assoc-in state [:routes (first *msg-data*)]                            
-                             (second *msg-data*)))
-   :dissoc-route (message-handler  
-                   (assoc-in state [:routes (first *msg-data*)]                            
-                             (second *msg-data*)))
-   :print        (message-handler 
-                  (do ((get state :printer (pprint/pprint)) 
-                     *msg-data*)
-                    state))
-   :eval         (message-handler 
-                   (do ((get state :printer (pprint/pprint) 
-                             (eval *msg-data*)
-                     state))))
-   :set-state    (message-handler 
-                   (assoc state :state *msg-data*))})
+;This is a hack, need a more elegant solution.
+(defn tbl->view [t & {:keys [sorted] :or 
+                       {sorted true}}]    
+    (gui/->swing-table (tbl/table-fields t)
+                       (tbl/table-rows t) 
+                       :sorted sorted))   
 
 (def project-routes 
   {:clear-project (message-handler 
-                   (assoc-in state 
-                          [:state :current-project] nil)) ;state->msg->state
-   
-   :load-project (message-handler 
-                   (assoc-in state 
-                          [:state :current-project]
-                          (load-project *msg-data*))) ;state->msg->state
-   
-   :save-project (pass-through #(save-project % *msg-data*)) ;state->msg->state
+                    (assoc-in env 
+                        [:state :current-project] {})) ;state->msg->state   
+   :load-project (message-handler
+                   (assoc-in env 
+                      [:state :current-project]
+                        (load-project msg-data))) ;state->msg->state   
+   :save-project (message-handler  
+                   (pass-through #(save-project % msg-data))) ;state->msg->state
    
    :view-project (effect (not-implemented :view-project)) ;state->msg->state
    
    :view-table   (pass-through 
-                     #(gui/view (get-table (:current-project state)
-                                           *msg-data*)
-                                :sorted true)) ;state->msg->state   
-   :add-table    (message-handler 
-                   (add-table (:current-project state)
-                              *msg-data*))}) ;state->msg->state
+                     #(gui/view (tbl->view (get-table (:current-project state)
+                                           msg-data)
+                                :sorted true)
+                                :title (str msg-data))) ;state->msg->state   
+   :add-table    (message-handler
+                   (let [[name table] msg-data]
+                     (assoc-in env [:state :current-project] 
+                       (add-table (:current-project state)
+                          msg-data))))}) ;state->msg->state
 
-(defn ->load-project [path] 
-  (->packet :load-project path))
+(comment 
+  (def project-manager
+    (project-mvc (merge default-routes project-routes)   {}))
+  
+  (def sample-table {:First ["Tom"]
+                     :Last  ["Spoon"]})
+)
+
+(def project-menu-spec  
+   {"Load-Project" "Loads a project into the context."
+    "Save-Project"  "Saves a project into the project path."
+    "Save-Project-As" "Saves a currently-loaded project into path."
+    "Convert-Project" "Convert a project from one format to another."
+    "Derive-Project" "Allows one to derive multiple projects from the current."})
+
+(def processing-menu-spec
+  {"Clean" "Cleans a run"
+   "High-Water" "Computes HighWater trails"
+   "Deployment-Vectors" "Analyzes deployments"
+   "Charts" "Generate plots."   
+   "Custom" "Run a custom script on the project"
+   "Eval"   "Evaluate an expression in the context"})
+
+(def scripting-menu-spec
+  {"Load-Script" "Load a clojure script into the environment."
+   "REPL"   "Jack in to a Read Evaluate Print Loop."})
+
+(def preferences-menu-spec
+  {"Update" "Check for updates to Marathon."
+   "Eval"   "Evaluate an expression in the context"})
+
+(defn reactive-menu-system
+  "Given a map of menu specs, builds a menu-system model with an integrated
+   event stream that has a unique event for each menu item selected.  Returns 
+   an event stream that is a union or merge of all the menu events."
+  [specs]
+  (let [menus (reduce (fn [acc [name spec]]
+                        (assoc acc name 
+                               (gui/map->reactive-menu name spec))))]
+    (mvc/make-modelview nil menus 
+      {:menu-events (obs/multimerge-obs (vals menus))})))       
 
 
-(def project-management-menu  
-  (gui/map->menu "Project-Management"
-   {"Load-Project" 
-      (notify "Loads a project into the context.")
-    "Save-Project" 
-      (notify "Saves a project into the project path.")
-    "Save-Project-As" 
-      (notify "Saves a currently-loaded project into path.")
-    "Convert-Project" 
-      (notify "Analyzes deployments")
-    "Derive-Project"
-      (notify "Allows one to derive multiple projects from the current.")}))
+(defn hub [& {:keys [project]}]
+  (let [project-menu   (gui/map->reactive-menu "Project-Management"  
+                                               project-menu-spec)
+        processing-menu (gui/map->reactive-menu "Processing"
+                                                processing-menu-spec)
+        main-menu (gui/menu-bar (:view project-menu)
+                                (:view processing-menu))
+        menu-events (obs/merge-obs (-> project-menu :control :event-stream)
+                                    (-> processing-menu :control :event-stream)) 
+        textlog (gui/label "Idle")
+        audit   (gui/button "Audit" (fn [_] 
+                                      (obs/notify! menu-events :audit)))
+;        textbox (gui/text-box)
+        reflect-selection (->> menu-events 
+                            (obs/subscribe  #(gui/change-label textlog %)))]
+    (mvc/make-modelview 
+      (agent {:state (if project {:current-project project} {})
+              :routes (merge default-routes project-routes)})       
+      (gui/display (->> (gui/empty-frame "Marathon Project Management")
+                     (gui/add-menu main-menu))
+                   (gui/stack textlog  
+                              (gui/text-box) 
+                              audit))
+      {:menu-events menu-events})))
+                  
 
 
-(def processing-menu
-  (gui/map->menu "Post-Process"
-       {"Clean" (notify "Cleans a run")
-        "HighWater" (notify "Computes HighWater trails")
-        "DeploymentVectors" (notify "Analyzes deployments")
-        "Custom" (notify "Run a custom script on the project")
-        "Eval"   (notify "Evaluate an expression in the context")}))
 
-(def main-menu 
-  (gui/menu-bar project-management-menu 
-                processing-menu))
 
-(defn interact []
-  (gui/display (->> (gui/empty-frame "Marathon Project Management")
-                    (gui/add-menu main-menu))
-  (gui/button "hello!")))
-                   
-                 
                
                
