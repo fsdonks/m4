@@ -111,12 +111,7 @@
     (mvc/make-modelview nil menus 
       {:menu-events (obs/multimerge-obs (vals menus))})))       
 
-(defn table-selector
-  "Given a project with one or more tables, presents a dialogue that allows the
-   user to select a table for subsequent viewing."
-  [project]
-  (gui/
-  
+
 (defn hub [& {:keys [project]}]
   (let [project-menu   (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
@@ -128,27 +123,20 @@
                                     (-> processing-menu :control :event-stream)) 
         textlog (gui/label "Idle")
         audit   (gui/button "Audit" (fn [_] 
-                                      (obs/notify! menu-events :audit)))        
-        inputbox (gui/text-box :width 300 :height 300) 
+                                      (obs/notify! menu-events :audit)))
+;        textbox (gui/text-box)
         reflect-selection (->> menu-events 
-                            (obs/subscribe  #(gui/change-label textlog %)))
-        model  (agent {:state (if project {:current-project project} {})
-                       :routes (merge default-routes project-routes)})        
-        select-project! (fn [e] (load-project (gui/select-file)))
-        load-project!   (fn [p]  (send-and-ignore model :load-project p))
-        key-filter (fn [k] (obs/filter-obs (fn [x] (= x k)) menu-events))]
+                            (obs/subscribe  #(gui/change-label textlog %)))]
     (mvc/make-modelview 
-      model       
+      (agent {:state (if project {:current-project project} {})
+              :routes (merge default-routes project-routes)})       
       (gui/display (->> (gui/empty-frame "Marathon Project Management")
                      (gui/add-menu main-menu))
                    (gui/stack textlog  
-                              inputbox 
+                              (gui/text-box) 
                               audit))
-      {:menu-events  menu-events})))
-       ;:audit        (key-filter :audit)
-       ;:load-project (key-filter :load-project)})))
-
-
+      {:menu-events menu-events})))
+                  
 
 
 
