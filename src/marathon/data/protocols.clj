@@ -1,7 +1,8 @@
 ;This is a conglomeration of Marathon protocols, derived from what used to 
 ;be VBA interface classes.  I'll probably be trimming these down significantly, 
 ;since much of the functionality can be replaced with simpler functions on the 
-;core data structures....
+;core data structures....especially if the core data structures are just 
+;maps or records (which support a map API).
 (ns marathon.data.protocols)
 
 ;This is the policy interface.  We have both constant and composite 

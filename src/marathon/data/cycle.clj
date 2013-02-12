@@ -7,27 +7,27 @@
 ;accumulated state during the cycle (bog, mob, dwell, etc.), start and end 
 ;of the cycle, transitions in the cycle, and more...
 (defrecord+ cyclerecord 
-  [UICname    ;As String ;;Associated uic
-   src        ;As String
-   component  ;As String   
-   policyname ;As String ;;Associated policy
-   tstart     ;As Single ;cycle start
-   tfinal     ;As Single ;expected cycle end
-   duration   ;As Single ;actual cycle length   
-   availableTime  ;As Single ;time spent in available pool
-   deployableTime ;As Single ;time spent deployable.
-   DurationExpected  ;As Single ;expected cycle length
-   bog         ;As Single ;experienced BOG (units of time, days)
-   bogbudget   ;As Single
-   BOGExpected ;As Single ;expected BOG (units of time, days)
-   dwell       ;As Single ;expected Dwell (units of time, days)
-   DwellExpected ;As Single ;experienced dwell
-   MOBexpected   ;As Single ;mobilization time expected, if any.
-   mob           ;As Single
-   deployments   ;As Long ;count of deployments
-   followons     ;As Long ;count of follow-on deployments
-   BDRExpected   ;As Single ;expected BOG/Dwell ratio
-   Traversals]) ;As Collection ;record of state traversal, good for verification
+  [uic-name    ;Associated uic
+   src        ;The unit-type, or template that identifies the unit's capability.
+   component  ;Identifier for the operating component (active,reserve,etc.)  
+   policyname ;Policy the unit entity follows
+   tstart     ;The start time of the unit's current cycle.
+   tfinal     ;The expected end time of the unit's current cycle.
+   duration   ;The time the entity has spent in cycle.   
+   available-time  ;Time the entity spent in available pool
+   deployableTime ;Time the entity spent in a deployable state.
+   duration-expected  ;The expected cycle length.
+   bog         ;The cumulative BOG experienced by the entity. (units of time, days)
+   bogbudget   ;The remaining BOG a unit can expend in the current cycle.
+   bog-expected ;The expected BOG days for the unit in the current cycle. 
+   dwell       ;The cumulative Dwell days for the current cycle.
+   dwell-expected ;The expected Dwell for the current cycle.
+   mob-expected  ;mobilization time expected, if any, for the current cycle.
+   mob          ;Accumulated mobilization days.
+   deployments  ;count of deployments in the current cycle.
+   followons    ;count of follow-on deployments for the current cycle.
+   bog-to-dwell-expected  ;expected BOG/Dwell ratio for the current cycle.
+   traversals]) ;record of state traversal, for the current cycle.
 
 ;Note -> this may be a little vestigial, or easily revamped; for instance, 
 ;we can provide uic, src, and component and we're fine...
@@ -37,13 +37,13 @@
    uic, the src, and the component."
   [cyclerec t bogtime dwelltime policyduration & [MOBtime  ghost  bogbudget]]
     (with-record cyclerec
-      :BOGExpected  bogtime
+      :bog-expected  bogtime
       :bogbudget (if (zero? bogbudget) bogtime bogbudget)
-      :BDRExpected =  (/ 1 (/ (+ MOBtime bogbudget)  
+      :bog-to-dwell-expected =  (/ 1 (/ (+ MOBtime bogbudget)  
                               (-  policyduration (+ bogbudget  MOBtime))))
-      :DurationExpected  policyduration
-      :DwellExpected  dwelltime
-      :MOBexpected  MOBtime
+      :duration-expected  policyduration
+      :dwell-expected  dwelltime
+      :mob-expected  MOBtime
       :tstart t
       :tfinal (+ t policyduration)))
 
@@ -54,42 +54,42 @@
   (if (and (> dwelltime 1095)  (zero? MOBtime) (not (= :inf dwelltime))
            (throw (Exception. "Expected dwell time is abnormal...")))     
     (with-record cyclerec
-      :BOGExpected  bogtime
-      :BDRExpected (/ 1 (/ (+ bogtime MOBtime) 
+      :bog-expected  bogtime
+      :bog-to-dwell-expected (/ 1 (/ (+ bogtime MOBtime) 
                            ( - policyduration (+ bogtime  MOBtime))))
-      :DurationExpected policyduration
-      :DwellExpected  dwelltime
-      :MOBexpected = MOBtime
+      :duration-expected policyduration
+      :dwell-expected  dwelltime
+      :mob-expected = MOBtime
       :bogbudget = bogbudget)))
 
 (defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]
   (let [trav  (str t "_"  startlocation  "_" endlocation)
-        ts (get :Traversals cyclerec)] 
+        ts (get :traversals cyclerec)] 
     (with-record cyclerec 
-      :Traversals (conj trav ts))))
+      :traversals (conj trav ts))))
 
-(defn BDR
+(defn bog-to-dwell
   "Computes the BOG:Dwell ratio for a cycle."
-  [bog mob dwell availableTime MOBexpected BOGExpected DurationExpected 
+  [bog mob dwell available-time mob-expected bog-expected duration-expected 
    & [conventional]]  
   (let [res 
         (cond (and  (> bog  0) (> dwell 0))
               (/ (+ bog mob)  dwell)
               (and (> dwell 0) 
-                   (> availableTime 0))
-              (/ availableTime dwell)
+                   (> available-time 0))
+              (/ available-time dwell)
               :else 
-              (/ (+ MOBexpected  BOGExpected) (- DurationExpected 
-                                                 (+ MOBexpected BOGExpected))))]
+              (/ (+ mob-expected  bog-expected) (- duration-expected 
+                                                 (+ mob-expected bog-expected))))]
     (if conventional 
       (/ 1 res) 
       res)))
 
-(defn cycle-BDR
+(defn cycle-bog-to-dwell
   "Computes the BOG:Dwell ratio from a cyclerecord."
   [cyclerec & [conventional]]
-  (let [{:keys [bog mob dwell availableTime 
-                MOBexpected BOGExpected DurationExpected]} cyclerec]
-    (BDR bog mob dwell availableTime 
-         MOBexpected BOGExpected DurationExpected conventional)))
+  (let [{:keys [bog mob dwell available-time 
+                mob-expected bog-expected duration-expected]} cyclerec]
+    (bog-to-dwell bog mob dwell available-time 
+         mob-expected bog-expected duration-expected conventional)))
   

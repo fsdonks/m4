@@ -1,7 +1,40 @@
 (ns marathon.policy.policydata
-  (:use [util.record :only [defrecord+]]))
+  (:use [util.record :only [defrecord+]]
+        [util.metaprogramming :only [keyvals->constants]]))
 
 ;need a protocol for policies...
+
+;Constants used for policy definition, among other things.  Imported from the 
+;original VBA implementation for the policystore. 
+;Might re-think this, for now it's a way of porting the existing implementation
+(def policyconstants 
+  {:Bogging "Bogging"
+   :Dwelling "Dwelling"
+   :BogDeployable "BoggingDeployable"
+   :DwellDeployable "DwellingDeployable"
+   :Deployable "Deployable"
+   :AC12 "AC12" 
+   :AC13 "AC13" 
+   :RC14 "RC14" 
+   :RC15 "RC15" 
+   :AC11 "AC11"
+   :RC11 "RC11"
+   :RC12 "RC12"
+   :GhostPermanent12 "GhostPermanent12"
+   :GhostPermanent13 "GhostPermanent13"
+   :GhostTransient12 "GhostTransient12"
+   :GhostTransient13 "GhostTransient13"   
+   :reset "Reset"
+   :train "Train"
+   :ready "Ready"
+   :available "Available"
+   :deployed "Deployed"
+   :Overlapping "Overlapping"
+   :SubSymbol  "{>"
+   :EquivSymbol "="})
+(keyvals->constants policyconstants) ;make the constants first class symbols.
+;inherited from substitution rules, may be vestigial.
+(keyvals->constants {:Equivalence :Equivalence :Substitution :Substitution})
 
 
 
@@ -36,28 +69,7 @@
                           activeperiod
                           policies])
 
-;This is for centralizing control over rotational policy, as well as substition 
-;policy. 
-;We maintain all the data structures necessary for managing this stuff.
-;    Also manage all feasible locations through this object.
-(defrecord+ policystore   [[name "PolicyStore"] 
-                           [locationmap {}] 
-                           [positions {}] 
-                           [locations {}] 
-                           [locationindex {}] 
-                           [policies {}] 
-                           [periods {}]
-                           [highest {}] 
-                           policytraffic  
-                           rules  
-                           rulegraph 
-                           ruledelim 
-                           activeperiod 
-                           [periodchanges {}]
-                           schedules 
-                           [composites {}] 
-                           [permanents {}] 
-                           canghost])
+
 
 ;(ns marathon.port.data.policy)
 ;
@@ -809,47 +821,7 @@
 ;IRotationPolicy_MinDwell = mindwell
 ;End Property
 ;
-;Private Function ISerializable_asString() As String
-;Dim properties As Dictionary
-;Set properties = newdict("class", "TimeStep_Policy", "name", name, "cyclelength", cyclelength, "MinDwell", mindwell, _
-;                     "MaxDwell", maxdwell, "MaxBOG", maxbog, "MaxMOB", MaxMOB, _
-;                     "Recovery", recovery, "StartDeployable", startdeployable, _
-;                     "StopDeployable", stopdeployable, "PositionGraph", JSONtoDictionary(asSerial(PositionGraph).asString), _
-;                     "StartState", startstate, "EndState", endstate, "EndIndex", EndIndex, _
-;                     "overlap", overlap)
-;
-;ISerializable_asString = DictionaryToJSON(properties)
-;End Function
-;
-;Private Sub ISerializable_FromString(code As String)
-;Dim properties As Dictionary
-;Set properties = JSONtoDictionary(code)
-;With properties
-;    name = .item("name")
-;    cyclelength = .item("cyclelength")
-;    mindwell = .item("MinDwell")
-;    maxdwell = .item("MaxDwell")
-;    maxbog = .item("MaxBOG")
-;    MaxMOB = .item("MaxMOB")
-;    recovery = .item("Recovery")
-;    startdeployable = .item("StartDeployable")
-;    stopdeployable = .item("StopDeployable")
-;    startstate = .item("StartState")
-;    endstate = .item("EndState")
-;    EndIndex = .item("EndIndex")
-;    overlap = .item("overlap")
-;    'Set PositionGraph = unpickle(New GenericGraph, .item("PositionGraph"))
-;    asSerial(PositionGraph).fromDictionary .item("PositionGraph")
-;End With
+
 ;    
 ;End Sub
-;Private Sub ISerializable_fromDictionary(indict As Scripting.IDictionary)
-;asSerial(Me).FromString (DictionaryToJSON(indict))
-;End Sub
-;
-;Private Sub ISerializable_fromFile(path As String)
-;unpickleFrom Me, path
-;End Sub
-;Private Sub ISerializable_toFile(path As String)
-;pickleTo Me, path
-;End Sub
+

@@ -1,3 +1,6 @@
+;Port of the I/O handler from marathon.  Thinking of a way to handle this...
+;we have much better I/O facilities in clojure.  This is just a place holder 
+;until the new design emerges.
 (ns marathon.port.data.output)
 
 
