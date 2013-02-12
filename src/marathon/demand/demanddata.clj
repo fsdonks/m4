@@ -1,9 +1,7 @@
-(ns marathon.demand
+(ns marathon.demand.demanddata
   (:use [util.record]
         [DEVS.Entity]))
 
-
-(in-ns 'Marathon.demand)
 
 (defrecord demanddata [name src priority startday duration overlap primaryunit 
                        sourcefirst quantity OITitle vignette operation
@@ -38,18 +36,6 @@
                              (assoc (:unitsAssigned d) (:name u) u)}))
 (defn assign-many [d us] (reduce assign d us)) 
 
-;'TOM Change 14 Mar 2011
-;Public Sub SendHome(unit As TimeStep_UnitData)
-
-;If unitsAssigned.exists(unit.name) = False And unitsOverlapping.exists(unit.name) = False Then
-;    Err.Raise 101, , "unit not assigned"
-;Else
-;    If unitsAssigned.exists(unit.name) Then unitsAssigned.remove unit.name
-;    If unitsOverlapping.exists(unit.name) Then unitsOverlapping.remove unit.name
-;End If
-
-;End Sub
-
 (defn assigned? [d u]
   (contains? (:unitsAssigned d) (:name u)))
 
@@ -62,6 +48,18 @@
 (defn list-units [d] 
   (keys (:unitsAssigned d)))
 
+;'TOM Change 14 Mar 2011
+;Public Sub SendHome(unit As TimeStep_UnitData)
+
+;If unitsAssigned.exists(unit.name) = False And unitsOverlapping.exists(unit.name) = False Then
+;    Err.Raise 101, , "unit not assigned"
+;Else
+;    If unitsAssigned.exists(unit.name) Then unitsAssigned.remove unit.name
+;    If unitsOverlapping.exists(unit.name) Then unitsOverlapping.remove unit.name
+;End If
+
+;End Sub
+
 (defn send-home [d u]
   (if (has-unit? d u)
     (let [flds [:unitsAssigned :unitsOverlapping]
@@ -70,40 +68,34 @@
     d))
           
 
-Public Sub SendOverlap(unit As TimeStep_UnitData)
-
-If unitsOverlapping.exists(unit.name) = True Then
-    Err.Raise 101, , "unit already overlapping"
-Else
-    unitsAssigned.remove unit.name
-    unitsOverlapping.add unit.name, unit.name
-End If
-
-End Sub
+;Public Sub SendOverlap(unit As TimeStep_UnitData)
+;
+;If unitsOverlapping.exists(unit.name) = True Then
+;    Err.Raise 101, , "unit already overlapping"
+;Else
+;    unitsAssigned.remove unit.name
+;    unitsOverlapping.add unit.name, unit.name
+;End If
+;
+;End Sub
 
 (defn send-overlap [d u]
   (if (has-unit? d u)
     (transfer (:unitsAssigned d) (:name u) (:unitsOverlapping d))
     d))
 
-Public Function unitCount() As Long
-unitCount = unitsOverlapping.count + unitsAssigned.count
-End Function
-Public Sub fillWith(fill As TimeStep_Fill)
-Assign fill.source, fill.quality
-Fills.add fill.source.name, fill
-End Sub
+;Public Function unitCount() As Long
+;unitCount = unitsOverlapping.count + unitsAssigned.count
+;End Function
+(defn unit-count [d] (reduce + ((juxt :unitsAssigned :unitsOverlapping) d)))
 
-Public Sub reset()
-unitsAssigned.RemoveAll
-unitsOverlapping.RemoveAll
-Fills.RemoveAll
-status = False
-End Sub
+;Public Sub fillWith(fill As TimeStep_Fill)
+;Assign fill.source, fill.quality
+;Fills.add fill.source.name, fill
+;End Sub
 
-Private Sub Class_Terminate()
-Set Fills = Nothing 'this is a historic record.  we keep all the fills "ever" used here.
-Set unitsAssigned = Nothing 'possibly redundant.
-Set unitsOverlapping = Nothing
-'Set tags = Nothing
-End Sub
+(defn fill-with [d fill]
+  (assoc d :fills 
+     (conj (:fills d) 
+           (name (fill-source fill)))))  
+  

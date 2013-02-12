@@ -1,3 +1,64 @@
+(ns marathon.policy.policydata
+  (:use [util.record :only [defrecord+]]))
+
+;need a protocol for policies...
+
+
+
+;a structure for unit entity policies. 
+(defrecord+ policy [[name "BlankPolicy"]
+                    [cyclelength :inf] 
+                    [mindwell 0]
+                    [maxdwell :inf]
+                    [maxbog :inf] 
+                    [maxMOB :inf]
+                    [recovery  90] 
+                    [startdeployable 0] 
+                    [stopdeployable :inf]
+                    [positiongraph  nil]
+                    [startstate :spawn]
+                    [endstate :spawn]
+                    [overlap 45]
+                    [subscribers {}]]) 
+
+(def empty-policy (make-policy))
+
+;policies defined by more than one atomic policy.
+(defrecord+ policycomposite [name 
+                             subscribers ;probably drop this field....
+                             activepolicy 
+                             activeperiod
+                             policies])
+
+(defrecord+ policyatomic [name 
+                          subscribers ;probably drop this field....
+                          activepolicy 
+                          activeperiod
+                          policies])
+
+;This is for centralizing control over rotational policy, as well as substition 
+;policy. 
+;We maintain all the data structures necessary for managing this stuff.
+;    Also manage all feasible locations through this object.
+(defrecord+ policystore   [[name "PolicyStore"] 
+                           [locationmap {}] 
+                           [positions {}] 
+                           [locations {}] 
+                           [locationindex {}] 
+                           [policies {}] 
+                           [periods {}]
+                           [highest {}] 
+                           policytraffic  
+                           rules  
+                           rulegraph 
+                           ruledelim 
+                           activeperiod 
+                           [periodchanges {}]
+                           schedules 
+                           [composites {}] 
+                           [permanents {}] 
+                           canghost])
+
 ;(ns marathon.port.data.policy)
 ;
 ;'TOM Change 20 May 2011 -> Policy nodes are NOW POSITIONS, no longer Locations.

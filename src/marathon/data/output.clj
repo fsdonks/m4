@@ -1,4 +1,4 @@
-(ns marathon.port.data.outputstore)
+(ns marathon.port.data.output)
 
 
 (defrecord outputstore [name observers filestreams 

@@ -1,4 +1,4 @@
-(ns marathon.unit
+(ns marathon.supply.unitdata
   (:use [DEVS.Entity]
         [util.record]))
 
