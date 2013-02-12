@@ -1,5 +1,5 @@
 (ns marathon.supply.supplystore
-  (:require [
+  (:require [util [tags :as tag]])
   (:use [util.record :only [defrecord+]]))
 
 (defrecord+ supplystore 
@@ -11,21 +11,12 @@
    unit-behaviors ;map of named unit behaviors.  may move this out...
    unit-updates ;set of eventful unit-days....might be able to handle this outside.
                 ;this was listed as a tag structure earlier...not certain..
-   [tags {:tags {:sources {}}
-          :subjects {}}];a generic set of tags...need to probably move this out to an external 
+   [tags tag/empty-tags];a generic set of tags...need to probably move this out to an external 
         ;tag-store.
    has-ghosts ;boolean flag to determine if the supply can generate ghosts..might change.
    follow-ons]) ;map of entity-names to units that are in follow-on status.
 
-;Need to initialize this guy with default unit behaviors....right now, the
-;behaviors don't exist...
 
-Set UnitBehaviors = New Dictionary
-Set behavior = New TimeStep_UnitBehaviorBase
-behavior.name = "Legacy"
-
-UnitBehaviors.add "Default", behavior
-UnitBehaviors.add "Legacy", behavior
 
 ;------>Note 
 ;When filling demands, if there are eligible follow-on units, we exhaust them FIRST.
@@ -40,3 +31,13 @@ UnitBehaviors.add "Legacy", behavior
 ;We partition these separately to ensure that follow-ons are exhausted first, prior to fill via
 ;normal supply.
 
+;-----------Pending-------------
+;Need to initialize this guy with default unit behaviors....right now, the
+;behaviors don't exist...
+
+;Set UnitBehaviors = New Dictionary
+;Set behavior = New TimeStep_UnitBehaviorBase
+;behavior.name = "Legacy"
+;
+;UnitBehaviors.add "Default", behavior
+;UnitBehaviors.add "Legacy", behavior

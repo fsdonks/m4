@@ -1,17 +1,28 @@
 (ns marathon.supply.unitdata
-  (:use [DEVS.Entity]
-        [util.record]))
+  (:use [marathon.util :only [defrecord+]]))
 
 (in-ns 'marathon.unit)
 
 ;record for unitdata state.
-(defrecord UnitData [name src component policy policystack 
-                     behavior statedata cycletime followoncode
-                     locationname positionpolicy currentcycle
-                     cycles spawntime locationhistory])
+(defrecord+ unitdata 
+  [name ;unit entity's unique name. corresponds to a UIC 
+   src ;unit entity's type, or capability it can supply.
+   component ;unit entity's membership in supply.
+   policy ;the policy the entity is currently following.
+   policystack ;a stack of any pending policy changes.
+   behavior ;the behavior the unit uses to interpret policy and messages.
+   statedata ;generic state data for the unit's finite state machine.
+   cycletime ;the unit's current coordinate in lifecycle space.
+   followoncode ;description of the categories this unit serve as a followon to.
+   locationname ;the current physical location of the unit.
+   positionpolicy ;the current position of the unit in its policy space.
+   currentcycle ;the current cycle data structure for the unit.
+   cycles ;an ordered collection of the cycles that the unit has completed.
+   spawntime ;the time in which the unit spawned.
+   locationhistory])
 
-(def emptyunit
-  (-> (empty-record Marathon.unit.UnitData)
+(def empty-unit
+  (-> (make-unitdata)
       (merge {:spawntime -1 :cycletime 0})))    
 
 ;pass a message to a unit, telling it to update itself.
@@ -21,7 +32,7 @@
   ((:behavior u) u msg))
 
 ;allow units to be entities 
-(extend UnitData IEntity (assoc default-entity :process-msg unit-update))
+(extend unitdata IEntity (assoc default-entity :process-msg unit-update))
 
 
 ;Public Sub InitCycles(t As Single)
