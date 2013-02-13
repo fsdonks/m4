@@ -1,6 +1,6 @@
-(ns DEVS.sim
-  (:use [DEVS.events])
-  (:require [DEVS [Schedule :as agenda]]))
+(ns sim.discrete
+  (:use [sim.events])
+  (:require [sim [schedule :as agenda]]))
 
 ;a simulation is a just an event source/repository (the schedule) and 
 ;event processors. 

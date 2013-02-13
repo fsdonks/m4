@@ -1,4 +1,4 @@
-(ns DEVS.events
+(ns sim.events
   (:use [util.general :only [unfold generate]]))
 
 ;Events are descriptions of ways to compute new values from initial values.  
@@ -7,30 +7,18 @@
 ;implemented (and the pending event removed), or with the change unimplemented 
 ;(the pending event remains).
 
-(defrecord event [type data])
-;note -> these functions overlap with a protocol in another lib....will have 
-;to think about how to integrate them better, either use the other lib as 
-;a basis, or make this one superior.
-(defn event-type
-  "Given a chunk of data, tries to coerce its event-type.  Keyword values are  
-   viewed as an intrinsic event type.  Maps (and records) dispatch off a :type 
-   key.  Any other generic sequences dispatch off the first value."
-  [e] (cond (keyword? e) e 
-            (map? e) (:type e)
-            (seq e) (first e)
-            :else (throw (Exception. (str "can't coerce event type from " e)))))
-                           
-(defn event-data
-  "Extracts event data from e.  Handles maps/records, sequences, and keywords.
-   Keywords are assumed to have no data.  Sequences are assumed to have data 
-   as the second element of the sequence."
-  [e] (cond (map? e) (:data e)
-                           (seq e) (fnext e)
-                           (keyword? e) nil))
 
-;helper functions for the subsequent defevents and letevents macros.
+;Note -> this is basically a direct copy of the events.base from cljgui
+;I'm going to reconcile the two at some point...
+
+
+
+
+
+
+;helper functions for the subsequent defevents and let-events macros.
 (defn- emit-event
-  "Auxillary function for parsing event specs in defevents/letevents, and
+  "Auxillary function for parsing event specs in defevents/let-events, and
    turning them into event constructing functions."
   ([ename docstring args body]
     (list 'do
@@ -48,7 +36,7 @@
                        '[data] 'data)))
 
 (defn- emit-letevent
-  "Auxillary function for parsing event specs in defevents/letevents, and
+  "Auxillary function for parsing event specs in defevents/let-events, and
    turning them into event constructing functions."
   ([ename args body]
     (list ename ;lexical event constructor fn
@@ -82,9 +70,9 @@
     `(do ~@(map #(doc (apply emit-event %))  bindings))))
 
 
-(defmacro letevents
+(defmacro let-events
   "Macro for binding (possibly new) events. In addition to a like-named 
-   constructor of type (args->event), letevents also provides a like-named 
+   constructor of type (args->event), let-events also provides a like-named 
    predicate suffixed with '?'. 
    
    In lieu of using (fn [e] (= (:type e) :myevent)), one can eval (myevent? e) 
@@ -93,7 +81,7 @@
      (name) 
      (name [args] body) 
    If no args are supplied, a generic argument is provided and passed as the 
-   event's data field.  Docstrings are invalid inside of letevents.  
+   event's data field.  Docstrings are invalid inside of let-events.  
    
    Args are available inside the evaluation of body."     
     [bindings body]
@@ -364,7 +352,7 @@
 (defn ucase [s] (.toUpperCase s))
 
 (defn simplegreet [n]
-  (letevents [(hello)]
+  (let-events [(hello)]
       (->> (add-event emptycontext :hello)
            (event-seq (route [:hello] (println "Hello! " (get-line))))
            (take n ))))
@@ -373,7 +361,7 @@
   "A function that, given an initial event context, will poll for a user's name
    and then reply with a greeting."
   ([ec]
-		(letevents [(newname)
+		(let-events [(newname)
 	              (getinput)]
 		   (let [quit? #(= (ucase (event-data %)) "QUIT")	           
 		         ui    (route [:getinput]
@@ -423,7 +411,7 @@
   "A function that, given an initial event context, will poll for a user's name
    and then reply with a greeting."
   ([ec]
-		(letevents [(newname)
+		(let-events [(newname)
 	              (getinput)]
 		   (let [quit? #(= (ucase (event-data %)) "QUIT")	           
 		         ui     (->> (process

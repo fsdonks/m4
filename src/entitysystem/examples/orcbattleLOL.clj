@@ -1,5 +1,5 @@
 ;A clojure implementation of Conrad Barksi's Orc Battle.
-(ns entitysystem.orcbattleLOL)
+(ns entitysystem.examples.orcbattleLOL)
 
 
 (declare init-monsters init-player gameloop)

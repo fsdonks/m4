@@ -2,11 +2,11 @@
 ;;This is intended to be a barebones implementation of the event engine that
 ;;currently rests under the VBA version....however, we should be able to use it
 ;;elsewhere, i.e. it's general.
-(ns DEVS.schedule
+(ns sim.schedule
   (:use [util.datetime]
-        [DEVS.events :only [->event]]))
+        [sim.events :only [->event]]))
 
-;;A DEVS engine is quite simple...I will adapt this from the F# version.
+;;A sim engine is quite simple...I will adapt this from the F# version.
 ;;We basically just need a priority q.
 ;;Events are queued in priority order according to time t (some single floating
 ;;point val).
@@ -27,7 +27,7 @@
   (print-method (quote <|EndQ) w))
 
 ;Revised 28 May 2012
-;Events are covered in DEVS.events 
+;Events are covered in sim.events 
 
 ;;Note -> events are simple kvps of {:t timestamp :type someeventyype :data
 ;;somedata}
@@ -45,37 +45,10 @@
 ;packets are still useful.  they basically wrap extra data for us.
 ;when we build an event, we append some context to it.
 
-;Packets are just standard information we'd like to have bindings for when 
+;packets are just standard information we'd like to have bindings for when 
 ;handling events.  They're subordinate to generic event structures. 
 
-(defrecord Packet [id eventtype from to data])
-(defn make-packet
-  "Default constructors for making packets.  Packets are the contextual
-   information associated with an event.
-   At a minimum, the type of event must be supplied.
-   We can also supply an event type and some data (data is any data type).
-   Finally, we can append from and to information about the event.
-   Note, the id field is never set by the user, but the schedule uses it
-   internally and provides it as a return value"
-  ([eventtype] (Packet. 0 eventtype nil nil nil))
-  ([eventtype data] (Packet. 0 eventtype nil nil data))
-  ([eventtype from to data] (Packet. 0 eventtype from to data)))
 
-
-(defn timed-event
-  "Default constructors for building temporal events; really just a nice
-   way of representing time-stamped packets.  The contextual information is
-   contained in the packet (another record).  We use the time-stamp on events
-   to keep them sorted in a schedule.  The time stamp is somewhat arbitrary,
-   in that we could use any comparable key for comparison.  However, we tend
-   to denote an absolute notion of time or ordering, hence the convention of
-   using a float as our :time key."
-  ([t] (->event :timed-event (make-packet :generic {:t t})))
-  ([t pckt]
-    (if (= (class pckt) DEVS.schedule.Packet)
-      (->event :timed-event pckt)
-      (->event :timed-event 
-         (make-packet :generic (assoc-in pckt [:data :t] t))))))
 
 (defn zip-events [ts packets] 
   "Zip a sequence of times and packets to produce a sequence of events."
@@ -132,7 +105,7 @@
    the current time.  Right now, invalid events just aren't added...
    Note that we're checking each added event, using calls to get-time, this
    could be done once and passed for performance sake."
-  ([s e] (let [t       (->> e (:data :t ))
+  ([s e] (let [t       (->> e (:content :t ))
                q (get-events s t)]
            (if (>= t (get-time s))
              (assoc s t (conj q e))

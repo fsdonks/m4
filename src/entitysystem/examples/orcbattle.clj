@@ -1,7 +1,7 @@
 ;from barski's book....tailored for an entity system using component based 
 ;architecture....
 
-(ns entitysystem.orcbattle 
+(ns entitysystem.examples.orcbattle 
   (:use [entitysystem.store]))
 
 ;A record to hold the gamestate....we only really 

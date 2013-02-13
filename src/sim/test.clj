@@ -1,5 +1,5 @@
-(ns DEVS.test
-  (:use [DEVS.events]))
+(ns sim.test
+  (:use [sim.events]))
 
 (defn get-line [] (deref (future (read-line))))
 (defn ucase [s] (.toUpperCase s))
@@ -15,7 +15,7 @@
 	            (recur nxt))))))
 
 (defn simplegreet [n]
-  (letevents [(hello)]
+  (let-events [(hello)]
       (->> (add-event emptycontext :hello)
            (event-seq (route [:hello] (println "Hello! " (get-line))))
            (take n ))))
@@ -24,7 +24,7 @@
   "A function that, given an initial event context, will poll for a user's name
    and then reply with a greeting."
   ([ec]
-		(letevents [(newname)
+		(let-events [(newname)
 	              (getinput)]
 		   (let [quit? #(= (ucase (event-data %)) "QUIT")
              terminate (route [:newname :getinput] 
@@ -77,7 +77,7 @@
   "A function that, given an initial event context, will poll for a user's name
    and then reply with a greeting."
   ([ec]
-		(letevents [(newname)
+		(let-events [(newname)
 	              (getinput)]
 		   (let [terminate (route [:newname :getinput]
                           (do (println "computation finished!") 

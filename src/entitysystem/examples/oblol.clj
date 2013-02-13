@@ -1,4 +1,4 @@
-(ns entitysystem.oblol)
+(ns entitysystem.examples.oblol)
 
 ;A clojure implementation of Conrad Barksi's Orc Battle.
 
