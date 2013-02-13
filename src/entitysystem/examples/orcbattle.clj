@@ -96,9 +96,10 @@
                             :or {offense 10 defense 0}}]
   "A basic set of components indicating an entity's ability to engage
    in combat, and to what extent."
-  [combatstats {:offense offense :defense defense}
-   :offensive (> offense 0)
-   :defensive (> defense 0)])   
+  {:components 
+   [combatstats {:offense offense :defense defense}
+    :offensive (> offense 0)
+    :defensive (> defense 0)]})   
 
 (defentity player [id]
   "A simple template for human players.  The initial game only anticipates one

@@ -194,7 +194,24 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 ;in most setups, data is statically typed, so that the components are homogenous
 ;we'll follow that practice, but nothing is technically stopping us from having
 ;heterogenous data across a component.
-(defrecord component [domain data]) 
+;(defrecord component [domain data])
+(defprotocol IComponent 
+  (component-domain [x] "Returns the logical domain of the component")
+  (component-data [x] "Returns the values associated with the component."))
+
+(defrecord component [domain data]
+  IComponent 
+  (component-domain [x] domain)
+  (component-data [x] data))
+
+(extend-protocol IComponent
+  clojure.lang.PersistentArrayMap
+  (component-domain [x] (:domain x))
+  (component-data [x] (:data x)))
+  
+(defn as-component [domain data] {:domain domain :data data})
+
+
 
 (defprotocol IEntity 
   "A protocol for defining fundamental operations on entities."
@@ -224,7 +241,14 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   (entity-components [m] (cond (contains? m :components) (get m :components)
                                (contains? m :domains) (get m :domains)
                                :else (dissoc m :name))))
-  
+
+;;Might move back to this guy in the future...
+;;moved away from record syntax.
+;(defn ->entity [name components]
+;  {:name name :components components})
+;
+;(def empty-entity {:name nil :components {}})
+
 (defn conj-component
   "Conjoins the component to components in ent ."
   [ent component]
@@ -251,7 +275,20 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
                (contains? v :components))
           (->component (:domain v) (:components v))
           :else (->component k v)))
-  ([keyval] (keyval->component (first keyval) (fnext keyval))))          
+  ([keyval] (keyval->component (first keyval) (fnext keyval))))
+
+;(defn keyval->component
+;  "Converts key/value pairs into components.  Allows a simple shorthand
+;   for composing entities, in that entity components can be contained in 
+;   a map."
+;  ([k v]
+;    (cond (= (type v) component)  v
+;          (and (map? v) 
+;               (contains? v :domain) 
+;               (contains? v :components))
+;          (->component (:domain v) (:components v))
+;          :else (->component k v)))
+;  ([keyval] (keyval->component (first keyval) (fnext keyval))))          
 
 (defn entity-from-map [m]
   "Allows shorthand definition of entities from simple map structures.
@@ -293,7 +330,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
 (defn ent-seq? [entcoll]
   (and (not (empty? entcoll))
        (or  (coll? (first entcoll))  
-         (= (type (first entcoll)) entity))))
+         (satisfies? IEntity (first entcoll)))))
             
 (defn merge-entities 
   "Merges multiple entities.  For overlapping domains, the right-most, or last 
@@ -354,7 +391,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   "Associate component data with id.  Records are {:component data} or 
   [[component data]] form.  Alternately, add a pre-built entity record."
   ([db id records] (reduce #(add-field %1 id %2) db records))
-  ([db ^entity ent] (add-records db (entity->records ent))))
+  ([db ent] (add-records db (entity->records ent))))
 
 (defn add-entities
   "Register multiple entity records at once..." 
