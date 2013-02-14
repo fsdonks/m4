@@ -40,6 +40,38 @@
 ;the observable, that propogates the notion that no more observations are 
 ;coming down the pipe, which would allow observers to disconnect.
 
+;-------------Implementation------------
+;The flow of control as exists in an observable/observer pipe is this: 
+;  Notifications flow in to the observable, and notify! is called with the 
+;  value of the notification. 
+;  The observable passes the notification on to each subscribed observer by 
+;  calling their update! function on the notification data.
+;    --this propogates, since some observers might be dual-hatted as
+;      as observables, and cause further propogation throughout the network.
+
+;The observable/observer symbiosm represents an abstract data flow, not unlike
+;sequences, where the data is conceptually a stream of events or notifications.
+;Combinators are derived by changing the context in which an observer  
+;subscribes to an observable......
+;Normal subscription implies a relationship in which the observer's update 
+;function is called against the notification. 
+
+;To achieve mapping, filtering, etc., we override the observable's notion of 
+;subscribe!, and compose special functions to operate on notifications that 
+;implement the desired behavior.  The implementation magic is actually inside 
+;of subscribe, since it defines a means of combination (or an adapter) through
+;which a context may change.
+
+;The primary mechanism in the observable case is to define compositions in terms
+;of how new observers are subscribed to the observable.  So when we define a 
+;map-obs, we actually define a function that builds an observer that creates
+;a new observable, who's mechanism for subscribing observers is to apply a 
+;user-supplied function to the input context, then updating subscribers with
+;the result of the function.  The result is a conceptual "map" or a "lift" of 
+;a function into the stream of notification....
+
+
+
 (ns cljgui.events.observe)
 
 (defprotocol observer 
