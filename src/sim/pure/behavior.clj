@@ -138,8 +138,6 @@
   [f r]
   (reaction (fn [arg] (f (r arg)))))
 
-
-
 ;Lifting functions...
 (defn lift1-reaction
   "Lifting is akin to mapping.  It allows to take a normal function, like a 

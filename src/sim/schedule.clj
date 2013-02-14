@@ -4,6 +4,7 @@
 ;;elsewhere, i.e. it's general.
 (ns sim.schedule
   (:use [util.datetime]
+        [sim.data]
         [sim.events :only [->event]]))
 
 ;;A sim engine is quite simple...I will adapt this from the F# version.
@@ -20,34 +21,10 @@
 ;;Should be pretty fast...
 ;;Dunno.
 
-
 (def emptyq clojure.lang.PersistentQueue/EMPTY)
 (defmethod print-method clojure.lang.PersistentQueue [q,w]
   (print-method (quote <Q|) w) (print-method (seq q) w) 
   (print-method (quote <|EndQ) w))
-
-;Revised 28 May 2012
-;Events are covered in sim.events 
-
-;;Note -> events are simple kvps of {:t timestamp :type someeventyype :data
-;;somedata}
-;;probably want to define events explicitly somewhere else..
-
-;(defrecord Event [t packet]) ;I don't think we need this anymore....
-;schedule can serve as an interface to event....
-;we store time data in the event data.
-;schedule satisfies IEventSeq, and orders its events by time. 
-;In the case where there is no time in event-data, time is :immediate. 
-;we use a custom comparison function to ensure that :immediate events are 
-;always ahead of ANY event scheduled with an actual time value.  
-
-
-;packets are still useful.  they basically wrap extra data for us.
-;when we build an event, we append some context to it.
-
-;packets are just standard information we'd like to have bindings for when 
-;handling events.  They're subordinate to generic event structures. 
-
 
 
 (defn zip-events [ts packets] 
@@ -55,7 +32,7 @@
   (map #(apply timed-event %)(seq (zipmap ts packets))))
 
 ;define a schedule, a sorted-map of event queues keyed by time.
-(def initial-schedule (sorted-map 0.0 emptyq))
+(def empty-schedule (sorted-map 0.0 emptyq))
 
 (defn empty-schedule? [s]
   "If schedule s has one eventqueue, and it's emptyq, the schedule is empty"
@@ -120,14 +97,14 @@
   (reduce #(put-event %1 %2) s es))
 
 
-(defn make-schedule 
+(defn ->schedule 
   "Unified constructor for building schedules.  No args invokes a reference to 
    the empty-schedule.  Providing a sequence of events inserts them into an 
    empty schedule.  Providing a sequence of times and packets zips and inserts 
    them into an empty schedule."
-  ([] initial-schedule)
-  ([evts] (put-events initial-schedule evts))
-  ([ts packets] (put-events initial-schedule (zip-events ts packets)))) 
+  ([] empty-schedule)
+  ([evts] (put-events empty-schedule evts))
+  ([ts packets] (put-events empty-schedule (zip-events ts packets)))) 
                             
 
 (defn take-event [s]
@@ -161,6 +138,8 @@
   ([s] (do-schedule s println)) 
   ([s n] (do-schedule s println n)))  
 
+
+
 (comment 
 ;;Testing.....
 
@@ -171,11 +150,11 @@
     (->> 
       (repeatedly n #(rand tmax)) 
       (map #(for 
-            [i (map inc (range (rand-int 10)))] 
-             (timed-event %1 
-               (make-packet :timestamp i))))
+              [i (map inc (range (rand-int 10)))] 
+              (timed-event %1 
+                           (make-packet :timestamp i))))
       (flatten)
-      (put-events initial-schedule)))
+      (put-events empty-schedule)))
 
 (def sample-schedule 
   (let [wednesdays (take 6 (map date->num (daystream "Wednesday")))

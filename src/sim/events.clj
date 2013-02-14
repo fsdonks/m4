@@ -1,5 +1,6 @@
 (ns sim.events
-  (:use [util.general :only [unfold generate]]))
+  (:use [util.general :only [unfold generate]]
+        [sim.data]))
 
 ;Events are descriptions of ways to compute new values from initial values.  
 ;They are inputs to functions that consume such information to map an 
@@ -7,14 +8,8 @@
 ;implemented (and the pending event removed), or with the change unimplemented 
 ;(the pending event remains).
 
-
 ;Note -> this is basically a direct copy of the events.base from cljgui
 ;I'm going to reconcile the two at some point...
-
-
-
-
-
 
 ;helper functions for the subsequent defevents and let-events macros.
 (defn- emit-event
@@ -97,83 +92,6 @@
               (quote evt))]
     (:doc (meta (resolve sym)))))
 
-;protocol for operating on abstract event collections.
-(defprotocol IEventSeq
-  (add-event [ecoll e] "add an event to the collection of events")
-  (drop-event [ecoll] "remove an event from the collection of events")
-  (next-event [ecoll] "return the next event in the collection")
-  (pending-events [ecoll] "return a collection of pending events"))
-
-(extend-protocol IEventSeq
-  clojure.lang.PersistentVector
-  (add-event [v e] (conj v e))
-  (drop-event [v] (cond (or (= 1 (count v)) 
-                            (= v [])) []
-                        (> (count v) 1) (subvec v 1)))                       
-  (next-event [v] (first v))
-  (pending-events [v] v))
-
-;protocol-derived functionality
-(defn add-events [ecoll es] (reduce add-event ecoll es)) 
-
-;IEventContext is a simple wrapper for things that have state and events. 
-(defprotocol IEventContext 
-  (get-state [ec] "return the state of the context")
-  (set-state [ec s] "return a new context with state as s")
-  (get-events [ec] "return the IEventSeq of the context")
-  (set-events [ec es] "return a new context with events as es"))
-
-;Allow pairs of vectors, lists, and {:keys [events state]} to be seen as 
-;event contexts.
-(extend-protocol IEventContext
-  clojure.lang.PersistentVector
-  (get-state  [v] (first v))
-  (set-state  [v s] [s (fnext v)]) 
-  (get-events [v] (fnext v))
-  (set-events [v es] [(first v) es])
-  clojure.lang.PersistentList
-  (get-state  [l] (first l))
-  (set-state  [l s] (cons s (rest l)))
-  (get-events [l] (fnext l))
-  (set-events [l es] (list (first l) es)) 
-  clojure.lang.PersistentArrayMap
-  (get-state  [m] (:state m))
-  (set-state  [m s] (assoc m :state s))
-  (get-events [m] (:events m))
-  (set-events [m es] (assoc m :events es)))
-
-;Define an all-in-one record that supports operations for both IEventContext 
-;and IEventSeq. 
-;An eventcontext is simply a nice wrapper for some state, and an IEventSeq, 
-;events.
-(defrecord eventcontext [state events]
-  IEventContext 
-  (get-state [ec] state)
-  (set-state [ec s] (eventcontext. s events))
-  (get-events [ec] events)
-  (set-events [ec es] (eventcontext. state es))
-  IEventSeq
-  (add-event [v e] (eventcontext. state (add-event events e)))
-  (drop-event [v] (eventcontext. state (drop-event events)))
-  (next-event [v] (next-event events))
-  (pending-events [v] (pending-events events)))
-
-(def emptycontext (->eventcontext nil []))
-
-(defn next-type
-  "Gets the type of the next event, based off of its :type field."
-  [ec] (-> ec
-         (get-events)
-         (next-event)
-         (event-type)))
-
-(defn type-filter
-  "Returns a filter function for event contexts, which yields true if the type 
-   of the next event is t."
-  [t] 
-  (fn [ec] (= (next-type ec) t)))
-
-
 
 ;(def proc-ops 
 ;  (ref '(conj-events! (fn 
@@ -217,6 +135,12 @@
      (do (if-let [res# (with-context ~'context ~body)]
            res#
            (drop-event ~'context)))))
+
+(defn type-filter
+  "Returns a filter function for event contexts, which yields true if the type 
+   of the next event is t."
+  [t] 
+  (fn [ec] (= (next-type ec) t)))
 
 (defn make-route
   "Simple constructor for defining routes.  This is akin to sample from 
