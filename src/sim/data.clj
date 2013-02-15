@@ -151,7 +151,7 @@
    the current time.  Right now, invalid events just aren't added...
    Note that we're checking each added event, using calls to get-time, this
    could be done once and passed for performance sake."
-  ([s e] (let [t       (event-time e)
+  ([s e] (let [t (or (event-time e) (get-time s))
                q (get-events s t)]
            (if (>= t (get-time s))
              (assoc s t (conj q e))
@@ -211,30 +211,41 @@
 ;Don't know if this is needed...
 
 ;protocol for operating on abstract event collections.
-;(defprotocol IEventSeq
-;  (add-event [ecoll e] "add an event to the collection of events")
-;  (drop-event [ecoll] "remove an event from the collection of events")
-;  (next-event [ecoll] "return the next event in the collection")
-;  (pending-events [ecoll] "return a collection of pending events"))
-;
-;(extend-protocol IEventSeq
-;  clojure.lang.PersistentVector
-;  (add-event [v e] (conj v e))
-;  (drop-event [v] (cond (or (= 1 (count v)) 
-;                            (= v [])) []
-;                        (> (count v) 1) (subvec v 1)))                       
-;  (next-event [v] (first v))
-;  (pending-events [v] v)
-;  clojure.lang.PersistentTreeMap
-;  (add-event [m e] (put-event m e))
-;  (drop-event [m] (take-event m))                       
-;  (next-event [m] (next-event  m))
-;  (pending-events [m] (event-stream m))
-;)
+(defprotocol IEventSeq
+  (add-event [ecoll e] "add an event to the collection of events")
+  (drop-event [ecoll]  "remove an event from the collection of events")
+  (first-event [ecoll] "return the next event in the collection")
+  (get-events [ecoll]  "return a collection of pending events"))
 
-;protocol-derived functionality
-(defn add-events [ecoll es] (reduce add-event ecoll es)) 
-(defn next-time [ecoll] (get-time (next-event ecoll)))
+(extend-protocol IEventSeq
+  clojure.lang.PersistentVector
+  (add-event [v e] (conj v e))
+  (drop-event [v] (cond (or (= 1 (count v)) 
+                            (= v [])) []
+                        (> (count v) 1) (subvec v 1)))                       
+  (first-event [v] (first v))
+  (pending-events [v] v)
+  
+  clojure.lang.PersistentTreeMap 
+  (add-event [m e] (put-event m e)) 
+  (drop-event [m] (take-event m))                       
+  (first-event [m] (next-event  m))
+  (pending-events [m] (event-stream m)))
+
+;;protocol-derived functionality
+(defn add-events
+  "Add multiple events to the event sequence."
+  [ecoll es] 
+  (reduce add-event ecoll es)) 
+(defn next-time
+  "Compute the time of the next event in the sequence."
+  [ecoll] (get-time (first-event (drop-event ecoll))))
+(defn event-seq [ecoll]
+  "Return a lazy seq of events by unfolding the schedule using 
+   event-streamf."
+   (map first 
+        (iterate (fn [[x xs]] (when xs [(next-event xs) (drop-event xs)]))
+                 [(first-event ecoll) (drop-event ecoll)]))
 
 (comment 
 ;;Testing.....
@@ -257,6 +268,7 @@
     (->schedule (zip-events wednesdays chores))))  
 
 (defn bullet-list [coll] (map #(str "->" % \newline) coll))
+(def easy-schedule (->schedule (take 10 (repeat :multiply))))
 )
 
 
