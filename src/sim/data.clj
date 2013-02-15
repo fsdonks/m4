@@ -109,7 +109,7 @@
     (= (count (vals s)) 1)
     (= (first (vals s)) emptyq)))
 
-(defn get-events
+(defn get-segment
   "[s] retrieve next queue of events from schedule s
    [s t] retrieve queue of events for time t from schedule s"
   ([s] (second (first s)))
@@ -119,8 +119,8 @@
 (defn active?
   "Determine if the schedule has any events, or if [s t] if events exist for a
    specific time"
-  ([s] (not (= (get-events s) emptyq)))
-  ([s t] (and (contains? s t) (not (= (get-events s t) emptyq)))))
+  ([s] (not (= (get-segment s) emptyq)))
+  ([s t] (and (contains? s t) (not (= (get-segment s t) emptyq)))))
     
 
 (defn get-time [s]
@@ -142,8 +142,8 @@
 (defn next-event
   "[s] retrieve first event in next active queue of events from schedule s
    [s t] retrieve first event in next active queue of events for time t from s"
-  ([s] (peek (get-events (next-active s))))
-  ([s t] (peek (get-events (next-active s) t)))) 
+  ([s] (peek (get-segment (next-active s))))
+  ([s t] (peek (get-segment (next-active s) t)))) 
 
 (defn put-event
   "[s e & es] insert one or more events into a schedule, based on event time.
@@ -152,7 +152,7 @@
    Note that we're checking each added event, using calls to get-time, this
    could be done once and passed for performance sake."
   ([s e] (let [t (or (event-time e) (get-time s))
-               q (get-events s t)]
+               q (get-segment s t)]
            (if (>= t (get-time s))
              (assoc s t (conj q e))
              s)))
@@ -182,40 +182,13 @@
   "[s] Remove the next event from schedule s, returning remaining schedule."
   (let [snext (next-active s)]
     (next-active
-      (assoc snext (get-time snext) (pop (get-events snext))))))
-
-;;for all active days, return a sequence of events.
-;;I am going to intern this function, it's just an auxillary...
-(defn- event-streamf [s]
-  (if (empty-schedule? s)
-    []
-    [(next-event s) , (take-event s)]))
-
-(defn event-stream [s]
-  "Return a lazy seq of events by unfolding the schedule using 
-   event-streamf."
-    (let [[evt, snext] (event-streamf s)]
-      (if snext
-        (cons evt (lazy-seq (event-stream snext))))))
-
-(defn do-schedule 
-  ([s f n] (doseq [evt (take n (event-stream s))] (f evt)))
-  ([s f] (doseq [evt (event-stream s)] (f evt))))
-
-(defn print-schedule 
-  "print the first n items of the schedule, produces a lazy seq...
-   Planning to provide a pretty-printer for events."
-  ([s] (do-schedule s println)) 
-  ([s n] (do-schedule s println n)))  
-
-;Don't know if this is needed...
+      (assoc snext (get-time snext) (pop (get-segment snext))))))
 
 ;protocol for operating on abstract event collections.
 (defprotocol IEventSeq
   (add-event [ecoll e] "add an event to the collection of events")
   (drop-event [ecoll]  "remove an event from the collection of events")
-  (first-event [ecoll] "return the next event in the collection")
-  (get-events [ecoll]  "return a collection of pending events"))
+  (first-event [ecoll] "return the next event in the collection"))
 
 (extend-protocol IEventSeq
   clojure.lang.PersistentVector
@@ -223,29 +196,44 @@
   (drop-event [v] (cond (or (= 1 (count v)) 
                             (= v [])) []
                         (> (count v) 1) (subvec v 1)))                       
-  (first-event [v] (first v))
-  (pending-events [v] v)
-  
+  (first-event [v] (first v))  
   clojure.lang.PersistentTreeMap 
   (add-event [m e] (put-event m e)) 
   (drop-event [m] (take-event m))                       
-  (first-event [m] (next-event  m))
-  (pending-events [m] (event-stream m)))
+  (first-event [m] (next-event  m)))
 
 ;;protocol-derived functionality
 (defn add-events
   "Add multiple events to the event sequence."
   [ecoll es] 
   (reduce add-event ecoll es)) 
+
+(defn current-time 
+  "Return the current time of the event collection (i.e. the time of the first 
+   event)."
+  [ecoll]
+  (event-time (first-event ecoll)))
+  
 (defn next-time
   "Compute the time of the next event in the sequence."
-  [ecoll] (get-time (first-event (drop-event ecoll))))
+  [ecoll] (event-time (first-event (drop-event ecoll))))
+
 (defn event-seq [ecoll]
-  "Return a lazy seq of events by unfolding the schedule using 
-   event-streamf."
-   (map first 
-        (iterate (fn [[x xs]] (when xs [(next-event xs) (drop-event xs)]))
-                 [(first-event ecoll) (drop-event ecoll)]))
+  "Return a lazy seq of ordered events."
+   (take-while #(not (nil? %)) 
+     (map first (iterate (fn [[x xs]] 
+                           (when xs [(next-event xs) (drop-event xs)]))
+                         [(first-event ecoll) (drop-event ecoll)]))))
+
+(defn do-events
+  ([s f n] (doseq [evt (take n (event-seq s))] (f evt)))
+  ([s f] (doseq [evt (event-seq s)] (f evt))))
+
+(defn print-events  
+  "print the first n items of the schedule, produces a lazy seq...
+   Planning to provide a pretty-printer for events."
+  ([s] (do-events s println)) 
+  ([s n] (do-events s println n))) 
 
 (comment 
 ;;Testing.....
@@ -256,10 +244,15 @@
    spread across time [0.0 tmax]"
     (->> 
       (repeatedly n #(rand-int tmax)) 
-      (map #(for [i (map inc (range (rand-int 10)))] 
-              (time-event %1  (->simple-event :timestamp i))))
+      (map (fn [t] 
+             (for [i (map inc (range (rand-int 10)))] 
+               (map->event {:id 1
+                            :type :task 
+                            :time t 
+                            :data (keyword (str 'task-type i))}))))
       (flatten)
-      (put-events empty-schedule)))
+      (map-indexed (fn [i evt] (assoc evt :id i)))
+      (add-events empty-schedule)))
 
 (def sample-schedule 
   (let [wednesdays (take 6 (map date->num (daystream "Wednesday")))
