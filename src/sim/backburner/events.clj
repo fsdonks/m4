@@ -27,8 +27,8 @@
     (list ename (list `fn  args (list `->event (keyword ename)  body))))
   ([ename docstring] (emit-event ename docstring '[data] 'data))
   ([ename] (emit-event ename
-                       (str "Anonymous event constructor for " ename)
-                       '[data] 'data)))
+             (str " Anonymous event constructor for " ename)
+                 '[data] 'data)))
 
 (defn- emit-letevent
   "Auxillary function for parsing event specs in defevents/let-events, and
@@ -281,11 +281,15 @@
            (event-seq (route [:hello] (println "Hello! " (get-line))))
            (take n ))))
 
+(defn ->newname 
+  [name] 
+  (map->event {:type newname :data name}))
+
 (defn greeter
   "A function that, given an initial event context, will poll for a user's name
    and then reply with a greeting."
   ([ec]
-		(let-events [(newname)
+		(let-events [(newname) ;(newname) = (->event :newname :data nil)
 	              (getinput)]
 		   (let [quit? #(= (ucase (event-data %)) "QUIT")	           
 		         ui    (route [:getinput]

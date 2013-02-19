@@ -1,5 +1,9 @@
+;This is a simple data structure, implemented on top of the event sequence 
+;substrate from sim.data, which supposes an ordering of events by time.  
+;The agenda is drawn from Abelson and Sussman's Structure and Interpretation of
+;Computer Programs (SICP), chapter 3 circuit simulator.
 (ns sim.agenda
-  (:use [sim.data]))
+  (:require [sim [data :as sim]]))
 
 ;Defined a simple protocol for agendas.  The operations on schedules are 
 ;similar to Abelson and Sussman's agenda from Structure and Interpretation of 
@@ -13,7 +17,7 @@
   (agenda-count [a] "Return the count of the items on the agenda.")
   (time-segments [a] "Return a map of agenda events, keyed by time segment.")
   (add-times [a ts] "Add a elements of time to the agenda.")
-  (get-times [a] "Return a set of all times contained in the agenda."))
+  (get-times [a] "Return an unordered set of all times in the agenda."))
 
 (defn feasible-time? [a t]
   (let [tf (final-time a)]
@@ -30,46 +34,65 @@
   (time-segments [a] schedule)
   (add-times [a ts] (reduce #(add-event %1 (->simple-event :time %2))  a ts))
   (get-times [a] times)
-  IEventSeq 
+  sim.data.IEventSeq 
   (add-event  [a e] ;note->allowing the agenda to have events beyond tfinal  
-    ;(if (feasible-time? (event-time e))
-    (agenda. tprev tfinal (add-event schedule e) (inc item-count)
-               (conj times (event-time e))))
-               ;a) )
+    (agenda. tprev tfinal (sim/add-event schedule e) (inc item-count)
+             (conj times (sim/event-time e)))) 
   (drop-event  [a]  
     (if (> item-count 0)  
-       (let [tnext (current-time schedule)]
-         (agenda. tnext tfinal (drop-event schedule) (dec item-count)
+       (let [tnext (sim/current-time schedule)
+             snext (sim/drop-event schedule)]
+         (agenda. tnext tfinal snext (dec item-count)
                   (if (not= tnext 
-                            (event-time (next-event schedule)))
+                        (sim/current-time snext))
                     (disj times tnext)
                     times)))
        (throw (Exception. "No items left in the agenda!"))))    
-  (first-event [a] (first-event schedule)))
+  (first-event [a] (sim/first-event schedule)))
 
 (def empty-agenda (->agenda nil nil nil 0 #{}))
 
 (defn add-time [a t] (add-times a #{t}))
 (defn get-quarter [day] ((comp inc int) (/ day 90)))
 
-(defn quarter [a] (get-quarter (current-time a))) 
-(defn elapsed [a] (- (current-time a) (previous-time a)))
+(defn quarter [a] (get-quarter (sim/current-time a))) 
+(defn elapsed [a] (- (sim/current-time a) (previous-time a)))
+(defn unbounded?
+  "Predicate indicating that the agenda has no upper bound on its time horizon."
+  [a] (or (nil? (final-time a)) 
+          (= (final-time a) :inf)))
+(defn still-time?
+  "Predicate indicating that the agenda still has work remaining."
+  [a] (and (not= (agenda-count a) 0)
+           (or (unbounded? a)
+               (<= (sim/next-time a) (final-time a)))))
 
-(defn still-time? [a] 
-  (and (not= (agenda-count a) 0)
-       (<= (next-time a) (final-time a))))
+(defn has-time?
+  "Predicate indicating if the agenda exists over a specific point in time."
+  [a t] (contains? (get-times a) t))
 
-(defn has-time? [a t] (contains? (get-times a) t))
 (defn add-time
   "Add at least one time event to the agenda for time t.  If an entry for t
    already exists, "
-  [a t]
-  (if (has-time? a t)
-    a
-    (add-times  a #{t})))
-(defn advance-time [a] (drop-event a))
+  [a t]  (if (has-time? a t)
+           a
+           (add-times a #{t})))
+
+(defn advance-time
+  "Advance the agenda to the next event."
+  [a] (sim/drop-event a))
+
+(defn agenda-seq
+  "Unfold a sequence of intermediate agendas as time advances."
+  [a] (take-while still-time? 
+          (iterate (fn [ag] (if (still-time? ag) 
+                              (advance-time ag))) a)))
 
 (comment ;testing 
 (def simple-agenda (add-time empty-agenda 2))
+(def larger-agenda (add-times empty-agenda (range 100)))
+(defn time-pairs [] 
+  (map (juxt previous-time current-time)
+       (agenda-seq larger-agenda)))
 )
 

@@ -59,12 +59,12 @@
   ([type t data] {:time t :type type :data data}))
 
 ;An event structure with more complex data, used primarily for scheduling.
-(defrecord event [type data id t from to]
+(defrecord event [type data id time from to]
   IEvent 
   (event-type [e] type)
   (event-data [e] data)
   (event-id   [e] id)
-  (event-time [e] t)
+  (event-time [e] time)
   (event-from [e] from)
   (event-to   [e] to))
 
@@ -79,7 +79,7 @@
   ([t] (->simple-event :time t))
   ([t evt]
     (if (= (class evt) event)
-      (merge {:t t} evt)
+      (merge {:time t} evt)
       (->simple-event :generic t evt))))
 
 ;;A sim engine is quite simple...I will adapt this from the F# version.
@@ -127,14 +127,16 @@
 (defn get-time [s]
   "[s] Determine the :time of the pending event in the schedule, if no events
    are pending (an empty schedule) we return nil"
-  (first (keys s)))
+  (if (empty? s) nil 
+    (first (keys s))))
 
 (defn next-active [s]
   "Clear empty queues.  If our current queue is no longer active (has no events)
    we remove it from consideration iff there are more pending queues."
-  (if (or (active? s) (empty-schedule? s))
-    s
-    (recur (dissoc s (get-time s)))))
+  (loop [sched s]    
+    (cond (empty-schedule? s) s 
+          (active? s)  s
+          :else   (recur (dissoc s (get-time s))))))
 
 (defn next-time [s]
   "[s] Get the next active time"
@@ -147,19 +149,13 @@
   ([s t] (peek (get-segment (next-active s) t)))) 
 
 (defn put-event
-  "[s e & es] insert one or more events into a schedule, based on event time.
-   We assert that added events must be futures...i.e. their time must be >=
-   the current time.  Right now, invalid events just aren't added...
-   Note that we're checking each added event, using calls to get-time, this
-   could be done once and passed for performance sake."
-  ([s e] (let [t (or (event-time e) (get-time s))
+  "[s e] insert one or more events into a schedule, based on event time.
+   Note - we allow arbitrary event times to be added, since this is a primitive
+   data structure.  In real applications, we would likely have a limitation on 
+   the times that could be added to the queue (i.e. only times >= current-time)"
+  ([s e] (let [t (or (event-time e) (get-time s) 0.0)
                q (get-segment s t)]
-           (if (>= t (get-time s))
-             (assoc s t (conj q e))
-             s)))
-  ([s e & es] (if es
-                (recur (put-event s e) (first es) (rest es))
-                (put-event s e))))
+             (assoc s t (conj q e)))))
 
 (defn put-events [s es] 
   "Insert multiple events (es) into the schedule."
@@ -167,7 +163,7 @@
 
 (defn zip-events [ts packets] 
   "Zip a sequence of times and packets to produce a sequence of events."
-  (map #(apply time-event %)(seq (zipmap ts packets))))
+  (map #(apply time-event %) (seq (zipmap ts packets))))
 
 (defn ->schedule 
   "Unified constructor for building schedules.  No args invokes a reference to 
@@ -178,12 +174,14 @@
   ([evts] (put-events empty-schedule evts))
   ([ts packets] (put-events empty-schedule (zip-events ts packets)))) 
                             
-
 (defn take-event [s]
   "[s] Remove the next event from schedule s, returning remaining schedule."
-  (let [snext (next-active s)]
+  (let [snext     (next-active s)
+        remaining (pop (get-segment snext))]
+    (if (empty? remaining)
+      (next-active (dissoc snext (get-time snext)))
     (next-active
-      (assoc snext (get-time snext) (pop (get-segment snext))))))
+      (assoc snext (get-time snext) (pop (get-segment snext)))))))
 
 ;protocol for operating on abstract event collections.
 (defprotocol IEventSeq
