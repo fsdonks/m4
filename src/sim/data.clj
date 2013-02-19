@@ -101,13 +101,14 @@
   (print-method (seq q) w))
 
 ;define a schedule, a sorted-map of event queues keyed by time.
-(def empty-schedule (sorted-map 0.0 emptyq))
+(def empty-schedule (sorted-map))
 
 (defn empty-schedule? [s]
   "If schedule s has one eventqueue, and it's emptyq, the schedule is empty"
-  (and
-    (= (count (vals s)) 1)
-    (= (first (vals s)) emptyq)))
+  (or (empty? s)
+      (and
+        (= (count (vals s)) 1)
+        (= (first (vals s)) emptyq))))
 
 (defn get-segment
   "[s] retrieve next queue of events from schedule s
@@ -200,7 +201,11 @@
   clojure.lang.PersistentTreeMap 
   (add-event [m e] (put-event m e)) 
   (drop-event [m] (take-event m))                       
-  (first-event [m] (next-event  m)))
+  (first-event [m] (next-event  m))
+  nil 
+  (add-event [m e] (add-event empty-schedule e)) 
+  (drop-event [m] (throw (Exception. "Empty schedule")))                       
+  (first-event [m] nil))
 
 ;;protocol-derived functionality
 (defn add-events
@@ -263,6 +268,8 @@
 (defn bullet-list [coll] (map #(str "->" % \newline) coll))
 (def easy-schedule (->schedule (take 10 (repeat :multiply))))
 )
+
+
 
 
 

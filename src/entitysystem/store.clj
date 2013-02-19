@@ -211,8 +211,6 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   
 (defn as-component [domain data] {:domain domain :data data})
 
-
-
 (defprotocol IEntity 
   "A protocol for defining fundamental operations on entities."
   (entity-name [e] "Get the unique name of entity e")
@@ -236,7 +234,7 @@ unique data (which reinforces our desire to maintain orthogonal domains)."
   (entity-name [n] nil)
   (entity-components [n] nil)
 
-  clojure.lang.PersistentHashMap
+  clojure.lang.PersistentHashMap ;maps can also be simple entities...
   (entity-name [m] (get m :name))
   (entity-components [m] (cond (contains? m :components) (get m :components)
                                (contains? m :domains) (get m :domains)
