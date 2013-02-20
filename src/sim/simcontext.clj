@@ -42,13 +42,14 @@
 ;the handlers in series.
 
 (ns sim.simcontext
-  (:require [sim [data :as sim] [agenda :as agenda]]))
+  (:require [sim [data :as sim] [agenda :as agenda]]
+            [sim.pure [observable :as obs]]))
 
 ;IEventContext is a simple wrapper for things that have state and events. 
 (defprotocol IEventContext 
-  (get-state [ec] "return the state of the context")
-  (set-state [ec s] "return a new context with state as s")
-  (get-events [ec] "return the IEventSeq of the context")
+  (get-state [ec]     "return the state of the context")
+  (set-state [ec s]   "return a new context with state as s")
+  (get-events [ec]    "return the IEventSeq of the context")
   (set-events [ec es] "return a new context with events as es"))
 
 ;Allow pairs of vectors, lists, and {:keys [events state]} to be seen as 
