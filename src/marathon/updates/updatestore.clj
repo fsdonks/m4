@@ -11,18 +11,18 @@
 ;'When we go to sample the state, we see no changes without updates.
 
 
-(def default-updates {:supply {} :demand {} :policy {}})
 (defrecord updatestore [name         ;the name of the manager  
                         updates      ;a map of all scheduled updates, by time.
                         lastupdate]) ;a map of the last update for each entity.
 
-(def empty-updatestore (->updatestore "UpdateStore" default-updates {}))
+(def empty-updatestore (->updatestore "UpdateStore" {} {}))
 (defn get-updates
   "Return a list of all requested updates from the updatestore, where 
    utype is a key for updates, and t is a time index."
   [store update-type  t]
   (get-in store [update-type t] {}))
 
+;need to elevate this....
 (defn listen-updates
   "Register the update store as an event listener with the update source.
    Probably re-think this guy."  
@@ -47,9 +47,18 @@
             tnext (if (> t tprev) t tprev)]  
           (assoc-in store [:lastupdate ent] tnext)))))
 
-
 ;Most managers will need a trigger function... 
 ;We need to find a way to establish "event trigger" behavior for these guys...
+;Actually, we can take the existing "trigger" behavior, and just apply it like
+;normal...Rather than having a side-effect cause the triggering, we'll have our
+;higher order state-transition function route events to interested parties, and 
+;fold over the result of their triggering.  As such, "trigger" really defines 
+;a routing for specific events.
 (defn trigger [store msgid {:keys [entity-to t]}]
   (record-update store entity-to  t))  
  
+(def routes {:supply-update trigger 
+             :demand-update trigger})
+(defn add-routes [ctx]
+  (assoc ctx :routing 
+

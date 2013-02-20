@@ -41,8 +41,8 @@
 ;broadcasting the event, fold the event and the simulation state through 
 ;the handlers in series.
 
-
-(ns sim.simcontext)
+(ns sim.simcontext
+  (:require [sim [data :as sim] [agenda :as agenda]]))
 
 ;IEventContext is a simple wrapper for things that have state and events. 
 (defprotocol IEventContext 
@@ -95,7 +95,6 @@
          (next-event)
          (event-type)))
 
-
 ;A generic class for defining simulation contexts.
 ;We have an event stream, a time manager, and an update manager.
 ;This helps us factor out a lot of access parameters that were being passed implicitly
@@ -109,34 +108,41 @@ Public updater As TimeStep_ManagerOfUpdates
 Public events As TimeStep_ManagerOfEvents
 Public state As Dictionary 'Extra chunk of state associated with context.  Common enough in general simulations.
 
-(defrecord simcontext [scheduler updater events state])
+
+
+(defrecord simcontext 
+  [scheduler ;supported by agenda.  
+   updater ;an agenda with some special state, keeping track of previous updates. 
+   events ;the main agenda for the entire simulation.
+   state]) ;the state of the simulation.
 
 (defn current-time
   "Fetches the current time of the context."
-  [ctx]  (get-time (:events ctx)))
-Public Function CurrentTime() As Single
-    CurrentTime = scheduler.CurrentTime
-End Function
+  [ctx]  (sim/current-time (:scheduler ctx)))
 
-Public Function CurrentQuarter() As Single
-    CurrentQuarter = scheduler.quarter
-End Function
+(defn current-quarter
+  "Don't really need this in agenda..Fetches the current quarter."
+  [ctx] (agenda/quarter (:scheduler ctx)))
 
-'this may no longer be as useful since we've moved to local updating.
-'keeping it around since it displays the time elapsed from last day.
-Public Function Elapsed() As Single
-    Elapsed = scheduler.Elapsed
-End Function
+(defn elapsed
+  "Computes the time elapsed since the last event in the context."
+  [ctx] (agenda/elapsed (:scheduler ctx)))
 
 Public Sub addTime(t As Single)
     scheduler.addTime t
 End Sub
+(defn add-time
+  "Ensures that time t exists on the agenda."
+  [ctx t] (assoc ctx :scheduler (agenda/add-time (:scheduler ctx) t)))  
 
 'Created a public interface for managing updates to the system.
 Public Sub requestUpdate(tupdate As Single, requestedby As String, requestType As UpdateType, Optional trequest As Single)
 addTime tupdate
 updater.requestUpdate tupdate, requestedby, requestType, trequest
 End Sub
+(defn request-update [ctx t requested-by request-type]
+  (
+  
 
 'Top-Level method for adding listeners to the event stream
 Public Sub AddListener(lname As String, listener As ITriggerable, subscriptions As Dictionary)

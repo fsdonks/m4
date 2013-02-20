@@ -39,10 +39,42 @@ Option Explicit
 
 (defrecord observable [name clients subscriptions])
 
-'All an observer needs to do is provide and interface that allows interested parties (ICallable) to
-'register themselves with the observer.
+;When you boil it down, the observable is just a collection of routing 
+;information.  We add routing information to the observable in the form of 
+;subscriptions, where unique clients subscribe, or attach, to one or more 
+;events.
 
-(defn register [able client-name client event-type]
+;All an observer needs to do is provide and interface that allows interested 
+;parties to register themselves with the observer.  We can then flex that
+;knowledge later to traverse the clients for a specific event.  In the impure
+;world, the traversal would cause I/O via evaluating a valueluess callback 
+;function associated with the entity.  In the pure world, our traversal will 
+;involve invoking a handler function (passed in as a map of handlers) associated
+;with the interested entity.  The handler function will take the current state,
+;and the event-data, and will return a new state.  This way, we perform an
+;event-driven reduction using A: routing information provided by the observable,
+;and B: a set of handler functions, and C: an initial state.  
+;That allows us to bridge the gap between the typical impure simulation and the 
+;desired pure form! 
+
+;Note -> some handler functions may (and likely will!) have side-effects, for 
+;logging, visualization, etc.  In this case, they must still return the input
+;state after performing the side-effect.
+
+(defn register
+  "Adds a bi-directional relation between client-name and event-type, where the 
+   abstract traversal cost from event-type to client, is to invoke f.  
+   We only want to allow 2 classes of registration: universal and specific.  
+   Universal subscribers trigger on any event, and require no argument for 
+   event-type. Specific subscriptions take an argument for event-type.
+   Subscribers are either specific (triggering on specific events) 
+   or universal, but never both."
+  [obs client-name handler event-type]
+  (let [{:keys [clients subscriptions]} obs
+        new-clients (assoc (get clients client-name {})
+                          ]
+    
+)
   
 Public Sub Register(clientname As String, client As ITriggerable, Optional msgid As Long)
 'bookkeeping...we only want to allow 2 classes of registration: universal and specific.

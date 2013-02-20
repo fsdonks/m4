@@ -1,3 +1,10 @@
+;I'm going to integrate the original mutable observer implementation into this 
+;guy.  Basically, the event stream will encompass the corpus of events that 
+;are defined, i.e. the event vocabulary, as well as routing information (i.e.
+;entities (capable of handling events) associated with each type of event. 
+;In the original design, this was a separate class that wrapped a subordinate 
+;observer.  I'm going to define them both in the same namespace.  
+
 (ns sim.eventstream)
 
 'Integrated 29 Aug 2012

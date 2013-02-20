@@ -32,7 +32,8 @@
   (set-final-time [a tf]  (agenda. tprev tf schedule item-count times))
   (agenda-count [a] item-count)
   (time-segments [a] schedule)
-  (add-times [a ts] (reduce #(add-event %1 (->simple-event :time %2))  a ts))
+  (add-times [a ts] (reduce #(sim/add-event %1 
+                                  (sim/->simple-event :time %2))  a ts))
   (get-times [a] times)
   sim.data.IEventSeq 
   (add-event  [a e] ;note->allowing the agenda to have events beyond tfinal  
@@ -52,11 +53,19 @@
 
 (def empty-agenda (->agenda nil nil nil 0 #{}))
 
-(defn add-time [a t] (add-times a #{t}))
+(defn add-time
+  "Appends a single time event to the agenda for time t. "
+  [a t] 
+  (add-times a #{t}))
 (defn get-quarter [day] ((comp inc int) (/ day 90)))
 
-(defn quarter [a] (get-quarter (sim/current-time a))) 
-(defn elapsed [a] (- (sim/current-time a) (previous-time a)))
+(defn quarter
+  "Assumes time is measured in days.  Converts time into a quarterly measure."
+  [a] (get-quarter (sim/current-time a))) 
+(defn elapsed
+  "Report the amount of time that elapsed since the last event.  Useful for 
+   operations requiring time deltas, such as integration."
+  [a] (- (sim/current-time a) (or (previous-time a) 0.0)))
 (defn unbounded?
   "Predicate indicating that the agenda has no upper bound on its time horizon."
   [a] (or (nil? (final-time a)) 
@@ -73,7 +82,8 @@
 
 (defn add-time
   "Add at least one time event to the agenda for time t.  If an entry for t
-   already exists, "
+   already exists, the time is ignored (since the agenda already has activity 
+   on said day."
   [a t]  (if (has-time? a t)
            a
            (add-times a #{t})))
