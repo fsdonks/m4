@@ -1,33 +1,4 @@
 (ns sim.pure.observable)
-
-;This is a simple implementation of the oberserver pattern.
-;An observer serves as an interface for registering "listeners" that respond to 
-;any number of external stimuli by triggering subscribed procedures...
-;This is an explicit implementation of native .Net language features.  When we 
-;port to .Net or clojure, we "probably" won;t even need this class.
-
-;Basically, the observer keeps an internal list of procedures to call.  We;ll do
-;this with object references So, an observer keeps a list of Callables. A 
-;callable is just a delegate<;T>, basically it takes an argument and performs 
-;some sideffect with it. We will use observers to flexibly automate tasks like 
-;logging events, keep track of statistics, recording graphs and trends, etc.
-
-;As a result, the main control flow of the program will populate the event 
-;stream, which can be listened to [observed] by any number of registered 
-;observers.  The observers will, by convention, perform side effects that 
-;DO NOT affect the control flow of the simulation.  They are primarily 
-;responsible for recording state, updating the user interface, writing to files, 
-;storing statistics for later retrieval. Basically, they accessorize the engine, 
-;and provide an easily extendable mechanism to add lots and lots of ad-hoc 
-;functionality to the basic simulation without screwing with the dedicated 
-;internals of the simulation.
-
-;Note -> we can also use observers to model functional composition, by passing 
-;state references through an observer chain, where each oberver partially 
-;mutates the referenced state. While useful, this is again discouraged....
-;mutation can inhibit reasoning about the program state, and could create funky 
-;bugs that are hard to spot.  Still, if necessary, it could be a powerful tool.
-
 ;Note -> there is currently no order of execution in notifying the observers 
 ;(actually, the order they register is the order of execution.  The net effect
 ;of this is that observations should be cummutative i.e., the effect of an
@@ -35,9 +6,6 @@
 ;argument against using observers as mutators of state, or signal chains, since 
 ;the designer would need to be extra vigilant about the order of execution.
 ;Note -> all of these concerns are moot in F# and clojure.
-Option Explicit
-
-(defrecord observer-network [name clients subscriptions])
 
 ;When you boil it down, the observable is just a collection of routing 
 ;information.  We add routing information to the observable in the form of 
@@ -61,8 +29,8 @@ Option Explicit
 ;logging, visualization, etc.  In this case, they must still return the input
 ;state after performing the side-effect.
 
-;Note -> we could probably use a simple tags data structure here...since it's 
-;basically the same thing....
+(defrecord event-network [name clients subscriptions])
+
 (defn- drop-event-client
   "Remove the relation from event-type to client-name.  If no relations 
    remain for event-type, drops the event-type from subscriptions."
@@ -112,7 +80,7 @@ Option Explicit
    of events.  If the client has :all as its subscription, it will trigger on 
    any event."
   [obs client-name]
-  (contains? (client-events obs client-name) :all))
+  (contains? (get-client-events obs client-name) :all))
 
 (defn register
   "Adds a bi-directional relation between client-name and event-type, where the 
@@ -131,15 +99,16 @@ Option Explicit
                               :subscriptions (assoc subscriptions event-type 
                                 (assoc (get subscriptions event-type {})
                                        client-name handler))})
-            evts (get-client-events nextobs)]
+            evts (get-client-events next-obs client-name)]
         (cond (= event-type :all) ;registered a universal subscription. 
-              (reduce (fn [o e-type] (un-register o client-name etype))
+              (reduce (fn [o e-type] (un-register o client-name e-type))
                       next-obs (disj evts :all))
               :else  ;registered a specific subscription.
               (if (= evts #{:all}) 
-                nextobs
-                (reduce (fn [o e-type] (un-register o client-name etype))
-                        next-obs (disj evts :all)))))))
+                next-obs
+                (reduce (fn [o e-type] (un-register o client-name e-type))
+                        next-obs (clojure.set/difference  
+                                   evts #{:all event-type})))))))
   ([obs client-name handler] (register obs client-name handler :all)))
 
 (defn register-routes
@@ -149,9 +118,9 @@ Option Explicit
    a client entity 'Bob with the :shower and :eat events would look like: 
    {'Bob {:shower take-shower :eat eat-sandwich}}"
   [obs client-event-handler-map]
-  (reduce (fn [o1 [client handler-map]] 
+  (reduce (fn [o1 [client-name handler-map]] 
             (reduce  (fn [o2 [etype handler]]
-                       (register o client-name handler etype)) o1 handler-map))
+                       (register o2 client-name handler etype)) o1 handler-map))
           obs client-event-handler-map))
 
 (defn drop-client
@@ -160,126 +129,158 @@ Option Explicit
   (assert (contains? (:clients obs) client-name) 
           (str "Client " client-name " does not exist!"))
   (reduce (fn [o etype] (un-register o client-name etype))
-      obs (client-events obs client-name)))      
+      obs (get-client-events obs client-name)))      
 
-(defn propogate
+(def default-transition 
+  (fn [state e [client-name handler]]
+    (handler e state)))
+(def noisy-transition 
+  (fn [state e [client-name handler]]
+    (do (println (str {:state state :event e :client client-name}))
+      (handler e state))))
+
+;This is a pretty straightforward replacement for notify, or trigger from the 
+;old mutable observable implementation.
+(defn propogate-event
   "Instead of the traditional notify, as we have in the observable lib, we 
-   define a function called propogate, which acts akin to a reduction.
+   define a function called propogate-event, which acts akin to a reduction.
    Each client with either an :all routing or a subscription to the event-type 
-   of event-to-handle, will be traversed.  Every step of the walk is treated as 
+   will be traversed.  Every step of the walk is treated as 
    a state transition, in which the handler function and the state are supplied
    to a transition-function - event-transition-func - which determines the 
-   resulting value.  The resulting reduction over every transition is the return 
-   value of the network." 
-  [obs event-type event-data state & {:keys [event-transition-func] 
-                                      :or   {event-transition-func 
-                                             (fn [state handler e]
-                                               (handler e state))}}]
-  (let [clients (get-event-clients obs (event-type 
+   resulting state.  
+   event-transition-func:: 
+      'a -> sim.data.IEvent -> ('b, (sim.data.IEvent -> 'a -> 'a)) -> 'a        
+   The resulting reduction over every transition is the return value of the 
+   network.  If no transition function is supplied, we default to simply  
+   applying the associated handler to the event-data and the state." 
+  [obs event-type event-data state0 
+   & {:keys [event-transition-func] 
+      :or   {event-transition-func default-transition}}]
+  (let [client-handler-map 
+        (merge (get-event-clients obs event-type)
+               (if (not= event-type :all)
+                 (get-event-clients obs :all) {}))]
+    (reduce (fn [state [client-name handler]] 
+              (event-transition-func state event-data [client-name handler]))
+            state0  client-handler-map)))
+
+;these are combinators for defining ways to compose event handlers, where an 
+;event handler is a function of the form: 
+; (event-type -> event-data -> state -> state)
+
+(defn merge-networks
+  "This is a simple merge operation that clooges together one or more networks,
+   and returns a new network that is the set-theoretic union of clients and 
+   events.  The resulting network has every client that the original did, as 
+   well as every event, with subscriptions merged."
+  [nets]
+  )
   
+  
+
+(defn map-network
+  "When events are propogated across the network, apply function f to the 
+   result of the propogation."
+  [origin f]
+  (fn [event-type event-data state0]
+   (f (propogate-event origin event-type event-data state0))))
+
+(defn singleton [handler-function]
+  (register-routes (empty-stream :anonymous) 
+     {:base {:all handler-function}})) 
+
+;comp base base2   
+;{:base {:all (fn [type data state] 
+;               (->> (handle-func1 type data state)
+;                    (handle-func2 type data)))}}
+
+;;map f base
+;{:base {:all (fn [type data state] (f (handle-func1 type data state)))}}
+;;pmap f base 
+;{:base {:all (fn [type data state] 
+;               (pmap (fn [h] (h type data state)) 
+;                     [handle-func1 handle-func2]))}}
+;;reduce f [base base2] 
+;{:base {:all (fn [type data state] 
+;               (reduce (fn [s h] 
+;                         (h type data s)) state [base base]
+
+
+
+(defn map-handler [handler-func base]  
+  (singleton (fn [type data state]
+               (handler-func type data 
+                 (propogate-event base type data state)))))
+
+(defn filter-handler [f base]
+  (singleton (fn [type data state]
+               (if (f {:type type :data data :state state})
+                 (base type data state)
+                 state))))
+
+(defn split-handler [split-map base]
+  (let [split (reduce (fn [label] 
+  (singleton (fn [type data state]
+               
+{:left  {:base {:all handle-func1}}}
+{:right {:base {:all handle-func2}}}
+
+
+  
+
+(defn empty-stream [name] 
+  (map->event-network  {:name name :clients {} :subscriptions {}})) 
+
+(comment ;testing 
+         
+(def sample-net 
+  (-> (empty-network "Mynetwork")
+    (register-routes 
+      {:hello-client {:hello-event 
+                       (fn [e state] 
+                         (do (println "Hello!") state))}})))
+(def simple-net 
+  (-> (empty-network "OtherNetwork")
+    (register-routes 
+      {:hello-client {:all 
+                      (fn [e state] 
+                        (do (println "I always talk!")) state)}})))
+(defn prop-hello [] 
+  (propogate-event sample-net :hello-event "hello world!" nil))
+
+(defn echo-hello [] 
+  (propogate-event sample-net :hello-event "hello world!" nil 
+                   :event-transition-func noisy-transaction))
 )
-  
 
 
-'TOM Change 30 June 2011 -> state is now passed as a genericpacket.
-'Public Sub notify(msgid As Long, Optional state As Dictionary)
-Public Sub notify(msgid As Long, Optional state As GenericPacket)
-Dim clientname
-Dim client As ITriggerable
-Dim ptr As Dictionary
+;This is a simple implementation of the oberserver pattern.
+;An observer serves as an interface for registering "listeners" that respond to 
+;any number of external stimuli by triggering subscribed procedures...
+;This is an explicit implementation of native .Net language features.  When we 
+;port to .Net or clojure, we "probably" won;t even need this class.
 
-If clients.count > 0 Then
-    'recursively notify indiscriminate listeners....things listening for 0
-    If subscriptions.exists(msgid) Then
-        Set ptr = subscriptions(msgid)
-        For Each clientname In ptr
-            Set client = ptr(clientname)
-            client.trigger msgid, state
-        Next clientname
-    End If
-    
-    'If msgid <> 0 Then notify 0, state 'notify universal listeners....
-    If subscriptions.exists(0) Then
-        Set ptr = subscriptions(0)
-        For Each clientname In ptr
-            Set client = ptr(clientname)
-            client.trigger msgid, state
-        Next clientname
-    End If
-'Else
-    'Debug.Print "no clients registered for "; msgid & " under observer " & name
-End If
+;Basically, the observer keeps an internal list of procedures to call.  We;ll do
+;this with object references So, an observer keeps a list of Callables. A 
+;callable is just a delegate<;T>, basically it takes an argument and performs 
+;some sideffect with it. We will use observers to flexibly automate tasks like 
+;logging events, keep track of statistics, recording graphs and trends, etc.
 
-Set ptr = Nothing
+;As a result, the main control flow of the program will populate the event 
+;stream, which can be listened to [observed] by any number of registered 
+;observers.  The observers will, by convention, perform side effects that 
+;DO NOT affect the control flow of the simulation.  They are primarily 
+;responsible for recording state, updating the user interface, writing to files, 
+;storing statistics for later retrieval. Basically, they accessorize the engine, 
+;and provide an easily extendable mechanism to add lots and lots of ad-hoc 
+;functionality to the basic simulation without screwing with the dedicated 
+;internals of the simulation.
 
-End Sub
+;Note -> we can also use observers to model functional composition, by passing 
+;state references through an observer chain, where each oberver partially 
+;mutates the referenced state. While useful, this is again discouraged....
+;mutation can inhibit reasoning about the program state, and could create funky 
+;bugs that are hard to spot.  Still, if necessary, it could be a powerful tool.
 
-Public Function getClients(msgid As Long) As Dictionary
-
-If subscriptions.exists(msgid) Then
-    Set getClients = subscriptions(msgid)
-Else
-    Set getClients = emptydict
-End If
-
-End Function
-
-Public Function getSubscriptions(clientname As String) As Dictionary
-
-If clients.exists(clientname) Then
-    Set getSubscriptions = clients(clientname)
-Else
-    Set getSubscriptions = New Dictionary
-End If
-    
-End Function
-
-Private Sub Class_Terminate()
-
-Set clients = Nothing
-Set subscriptions = Nothing
-
-'Set ptr = Nothing
-Set emptydict = Nothing
-
-End Sub
-
-
-
-Private Function IObservable_getRegistered() As Collection
-Set IObservable_getRegistered = list(clients, subscriptions)
-End Function
-
-'observers can be triggered, so observers can subscribe to eachother.
-'their trigger simply points to the notify method.
-'TOM Change 30 june 2011
-'Private Sub ITriggerable_trigger(msgid As Long, Optional data As Scripting.IDictionary)
-Private Sub ITriggerable_trigger(msgid As Long, Optional data As GenericPacket)
-notify msgid, data
-End Sub
-
-'IObservable implementations mirror earlier ones.
-Private Sub IObservable_clearClient(clientname As String)
-clearClient clientname
-End Sub
-
-Private Function IObservable_getClients(msgid As Long) As Scripting.IDictionary
-Set IObservable_getClients = getClients(msgid)
-End Function
-
-Private Function IObservable_getSubscriptions(clientname As String) As Scripting.IDictionary
-Set IObservable_getSubscriptions = getSubscriptions(clientname)
-End Function
-
-Private Sub IObservable_notify(msgid As Long, Optional state As GenericPacket)
-notify msgid, state
-End Sub
-
-Private Sub IObservable_Register(clientname As String, client As ITriggerable, Optional msgid As Long)
-Register clientname, client, msgid
-End Sub
-
-Private Sub IObservable_unRegister(clientname As String, Optional msgid As Long)
-unRegister clientname, msgid
-End Sub
 
