@@ -37,7 +37,7 @@
 ;Note -> all of these concerns are moot in F# and clojure.
 Option Explicit
 
-(defrecord observable [name clients subscriptions])
+(defrecord observer-network [name clients subscriptions])
 
 ;When you boil it down, the observable is just a collection of routing 
 ;information.  We add routing information to the observable in the form of 
@@ -61,100 +61,126 @@ Option Explicit
 ;logging, visualization, etc.  In this case, they must still return the input
 ;state after performing the side-effect.
 
+;Note -> we could probably use a simple tags data structure here...since it's 
+;basically the same thing....
+(defn- drop-event-client
+  "Remove the relation from event-type to client-name.  If no relations 
+   remain for event-type, drops the event-type from subscriptions."
+  [obs client-name event-type] 
+  (let [subscriptions (get obs :subscriptions)
+        scripts (get subscriptions event-type {})]
+    (if (contains? scripts client-name)
+      (if (= (count scripts) 1)        
+        (assoc obs :subscriptions (dissoc subscriptions event-type))
+        (assoc-in obs [:subscriptions event-type] (dissoc scripts client-name)))      
+      (throw (Exception. 
+               (str "Client subscription does not exist" client-name)))))) 
+
+(defn- drop-client-event
+  "Remove the relation from client-name to event-type.  If no relations remain
+   for client, client is dropped from clients."
+  [obs client-name event-type]
+  (let [clients (get obs :clients)
+        events (get clients client-name #{})]
+    (if (contains? clients client-name)
+      (if (= (count events) 1)        
+        (assoc obs :clients (dissoc clients client-name))
+        (assoc-in obs [:clients client-name] (dissoc events event-type)))      
+      (throw (Exception. 
+               (str "Client does not exist" client-name)))))) 
+
+(defn un-register
+  "Drop the relation from client-name to event-type, and the subscription from 
+   event-type to client-name."
+  [obs client-name event-type]
+  (-> (drop-event-client obs client-name event-type)
+    (drop-client-event client-name event-type))) 
+
+(defn get-event-clients
+  "Return a map of clients to handlers, which will be invoked when this event 
+   is traversed."
+  [obs event-type]
+  (get-in obs [:subscriptions event-type]))
+  
+(defn get-client-events
+  "Return an un-ordered set of the events this client is interested in."
+  [obs client-name]
+  (get-in obs [:clients client-name]))
+
+(defn universal?
+  "Determines if the client is subscribed to all events, or only a specific set
+   of events.  If the client has :all as its subscription, it will trigger on 
+   any event."
+  [obs client-name]
+  (contains? (client-events obs client-name) :all))
+
 (defn register
   "Adds a bi-directional relation between client-name and event-type, where the 
    abstract traversal cost from event-type to client, is to invoke f.  
    We only want to allow 2 classes of registration: universal and specific.  
-   Universal subscribers trigger on any event, and require no argument for 
-   event-type. Specific subscriptions take an argument for event-type.
-   Subscribers are either specific (triggering on specific events) 
-   or universal, but never both."
-  [obs client-name handler event-type]
-  (let [{:keys [clients subscriptions]} obs
-        new-clients (assoc (get clients client-name {})
-                          ]
-    
+   Universal subscribers, tagged by :all, trigger on any event, and require no 
+   argument for event-type. Specific subscriptions take an argument for 
+   event-type.  Subscribers are either specific (triggering on specific events) 
+   or universal, but never both.  If no event-type is supplied, the type will 
+   default to :all, or a universal handler."
+  ([obs client-name handler event-type]
+    (let [{:keys [clients subscriptions]} obs]    
+      (let [next-obs  (merge obs 
+                             {:clients (assoc clients client-name 
+                                (conj (get clients client-name #{}) event-type))
+                              :subscriptions (assoc subscriptions event-type 
+                                (assoc (get subscriptions event-type {})
+                                       client-name handler))})
+            evts (get-client-events nextobs)]
+        (cond (= event-type :all) ;registered a universal subscription. 
+              (reduce (fn [o e-type] (un-register o client-name etype))
+                      next-obs (disj evts :all))
+              :else  ;registered a specific subscription.
+              (if (= evts #{:all}) 
+                nextobs
+                (reduce (fn [o e-type] (un-register o client-name etype))
+                        next-obs (disj evts :all)))))))
+  ([obs client-name handler] (register obs client-name handler :all)))
+
+(defn register-routes
+  "Register multiple clients associated with multiple event/handler pairs.  
+   The routing is passed as a map of maps, where the keys are client-names, and 
+   the associated values are maps of event-type -> handler.  Thus, registering 
+   a client entity 'Bob with the :shower and :eat events would look like: 
+   {'Bob {:shower take-shower :eat eat-sandwich}}"
+  [obs client-event-handler-map]
+  (reduce (fn [o1 [client handler-map]] 
+            (reduce  (fn [o2 [etype handler]]
+                       (register o client-name handler etype)) o1 handler-map))
+          obs client-event-handler-map))
+
+(defn drop-client
+  "Unregisters client from every event, automatically dropping it from clients."
+  [obs client-name] 
+  (assert (contains? (:clients obs) client-name) 
+          (str "Client " client-name " does not exist!"))
+  (reduce (fn [o etype] (un-register o client-name etype))
+      obs (client-events obs client-name)))      
+
+(defn propogate
+  "Instead of the traditional notify, as we have in the observable lib, we 
+   define a function called propogate, which acts akin to a reduction.
+   Each client with either an :all routing or a subscription to the event-type 
+   of event-to-handle, will be traversed.  Every step of the walk is treated as 
+   a state transition, in which the handler function and the state are supplied
+   to a transition-function - event-transition-func - which determines the 
+   resulting value.  The resulting reduction over every transition is the return 
+   value of the network." 
+  [obs event-type event-data state & {:keys [event-transition-func] 
+                                      :or   {event-transition-func 
+                                             (fn [state handler e]
+                                               (handler e state))}}]
+  (let [clients (get-event-clients obs (event-type 
+  
 )
   
-Public Sub Register(clientname As String, client As ITriggerable, Optional msgid As Long)
-'bookkeeping...we only want to allow 2 classes of registration: universal and specific.
-'universal register with msgid = 0, specific is any nonzero.
-'if a msgid is nonzero, we make sure it's not pre-registered as universal.
-'if it is, we remove it from universal.
-Dim key
-Dim ptr As Dictionary
 
-If subscribef Is Nothing Then
 
-    If clients.exists(clientname) Then
-        Set ptr = clients(clientname)
-    Else
-        Set ptr = New Dictionary
-        clients.add clientname, ptr
-    End If
-    ptr.add msgid, msgid
-    
-    If msgid <> 0 And ptr.exists(0) Then
-        unRegister clientname, 0
-    ElseIf msgid = 0 And ptr.count > 1 Then
-        For Each key In ptr
-            If CLng(key) <> 0 Then unRegister clientname, CLng(key)
-        Next key
-    End If
-    
-    If subscriptions.exists(msgid) Then
-        Set ptr = subscriptions(msgid)
-    Else
-        Set ptr = New Dictionary
-        subscriptions.add msgid, ptr
-    End If
-    ptr.add clientname, client
-    
-    Set ptr = Nothing
-Else
-    Call subscribef.apply(list(Me, clientname, client, msgid))
-End If
-
-End Sub
-
-Public Sub unRegister(clientname As String, Optional msgid As Long)
-Dim ptr As Dictionary
-
-If subscriptions.exists(msgid) Then
-    Set ptr = subscriptions(msgid)
-    If ptr.exists(clientname) Then
-        ptr.Remove clientname
-        If ptr.count = 0 Then subscriptions.Remove msgid
-        
-        Set ptr = clients(clientname)
-        ptr.Remove (msgid)
-        If ptr.count = 0 Then
-            Set ptr = Nothing
-            clients.Remove (clientname)
-        End If
-    End If
-End If
-Set ptr = Nothing
-
-End Sub
-Public Sub clearClient(clientname As String)
-Dim evt
-Dim ptr As Dictionary
-
-Static subs As Dictionary
-If clients.exists(clientname) Then
-    Set ptr = clients(clientname)
-    If ptr.count > 0 Then
-        For Each evt In ptr
-            Set subs = subscriptions(CLng(evt))
-            subs.Remove clientname
-        Next evt
-        clients.Remove clientname
-    End If
-End If
-Set ptr = Nothing
-
-End Sub
 'TOM Change 30 June 2011 -> state is now passed as a genericpacket.
 'Public Sub notify(msgid As Long, Optional state As Dictionary)
 Public Sub notify(msgid As Long, Optional state As GenericPacket)
