@@ -1,4 +1,89 @@
-(ns sim.pure.observable)
+;this is a functional replacement for an event-based control flow that was 
+;previously implemented using the observable/observer design pattern. 
+;The previous implementation more or less specified a decoupled system of 
+;event propogators (observables), and event consumers (observers).
+;The event propogator served as an abstract "event stream", in that it had 
+;a set of defined events, which implicitly formed communication channels, 
+;as well as a set of observers associated with each event channel.
+
+;Observers registered their interest with an observable, providing a client  
+;identifier, along with the msgid (an enumerated type) of the event of interest,
+;and a call-back function or a trigger to invoke.  In VBA, the observers were 
+;classes of objects that implemented the ITriggerable interface, which forced 
+;them to have a consistent 'trigger sub routine that served as the callback. 
+;During subscription to an observable, the observer simply passed itself (via 
+;an object reference) to the observerable, which saw the observer as a valid 
+;instance of ITriggerable to be invoked upon observation of an associated event.
+
+;This allowed the observable to channel event propogation to only the relevant
+;parties.  A standard broadcast channel (0) was also provided, so that observers 
+;could choose how to handle notifications internally.  
+
+;Notification of events was accomplished with imperative calls to the 'notify 
+;method of the observable, which recieved arguments in the form of the msgid 
+;(an enumerated type that identified the event), as well as optional data 
+;associated with the event. 
+
+;The (msgid, data) pairs were then channeled to appropriately subscribed 
+;observers, and the observers'  'trigger callback was invoked with (msgid, data)
+;as arguments.  The callback had a type signature of ::integer->maybe(obj)->unit
+;As such, the callbacks were fundemantally side-effecting - although generally
+;not mutating.  In VBA, most events were treated as instantaneous, which meant
+;that as soon as a client "triggered" an event notification, the flow of 
+;control would shift to handling the event immediately via notification.  
+;Event deferral happened sparingly, with a very rudimentary use of the event 
+;queue to schedule state changes.  Specifically, "time" changes were the primary
+;mechanism for controlling flow, at which point the entire simulation would 
+;"wake" and handle all of the subsystems as part of a large process, again 
+;handling instantanteous events/messages during processing of the main
+;simulation engine.  
+
+;We still need to retain some concepts from the previous implementation, while 
+;adding new features.  The ability to execute "instantaneous" events is useful, 
+;particularly in reasoning about the order of state changes.  However, we'd like
+;to build in a robust means for defining and composing event-based control 
+;structures, specifically networks that propogate event/state contexts, handling
+;event-driven state-transitions.  Composing such networks is also of vital 
+;importance, since we can describe components independently, and then compose 
+;them into a greater whole.  
+
+
+;Note -> we view the event propogation network as a control structure that 
+;communicates via message passing....in this case, the message queue is 
+;embedded in the event-context.  Much like Clojure agents, and futures, we 
+;should allow the notion of asynchronous and synchronous event-handling...
+;For instance, when handling one event, the handler may need to trigger, 
+;and subsequently await the arrival of, another event, in order to 
+;complete its handling.  
+
+;Need to handle delayed activation of events....probably via storing a 
+;continuation as an event....this lets event handlers act as co-routines.
+;How do we know when to call the continuation?  
+;If it's time-based, like...wait until 220, it's just a scheduled event like 
+;every other...
+
+;If it's condition-based, like wait until "Unit B comes home", we need to 
+;filter on comes-home events, which are for unit B, and then apply the 
+;handler to the state.
+
+;Alternately, we define a new "Unit B comes home" event, which filters 
+;supply events looking for unit b's return, and then triggers (or enqueues)
+;the "Unit B Comes home" event, which is handled by the continuation. 
+
+;condition-based handlers are typically ad-hoc, and one-time use....so after 
+;they're processed, the condition should be removed from the network.....
+
+;so we now have the ability to alter the network (not unlike altering the 
+;dynamic signal collection in YAMPA) as we process events....
+
+;So.....our handler actually takes the state, the event, the network, and 
+;returns a new (state, network).....
+
+;Propogating an event through the network could result in the network topology
+;changing, like defining new events.  
+
+
+(ns sim.pure.network)
 ;Note -> there is currently no order of execution in notifying the observers 
 ;(actually, the order they register is the order of execution.  The net effect
 ;of this is that observations should be cummutative i.e., the effect of an
@@ -28,6 +113,39 @@
 ;Note -> some handler functions may (and likely will!) have side-effects, for 
 ;logging, visualization, etc.  In this case, they must still return the input
 ;state after performing the side-effect.
+
+(defn unit-returned? [name event] 
+  (= name (get-in [:unit :name] (event-data event))))
+
+(defn log-return [state e] 
+  (let [uic (get (event-data e) :unit-name)
+        return-id (keyword (str uic "-returned"))
+        handle-return (fn [state e] 
+                    (do (println [uic "returned"])
+                      state))
+        new-net (register-routes (get state :net) 
+                   {(event-watcher eid) {return-id 
+                                         (one-time-only handle-return)}
+                    return-id {:all (fn [state e] 
+                                      (if (unit-returned? :UIC2 e)
+                                        (add-event state 
+                                           (->simple-event eid 
+                                               (get-time state)))))}})]
+    (assoc state :net newnet)))
+
+; a more general notion of waiting
+(defn wait-until [state e [label condition] f]
+  (let [event-name (keyword (str "observed" label))]                       
+    (set-network state 
+       (register-routes (get-network state)
+          {(event-watcher eid) {event-name f}
+             event-name {:all (fn [state e] 
+                            (if (unit-returned? :UIC2 e)
+                                (add-event state 
+                                   (->simple-event eid (get-time state)))
+                                state))}}))))
+
+
 
 (defrecord event-network [name clients subscriptions])
 
@@ -59,11 +177,11 @@
 
 (def default-transition ;when handling events, we don't care about the client.
   (fn [state e [client-name handler]]
-    (handler e state)))
+    (handler state e)))
 (def noisy-transition 
   (fn [state e [client-name handler]]
     (do (println (str {:state state :event e :client client-name}))
-      (handler e state))))
+      (handler state e))))
 
 
 (defn ->handler-context
@@ -147,11 +265,46 @@
   (reduce (fn [o etype] (un-register o client-name etype))
       obs (get-client-events obs client-name)))      
 
+(defn empty-network [name] 
+  (map->event-network  {:name name :clients {} :subscriptions {}})) 
+
+(defn singleton [handler-function]
+  (register-routes (empty-network :anonymous) 
+     {:base {:all handler-function}})) 
+
 ;This is a pretty straightforward replacement for notify, or trigger from the 
 ;old mutable observable implementation.
 ;This is Identical to sample-reaction/sample-behavior....should probably 
 ;just extend the functionality over there...duplicating it for now until a 
 ;uniform API becomes more obvious.
+;(defn propogate-event
+;  "Instead of the traditional notify, as we have in the observable lib, we 
+;   define a function called propogate-event, which acts akin to a reduction.
+;   Each client with either an :all routing or a subscription to the event-type 
+;   will be traversed.  Every step of the walk is treated as 
+;   a state transition, in which the handler function and the state are supplied
+;   to a transition-function - event-transition-func - which determines the 
+;   resulting state.  
+;   event-transition-func:: 
+;      'a -> sim.data.IEvent -> ('b, (sim.data.IEvent -> 'a -> 'a)) -> 'a        
+;   The resulting reduction over every transition is the return value of the 
+;   network.  If no transition function is supplied, we default to simply  
+;   applying the associated handler to the event-data and the state." 
+;  [{:keys [type data state transition] :as ctx} net] 
+;  (let [client-handler-map 
+;        (merge (get-event-clients net type)
+;               (if (not= type :all)
+;                 (get-event-clients net :all) {}))]
+;    (reduce (fn [s [client-name handler]] 
+;              (transition s data [client-name handler]))
+;            state client-handler-map)))
+
+(defn agg-serial 
+  [{:keys [state type data transition net] :as acc} client-handler-map]
+  (reduce (fn [s [client-name handler]] 
+            (transition s data [client-name handler]))
+          state client-handler-map))
+
 (defn propogate-event
   "Instead of the traditional notify, as we have in the observable lib, we 
    define a function called propogate-event, which acts akin to a reduction.
@@ -165,15 +318,40 @@
    The resulting reduction over every transition is the return value of the 
    network.  If no transition function is supplied, we default to simply  
    applying the associated handler to the event-data and the state." 
-  [{:keys [type data state transition] :as ctx} obs] 
+  [agg-func {:keys [type data state transition] :as ctx} net] 
   (let [client-handler-map 
-        (merge (get-event-clients obs type)
+        (merge (get-event-clients net type)
                (if (not= type :all)
-                 (get-event-clients obs :all) {}))]
-    (reduce (fn [s [client-name handler]] 
-              (transition s data [client-name handler]))
-            state client-handler-map)))
+                 (get-event-clients net :all) {}))]
+    (agg-func (assoc ctx :net net) client-handler-map)))
 
+(def propogate-serially (partial propogate-event agg-serial))
+
+{:state {:agenda []
+         :state {loads of shit}}
+ :type  
+ 
+
+;we could break down the network into primitive components....
+;specifically...
+;a set of handlers that listen to the same input, :all....
+;that apply a filter to the context. 
+;(def simple-net 
+;  (-> (empty-network "OtherNetwork")
+;    (register-routes 
+;      {:hello-client {:all 
+;                      (fn [state edata] 
+;                        (do (println "I always talk!")) state)}})))
+;transforms into....
+{:type-filter {:all (let [clients {:hello-client (fn [state edata] 
+                                                   (do (println "I always talk!") 
+                                                     state))}]
+                      (fn [state e] 
+                        (if (contains? clients (event-type e))
+                          ((get clients (event-type e))
+                            state e)
+                          state)))}}
+                          
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 
 ; (event-type -> event-data -> state -> state)
@@ -191,9 +369,10 @@
            (reduce (fn [routes e]
                (merge routes 
                       (zipmap (repeat e) 
-                              (get-event-clients net e)))) {} (events net))))
+                              (get-event-clients net e)))) 
+                   {} (:subscriptions net))))
     (empty-network name) nets))
-  ([nets] (merge-networks :merged nets)))
+  ([nets] (union-networks :merged nets)))
 
 (defn join-networks 
   "Unlike union-networks, which creates a single 'flat network represntation of 
@@ -201,9 +380,6 @@
    each network, instead unifying the different networks under a new network 
    that propogates events to all of them."
   [nets]) 
-  
-  
-
 
 (defn map-network
   "When events are propogated across the network, apply function f to the 
@@ -211,12 +387,7 @@
   [origin f]
   (fn [ctx] (f (propogate-event origin ctx))))
 
-(defn empty-stream [name] 
-  (map->event-network  {:name name :clients {} :subscriptions {}})) 
 
-(defn singleton [handler-function]
-  (register-routes (empty-stream :anonymous) 
-     {:base {:all handler-function}})) 
 
 ;comp base base2   
 ;{:base {:all (fn [type data state] 
@@ -266,19 +437,22 @@
 ;{:left  {:base {:all handle-func1}}}
 ;{:right {:base {:all handle-func2}}}
 
+
+
+
 (comment ;testing 
          
 (def sample-net 
   (-> (empty-network "Mynetwork")
     (register-routes 
       {:hello-client {:hello-event 
-                       (fn [e state] 
+                       (fn [state edata] 
                          (do (println "Hello!") state))}})))
 (def simple-net 
   (-> (empty-network "OtherNetwork")
     (register-routes 
       {:hello-client {:all 
-                      (fn [e state] 
+                      (fn [state edata] 
                         (do (println "I always talk!")) state)}})))
 (defn prop-hello [] 
   (propogate-event 
@@ -287,8 +461,25 @@
 
 (defn echo-hello [] 
   (propogate-event 
-    (->handler-context :hello-event "hello world!" nil noisy-transaction) 
+    (->handler-context :hello-event "hello world!" nil noisy-transition) 
     sample-net ))
+
+(def message-net 
+  (-> (empty-network "A message pipe!")
+    (register-routes 
+      {:echoing {:echo (fn [state edata] 
+                            (do (println "State:" state)
+                              state))}
+       :messaging {:append (fn [state edata] 
+                                   (conj state edata))}})))
+
+(defn sim-state 
+(defn test-echo [&[msg]]
+  (propogate-event (->handler-context :echo-state nil [msg])
+                   message-net))
+(defn test-conj [& xs]
+  (propogate-event (->handler-context :append xs [])
+                   message-net))
 )
 
 
