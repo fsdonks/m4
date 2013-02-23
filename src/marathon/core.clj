@@ -1,6 +1,5 @@
 (ns marathon.core
-  (:require ;[util.gui :as gui]
-            [util.table :as tbl]
+  (:require [util [table :as tbl]]
             [clojure [pprint :as pprint]]
             [cljgui.components [swing :as gui]]
             [cljgui [mvc :as mvc]]
