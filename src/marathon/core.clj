@@ -135,6 +135,13 @@
                               (gui/text-box) 
                               audit))
       {:menu-events menu-events})))
+;       :add-table   
+;       :clear-project     
+;       :load-project   
+;       :save-project        
+;       :view-project  
+;       :view-table   
+;       :add-table})))
                   
 
 

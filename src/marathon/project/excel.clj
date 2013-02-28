@@ -2,7 +2,7 @@
 ;workbook-based data.
 (ns marathon.project.excel
   (:use [marathon.project])
-  (:require [marathon.processing [excel :as xl]]
+  (:require [util.excel [core :as xl]]
             [util [io :as io]]))
 
 ;Given a Marathon workbook, we know that these are the tables we'll care about
