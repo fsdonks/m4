@@ -81,9 +81,8 @@
 
 ;Propogating an event through the network could result in the network topology
 ;changing, like defining new events.  
-
-
-(ns sim.pure.network)
+(ns sim.pure.network
+  (:use [sim.data]))
 ;Note -> there is currently no order of execution in notifying the observers 
 ;(actually, the order they register is the order of execution.  The net effect
 ;of this is that observations should be cummutative i.e., the effect of an
@@ -114,38 +113,6 @@
 ;logging, visualization, etc.  In this case, they must still return the input
 ;state after performing the side-effect.
 
-(defn unit-returned? [name event] 
-  (= name (get-in [:unit :name] (event-data event))))
-
-(defn log-return [state e] 
-  (let [uic (get (event-data e) :unit-name)
-        return-id (keyword (str uic "-returned"))
-        handle-return (fn [state e] 
-                    (do (println [uic "returned"])
-                      state))
-        new-net (register-routes (get state :net) 
-                   {(event-watcher eid) {return-id 
-                                         (one-time-only handle-return)}
-                    return-id {:all (fn [state e] 
-                                      (if (unit-returned? :UIC2 e)
-                                        (add-event state 
-                                           (->simple-event eid 
-                                               (get-time state)))))}})]
-    (assoc state :net newnet)))
-
-; a more general notion of waiting
-(defn wait-until [state e [label condition] f]
-  (let [event-name (keyword (str "observed" label))]                       
-    (set-network state 
-       (register-routes (get-network state)
-          {(event-watcher eid) {event-name f}
-             event-name {:all (fn [state e] 
-                            (if (unit-returned? :UIC2 e)
-                                (add-event state 
-                                   (->simple-event eid (get-time state)))
-                                state))}}))))
-
-
 
 (defrecord event-network [name clients subscriptions])
 
@@ -173,16 +140,20 @@
         (assoc obs :clients (dissoc clients client-name))
         (assoc-in obs [:clients client-name] (dissoc events event-type)))      
       (throw (Exception. 
-               (str "Client does not exist" client-name)))))) 
+               (str "Client does not exist" client-name))))))
+
+(defn get-events
+  "List the active events in this network."
+  [net] (keys (get obs :subscriptions)))
 
 (def default-transition ;when handling events, we don't care about the client.
   (fn [state e [client-name handler]]
     (handler state e)))
+
 (def noisy-transition 
   (fn [state e [client-name handler]]
     (do (println (str {:state state :event e :client client-name}))
       (handler state e))))
-
 
 (defn ->handler-context
   "Creates a composite data structure that carries the context to be handled by
@@ -271,39 +242,20 @@
 (defn singleton [handler-function]
   (register-routes (empty-network :anonymous) 
      {:base {:all handler-function}})) 
-
-;This is a pretty straightforward replacement for notify, or trigger from the 
-;old mutable observable implementation.
-;This is Identical to sample-reaction/sample-behavior....should probably 
-;just extend the functionality over there...duplicating it for now until a 
-;uniform API becomes more obvious.
-;(defn propogate-event
-;  "Instead of the traditional notify, as we have in the observable lib, we 
-;   define a function called propogate-event, which acts akin to a reduction.
-;   Each client with either an :all routing or a subscription to the event-type 
-;   will be traversed.  Every step of the walk is treated as 
-;   a state transition, in which the handler function and the state are supplied
-;   to a transition-function - event-transition-func - which determines the 
-;   resulting state.  
-;   event-transition-func:: 
-;      'a -> sim.data.IEvent -> ('b, (sim.data.IEvent -> 'a -> 'a)) -> 'a        
-;   The resulting reduction over every transition is the return value of the 
-;   network.  If no transition function is supplied, we default to simply  
-;   applying the associated handler to the event-data and the state." 
-;  [{:keys [type data state transition] :as ctx} net] 
-;  (let [client-handler-map 
-;        (merge (get-event-clients net type)
-;               (if (not= type :all)
-;                 (get-event-clients net :all) {}))]
-;    (reduce (fn [s [client-name handler]] 
-;              (transition s data [client-name handler]))
-;            state client-handler-map)))
-
-(defn agg-serial 
-  [{:keys [state type data transition net] :as acc} client-handler-map]
+ 
+(defn serial-propogator 
+  "This propogation function folds the context through the entire client-handler
+   map, acting as close as possible to the original observer pattern.  We're 
+   basically simulating the observer pattern by doing this, where instead of 
+   calling side-effecting functions that mutate global state, we're accumulating
+   the result of each 'handler', where the handler may change anything in the 
+   context....Note, this offers a significant amount of control, in that the 
+   handler can override the propogation, short-circuit, change the event, 
+   change the state, change the propogation network topology, etc."
+  [{:keys [state type data transition net] :as ctx} client-handler-map]
   (reduce (fn [s [client-name handler]] 
             (transition s data [client-name handler]))
-          state client-handler-map))
+          ctx client-handler-map))
 
 (defn propogate-event
   "Instead of the traditional notify, as we have in the observable lib, we 
@@ -325,38 +277,13 @@
                  (get-event-clients net :all) {}))]
     (agg-func (assoc ctx :net net) client-handler-map)))
 
-(def propogate-serially (partial propogate-event agg-serial))
+(def propogate-serially (partial propogate-event serial-propogator))
 
-{:state {:agenda []
-         :state {loads of shit}}
- :type  
- 
-
-;we could break down the network into primitive components....
-;specifically...
-;a set of handlers that listen to the same input, :all....
-;that apply a filter to the context. 
-;(def simple-net 
-;  (-> (empty-network "OtherNetwork")
-;    (register-routes 
-;      {:hello-client {:all 
-;                      (fn [state edata] 
-;                        (do (println "I always talk!")) state)}})))
-;transforms into....
-{:type-filter {:all (let [clients {:hello-client (fn [state edata] 
-                                                   (do (println "I always talk!") 
-                                                     state))}]
-                      (fn [state e] 
-                        (if (contains? clients (event-type e))
-                          ((get clients (event-type e))
-                            state e)
-                          state)))}}
-                          
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 
 ; (event-type -> event-data -> state -> state)
 
-(defn union-networks
+(defn union-handlers
   "This is a simple merge operation that clooges together one or more networks,
    and returns a new network that is the set-theoretic union of clients and 
    events.  The resulting network has every client that the original did, as 
@@ -374,71 +301,54 @@
     (empty-network name) nets))
   ([nets] (union-networks :merged nets)))
 
-(defn join-networks 
-  "Unlike union-networks, which creates a single 'flat network represntation of 
-   the union of multiple networks, join-networks retains the split nature of 
-   each network, instead unifying the different networks under a new network 
-   that propogates events to all of them."
-  [nets]) 
-
-(defn map-network
-  "When events are propogated across the network, apply function f to the 
-   result of the propogation."
-  [origin f]
-  (fn [ctx] (f (propogate-event origin ctx))))
-
-
-
-;comp base base2   
-;{:base {:all (fn [type data state] 
-;               (->> (handle-func1 type data state)
-;                    (handle-func2 type data)))}}
-
-;;map f base
-;{:base {:all (fn [type data state] (f (handle-func1 type data state)))}}
-;;pmap f base 
-;{:base {:all (fn [type data state] 
-;               (pmap (fn [h] (h type data state)) 
-;                     [handle-func1 handle-func2]))}}
-;;reduce f [base base2] 
-;{:base {:all (fn [type data state] 
-;               (reduce (fn [s h] 
-;                         (h type data s)) state [base base]
+(defn bind-handlers
+  "Creates a new network from one or more networks, that is a logical 
+   composition of the event propogation from the rightmost network to the left
+   most network, just like #'compose.  Composition implies that like-named 
+   events from the inner networks are automatically subscribed to by the 
+   outer networks.  Thus, propogations are chained on the basis of event names."
+  [from to]
+  (let [like-events (clojure.set/intersection (set (get-events from))
+                                              (set (get-events to)))]
+    (singleton (fn [{:keys [type] :as ctx}] 
+                 (let [nxt (propogate-event from ctx)]
+                   (if (contains? like-events type)
+                     (propogate-event to nxt)
+                     nxt))))))
 
 (defn map-handler
   "Maps a handler to the underlying network.  This is a primitive chaining 
    function.  We return a new network that, when used for propogation, calls
    the handler-func with the resulting state of the propogation."
   [handler-func base]  
-  (singleton (fn [ctx] (handler-func (assoc ctx :state 
-                                        (propogate-event ctx base))))))
+  (singleton (fn [ctx] (handler-func (propogate-event ctx base)))))
 
 (defn filter-handler
   "Maps a filtering function f, to a map of the handler-context, namely 
    {:keys [type data state]}"
   [f base]
-  (singleton (fn [ctx] (when (f ctx) (propogate-event ctx base)))))
+  (singleton (fn [ctx] (if (f ctx) (propogate-event ctx base) ctx))))
 
-;(defn switch-handler
-;  "Given predicate split-func, creates a network with 2 routes :left and :right.
-;   When split-func is applied to a handler-context {:keys [type data state]}, 
-;   true values will propogate the :true route, while false propogates the :false
-;   route."
-;  [split-func base]
-;  (let [split-net (-> (empty-network "split")
-;                    (register-routes 
-;                      {:all {:true (fn [type data state]
-;                                     (if (split-func (handler-context 
-;                                                       type data state))
-;                                       (
-                                     
-;  (singleton (fn [type data state]
-               
-;{:left  {:base {:all handle-func1}}}
-;{:right {:base {:all handle-func2}}}
+(defn switch-handler
+  "Given predicate switch-func, composes two networks as if they were connected
+   by a switch.  When split-func is applied to a handler context, true values 
+   will cause propogation to continue to true-net, while false propogates to 
+   false-net."
+  [switch-func true-net false-net base]
+  (singleton 
+    (fn [ctx]
+      (if (split-func ctx)
+        (propogate-event ctx true-net)
+        (propogate-event ctx false-net)))))
 
-
-
+;;We'll see if we actually need this guy later...might not need to macroize 
+;this stuff yet....
+;(defmacro with-event-context [ctx & body]
+;  `(let [~'*context* ~ctx
+;         ~'*events*  ~(get ctx :events)
+;         ~'*state*   ~(get ctx :state)
+;         ~'*t*       (current-time ~'*events*)]
+;     ~body))
 
 (comment ;testing 
          
@@ -473,7 +383,6 @@
        :messaging {:append (fn [state edata] 
                                    (conj state edata))}})))
 
-(defn sim-state 
 (defn test-echo [&[msg]]
   (propogate-event (->handler-context :echo-state nil [msg])
                    message-net))

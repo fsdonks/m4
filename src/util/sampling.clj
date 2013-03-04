@@ -35,6 +35,8 @@
 ;      distance :: record -> record -> float
 ;      minimum-distance:: record -> record -> float
 
+
+;This is on hold temporarily....probably punt off on Dwight!
 ;A population of records from which to sample.
 (def example-population 
   [{:group "LandPrey" :start 1 :duration 1000 :SRC "Donkey"  :quantity 2}
@@ -98,11 +100,14 @@
   [r]
   (merge r {:computed-fields (derive-distributions r)}))  
 
-(defn record->generator [r population]
-  (let [spec (if (legacy-record? r) 
-               (legacy-record->generator-spec r)
-               r)]
-    (fn [
+;(defn record->generator [r population]
+;  (let [spec (if (legacy-record? r) 
+;               (legacy-record->generator-spec r)
+;               r)]
+;    (fn [
+
+;(defn record->run-spec [r])
+  
    
 ;records that describe dependencies that must be enforced for any sampled 
 ;population.  note...the implicit assumption is that trigger and triggered are
