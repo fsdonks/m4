@@ -256,7 +256,7 @@
   (reduce (fn [s [client-name handler]] 
             (transition s data [client-name handler]))
           ctx client-handler-map))
-
+  
 (defn propogate-event
   "Instead of the traditional notify, as we have in the observable lib, we 
    define a function called propogate-event, which acts akin to a reduction.
@@ -270,12 +270,12 @@
    The resulting reduction over every transition is the return value of the 
    network.  If no transition function is supplied, we default to simply  
    applying the associated handler to the event-data and the state." 
-  [agg-func {:keys [type data state transition] :as ctx} net] 
+  [{:keys [type data state propogation] :as ctx} net] 
   (let [client-handler-map 
         (merge (get-event-clients net type)
                (if (not= type :all)
                  (get-event-clients net :all) {}))]
-    (agg-func (assoc ctx :net net) client-handler-map)))
+    (propogate-with propogation (assoc ctx :net net) client-handler-map)))
 
 (def propogate-serially (partial propogate-event serial-propogator))
 
