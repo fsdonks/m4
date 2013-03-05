@@ -144,16 +144,16 @@
 
 (defn get-events
   "List the active events in this network."
-  [net] (keys (get obs :subscriptions)))
+  [net] (keys (get net :subscriptions)))
 
 (def default-transition ;when handling events, we don't care about the client.
-  (fn [state e [client-name handler]]
-    (handler state e)))
+  (fn [ctx e [client-name handler]]
+    (handler ctx e client-name)))
 
 (def noisy-transition 
-  (fn [state e [client-name handler]]
+  (fn [ctx e [client-name handler]]
     (do (println (str {:state state :event e :client client-name}))
-      (handler state e))))
+      (handler ctx e client-name))))
 
 (defn ->handler-context
   "Creates a composite data structure that carries the context to be handled by
@@ -228,6 +228,8 @@
                        (register o2 client-name handler etype)) o1 handler-map))
           obs client-event-handler-map))
 
+ 
+
 (defn drop-client
   "Unregisters client from every event, automatically dropping it from clients."
   [obs client-name] 
@@ -236,12 +238,27 @@
   (reduce (fn [o etype] (un-register o client-name etype))
       obs (get-client-events obs client-name)))      
 
-(defn empty-network [name] 
+(defn empty-network
+  "Creates an empty network of event-handlers."
+  [name] 
   (map->event-network  {:name name :clients {} :subscriptions {}})) 
 
-(defn singleton [handler-function]
-  (register-routes (empty-network :anonymous) 
-     {:base {:all handler-function}})) 
+(defn ->propogation
+  "Given an event routing, as specified by m, creates a new event network for
+   propogating events."
+  [m]
+  (-> (empty-network)
+    (register-routes m)))
+
+(defn simple-handler
+  "Defines the simplest possible event-network: a single client called :in 
+   that listens for every event, and handles it with the supplied 
+   handler-function."
+  ([name event-type handler-function]
+    (register-routes (empty-network :anonymous) 
+                     {name {event-type handler-function}}))
+  ([handler-function] 
+    (simple-handler (keyword (gensym "handler")) :all handler-function)))
  
 (defn serial-propogator 
   "This propogation function folds the context through the entire client-handler
@@ -253,31 +270,45 @@
    handler can override the propogation, short-circuit, change the event, 
    change the state, change the propogation network topology, etc."
   [{:keys [state type data transition net] :as ctx} client-handler-map]
-  (reduce (fn [s [client-name handler]] 
-            (transition s data [client-name handler]))
+  (reduce (fn [context [client-name handler]] 
+            (transition context data [client-name handler]))
           ctx client-handler-map))
-  
+
+;For right now....we assume serial propogation...I'll have to figure out how
+;to weave in parallel or asynch propogation in the future....Serial is the 
+;simplest case, and we might be able to convey parallelism using composed forms
+;of serial propogation....or...we push the parallelism into the handler 
+;functions, i.e. bulk updates of systems, so we have a coarse-grained event 
+;structure.
 (defn propogate-event
   "Instead of the traditional notify, as we have in the observable lib, we 
    define a function called propogate-event, which acts akin to a reduction.
    Each client with either an :all routing or a subscription to the event-type 
-   will be traversed.  Every step of the walk is treated as 
-   a state transition, in which the handler function and the state are supplied
-   to a transition-function - event-transition-func - which determines the 
-   resulting state.  
+   will be traversed.  Every step of the walk is treated as a transition, in 
+   which the handler function and the context are supplied to a 
+   transition-function - transition - which determines the resulting context.  
    event-transition-func:: 
       'a -> sim.data.IEvent -> ('b, (sim.data.IEvent -> 'a -> 'a)) -> 'a        
    The resulting reduction over every transition is the return value of the 
    network.  If no transition function is supplied, we default to simply  
    applying the associated handler to the event-data and the state." 
-  [{:keys [type data state propogation] :as ctx} net] 
+  [{:keys [type data state] :as ctx} net 
+   & {:keys [transition] 
+      :or {transition (get ctx :transition default-transition)}}] 
   (let [client-handler-map 
         (merge (get-event-clients net type)
                (if (not= type :all)
                  (get-event-clients net :all) {}))]
-    (propogate-with propogation (assoc ctx :net net) client-handler-map)))
+    (serial-propogator 
+      (assoc ctx :net net :transition transition) client-handler-map)))
 
-(def propogate-serially (partial propogate-event serial-propogator))
+(defn handle-event
+  "High level function to handle an IEvent, in the context of some state, using 
+   an event-network defined by net.  Returns the resulting state."
+  [event state net]
+  (->> (propogate-event 
+         (->handler-context (event-type event) (event-data event) state) net)
+       :state))
 
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 
@@ -299,35 +330,35 @@
                               (get-event-clients net e)))) 
                    {} (:subscriptions net))))
     (empty-network name) nets))
-  ([nets] (union-networks :merged nets)))
+  ([nets] (union-handlers :merged nets)))
 
 (defn bind-handlers
   "Creates a new network from one or more networks, that is a logical 
-   composition of the event propogation from the rightmost network to the left
-   most network, just like #'compose.  Composition implies that like-named 
-   events from the inner networks are automatically subscribed to by the 
-   outer networks.  Thus, propogations are chained on the basis of event names."
+   composition of the event propogation of events handled by from, to identical
+   events handled by to.  Every propogation is first handled by from, then by 
+   to, effectively chaining propogations on the basis of event names."
   [from to]
   (let [like-events (clojure.set/intersection (set (get-events from))
                                               (set (get-events to)))]
-    (singleton (fn [{:keys [type] :as ctx}] 
-                 (let [nxt (propogate-event from ctx)]
-                   (if (contains? like-events type)
-                     (propogate-event to nxt)
-                     nxt))))))
-
+    (simple-handler (fn [{:keys [type] :as ctx} edata name] 
+                      (let [nxt (propogate-event ctx from)]
+                        (if (contains? like-events type)
+                          (propogate-event nxt to)
+                          nxt))))))
 (defn map-handler
   "Maps a handler to the underlying network.  This is a primitive chaining 
    function.  We return a new network that, when used for propogation, calls
    the handler-func with the resulting state of the propogation."
   [handler-func base]  
-  (singleton (fn [ctx] (handler-func (propogate-event ctx base)))))
+  (simple-handler (fn [ctx edata name] 
+                    (handler-func (propogate-event ctx base)))))
 
 (defn filter-handler
   "Maps a filtering function f, to a map of the handler-context, namely 
    {:keys [type data state]}"
   [f base]
-  (singleton (fn [ctx] (if (f ctx) (propogate-event ctx base) ctx))))
+  (simple-handler (fn [ctx edata name] 
+                    (if (f ctx) (propogate-event ctx base) ctx))))
 
 (defn switch-handler
   "Given predicate switch-func, composes two networks as if they were connected
@@ -335,11 +366,15 @@
    will cause propogation to continue to true-net, while false propogates to 
    false-net."
   [switch-func true-net false-net base]
-  (singleton 
+  (simple-handler 
     (fn [ctx]
-      (if (split-func ctx)
+      (if (switch-func  ctx)
         (propogate-event ctx true-net)
         (propogate-event ctx false-net)))))
+(defn one-time-handler 
+  "After handling an event, this handler will alter the network, as provided in
+   the context, to remove itself from any further event handling."
+  [handler-function base] 
 
 ;;We'll see if we actually need this guy later...might not need to macroize 
 ;this stuff yet....
@@ -351,44 +386,57 @@
 ;     ~body))
 
 (comment ;testing 
-         
+
+;these are low level examples of event handler networks.         
 (def sample-net 
   (-> (empty-network "Mynetwork")
     (register-routes 
       {:hello-client {:hello-event 
-                       (fn [state edata] 
-                         (do (println "Hello!") state))}})))
+                       (fn [ctx edata name] 
+                         (do (println "Hello!") ctx))}})))
 (def simple-net 
   (-> (empty-network "OtherNetwork")
     (register-routes 
       {:hello-client {:all 
-                      (fn [state edata] 
-                        (do (println "I always talk!")) state)}})))
+                      (fn [ctx edata name] 
+                        (do (println "I always talk!")) ctx)}})))
+
+;low-level event propogation
 (defn prop-hello [] 
   (propogate-event 
     (->handler-context :hello-event "hello world!" nil)
     sample-net))
 
+;high level event propogation
+(defn handle-hello [] 
+  (handle-event (->simple-event :hello-event 0 nil) nil sample-net))
+
+;using combinators to build networks
+(defn complex-net 
+  ( (simple-handler (fn [ctx edata name]))))   
+
 (defn echo-hello [] 
   (propogate-event 
     (->handler-context :hello-event "hello world!" nil noisy-transition) 
-    sample-net ))
+    sample-net))
 
 (def message-net 
   (-> (empty-network "A message pipe!")
     (register-routes 
-      {:echoing {:echo (fn [state edata] 
+      {:echoing {:echo (fn [{:keys [state] :as ctx} edata name] 
                             (do (println "State:" state)
-                              state))}
-       :messaging {:append (fn [state edata] 
-                                   (conj state edata))}})))
+                              ctx))}
+       :messaging {:append (fn [{:keys [state] :as ctx} edata name] 
+                                   (update-in ctx [:state] conj edata))}})))
 
 (defn test-echo [&[msg]]
-  (propogate-event (->handler-context :echo-state nil [msg])
-                   message-net))
+  (propogate-event (->handler-context :echo-state nil [msg]) message-net))
+
+;this is a round-about way of doing business....
 (defn test-conj [& xs]
-  (propogate-event (->handler-context :append xs [])
-                   message-net))
+  (reduce (fn [acc x] 
+            (handle-event (->simple-event :append 0 x) acc message-net))
+          [] xs))
 )
 
 
