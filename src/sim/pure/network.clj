@@ -152,7 +152,7 @@
 
 (def noisy-transition 
   (fn [ctx e [client-name handler]]
-    (do (println (str {:state state :event e :client client-name}))
+    (do (println (str {:state ctx :event e :client client-name}))
       (handler ctx e client-name))))
 
 (defn ->handler-context
@@ -222,7 +222,7 @@
    the associated values are maps of event-type -> handler.  Thus, registering 
    a client entity 'Bob with the :shower and :eat events would look like: 
    {'Bob {:shower take-shower :eat eat-sandwich}}"
-  [obs client-event-handler-map]
+  [client-event-handler-map obs]
   (reduce (fn [o1 [client-name handler-map]] 
             (reduce  (fn [o2 [etype handler]]
                        (register o2 client-name handler etype)) o1 handler-map))
@@ -247,7 +247,7 @@
   "Given an event routing, as specified by m, creates a new event network for
    propogating events."
   [m]
-  (-> (empty-network)
+  (->> (empty-network "anonymous")
     (register-routes m)))
 
 (defn simple-handler
@@ -255,8 +255,8 @@
    that listens for every event, and handles it with the supplied 
    handler-function."
   ([name event-type handler-function]
-    (register-routes (empty-network :anonymous) 
-                     {name {event-type handler-function}}))
+    (register-routes {name {event-type handler-function}}
+                     (empty-network :anonymous)))
   ([handler-function] 
     (simple-handler (keyword (gensym "handler")) :all handler-function)))
  
@@ -322,13 +322,12 @@
    name for the merger."
   ([name nets]
     (reduce 
-      (fn [merged net] 
-        (register-routes merged
-           (reduce (fn [routes e]
-               (merge routes 
-                      (zipmap (repeat e) 
-                              (get-event-clients net e)))) 
-                   {} (:subscriptions net))))
+      (fn [merged net] (register-routes 
+                         (reduce (fn [routes e]
+                                   (merge routes 
+                                          (zipmap (repeat e) 
+                                                  (get-event-clients net e)))) 
+                                 {} (:subscriptions net)) merged))
     (empty-network name) nets))
   ([nets] (union-handlers :merged nets)))
 
@@ -380,9 +379,18 @@
 ;note...the analogue for an observable, in this context, is a network....
 ;in the impure, observable library, we'd write...
 ;(->> (make-observable)
-;  (map-observer 
-;    (fn [ctx] (let [s (:state ctx)]
-;                (if (coll? s) (first s))
+;  (filter-obs (fn [ctx] (> (-> ctx :state :event) 2))) 
+;  (map-obs (fn [ctx] 
+;             (let [s (:state ctx)]
+;               (if (coll? s) (first s))
+
+
+
+;we can imagine this as an event network in that we push a single type around..
+;where the medium being propogated is a compatible event context...really 
+;a map.
+
+
 
 ;;We'll see if we actually need this guy later...might not need to macroize 
 ;this stuff yet....
@@ -397,13 +405,13 @@
 
 ;these are low level examples of event handler networks.         
 (def sample-net 
-  (-> (empty-network "Mynetwork")
+  (->> (empty-network "Mynetwork")
     (register-routes 
       {:hello-client {:hello-event 
                        (fn [ctx edata name] 
                          (do (println "Hello!") ctx))}})))
 (def simple-net 
-  (-> (empty-network "OtherNetwork")
+  (->> (empty-network "OtherNetwork")
     (register-routes 
       {:hello-client {:all 
                       (fn [ctx edata name] 
@@ -420,8 +428,6 @@
   (handle-event (->simple-event :hello-event 0 nil) nil sample-net))
 
 ;using combinators to build networks
-(defn complex-net 
-  (let [
 
 (defn echo-hello [] 
   (propogate-event 
@@ -429,13 +435,13 @@
     sample-net))
 
 (def message-net 
-  (-> (empty-network "A message pipe!")
+  (->> (empty-network "A message pipe!")
     (register-routes 
       {:echoing {:echo (fn [{:keys [state] :as ctx} edata name] 
                             (do (println "State:" state)
                               ctx))}
        :messaging {:append (fn [{:keys [state] :as ctx} edata name] 
-                                   (update-in ctx [:state] conj edata))}})))
+                                   (update-in ctx [:state :message] conj edata))}})))
 
 (defn test-echo [&[msg]]
   (propogate-event (->handler-context :echo-state nil [msg]) message-net))
@@ -444,9 +450,20 @@
 (defn test-conj [& xs]
   (reduce (fn [acc x] 
             (handle-event (->simple-event :append 0 x) acc message-net))
-          [] xs))
-)
+          {:message []} xs))
 
+;this is an attempt to get at the composable workflow from observable.
+(def time-stamped-messages
+  (let [print-route (->propogation {:in {:all (fn [ctx edata name] 
+                           (do (pprint (:state ctx)) ctx))}})
+        add-current-time (fn [ctx] (assoc-in ctx [:state :date]
+                                             (util.datetime/get-date)))] 
+    (->> print-route
+      (map-handler add-current-time)
+      (union-handlers message-net))))
+
+
+)
 
 ;This is a simple implementation of the oberserver pattern.
 ;An observer serves as an interface for registering "listeners" that respond to 
