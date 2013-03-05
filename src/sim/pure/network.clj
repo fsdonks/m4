@@ -462,7 +462,6 @@
       (map-handler add-current-time)
       (union-handlers message-net))))
 
-
 )
 
 ;This is a simple implementation of the oberserver pattern.

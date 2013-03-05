@@ -1,5 +1,6 @@
 (ns marathon.updates.updatestore
-  (:require [marathon.updates [updatepacket :as upacket]]))
+  (:require [marathon.updates [updatepacket :as upacket]]
+            [sim.pure [network :as simnet]]))
 
 ;'All the update manager does is listen for update request traffic.
 ;'It records the time of the update request, who made the request, and the future update.
@@ -21,14 +22,6 @@
    utype is a key for updates, and t is a time index."
   [store update-type  t]
   (get-in store [update-type t] {}))
-
-;need to elevate this....
-(defn listen-updates
-  "Register the update store as an event listener with the update source.
-   Probably re-think this guy."  
-  [store source] 
-  (add-listener source (:name ustore) ustore :supply-update)
-  (add-listener source (:name ustore) ustore :demand-update))
 
 (defn request-update
   "Schedule an update for requestor, of type request, at"
@@ -57,8 +50,27 @@
 (defn trigger [store msgid {:keys [entity-to t]}]
   (record-update store entity-to  t))  
  
-(def routes {:supply-update trigger 
-             :demand-update trigger})
-(defn add-routes [ctx]
-  (assoc ctx :routing 
+(defn update-handler
+  "A handler that assumes an update-store is present in the event context,
+   inside the context's state."
+  [ctx edata name]
+  (update-in ctx [:state :update-store] 
+             record-update (get edata :entity-to) (get edata :t)))
+  
+(def routes {:supply-update update-handler 
+             :demand-update update-handler})
+
+(defn add-routes
+  "Registers default event-handlers for update events."
+  [ctx store] 
+  (->> ctx (simnet/register-routes {(:name store) routes})))
+
+;;need to elevate this....
+;(defn listen-updates
+;  "Register the update store as an event listener with the update source.
+;   Probably re-think this guy."  
+;  [store source] 
+;  (add-listener source (:name ustore) ustore :supply-update)
+;  (add-listener source (:name ustore) ustore :demand-update))
+
 
