@@ -371,10 +371,18 @@
       (if (switch-func  ctx)
         (propogate-event ctx true-net)
         (propogate-event ctx false-net)))))
-(defn one-time-handler 
-  "After handling an event, this handler will alter the network, as provided in
-   the context, to remove itself from any further event handling."
-  [handler-function base] 
+
+;(defn one-time-handler 
+;  "After handling an event, this handler will alter the network, as provided in
+;   the context, to remove itself from any further event handling."
+;  [handler-function base]
+
+;note...the analogue for an observable, in this context, is a network....
+;in the impure, observable library, we'd write...
+;(->> (make-observable)
+;  (map-observer 
+;    (fn [ctx] (let [s (:state ctx)]
+;                (if (coll? s) (first s))
 
 ;;We'll see if we actually need this guy later...might not need to macroize 
 ;this stuff yet....
@@ -413,7 +421,7 @@
 
 ;using combinators to build networks
 (defn complex-net 
-  ( (simple-handler (fn [ctx edata name]))))   
+  (let [
 
 (defn echo-hello [] 
   (propogate-event 
