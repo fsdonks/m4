@@ -304,11 +304,20 @@
 
 (defn handle-event
   "High level function to handle an IEvent, in the context of some state, using 
-   an event-network defined by net.  Returns the resulting state."
-  [event state net]
-  (->> (propogate-event 
-         (->handler-context (event-type event) (event-data event) state) net)
-       :state))
+   an event-network defined by net.  Alternatively, the state and the network 
+   can be bundled in a associative structure (a map), in which case only two 
+   values are required.  Returns the resulting state."
+  ([event state net]
+    (->> (propogate-event 
+           (->handler-context (event-type event) (event-data event) state) net)
+      :state))
+  ([event ctx]
+    (->> (propogate-event 
+           (merge ctx {:type (event-type event) 
+                       :data (event-data event)})
+           (:net ctx)))))
+                  
+                  
 
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 

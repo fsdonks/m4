@@ -30,6 +30,7 @@
     (assoc-in store [update-type update-time]
       (assoc pending-updates requested-by
        (upacket/->update-packet update-time requested-by update-type trequest)))))
+
 (defn record-update
   "Returns an update store that reflects the  sucessful updating of an entity x, 
    with an updated last know update time for the entity.."
@@ -50,15 +51,25 @@
 (defn trigger [store msgid {:keys [entity-to t]}]
   (record-update store entity-to  t))  
  
-(defn update-handler
+(defn record-update-handler
   "A handler that assumes an update-store is present in the event context,
    inside the context's state."
   [ctx edata name]
   (update-in ctx [:state :update-store] 
-             record-update (get edata :entity-to) (get edata :t)))
+       record-update (get edata :entity-to) (get edata :t)))
+
+(defn update-request-handler
+  "A handler that assumes an update-store is present in the event context,
+   inside the context's state.  Passes requests for update to the update-store."
+  [ctx edata name]
+  (let [{:keys [update-time requested-by update-type trequest]}
+        (event-data edata)]
+    (update-in ctx [:state :update-store] 
+               request-update update-time requested-by update-type trequest)))
   
-(def routes {:supply-update update-handler 
-             :demand-update update-handler})
+(def routes {:supply-update record-update-handler 
+             :demand-update record-update-handler
+             :update-request request-update-handler})
 
 (defn add-routes
   "Registers default event-handlers for update events."
