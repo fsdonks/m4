@@ -1,12 +1,12 @@
 ;A simulation context is a general purpose structure for bearing discrete event
 ;simulation information, specifically a scheduler, an updater, event-routing/
-;event registration, and the simulation state.
+;event registration (propogation), and the simulation state.
 
 ;The simulation context defines the dependencies in the simulation, as well as 
 ;the pending instantaneous changes (event), and the notion of time or an 
 ;absolute ordering of the computation in the simulation.
 
-;The scheduler is just a schedule value from sim.schedule.  Its purpose is to 
+;The scheduler is just an agenda value from sim.agenda.  Its purpose is to 
 ;provide a focus for ordering events.  In the observer-based, mutation-driven 
 ;style of old, we would "trigger" events in functions, which would communicate
 ;the presence of an event along the event stream by broadcasting an
@@ -22,24 +22,27 @@
 
 ;The updater allows us to encode localized updates or patches to entities, 
 ;and to keep track of the last "time" an entity was updated.  For temporal 
-;simulations, this is valuable as it provides effecient, localized updating 
+;simulations, this is valuable as it provides effeicient, localized updating 
 ;of entities, and keeps the system consistent (i.e. prevents the application of
 ;old time-dependent updates with outdated notions of elapsed time).
 ;Much of the simulation domain requires time deltas to compute the next step 
 ;of the simulation, or to define an entity's behavior, so keeping track of 
 ;this is fairly useful.
 
-;Event routing information encodes a communications network.  For every 
-;simulation, there is a vocabulary used to communicate changes in the simulation
-;or to trigger side-effects (rendering or logging for instance).
-;The event stream describes a network of named events, and for each event, 
-;an ordered set of subscribers that are "interested" in the event.
-;We typically handle this with an observable/observer setup, which encodes an 
-;event as an enumerated type, mapping every event to a list of oberservers who
-;need to be notified when an event is observed.  We can simulate this setup 
-;in a pure manner, by maintaining the same dependency map, and - rather than 
-;broadcasting the event, fold the event and the simulation state through 
-;the handlers in series.
+;Event routing information encodes a communications network, represented by an 
+;event-network from sim.pure.network.  For every simulation, there is a 
+;vocabulary used to communicate changes in the simulation or to trigger 
+;side-effects (rendering or logging for instance). The propogator describes a 
+;network of named events, and for each event, an ordered set of subscribers that 
+;are "interested" in the event. We typically handle this with an 
+;observable/observer setup, which encodes an event as an enumerated type, 
+;mapping every event to a list of oberservers who need to be notified when an 
+;event is observed.  We can simulate this setup in a pure manner, by maintaining 
+;the same dependency map, and - rather than broadcasting the event, fold the 
+;event and the simulation state through the handlers in series.
+
+;The rest of the namespace defines an API for creating, querying, and modifying
+;abstract simulation contexts.
 
 (ns sim.simcontext
   (:require [sim [data :as sim] [agenda :as agenda]]

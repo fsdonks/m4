@@ -1,5 +1,5 @@
 (ns marathon.updates.updatestore
-  (:require [marathon.updates [updatepacket :as upacket]]
+  (:require [marathon.updates]
             [sim.pure [network :as simnet]]))
 
 ;'All the update manager does is listen for update request traffic.
@@ -16,10 +16,29 @@
                         updates      ;a map of all scheduled updates, by time.
                         lastupdate]) ;a map of the last update for each entity.
 
+(defn ->update-packet
+  "Creates an update packet that contains the time of the future update,
+   the entity that requested the update, the type of the update, and the 
+   time of the request."
+  [update-time requested-by update-type request-time]
+  {:update-time update-time 
+   :requested-by requested-by
+   :update-type update-type 
+   :request-time request-time})
+
+(defn elapsed 
+  "Computes the time elapsed since the last update for this packet."
+  ([update-packet tnow last-update]
+    (if (= last-update 0)
+      (:request-time update-packet)
+      (- tnow last-update)))
+  ([update-packet tnow] (elapsed update-packet tnow 0)))
+
 (def empty-updatestore (->updatestore "UpdateStore" {} {}))
 (defn get-updates
   "Return a list of all requested updates from the updatestore, where 
-   utype is a key for updates, and t is a time index."
+   utype is a key for updates, and t is a time index.  Updates are represented
+   as update-packets."
   [store update-type  t]
   (get-in store [update-type t] {}))
 
@@ -34,7 +53,7 @@
   (let [pending-updates (get-in store [update-type update-time] {})] 
     (assoc-in store [update-type update-time]
       (assoc pending-updates requested-by
-       (upacket/->update-packet update-time requested-by update-type trequest)))))
+       (->update-packet update-time requested-by update-type trequest)))))
 
 (defn record-update
   "Returns an update store that reflects the  sucessful updating of an entity x, 

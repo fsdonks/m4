@@ -113,7 +113,6 @@
 ;logging, visualization, etc.  In this case, they must still return the input
 ;state after performing the side-effect.
 
-
 (defrecord event-network [name clients subscriptions])
 
 (defn- drop-event-client
@@ -472,6 +471,7 @@
 
 )
 
+;-------legacy notes------
 ;This is a simple implementation of the oberserver pattern.
 ;An observer serves as an interface for registering "listeners" that respond to 
 ;any number of external stimuli by triggering subscribed procedures...
