@@ -23,6 +23,11 @@
   [store update-type  t]
   (get-in store [update-type t] {}))
 
+(defn last-update
+  "Returns the last time the entity was updated, if ever."
+  [store entity-name]
+  (get (:last-update store) entity-name))
+
 (defn request-update
   "Schedule an update for requestor, of type request, at"
   [store update-time requested-by update-type trequest]

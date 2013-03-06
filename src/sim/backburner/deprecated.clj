@@ -71,3 +71,50 @@
 
 
 )
+
+(comment 
+ ;IEventContext is a simple wrapper for things that have state and events.
+ ;Not sure I need this....
+(defprotocol IEventContext 
+  (get-state [ec]     "return the state of the context")
+  (set-state [ec s]   "return a new context with state as s")
+  (get-events [ec]    "return the IEventSeq of the context")
+  (set-events [ec es] "return a new context with events as es"))
+
+;Allow pairs of vectors, lists, and {:keys [events state]} to be seen as 
+;event contexts.
+(extend-protocol IEventContext
+  clojure.lang.PersistentVector
+  (get-state  [v] (first v))
+  (set-state  [v s] [s (fnext v)]) 
+  (get-events [v] (fnext v))
+  (set-events [v es] [(first v) es])
+  clojure.lang.PersistentList
+  (get-state  [l] (first l))
+  (set-state  [l s] (cons s (rest l)))
+  (get-events [l] (fnext l))
+  (set-events [l es] (list (first l) es)) 
+  clojure.lang.PersistentArrayMap
+  (get-state  [m] (:state m))
+  (set-state  [m s] (assoc m :state s))
+  (get-events [m] (:events m))
+  (set-events [m es] (assoc m :events es)))
+
+;Define an all-in-one record that supports operations for both IEventContext 
+;and IEventSeq. 
+;An eventcontext is simply a nice wrapper for some state, and an IEventSeq, 
+;events.
+(defrecord eventcontext [state events]
+  IEventContext 
+  (get-state [ec] state)
+  (set-state [ec s] (eventcontext. s events))
+  (get-events [ec] events)
+  (set-events [ec es] (eventcontext. state es))
+  IEventSeq
+  (add-event [v e] (eventcontext. state (add-event events e)))
+  (drop-event [v] (eventcontext. state (drop-event events)))
+  (next-event [v] (next-event events))
+  (pending-events [v] (pending-events events)))
+
+(def emptycontext (->eventcontext nil [])) 
+)
