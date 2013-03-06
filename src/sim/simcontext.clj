@@ -127,9 +127,9 @@ Public state As Dictionary 'Extra chunk of state associated with context.  Commo
   "Computes the time elapsed since the last event in the context."
   [ctx] (agenda/elapsed (:scheduler ctx)))
 
-Public Sub addTime(t As Single)
-    scheduler.addTime t
-End Sub
+;Public Sub addTime(t As Single)
+;    scheduler.addTime t
+;End Sub
 (defn add-time
   "Ensures that time t exists on the agenda."
   [ctx t] (assoc ctx :scheduler (agenda/add-time (:scheduler ctx) t)))  
@@ -170,11 +170,30 @@ events.dispatch CurrentTime, eventtype, entityFrom, entityTo, msg, logtarget, da
 
 End Sub
 
+(defn ->packet
+  "Creates an event record that - possibly - carries a message and some data.
+   This is derived from the initial GenericPacket class from an earlier version
+   of Marathon.  In the clojure manifestation, it's a sim.data.event with a 
+   special structure for the event-data."
+  [type from to & {:keys [msg data] 
+                   :or {msg nil data nil}}] 
+  (sim/->event event-type {:msg msg :data data} nil 
+       (current-time ctx) entity-from entity-to))
+(defn packet-message
+  "Fetches the message, if any from an event that carries a packet."
+  [p] (get (sim/event-data p) :msg))
+(defn packet-data 
+  "Fetches associated data, if any, from an event that carries a packet."
+  [p] (get (sim-event-data p) :data))
+
 (defn trigger
   "Shorthand convenience function for triggering immediate, synchronous events
-   inline.  "
-  ([ctx eventtype entityFrom entityTo msg data])
-  ([ctx event] (simnet/handle-event event 
+   inline. "
+  ([ctx event-type entity-from entity-to msg data]
+    (simnet/handle-event 
+
+      ctx))
+  ([ctx event] (simnet/handle-event event ctx)))
 
 
 Private Sub Class_Initialize()

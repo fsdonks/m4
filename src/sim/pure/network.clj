@@ -394,7 +394,6 @@
 ;               (if (coll? s) (first s))
 
 
-
 ;we can imagine this as an event network in that we push a single type around..
 ;where the medium being propogated is a compatible event context...really 
 ;a map.
