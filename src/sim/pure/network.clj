@@ -227,8 +227,6 @@
                        (register o2 client-name handler etype)) o1 handler-map))
           obs client-event-handler-map))
 
- 
-
 (defn drop-client
   "Unregisters client from every event, automatically dropping it from clients."
   [obs client-name] 

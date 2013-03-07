@@ -11,6 +11,8 @@
 ;Note -> this is basically a direct copy of the events.base from cljgui
 ;I'm going to reconcile the two at some point...
 
+;[type data id time from to]
+
 ;helper functions for the subsequent defevents and let-events macros.
 (defn- emit-event
   "Auxillary function for parsing event specs in defevents/let-events, and
@@ -63,7 +65,6 @@
                  (cons 'def syms)
                  syms))]
     `(do ~@(map #(doc (apply emit-event %))  bindings))))
-
 
 (defmacro let-events
   "Macro for binding (possibly new) events. In addition to a like-named 
@@ -262,9 +263,6 @@
 (defn map-route [f routef] 
   (fn [ec] ((comp f routef) ec)))
 
-
-
-
 ;;testing 
 (comment 
 ;The following functions are simple simulations, in that they represent simple
@@ -347,15 +345,12 @@
                                          (add-events *events* 
                                            [(newname (get-line))])))                                                                                     
                          (filter-route (type-filter :getinput)))
-                         
-
 		         greet  (->> (process 
                             (when (and (not (nil? *state*)) (not= *state* ""))
                               (do (println (str "Greetings,  " *state*  \!))
                                 (set-events *context* 
                                    (add-event *events* (getinput :keyboard))))))
                          (filter-route (type-filter :newname)))
-                   
 		         nm     (->> (process
                             (if (quit? *event*)
                             (set-events *context* [])
