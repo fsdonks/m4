@@ -8,7 +8,8 @@
             [util [gui :as gui]])
   (:use [util.vector]
         [util.record :only [serial-field-comparer key-function]]
-        [util.general :only [align-by]])) 
+        [util.general :only [align-by]]
+        [clojure.pprint :only [pprint]])) 
 
 
 ;Moved generic protocols to util.protocols
@@ -454,7 +455,7 @@
        (conj-rows (empty-columns (count flds)))
        (make-table flds))))
 
-(defn view-table [tbl] (clojure.pprint/pprint (table-records tbl)))
+(defn view-table [tbl] (pprint (table-records tbl)))
 (defn select-distinct
   "Select only distinct records from the table.  This treats each record as a 
    tuple, and performs a set union on all the records.  The resulting table is 
