@@ -1,5 +1,6 @@
 ;A generic namespace for drawing samples from populations.
-(ns util.sampling)
+(ns util.sampling
+  (:require [util [stats :as stats]]))
 
 ;This rose from the "stochastic demand generation" problem that was presented
 ;in a somewhat convoluted solution in VBA...
@@ -35,6 +36,119 @@
 ;      distance :: record -> record -> float
 ;      minimum-distance:: record -> record -> float
 
+
+
+;This is a slight break with the original version, in that I've developed a 
+;simple little-language to describe the phenomenon (actually many phenomena).
+
+;These are our primitive nodes....
+;If we don't have a set of primitive nodes, we need a way to generate them.
+(def p1 {:bar1 {:s 10 :d 1}
+         :bar2 {:s 11 :d 10}
+         :bar3 {:s 21 :d 5}
+         :bill {:s 30 :d 30}
+         :cat {:s 2 :d 1}
+         :qux {:s 50 :d 1000}})
+;let's create a set of grouped nodes...
+
+;Rules for composing primitive nodes, which in turn create new nodes.
+(def p2 {:bar {:chain [:bar1 :bar2 :bar3]}
+         :baz {:choice [0.5 :bill 
+                        0.5 {:transform [{:s (stats/exponential-dist 10)
+                                          :d (stats/exponential-dist 2000)}
+                                         :cat]}]}})
+;Rules for composing previous nodes into a case node.
+(def p3 {:case1 {:concat [{:replications [2  :foo]}
+                          {:replications [10 :qux]}
+                          {:replications [3  :baz]}]}})
+
+;Rules for composing everything into a sample. 
+(def p4 {:sample {:replications [3 {:constrain [{:tfinal 5000 
+                                                 :dmax 5000}
+                                                :case1]}]}})
+ 
+;some convenience operators....
+;since we're likely dealing with tables...or record sets....it'd be nice 
+;to have an operator for describing them...
+
+
+;Now...there are operators in our language...
+(defn chain
+  "chain - takes a node list an creates a node that produces  a list of nodes 
+  that are chained together so that the end of one node is 'before the next.  
+  Returns the concatenated, chained nodes, where chaining is defined by f."
+  [chain-func nodes]
+  (fn [ctx] 
+    (let [xs (map (fn [nd] (nd ctx)) nodes)]
+      (reduce (fn [acc [rec1 rec2]] (conj acc (chain-func rec1 rec2)))
+              [(first xs)] (partition 2 1 xs)))))
+
+(defn choice
+  "choice - takes a node list, and creates a node that will randomly return 
+   one of the nodes in the list.  Probability of selecting a node is even, 
+   unless an alternate probabilities are provided."
+  ([nodes sample-func]
+    (fn [ctx] ((sample-func nodes) ctx)))
+  ([nodes] (choice nodes rand-nth)))
+
+(defn concatenate
+  "Takes an arbitray number of nodes, applies them to a context, and 
+   concatenates the result."
+  [nodes]
+  (fn [ctx] (mapcat (fn [f] (f ctx)) nodes)))
+
+
+(defn replications
+  "replicate - takes an positive integer, n, and performs n traversals of the 
+   children, implicitly concatenating the results." 
+  [n nodes]
+  (let [rep (concatenate nodes)]
+    (fn [ctx] (mapcat (fn [i] (rep ctx)) (range n)))))
+
+
+(defn transform
+  "given a function, applies the function to each child, returning the
+   result.  basically map."
+  [f nodes]
+  (fn [ctx] (map (fn [nd] (f (nd ctx))) nodes)))
+
+
+
+;constrain - modifies the contextual constraints applied when generating node
+;records.  We can probably replace this with filter.
+
+;each of our operators can be serialized...
+
+;fyi  we can use a similar rule-base for determining a validation network.
+
+;Whenever we sample records...we can pass the samples through a validation 
+;network, composed of simple rules, that ensures the sample maintains some 
+;invariant...
+
+;the current case is a form of "collision" that can occur between samples.
+;Basically, we can define collision rules, and collision responses.
+;The collision rules will match on every record, and determine if they should
+;run...
+;Notice that a collision requires context, specifically a relation between 
+;one or more records in the sample.  The typical context is a temporal 
+;intersection, but there could be other contexts.
+
+;The original concrete algorithm attempted to insert records onto a timeline, 
+;then scanned the timeline for collisions to affirm validity.
+;Collisions could only occur for certain classes of records, defined by 
+;demand classes, which related records from the population. 
+
+;It occurs to me that when we're computing "overlap", we're really just 
+;performing a prejudiced XOR on a subset of the records....specifically 
+;records that may "overlap", where overlap occurs temporally.
+;We detect temporal overlaps by 
+
+
+
+
+
+
+;legacy implementation
 
 ;This is on hold temporarily....probably punt off on Dwight!
 ;A population of records from which to sample.
@@ -78,11 +192,13 @@
    as a modified field value, to be merged with the record."
   [name & args]
   (case (keyword (clojure.string/lower-case name))
-    :uniform (fn [x] (uniform-rv (first args) (second args)))
+    :uniform (let [g (stats/uniform-dist (first args) (second args))]
+               (fn [_](g)))
     :vignette identity 
     :constant identity    
     :fixed    (fn [x] (first args))
     (throw (Exception. "Unknown distribution!"))))
+
 (defn legacy-record? [r] (contains? r :StartDistribution))
 (defn derive-distributions
   "A simple patch to allow us to pull in old data."
@@ -187,7 +303,7 @@
 (defn default-merge 
   [inherited-fields rec-from rec-to]
   (into rec-to (for [fld inherited-fields]
-                 [f (get rec-from fld)])))
+                 [fld (get rec-from fld)])))
 
 (defn dependency-injector
   "A dependency injector, for records, provides a function that maps a record to
@@ -201,5 +317,14 @@
   (let [dependent-recs (filter (partial field-equal? key-field 
                                         (get dependency key-field)) population)]        
     (fn [record] (map (partial merge-func record) dependent-recs))))
+
+
+
+
+
+
+
+
+
 
 

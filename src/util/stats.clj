@@ -23,8 +23,6 @@
 
 (def ^:dynamic *rand* clojure.core/rand) 
 
-
-
 (defmacro with-generator
   "Temporarily overrides clojure.rand to use a new random number 
    generator seeded by seed.  All calls in the body that use 
