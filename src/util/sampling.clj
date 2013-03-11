@@ -37,6 +37,44 @@
 ;      minimum-distance:: record -> record -> float
 
 
+;Special operators for our temporal records...
+(defn record->segment
+  "Convert a map into a vector of [start duration]"
+  [r] [(:start r) (+ (:start r) (:duration r))])
+
+(defn overlap?
+  "Determine if two segments, or 2 coordinate pairs, overlap."
+  ([s1 e1 s2 e2] (and (<= s1 e2) (>= e1 s2)))
+  ([seg1 seg2] (overlap? (first seg1) (second seg1) 
+                         (first seg2) (second seg2))))
+(defn segment-distance
+  "Compute the distance between two segments, where overlapping segments have
+   0 distance, and non-overlapping segments have distance equal to the minimum
+   space between exterior points."
+  [[s1 e1] [s2 e2]] 
+  (if (overlap? s1 e1 s2 e2)   0
+    (if (< s1 s2)
+      (- s2 e1)
+      (- s1 e2))))
+    
+(defn distance [r1 r2] 
+  (apply segment-distance (map record->segment) [r1 r2]))
+
+(defn stretch-to [rec1 rec2]
+  (assoc rec1 :duration (- (:start rec2) (:start rec1))))
+
+(defn translate-to [rec1 rec2]
+  (assoc rec1 :duration (- (:start rec2) (:start rec1))))
+
+(defn translate [delta rec]
+  (assoc rec :start (- (:start rec) delta)))
+
+(defn scale [alpha rec]
+  (assoc rec :duration (* (:duration rec) alpha)))
+
+(defn group [group-key rs] 
+  (map #(assoc % :group group-key) rs)) 
+
 
 ;This is a slight break with the original version, in that I've developed a 
 ;simple little-language to describe the phenomenon (actually many phenomena).
@@ -47,8 +85,8 @@
          :bar2 {:s 11 :d 10}
          :bar3 {:s 21 :d 5}
          :bill {:s 30 :d 30}
-         :cat {:s 2 :d 1}
-         :qux {:s 50 :d 1000}})
+         :cat  {:s 2 :d 1}
+         :qux  {:s 50 :d 1000}})
 ;let's create a set of grouped nodes...
 
 ;Rules for composing primitive nodes, which in turn create new nodes.
@@ -56,7 +94,11 @@
          :baz {:choice [0.5 :bill 
                         0.5 {:transform [{:s (stats/exponential-dist 10)
                                           :d (stats/exponential-dist 2000)}
-                                         :cat]}]}})
+                                         :cat]}]}
+         :foo {:transform [{:s (stats/normal-dist 10 1)}
+                           {:choice {:bar 1/3
+                                     :baz 1/3
+                                     :qux 1/3}}]}})
 ;Rules for composing previous nodes into a case node.
 (def p3 {:case1 {:concat [{:replications [2  :foo]}
                           {:replications [10 :qux]}
@@ -65,16 +107,25 @@
 ;Rules for composing everything into a sample. 
 (def p4 {:sample {:replications [3 {:constrain [{:tfinal 5000 
                                                  :dmax 5000}
-                                                :case1]}]}})
+                                                 :case1]}]}})
+
+(def sample-graph (merge p1 p2 p3 p4))
+(defn walk-samplegraph
+  "Walks a set of nodes representing a sampling graph, starting at the 
+   root node.  Evalutes each node of the sample graph in the context of the 
+   graph as a whole.  Returns a sequence of results from the walk, typically 
+   records."
+  [graph-ctx root]
+  
+)  
  
 ;some convenience operators....
 ;since we're likely dealing with tables...or record sets....it'd be nice 
 ;to have an operator for describing them...
 
-
 ;Now...there are operators in our language...
 (defn chain
-  "chain - takes a node list an creates a node that produces  a list of nodes 
+  "chain - takes a node list and creates a node that produces  a list of nodes 
   that are chained together so that the end of one node is 'before the next.  
   Returns the concatenated, chained nodes, where chaining is defined by f."
   [chain-func nodes]
@@ -82,6 +133,20 @@
     (let [xs (map (fn [nd] (nd ctx)) nodes)]
       (reduce (fn [acc [rec1 rec2]] (conj acc (chain-func rec1 rec2)))
               [(first xs)] (partition 2 1 xs)))))
+
+(defn contiguously-stretch
+  "Assumes nodes have a start time and a duration. Ensures that any nodes in the 
+   list are chained so that their start and end time (+ start duration) overlap"
+  [nodes]
+  (chain stretch-to nodes))
+
+(defn contiguously-align 
+  "Assumes nodes have a start time and a duration. Ensures that any nodes in the 
+   list are chained so that their start and end time (+ start duration) overlap.
+   Overlapping is performed by translating (or shifting) the nodes rather than 
+   altering the durations."
+  [nodes]
+  (chain 
 
 (defn choice
   "choice - takes a node list, and creates a node that will randomly return 
@@ -91,12 +156,28 @@
     (fn [ctx] ((sample-func nodes) ctx)))
   ([nodes] (choice nodes rand-nth)))
 
+(defn weighted-choice
+  "Identical to choice, except it takes a map of node->probability densities.
+   Where the keys are resolvable nodes, and the densities are the probabilities
+   from [0 1], that a node will be chosen.  Densities must sum to 1.0 to be
+   valid."
+  [pdf-map]
+  (assert (= 1.0 (reduce + (vals pdf-map))) 
+          (str "Probability densities must sum to 1.0"))
+  (let [nodes  (keys pdf-map) 
+        choose (fn [] (loop [r (rand)
+                             xs nodes
+                             ds (vals pdf-map)]
+                        (cond (count (xs 1))    (first xs)
+                              (<= r (first ds)) (first xs)
+                              (recur (dec r (first ds)) (rest xs) (rest ds)))))]
+    (fn [ctx] ((choose) ctx))))
+
 (defn concatenate
   "Takes an arbitray number of nodes, applies them to a context, and 
    concatenates the result."
   [nodes]
   (fn [ctx] (mapcat (fn [f] (f ctx)) nodes)))
-
 
 (defn replications
   "replicate - takes an positive integer, n, and performs n traversals of the 
@@ -105,12 +186,18 @@
   (let [rep (concatenate nodes)]
     (fn [ctx] (mapcat (fn [i] (rep ctx)) (range n)))))
 
-
 (defn transform
   "given a function, applies the function to each child, returning the
    result.  basically map."
   [f nodes]
   (fn [ctx] (map (fn [nd] (f (nd ctx))) nodes)))
+
+(defn merge-record
+  "Given a record of values, merges the record with each node, which assumably
+   resolves to a record expression."
+  [rec nodes]
+  (transform #(merge %) nodes))
+
 
 
 
@@ -142,11 +229,6 @@
 ;performing a prejudiced XOR on a subset of the records....specifically 
 ;records that may "overlap", where overlap occurs temporally.
 ;We detect temporal overlaps by 
-
-
-
-
-
 
 ;legacy implementation
 
@@ -260,36 +342,7 @@
 ;behavior is to stretch the duration of the earlier record to the start of 
 ;the second record. 
   
-(defn record->segment
-  "Convert a map into a vector of [start duration]"
-  [r] [(:start r) (+ (:start r) (:duration r))])
 
-(defn overlap?
-  "Determine if two segments, or 2 coordinate pairs, overlap."
-  ([s1 e1 s2 e2] (and (<= s1 e2) (>= e1 s2)))
-  ([seg1 seg2] (overlap? (first seg1) (second seg1) 
-                         (first seg2) (second seg2))))
-(defn segment-distance
-  "Compute the distance between two segments, where overlapping segments have
-   0 distance, and non-overlapping segments have distance equal to the minimum
-   space between exterior points."
-  [[s1 e1] [s2 e2]] 
-  (if (overlap? s1 e1 s2 e2)   0
-    (if (< s1 s2)
-      (- s2 e1)
-      (- s1 e2))))
-    
-(defn distance [r1 r2] 
-  (apply segment-distance (map record->segment) [r1 r2]))
-
-(defn stretch-to [rec1 rec2]
-  (assoc rec1 :duration (- (:start rec2) (:start rec1))))
-(defn translate [delta rec]
-  (assoc rec :start (- (:start rec) delta)))
-(defn scale [alpha rec]
-  (assoc rec :duration (* (:duration rec) alpha)))
-(defn group [group-key rs] 
-  (map #(assoc % :group group-key) rs)) 
 (defn overlap-records [rec1 rec2])
 
 ;The original algorithm implied that dependent events could be merged or 
