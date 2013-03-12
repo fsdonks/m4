@@ -63,11 +63,8 @@
 (defn stretch-to [rec1 rec2]
   (assoc rec1 :duration (- (:start rec2) (:start rec1))))
 
-(defn translate-to [rec1 rec2]
-  (assoc rec1 :duration (- (:start rec2) (:start rec1))))
-
-(defn translate [delta rec]
-  (assoc rec :start (- (:start rec) delta)))
+(defn lengthen [length rec]
+  (assoc rec :duration (+ (:duration rec) length)))
 
 (defn scale [alpha rec]
   (assoc rec :duration (* (:duration rec) alpha)))
@@ -75,6 +72,60 @@
 (defn group [group-key rs] 
   (map #(assoc % :group group-key) rs)) 
 
+(defn end-time [r]
+  (+ (:start r) (:duration r)))
+
+(defn translate
+  "Shifts record along its temporal axis by delta."
+  [delta rec]
+  (assoc rec :start (- (:start rec) delta)))
+
+(defn move-before
+  "Translates record1 to occur directly before record2.  Record1 will not 
+   overlap record2."
+  [rec1 rec2]
+  (let [end1 (+ (:start rec1 (:duration rec1)))
+        start2 (:start rec2)
+        delta (- start2 end1)]
+    (translate rec1 delta)))
+
+(defn precede
+  "Translates record1 to end directly on the start of record2, so that record1
+   overlaps record2 by 1 unit of time.  Treats record 2 as fixed, and returns 
+   transformed version of record1.  Record1 is the 'precursor to record2."
+  [rec1 rec2]
+  (assoc :start rec1 (inc (:start (move-before rec1 rec2)))))
+  
+(defn move-after
+  "Translates record2 to occur directly after record1.  Record2 will not overlap
+   record1."
+  [rec1 rec2] 
+  (translate rec2 (+ (:start rec1) (:duration rec1))))
+
+(defn succeed 
+  "Translates record2 to start directly on the end of record1, so that record2
+   overlaps record1 by 1 unit of time.  Record2 is the 'successor to record2.
+   Identical to precursor in function, except record1 is treated as fixed, 
+   while record2 moves.  Returns a shifted value for record2.  Useful for 
+   constructing 'trailing sets of events that must overlap by a single unit of 
+   time."
+  [rec1 rec2]
+  (assoc :start rec2 (dec (:start (move-after rec1 rec2)))))
+
+(defn subsume
+  "Translates and scales record 1 to accomodate the time segment of both record
+   one and record2."
+  [rec1 rec2]
+  (let [tstart (min (map :start [rec1 rec2]))
+        tfinal (max (map end-time [rec1 rec2]))]
+    (merge {:start tstart :duration (- tfinal tstart)}
+           rec1)))
+(defn subsume-by
+  "Allows a user-supplied function to determine the order in which a set of 
+   records should be merged.  f should be a function that returns a value 
+   amenable to comparison, using clojure.core/compare."
+  [f xs])
+  
 
 ;This is a slight break with the original version, in that I've developed a 
 ;simple little-language to describe the phenomenon (actually many phenomena).
@@ -140,19 +191,19 @@
   [nodes]
   (chain stretch-to nodes))
 
-(defn contiguously-align 
-  "Assumes nodes have a start time and a duration. Ensures that any nodes in the 
-   list are chained so that their start and end time (+ start duration) overlap.
-   Overlapping is performed by translating (or shifting) the nodes rather than 
-   altering the durations."
-  [nodes]
-  (chain 
+;(defn contiguously-align 
+;  "Assumes nodes have a start time and a duration. Ensures that any nodes in the 
+;   list are chained so that their start and end time (+ start duration) overlap.
+;   Overlapping is performed by translating (or shifting) the nodes rather than 
+;   altering the durations."
+;  [nodes]
+;  (chain 
 
 (defn choice
   "choice - takes a node list, and creates a node that will randomly return 
    one of the nodes in the list.  Probability of selecting a node is even, 
    unless an alternate probabilities are provided."
-  ([nodes sample-func]
+  ([sample-func nodes]
     (fn [ctx] ((sample-func nodes) ctx)))
   ([nodes] (choice nodes rand-nth)))
 
@@ -161,43 +212,76 @@
    Where the keys are resolvable nodes, and the densities are the probabilities
    from [0 1], that a node will be chosen.  Densities must sum to 1.0 to be
    valid."
-  [pdf-map]
+  [pdf-map & rest]
   (assert (= 1.0 (reduce + (vals pdf-map))) 
           (str "Probability densities must sum to 1.0"))
   (let [nodes  (keys pdf-map) 
         choose (fn [] (loop [r (rand)
                              xs nodes
                              ds (vals pdf-map)]
-                        (cond (count (xs 1))    (first xs)
+                        (cond (= (count xs) 1)  (first xs)
                               (<= r (first ds)) (first xs)
-                              (recur (dec r (first ds)) (rest xs) (rest ds)))))]
+                              :else (recur (- r (first ds)) 
+                                           (rest xs) (rest ds)))))]
     (fn [ctx] ((choose) ctx))))
 
 (defn concatenate
   "Takes an arbitray number of nodes, applies them to a context, and 
-   concatenates the result."
+   concatenates the result into a vector."
   [nodes]
-  (fn [ctx] (mapcat (fn [f] (f ctx)) nodes)))
+  (fn [ctx] (reduce conj [] (map (fn [f] (f ctx)) nodes))))
 
 (defn replications
   "replicate - takes an positive integer, n, and performs n traversals of the 
    children, implicitly concatenating the results." 
   [n nodes]
-  (let [rep (concatenate nodes)]
-    (fn [ctx] (mapcat (fn [i] (rep ctx)) (range n)))))
+  (fn [ctx] (reduce conj [] (map (fn [i] (nodes ctx)) (range n)))))
 
 (defn transform
   "given a function, applies the function to each child, returning the
    result.  basically map."
   [f nodes]
-  (fn [ctx] (map (fn [nd] (f (nd ctx))) nodes)))
+  (fn [ctx] (vec (map (fn [nd] (f (nd ctx))) nodes))))
 
 (defn merge-record
   "Given a record of values, merges the record with each node, which assumably
    resolves to a record expression."
   [rec nodes]
-  (transform #(merge %) nodes))
+  (transform #(merge rec %) nodes))
 
+(defn merge-context [rec nodes]
+  (fn [ctx] (nodes (merge rec ctx)))) 
+
+(defn sample-context [ctx nodes] (nodes ctx))
+(defn compose [n1 n2]
+  (fn [ctx] (n2 (n1 ctx))))
+(comment ;testing 
+;sample from a pdf...
+(def simple-graph {:foo {:name "Foo!"}
+                   :bar {:name "Bar!"}
+                   :baz {:name "Baz!"}})
+(def simple-nodes (keys simple-graph))
+
+(def choices (weighted-choice {:foo 0.25 :bar 0.50 :baz 0.25}))
+(def even-choices (choice (keys simple-graph)))
+(def samples (frequencies (take 1000 (repeatedly #(choices simple-graph)))))
+;=>{{:name "Bar!"} 514, {:name "Baz!"} 242, {:name "Foo!"} 244}
+(def even-samples 
+  (frequencies (take 1000 (repeatedly #(even-choices simple-graph)))))
+;=>{{:name "Bar!"} 322, {:name "Baz!"} 347, {:name "Foo!"} 331}
+
+(defn time-stamp [nodes] 
+  (merge-record {:time (System/currentTimeMillis)} nodes))
+
+(def timed-result (->> simple-graph 
+                    ((add-time simple-nodes))))
+
+(def multiple-results (->> (choice [:foo :bar])
+                        (compose (time-stamp simple-nodes))
+                        (replications 2)                                                                                
+                        (sample-context simple-graph)))
+                                            
+)
 
 
 
