@@ -83,26 +83,26 @@
 (defn move-before
   "Translates record1 to occur directly before record2.  Record1 will not 
    overlap record2."
-  [rec1 rec2]
-  (let [end1 (+ (:start rec1 (:duration rec1)))
-        start2 (:start rec2)
-        delta (- start2 end1)]
-    (translate rec1 delta)))
+  ([rec1 rec2 separation]
+    (assoc rec1 :start (- (:start rec2) (+ separation (:duration rec1)))))
+  ([rec1 rec2]
+    (move-before rec1 rec2 1)))
 
-(defn precede
+(defn lead
   "Translates record1 to end directly on the start of record2, so that record1
    overlaps record2 by 1 unit of time.  Treats record 2 as fixed, and returns 
    transformed version of record1.  Record1 is the 'precursor to record2."
   [rec1 rec2]
-  (assoc :start rec1 (inc (:start (move-before rec1 rec2)))))
+  (move-before rec1 rec2 0))
   
 (defn move-after
   "Translates record2 to occur directly after record1.  Record2 will not overlap
    record1."
-  [rec1 rec2] 
-  (translate rec2 (+ (:start rec1) (:duration rec1))))
+  ([rec1 rec2 separation] 
+    (assoc rec2 :start (+ separation (:start rec1) (:duration rec1))))
+  ([rec1 rec2] (move-after rec1 rec2 1)))
 
-(defn succeed 
+(defn follow 
   "Translates record2 to start directly on the end of record1, so that record2
    overlaps record1 by 1 unit of time.  Record2 is the 'successor to record2.
    Identical to precursor in function, except record1 is treated as fixed, 
@@ -110,7 +110,7 @@
    constructing 'trailing sets of events that must overlap by a single unit of 
    time."
   [rec1 rec2]
-  (assoc :start rec2 (dec (:start (move-after rec1 rec2)))))
+  (move-after rec1 rec2 0))
 
 (defn subsume
   "Translates and scales record 1 to accomodate the time segment of both record
@@ -120,70 +120,34 @@
         tfinal (max (map end-time [rec1 rec2]))]
     (merge {:start tstart :duration (- tfinal tstart)}
            rec1)))
+
 (defn subsume-by
   "Allows a user-supplied function to determine the order in which a set of 
    records should be merged.  f should be a function that returns a value 
    amenable to comparison, using clojure.core/compare."
   [f xs])
-  
 
-;This is a slight break with the original version, in that I've developed a 
-;simple little-language to describe the phenomenon (actually many phenomena).
-
-;These are our primitive nodes....
-;If we don't have a set of primitive nodes, we need a way to generate them.
-(def p1 {:bar1 {:s 10 :d 1}
-         :bar2 {:s 11 :d 10}
-         :bar3 {:s 21 :d 5}
-         :bill {:s 30 :d 30}
-         :cat  {:s 2 :d 1}
-         :qux  {:s 50 :d 1000}})
-;let's create a set of grouped nodes...
-
-;Rules for composing primitive nodes, which in turn create new nodes.
-(def p2 {:bar {:chain [:bar1 :bar2 :bar3]}
-         :baz {:choice [0.5 :bill 
-                        0.5 {:transform [{:s (stats/exponential-dist 10)
-                                          :d (stats/exponential-dist 2000)}
-                                         :cat]}]}
-         :foo {:transform [{:s (stats/normal-dist 10 1)}
-                           {:choice {:bar 1/3
-                                     :baz 1/3
-                                     :qux 1/3}}]}})
-;Rules for composing previous nodes into a case node.
-(def p3 {:case1 {:concat [{:replications [2  :foo]}
-                          {:replications [10 :qux]}
-                          {:replications [3  :baz]}]}})
-
-;Rules for composing everything into a sample. 
-(def p4 {:sample {:replications [3 {:constrain [{:tfinal 5000 
-                                                 :dmax 5000}
-                                                 :case1]}]}})
-
-(def sample-graph (merge p1 p2 p3 p4))
-(defn walk-samplegraph
-  "Walks a set of nodes representing a sampling graph, starting at the 
-   root node.  Evalutes each node of the sample graph in the context of the 
-   graph as a whole.  Returns a sequence of results from the walk, typically 
-   records."
-  [graph-ctx root]
-  
-)  
- 
 ;some convenience operators....
 ;since we're likely dealing with tables...or record sets....it'd be nice 
 ;to have an operator for describing them...
 
 ;Now...there are operators in our language...
+(defn following-recs [rs]
+  (reduce (fn [acc x] 
+            (conj acc (follow (last acc) x))) [(first rs)] (rest rs)))
+
+(defn preceding-recs [rs]
+  (reduce (fn [acc x] 
+            (conj acc (lead x (last acc)))) [(first rs)] (rest rs)))
+
 (defn chain
-  "chain - takes a node list and creates a node that produces  a list of nodes 
+  "chain - takes a node list and creates a node that produces a list of nodes 
   that are chained together so that the end of one node is 'before the next.  
   Returns the concatenated, chained nodes, where chaining is defined by f."
-  [chain-func nodes]
-  (fn [ctx] 
-    (let [xs (map (fn [nd] (nd ctx)) nodes)]
-      (reduce (fn [acc [rec1 rec2]] (conj acc (chain-func rec1 rec2)))
-              [(first xs)] (partition 2 1 xs)))))
+  ([chain-func nodes]
+    (fn [ctx] 
+      (chain-func (map (fn [nd] (nd ctx)) nodes))))
+  ([nodes] (chain following-recs nodes)))
 
 (defn contiguously-stretch
   "Assumes nodes have a start time and a duration. Ensures that any nodes in the 
@@ -212,7 +176,7 @@
    Where the keys are resolvable nodes, and the densities are the probabilities
    from [0 1], that a node will be chosen.  Densities must sum to 1.0 to be
    valid."
-  [pdf-map & rest]
+  [pdf-map]
   (assert (= 1.0 (reduce + (vals pdf-map))) 
           (str "Probability densities must sum to 1.0"))
   (let [nodes  (keys pdf-map) 
@@ -247,7 +211,26 @@
   "Given a record of values, merges the record with each node, which assumably
    resolves to a record expression."
   [rec nodes]
-  (transform #(merge rec %) nodes))
+  (transform #(merge % rec) nodes))
+
+;(defn truncate [start duration rec]
+;  (let [tfinal    (+ start duration)
+;        rstart    (get rec :start)
+;        rduration (get rec :duration)
+;        rfinal    (end-time rec)]
+;    (cond (<= rfinal tfinal) rec
+;          (<= 
+;          :else nil
+    
+(defn with-constrains
+  "Uses a pre-baked set of constraints, as provided by constraint-map, to filter
+   the result of any generated nodes.  I'd like to change this, but for now 
+   it'll be somewhat predefined constraints."
+  [{:keys [tfinal duration-max] :as constraint-map} nodes]
+  (let [tfinal (or tfinal :inf)
+        duration-max (or duration-max :inf)]
+    
+)
 
 (defn merge-context [rec nodes]
   (fn [ctx] (nodes (merge rec ctx)))) 
@@ -255,6 +238,78 @@
 (defn sample-context [ctx nodes] (nodes ctx))
 (defn compose [n1 n2]
   (fn [ctx] (n2 (n1 ctx))))
+
+;This is a slight break with the original version, in that I've developed a 
+;simple little-language to describe the phenomenon (actually many phenomena).
+
+;These are our primitive nodes....
+;If we don't have a set of primitive nodes, we need a way to generate them.
+(def p1 {:bar1 {:start 10 :duration 1}
+         :bar2 {:start 11 :duration 10}
+         :bar3 {:start 21 :duration 5}
+         :bill {:start 30 :duration 30}
+         :cat  {:start 2  :duration 1}
+         :qux  {:start 50 :duration 1000}})
+;let's create a set of grouped nodes...
+
+;Rules for composing primitive nodes, which in turn create new nodes.
+(def p2 {:bar {:chain [:bar1 :bar2 :bar3]}
+         :baz {:choice [0.5 :bill 
+                        0.5 {:transform [{:start (stats/exponential-dist 10)
+                                          :duration (stats/exponential-dist 2000)}
+                                         :cat]}]}
+         :foo {:transform [{:start (stats/normal-dist 10 1)}
+                           {:choice {:bar 1/3
+                                     :baz 1/3
+                                     :qux 1/3}}]}})
+;Rules for composing previous nodes into a case node.
+(def p3 {:case1 {:concat [{:replications [2  [:foo]]}
+                          {:replications [10 [:qux]]}
+                          {:replications [3  [:baz]]}]}})
+
+;Rules for composing everything into a sample. 
+(def p4 {:sample {:replications [3 [{:constrain [{:tfinal 5000 
+                                                  :dmax 5000}
+                                                  :case1]}]]}})
+
+(defmulti  render-node (fn [node-type node-data ctx] node-type))
+(defmethod render-node :default  [_ node-data ctx] node-data)
+(defmethod render-node :chain [_ node-data ctx] ((chain node-data) ctx))
+(defmethod render-node :choice [_ node-data ctx] 
+  (cond (map? node-data) ((weighted-choice node-data) ctx)
+        :else ((choice node-data) ctx)))
+(defmethod render-node :transform [_ node-data ctx]
+  (let [[t-rec child-nodes] node-data]
+    (let [merged (into {} (for [[k v] (seq t-rec)] [k (if (fn? v) (v) v)]))]
+      ((merge-record merged child-nodes) ctx))))
+(defmethod render-node :replications [_ node-data ctx]
+  (let [[reps nodes] node-data]
+    ((replications reps nodes) ctx)))
+(defmethod render-node :concat [_ node-data ctx]
+  ((concatenate node-data) ctx))
+(defmethod render-node :constrain [_ node-data ctx]
+  (let [[constraints nodes] node-data]
+    (
+    
+;(def ops {:chain 
+;          :choice 
+;          :weighted-choice 
+;          :transform 
+;          :replications 
+;          :concat
+;          :constrain })
+
+(def sample-graph (merge p1 p2 p3 p4))
+(defn walk-samplegraph
+  "Walks a set of nodes representing a sampling graph, starting at the 
+   root node.  Evalutes each node of the sample graph in the context of the 
+   graph as a whole.  Returns a sequence of results from the walk, typically 
+   records."
+  [graph-ctx root]
+  
+)
+
+
 (comment ;testing 
 ;sample from a pdf...
 (def simple-graph {:foo {:name "Foo!"}
