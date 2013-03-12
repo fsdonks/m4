@@ -1,0 +1,59 @@
+Type 	Enabled	Priority	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Is 1_8	OITitle	Include	IsHoot	StochasticDuration	DependencyClass	Group	
+DemandRecord	true	1.0	1.0	1.0	1.0	17.0	45.0	Widget-A	Mixture-Initial	A	A 0	A 0-Initial	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	4.0	1.0	18.0	43.0	45.0	Widget-A	Mixture-Initial	A	A 1	A 1-Initial	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	4.0	1.0	61.0	13.0	45.0	Widget-A	Mixture-Saucy	A	A 1	A 1-Saucy	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	4.0	1.0	74.0	40.0	45.0	Widget-A	Mixture-Saucy	A	A 2	A 2	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	4.0	1.0	114.0	32.0	45.0	Widget-A	Mixture-Saucy	A	A 3	A 3	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	4.0	1.0	146.0	368.0	45.0	Widget-A	Mixture-Saucy	A	A 4	A 4	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	3.0	1.0	514.0	88.0	45.0	Widget-A	Mixture-Saucy	A	A 5	A 5	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	2.0	1.0	602.0	280.0	45.0	Widget-A	Mixture-Saucy	A	A 6	A 6	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
+DemandRecord	true	1.0	2.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	A-Pi	A-Pi-Initial	Saucy	0.0	The Widget	true	Hoot		Pi	A_Dipper	
+DemandRecord	true	1.0	2.0	1.0	61.0	84.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	A-Pi	A-Pi-Saucy	Saucy	0.0	The Widget	true	Hoot		Pi	A_Dipper	
+DemandRecord	true	1.0	2.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Dollar	Dracula-1	Dracula-1-Initial	Saucy	0.0	The Widget	true	Hoot			Dollar	
+DemandRecord	true	1.0	2.0	1.0	61.0	3180.0	45.0	Widget-A	Mixture-Saucy	Dollar	Dracula-1	Dracula-1-Saucy	Saucy	0.0	The Widget	true	Hoot			Dollar	
+DemandRecord	true	1.0	1.0	1.0	3241.0	1440.0	45.0	Widget-A	Mixture-Saucy	Dollar	Dracula-2	Dracula-2-Saucy	Saucy	0.0	The Widget	true				Dollar	
+DemandRecord	true	1.0	1.0	1.0	49.0	12.0	45.0	Widget-A	Mixture-Initial	Ipsum1	Ipsum1 1	Ipsum1 1-Initial	Saucy	0.0	The Widget	true				Ipsum1_Dipper	
+DemandRecord	true	1.0	1.0	1.0	61.0	61.0	45.0	Widget-A	Mixture-Saucy	Ipsum1	Ipsum1 1	Ipsum1 1-Saucy	Saucy	0.0	The Widget	true				Ipsum1_Dipper	
+DemandRecord	true	1.0	1.0	1.0	122.0	64.0	45.0	Widget-A	Mixture-Saucy	Ipsum1	Ipsum1 2	Ipsum1 2	Saucy	0.0	The Widget	true	Hoot			Ipsum1_Dipper	
+DemandRecord	true	1.0	1.0	1.0	186.0	48.0	45.0	Widget-A	Mixture-Saucy	Ipsum1	Ipsum1 3	Ipsum1 3	Saucy	0.0	The Widget	true	Hoot			Ipsum1_Dipper	
+DemandRecord	true	1.0	1.0	1.0	234.0	112.0	45.0	Widget-A	Mixture-Saucy	Ipsum1	Ipsum1 6	Ipsum1 6	Saucy	0.0	The Widget	true	Hoot			Ipsum1_Dipper	
+DemandRecord	true	1.0	2.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Ipsum1-Pi	Ipsum-1-Pi-Initial	Saucy	0.0	The Widget	true	Hoot		Pi	Ipsum1_Dipper	
+DemandRecord	true	1.0	2.0	1.0	61.0	125.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Ipsum1-Pi	Ipsum1-Pi-Saucy	Saucy	0.0	The Widget	true	Hoot		Pi	Ipsum1_Dipper	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	S-Foo-FootLbs-Lambda	S-Foo-FootLbs-Lambda-Initial	Saucy	0.0	The Widget	true	Hoot		Lambda	S-Foo-FootLbs	
+DemandRecord	true	1.0	1.0	1.0	61.0	480.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	S-Foo-FootLbs-Lambda	S-Foo-FootLbs-Lambda-Saucy	Saucy	0.0	The Widget	true	Hoot		Lambda	S-Foo-FootLbs	
+DemandRecord	true	1.0	4.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	S-Foo-FootLbs-Lambda	S-Foo-FootLbs-Initial	Saucy	0.0	The Widget	true	Hoot			S-Foo-FootLbs	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Foo	S-Foo-FootLbs-Lambda	S-Foo-FootLbs-Initial	Saucy	0.0	The Widget	true	Hoot			S-Foo-FootLbs	
+DemandRecord	true	1.0	4.0	1.0	61.0	120.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	S-Foo-FootLbs-Lambda	S-Foo-FootLbs-Saucy	Saucy	0.0	The Widget	true	Hoot			S-Foo-FootLbs	
+DemandRecord	true	1.0	1.0	1.0	61.0	120.0	45.0	Widget-A	Mixture-Saucy	Foo	S-Foo-FootLbs-Lambda	S-Foo-FootLbs-Saucy	Saucy	0.0	The Widget	true	Hoot			S-Foo-FootLbs	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Hoot1	Hoot1	Hoot1-Initial	Saucy	0.0	The Widget	true	Hoot			Hoot1	
+DemandRecord	true	1.0	1.0	1.0	61.0	480.0	45.0	Widget-A	Mixture-Saucy	Hoot1	Hoot1	Hoot1-Saucy	Saucy	0.0	The Widget	true	Hoot			Hoot1	
+DemandRecord	true	1.0	2.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Hoot1-Pi	Hoot1-Pi-Initial	Saucy	0.0	The Widget	true	Hoot		Pi	Hoot1	
+DemandRecord	true	1.0	2.0	1.0	61.0	125.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Hoot1-Pi	Hoot1-Pi-Saucy	Saucy	0.0	The Widget	true	Hoot		Pi	Hoot1	
+DemandRecord	true	1.0	2.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Hoot2-Pi	Hoot2-Pi-Initial	Saucy	0.0	The Widget	true	Hoot		Pi	Hoot2	
+DemandRecord	true	1.0	2.0	1.0	61.0	390.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Hoot2-Pi	Hoot2-Pi-Saucy	Saucy	0.0	The Widget	true	Hoot		Pi	Hoot2	
+DemandRecord	true	1.0	1.0	1.0	1.0	16.0	45.0	Widget-A	Mixture-Initial	Hoot3	Hoot3	Hoot3 PH II-Initial	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	2.0	1.0	17.0	44.0	45.0	Widget-A	Mixture-Initial	Hoot3	Hoot3	Hoot3 1-Initial	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	2.0	1.0	61.0	12.0	45.0	Widget-A	Mixture-Saucy	Hoot3	Hoot3	Hoot3 1-Saucy	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	5.0	1.0	73.0	40.0	45.0	Widget-A	Mixture-Saucy	Hoot3	Hoot3	Hoot3 2	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	5.0	1.0	113.0	32.0	45.0	Widget-A	Mixture-Saucy	Hoot3	Hoot3	Hoot3 3	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	5.0	1.0	145.0	336.0	45.0	Widget-A	Mixture-Saucy	Hoot3	Hoot3	Hoot3 PHIVaa	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	4.0	1.0	481.0	256.0	45.0	Widget-A	Mixture-Saucy	Hoot3	Hoot3	Hoot3 PHIVab	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	2.0	1.0	737.0	240.0	45.0	Widget-A	Mixture-Saucy	Hoot3	Hoot3	Hoot3 6	Saucy	0.0	The Widget	true	Hoot			Hoot3	
+DemandRecord	true	1.0	2.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Hoot3-Pi	Hoot3-Pi-Initial	Saucy	0.0	The Widget	true	Hoot		Pi	Hoot3	
+DemandRecord	true	1.0	2.0	1.0	61.0	84.0	45.0	Widget-A	Mixture-Foo-Hoot	Foo	Hoot3-Pi	Hoot3-Pi-Saucy	Saucy	0.0	The Widget	true	Hoot		Pi	Hoot3	
+DemandRecord	true	1.0	2.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Hoot4	Hoot4	Hoot4 0-Initial	Saucy	0.0	The Widget	true	Hoot			Hoot4	
+DemandRecord	true	1.0	2.0	1.0	61.0	337.0	45.0	Widget-A	Mixture-Saucy	Hoot4	Hoot4	Hoot4 0-Saucy	Saucy	0.0	The Widget	true	Hoot			Hoot4	
+DemandRecord	true	1.0	4.0	1.0	398.0	1152.0	45.0	Widget-A	Mixture-Saucy	Hoot4	Hoot4	Hoot4 1 	Saucy	0.0	The Widget	true	Hoot			Hoot4	
+DemandRecord	true	1.0	2.0	1.0	1550.0	740.0	45.0	Widget-A	Mixture-Saucy	Hoot4	Hoot4	Hoot4 2	Saucy	0.0	The Widget	true	Hoot			Hoot4	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Beta	Some5	Some5-Initial	Saucy	0.0	The Widget	true				Some5	
+DemandRecord	true	1.0	1.0	1.0	61.0	1470.0	45.0	Widget-A	Mixture-Saucy	Beta	Some5	Some5-Saucy	Saucy	0.0	The Widget	true		Yes		Some5	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Beta	Some6	Some6-Initial	Saucy	0.0	The Widget	true				Some6	
+DemandRecord	true	1.0	1.0	1.0	61.0	570.0	45.0	Widget-A	Mixture-Saucy	Beta	Some6	Some6-Saucy	Saucy	0.0	The Widget	true		Yes		Some6	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Beta	some16	Some16-Initial	Saucy	0.0	The Widget	true				Some16	
+DemandRecord	true	1.0	1.0	1.0	61.0	1020.0	45.0	Widget-A	Mixture-Saucy	Beta	some16	Some16-Saucy	Saucy	0.0	The Widget	true		Yes		Some16	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Beta	some18	Some18-Initial	Saucy	0.0	The Widget	true				Some18	
+DemandRecord	true	1.0	1.0	1.0	61.0	120.0	45.0	Widget-A	Mixture-Saucy	Beta	some18	Some18-Saucy	Saucy	0.0	The Widget	true		Yes		Some18	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Beta	some21	Some21-Initial	Saucy	0.0	The Widget	true				Some21	
+DemandRecord	true	1.0	1.0	1.0	61.0	210.0	45.0	Widget-A	Mixture-Saucy	Beta	some21	Some21-Saucy	Saucy	0.0	The Widget	true		Yes		Some21	
+DemandRecord	true	1.0	1.0	1.0	1.0	60.0	45.0	Widget-A	Mixture-Initial	Beta	some21	Some21-Initial	Saucy	0.0	The Widget	true				Some21	
+DemandRecord	true	1.0	1.0	1.0	61.0	390.0	45.0	Widget-A	Mixture-Saucy	Beta	some21	Some21-Saucy	Saucy	0.0	The Widget	true		Yes		Some21	

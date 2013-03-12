@@ -41,7 +41,13 @@
 (defn record->segment
   "Convert a map into a vector of [start duration]"
   [r] [(:start r) (+ (:start r) (:duration r))])
+(defn segment->record
+  "Convers a vector of [start end] into a record of {start duration}."
+  [seg]
+  {:start (first seg) :duration (- (second seg) (first seg))})
 
+;functions for dealing with abstract 1D line segments, as represented by vector
+;pairs, where each entry in the vector is a point on a shared axis.
 (defn overlap?
   "Determine if two segments, or 2 coordinate pairs, overlap."
   ([s1 e1 s2 e2] (and (<= s1 e2) (>= e1 s2)))
@@ -56,8 +62,29 @@
     (if (< s1 s2)
       (- s2 e1)
       (- s1 e2))))
-    
-(defn distance [r1 r2] 
+
+(defn segment-encloses?
+  "Returns true if segment1 encloses segment2, which means that segment2 lies 
+   entirely inside of segment1, end-points inclusive."
+  [[s1 e1] [s2 e2]]
+  (and (<= s1 s2) (>= e1 e2)))
+
+(defn clip-segment
+  "Attempts to project target-segment onto base-segment, were regions of 
+   target-segment outside of base-segment are truncated, or clipped, to the 
+   bounds of the base-segment."
+  [base-segment target-segment]
+  (cond (segment-encloses? base-segment target-segment) target-segment
+        (overlap? base-segment target-segment) 
+          (let [[s1 e1] base-segment 
+                [s2 e2] target-segment]
+            [(min e1 (max s2 s1))
+             (max s1 (min e1 e2))])
+        :else nil))
+
+;for records that contain a :start and :duration field, we can view them as 
+;line segments on the temporal axis.
+(defn record-distance [r1 r2] 
   (apply segment-distance (map record->segment) [r1 r2]))
 
 (defn stretch-to [rec1 rec2]
@@ -74,6 +101,8 @@
 
 (defn end-time [r]
   (+ (:start r) (:duration r)))
+(defn unbounded-segment? [s] 
+  (= s [Double/NEGATIVE_INFINITY Double/POSITIVE_INFINITY]))
 
 (defn translate
   "Shifts record along its temporal axis by delta."
@@ -143,25 +172,13 @@
 (defn chain
   "chain - takes a node list and creates a node that produces a list of nodes 
   that are chained together so that the end of one node is 'before the next.  
-  Returns the concatenated, chained nodes, where chaining is defined by f."
+  Returns the concatenated, chained nodes, where chaining is defined by f.
+  Default behavior ensures that any nodes in the list follow each otherso that 
+  their start and end time (+ start duration) overlap."
   ([chain-func nodes]
     (fn [ctx] 
       (chain-func (map (fn [nd] (nd ctx)) nodes))))
   ([nodes] (chain following-recs nodes)))
-
-(defn contiguously-stretch
-  "Assumes nodes have a start time and a duration. Ensures that any nodes in the 
-   list are chained so that their start and end time (+ start duration) overlap"
-  [nodes]
-  (chain stretch-to nodes))
-
-;(defn contiguously-align 
-;  "Assumes nodes have a start time and a duration. Ensures that any nodes in the 
-;   list are chained so that their start and end time (+ start duration) overlap.
-;   Overlapping is performed by translating (or shifting) the nodes rather than 
-;   altering the durations."
-;  [nodes]
-;  (chain 
 
 (defn choice
   "choice - takes a node list, and creates a node that will randomly return 
@@ -213,23 +230,33 @@
   [rec nodes]
   (transform #(merge % rec) nodes))
 
-;(defn truncate [start duration rec]
-;  (let [tfinal    (+ start duration)
-;        rstart    (get rec :start)
-;        rduration (get rec :duration)
-;        rfinal    (end-time rec)]
-;    (cond (<= rfinal tfinal) rec
-;          (<= 
-;          :else nil
-    
-(defn with-constrains
+(defn truncate-record
+  "Uses the boundary set by base-record to truncate target-record.
+   If target record can be fit into the bounds of base, a modified target-record
+   is returned.  Otherwise, nil."
+  [base-record target-record]
+  (let [bounds (record->segment base-record)
+        target (record->segment target-record)]
+    (if-let [new-bounds (record->segment (clip-segment bounds target))]
+      (merge target-record (segment->record new-bounds))
+      nil)))
+
+(defn with-constraints
   "Uses a pre-baked set of constraints, as provided by constraint-map, to filter
    the result of any generated nodes.  I'd like to change this, but for now 
    it'll be somewhat predefined constraints."
-  [{:keys [tfinal duration-max] :as constraint-map} nodes]
-  (let [tfinal (or tfinal :inf)
-        duration-max (or duration-max :inf)]
-    
+  [{:keys [tstart tfinal duration-max] :as constraint-map} nodes]
+  (let [tstart       (or tstart Double/NEGATIVE_INFINITY)
+        tfinal       (or tfinal Double/POSITIVE_INFINITY)
+        duration-max (or duration-max Double/POSITIVE_INFINITY)
+        global-bounds [tstart tfinal]
+        constrain  (if (unbounded-segment?  global-bounds)
+                          identity
+                          #(map (partial truncate-record global-bounds) %))]
+    (fn [ctx] 
+      (->> (flatten (nodes ctx))
+           (constrain) 
+           (filter (complement nil?)))))               
 )
 
 (defn merge-context [rec nodes]
@@ -244,20 +271,20 @@
 
 ;These are our primitive nodes....
 ;If we don't have a set of primitive nodes, we need a way to generate them.
-(def p1 {:bar1 {:start 10 :duration 1}
-         :bar2 {:start 11 :duration 10}
-         :bar3 {:start 21 :duration 5}
-         :bill {:start 30 :duration 30}
-         :cat  {:start 2  :duration 1}
-         :qux  {:start 50 :duration 1000}})
+(def p1 {:bar1 [{:start 10 :duration 1}]
+         :bar2 [{:start 11 :duration 10}]
+         :bar3 [{:start 21 :duration 5}]
+         :bill [{:start 30 :duration 30}]
+         :cat  [{:start 2  :duration 1}]
+         :qux  [{:start 50 :duration 1000}]})
 ;let's create a set of grouped nodes...
 
 ;Rules for composing primitive nodes, which in turn create new nodes.
-(def p2 {:bar {:chain [:bar1 :bar2 :bar3]}
-         :baz {:choice [0.5 :bill 
-                        0.5 {:transform [{:start (stats/exponential-dist 10)
-                                          :duration (stats/exponential-dist 2000)}
-                                         :cat]}]}
+(def p2 {:bar {:chain  [:bar1 :bar2 :bar3]}
+         :baz {:choice [:bill 
+                        {:transform [{:start (stats/exponential-dist 10)
+                                      :duration (stats/exponential-dist 2000)}
+                                     :cat]}]}
          :foo {:transform [{:start (stats/normal-dist 10 1)}
                            {:choice {:bar 1/3
                                      :baz 1/3
@@ -272,7 +299,20 @@
                                                   :dmax 5000}
                                                   :case1]}]]}})
 
-(defmulti  render-node (fn [node-type node-data ctx] node-type))
+(def node-ops #{:chain 
+                :transform 
+                :concat 
+                :replications
+                :constrain})
+
+(defn get-operation [nd] (and (map? nd) (some node-ops (keys nd))))
+(defn node-type [nd] (first (keys nd)))
+    
+(defmulti  render-node
+  "A generic method for traversing a sample-tree, collecting records at each 
+   step."
+  (fn [node-type node-data ctx] node-type))
+
 (defmethod render-node :default  [_ node-data ctx] node-data)
 (defmethod render-node :chain [_ node-data ctx] ((chain node-data) ctx))
 (defmethod render-node :choice [_ node-data ctx] 
@@ -287,9 +327,13 @@
     ((replications reps nodes) ctx)))
 (defmethod render-node :concat [_ node-data ctx]
   ((concatenate node-data) ctx))
-(defmethod render-node :constrain [_ node-data ctx]
-  (let [[constraints nodes] node-data]
-    (
+(defn render-graph [sample-graph root-node]
+  (let [nd (get root-node sample-graph)]
+    (render-node root-node 
+
+;(defmethod render-node :constraint [_ node-data ctx]
+;  (let [[constraints nodes] node-data]
+;    (
     
 ;(def ops {:chain 
 ;          :choice 
