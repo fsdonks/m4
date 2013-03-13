@@ -240,7 +240,7 @@
    from [0 1], that a node will be chosen.  Densities must sum to 1.0 to be
    valid."
   [pdf-map]
-  (assert (= 1.0 (reduce + (vals pdf-map))) 
+  (assert (= 1.0 (float (reduce + (vals pdf-map)))) 
           (str "Probability densities must sum to 1.0"))
   (let [nodes  (keys pdf-map) 
         choose (fn [] (loop [r (rand)
@@ -269,8 +269,8 @@
 (defn transform
   "given a function, applies the function to each child, returning the
    result.  basically map."
-  [f nodes]
-  (fn [ctx] (vec (map (fn [nd] (f (nd ctx))) nodes))))
+  [f node]
+  (fn [ctx] (f (node ctx))))
 
 (defn merge-record
   "Given a record of values, merges the record with each node, which assumably
@@ -354,9 +354,12 @@
   (into [] (map (fn [x] (if (or (keyword? x) (fn? x)) x 
                           (fn [ctx] (sample-node x ctx)))) xs)))
 
+(defn lift [x] (fn [ctx] (sample-node x ctx)))
+
 (defmethod sample-node :default  [node ctx] 
   (if (keyword? node) 
-    (node ctx) 
+    (let [res (node ctx)]
+      (if res (sample-node res ctx) res))
     (if-let [remaining (node-data node)]
       (sample-node remaining ctx)
       node)))
@@ -368,18 +371,18 @@
     (if (map? data) 
       (let [rendered-map (zipmap (lift-children (keys data))
                                                   (vals data))]                                             
-        ((weighted-choice rendered-map) ctx))
-      ((choice (lift-children data)) ctx))))
+        (sample-node ((weighted-choice rendered-map) ctx) ctx))
+      (sample-node ((choice (lift-children data)) ctx) ctx))))
 
 (defmethod sample-node :transform [node ctx]
   (let [{:keys [f children]} (node-data node)
         func (if (map? f) 
                (merge-stochastic f) f)]
-      ((transform func (lift-children children)) ctx)))
+      ((transform func (lift children)) ctx)))
 
 (defmethod sample-node :replications [node ctx]
   (let [{:keys [reps children]} (node-data node)]
-    ((replications reps (fn [ctx] (sample-node children ctx))) ctx)))
+    ((replications reps (lift-children children)) ctx)))
 
 (defmethod sample-node :constrain [node ctx]
   (let [{:keys [constraints children]} (node-data node)]
@@ -389,6 +392,20 @@
   ((concatenate (node-data node)) ctx))
 
 (comment ;testing
+  ;A population of records from which to sample.
+(def example-population 
+  [{:group "LandPrey" :start 1 :duration 1000 :SRC "Donkey"  :quantity 2}
+   {:group "LandPrey" :start 1 :duration 1000 :SRC "Rabbit"  :quantity 5}
+   {:group "LandPrey" :start 1 :duration 1000 :SRC "Mouse"   :quantity 20}
+   {:group "AirPrey"  :start 1 :duration 150  :SRC "Sparrow" :quantity 10}
+   {:group "AirPrey"  :start 1 :duration 150  :SRC "Finch"   :quantity 30}
+   {:group "WaterPrey" :start 1 :duration 1000 :SRC "Minnow" :quantity 100}
+   {:group "LandPred" :start 1 :duration 300  :SRC "Fox"     :quantity 1}
+   {:group "LandPred" :start 1 :duration 300  :SRC "Wolf"    :quantity 5}
+   {:group "AirPred"  :start 1 :duration 500  :SRC "Hawk"    :quantity 15}
+   {:group "AirPred"  :start 1 :duration 500  :SRC "Eagle"   :quantity 7}
+   {:group "WaterPred" :start 1 :duration 2000 :SRC "Shark"  :quantity 1}])
+         
 ;These are our primitive nodes....
 ;If we don't have a set of primitive nodes, we need a way to generate them.
 (def p1 {:bar1 {:name "bar1" :start 10 :duration 1}
@@ -406,22 +423,31 @@
                            {:start    (stats/exponential-dist 10)
                             :duration (stats/exponential-dist 2000)}
                            :cat)])
-         :foo (->transform {:start (stats/normal-dist 10 1)}
-                 (->choice {:bar 1/3
-                            :baz 1/3
-                            :qux 1/3}))})
+         :foo (->transform  {:start (stats/normal-dist 10 1)}
+                 (->choice  {:bar (/ 1 3)
+                             :baz (/ 1 3)
+                             :qux (/ 1 3)}))})
 
 ;Rules for composing previous nodes into a case node.
 (def p3 {:case1 (->concatenate 
-                  [(->replications 2  [:foo])
-                   (->replications 10 [:qux])
-                   (->replications 3  [:baz])])})
+                  [(->replications 2  :foo)
+                   (->replications 10 :qux)
+                   (->replications 3  :baz)])})
 
 ;Rules for composing everything into a sample. 
-(def p4 {:sample (->replications 3 [(->constraint {:tfinal 5000 
-                                                   :duration-max 5000}
-                                                  :case1)])})
+(def p4 {:sample (->replications 3 [(->constrain {:tfinal 5000 
+                                                  :duration-max 5000}
+                                                 :case1)])})
 (def sample-graph (merge p1 p2 p3 p4))
+
+;(def ptest 
+;  {:bill {:name "bill" :start 30 :duration 30}
+;   :cat  {:name "cat" :start 2  :duration 1}   
+;   :baz (->choice [:bill 
+;                   (->transform 
+;                     {:start    (stats/exponential-dist 10)
+;                      :duration (stats/exponential-dist 2000)}
+;                     :cat)])})
 
 ;nodes take the form {:node-type some-type :node-data  some-data}
 (def sampler1 
@@ -456,6 +482,7 @@
 (def simple-graph {:foo {:name "Foo!"}
                    :bar {:name "Bar!"}
                    :baz {:name "Baz!"}})
+
 (def simple-nodes (keys simple-graph))
 
 (def choices (weighted-choice {:foo 0.25 :bar 0.50 :baz 0.25}))
@@ -513,39 +540,9 @@
 ;legacy implementation
 
 ;This is on hold temporarily....probably punt off on Dwight!
-;A population of records from which to sample.
-(def example-population 
-  [{:group "LandPrey" :start 1 :duration 1000 :SRC "Donkey"  :quantity 2}
-   {:group "LandPrey" :start 1 :duration 1000 :SRC "Rabbit"  :quantity 5}
-   {:group "LandPrey" :start 1 :duration 1000 :SRC "Mouse"   :quantity 20}
-   {:group "AirPrey"  :start 1 :duration 150  :SRC "Sparrow" :quantity 10}
-   {:group "AirPrey"  :start 1 :duration 150  :SRC "Finch"   :quantity 30}
-   {:group "WaterPrey" :start 1 :duration 1000 :SRC "Minnow" :quantity 100}
-   {:group "LandPred" :start 1 :duration 300  :SRC "Fox"     :quantity 1}
-   {:group "LandPred" :start 1 :duration 300  :SRC "Wolf"    :quantity 5}
-   {:group "AirPred"  :start 1 :duration 500  :SRC "Hawk"    :quantity 15}
-   {:group "AirPred"  :start 1 :duration 500  :SRC "Eagle"   :quantity 7}
-   {:group "WaterPred" :start 1 :duration 2000 :SRC "Shark"  :quantity 1}])
 
-;Records that describe sampling functions. 
-(def legacy-generator-records 
-  [{:type "RandomPrey" :frequency 10 
-    :StartDistribution "Uniform"     :Start1 0 :Start2 4670 :Start3 0 
-    :DurationDistribution "Vignette" :Duration1 0 :Duration2 0 :Duration3 0
-    :pool ["LandPrey" 0.33 "AirPrey" 0.33 "WaterPrey" 0.33]}
-   {:type "RandomPredator" :frequency 5 
-    :StartDistribution "Uniform"     :Start1 0 :Start2 4670 :Start3 0 
-    :DurationDistribution "Vignette" :Duration1 0 :Duration2 0 :Duration3 0
-    :pool ["LandPred" 0.33 "AirPred" 0.33 "WaterPred" 0.33]}
-   {:type "RandomWaterPred"  :StartDistribution "Uniform" :Start1 0 :Start2 4670 :Start3 0 
-    :DurationDistribution "Vignette" :Duration1 0 :Duration2 0 :Duration3 0
-    :pool ["WaterPred" 1.0]}
-   {:type "RandomLandPred"  :StartDistribution "Uniform" :Start1 0 :Start2 4670 :Start3 0 
-    :DurationDistribution "Vignette" :Duration1 0 :Duration2 0 :Duration3 0
-    :pool ["LandPred" 1.0]}
-   {:type "RandomAirPred"  :StartDistribution "Uniform" :Start1 0 :Start2 4670 :Start3 0 
-    :DurationDistribution "Vignette" :Duration1 0 :Duration2 0 :Duration3 0
-    :pool ["AirPred" 1.0]}])
+
+
 
 (defn legacy-distribution
   "A patch to allow us to parse old data for defining distributions.
@@ -578,78 +575,13 @@
   [r]
   (merge r {:computed-fields (derive-distributions r)}))  
 
-;(defn record->generator [r population]
-;  (let [spec (if (legacy-record? r) 
-;               (legacy-record->generator-spec r)
-;               r)]
-;    (fn [
 
-;(defn record->run-spec [r])
-  
-   
-;records that describe dependencies that must be enforced for any sampled 
-;population.  note...the implicit assumption is that trigger and triggered are
-;primary are keys generated from -an un-named field - :group.  This is a 
-;weakness in the design, and is brittle.  we should make it more robust.
-;There is also a problem here with the separation of concerns.....specifically, 
-;we encode a second layer of dependencies between the dependencies with the 
-;notion of 'priorities' and 'min-inter-arrival times.....what we really want 
-;is a second set of data that indicates mutual exclusions....
-(def demo-dependency-records 
-  [{:trigger "AirPrey"  :triggered "AirPred"   
-    :priority 2 :offset 2 :min-inter-arrival 10}
-   {:trigger "LandPrey"  :triggered "LandPred"  
-    :priority 1 :offset 7 :min-inter-arrival 30}
-   {:trigger "LandPrey"  :triggered "AirPred"   
-    :priority 1 :offset 7 :min-inter-arrival 10}
-   {:trigger "WaterPrey" :triggered "WaterPred" 
-    :priority 1 :offset 1 :min-interarrival  90}
-   {:trigger "WaterPrey" :triggered "AirPred" 
-    :priority 1 :offset 1 :min-interarrival  10}])
 
-(defn get-dependent-set
-  "Returns a hash-set of the records that must be checked for collisions due
-   to dependencies.  All other records are assumed independent."
-  [dependency-records]
-  (into #{} (map :triggered dependency-records)))
 
-;dependencies are constraints...that enforce the existence of one or more 
-;records offset from an original record.
-;distance constraints enforce the merging of records that are members of an 
-;equivalence class.  Equivalent records that overlap are merged according to 
-;the highest priority.  Equivalent records that are "close", <= the min 
-;inter-arrival time, are merged according to a weld function.  The default 
-;behavior is to stretch the duration of the earlier record to the start of 
-;the second record. 
-  
 
-(defn overlap-records [rec1 rec2])
 
-;The original algorithm implied that dependent events could be merged or 
-;subsumed if multiple dependent events were found to collide, where a collision
-;occured if two 'dependent events overlapped, where dependent events are 
-;the set of reachable 'triggered events from the dependency records.
-;these records form an implicit equivalence class....
 
-(defn field-equal? [field v m] (= (get  m field) v))
 
-(defn default-merge 
-  [inherited-fields rec-from rec-to]
-  (into rec-to (for [fld inherited-fields]
-                 [fld (get rec-from fld)])))
-
-(defn dependency-injector
-  "A dependency injector, for records, provides a function that maps a record to
-   a sequence of dependent records, where dependent records are drawn from a 
-   population of records.  Dependent-records share the same value of key-field
-   with the input record.  If inherited fields are specified, the dependent 
-   records will assume the field values of the input record."
-  [key-field inherited-fields dependency population 
-   & {:keys [merge-func] :or {merge-func (partial default-merge 
-                                                  inherited-fields)}}]
-  (let [dependent-recs (filter (partial field-equal? key-field 
-                                        (get dependency key-field)) population)]        
-    (fn [record] (map (partial merge-func record) dependent-recs))))
 
 
 
