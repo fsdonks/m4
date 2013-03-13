@@ -393,6 +393,12 @@
 (defmethod sample-node :concatenate [node ctx]
   ((concatenate (node-data node)) ctx))
 
+(defn sample-from
+  "Convenience function for executing complex queries.  Useful for building 
+   queries inline, using the ->> threading macro."
+  [ctx query]
+  (sample-node query ctx))
+
 (comment ;testing
   ;A population of records from which to sample.
 (def example-population-table
@@ -411,8 +417,7 @@
 (def population-context 
   (->>  example-population-table
     (group-by (comp keyword clojure.string/lower-case :group))))
-
-(def dependencies (          
+        
 
 (def simple-sim (->replications 10 
                   [(->transform 

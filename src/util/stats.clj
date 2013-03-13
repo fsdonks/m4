@@ -151,8 +151,11 @@
 (defn distribution-error [dname]
   (throw (Exception. (str "distribution " dname "does not exist!"))))
 
-(defn get-distribution [distribution-name]
-  (get distribution-map (lower-case distribution-name)))
+(defn get-distribution
+  "Fetches a canonical distribution constructor from a common string name."
+  [distribution-name]
+  (get distribution-map (lower-case distribution-name)
+       (distribution-error distribution-name)))
 
 ;testing
 (comment 
