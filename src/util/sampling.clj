@@ -355,11 +355,13 @@
                           (fn [ctx] (sample-node x ctx)))) xs)))
 
 (defn lift [x] (fn [ctx] (sample-node x ctx)))
+(defn node? [x] (and (map? x) (contains? x :node-type)))
 
 (defmethod sample-node :default  [node ctx] 
-  (if (keyword? node) 
-    (let [res (node ctx)]
-      (if res (sample-node res ctx) res))
+  (if (or (keyword? node) (symbol? node) (number? node) (string? node)) 
+    (let [res (get ctx node)]
+      (if res (sample-node res ctx) ;continue sampling... 
+        (or res (when ((complement node?) node) node))))
     (if-let [remaining (node-data node)]
       (sample-node remaining ctx)
       node)))
@@ -393,7 +395,7 @@
 
 (comment ;testing
   ;A population of records from which to sample.
-(def example-population 
+(def example-population-table
   [{:group "LandPrey" :start 1 :duration 1000 :SRC "Donkey"  :quantity 2}
    {:group "LandPrey" :start 1 :duration 1000 :SRC "Rabbit"  :quantity 5}
    {:group "LandPrey" :start 1 :duration 1000 :SRC "Mouse"   :quantity 20}
@@ -406,6 +408,18 @@
    {:group "AirPred"  :start 1 :duration 500  :SRC "Eagle"   :quantity 7}
    {:group "WaterPred" :start 1 :duration 2000 :SRC "Shark"  :quantity 1}])
          
+(def population-context 
+  (->>  example-population-table
+    (group-by (comp keyword clojure.string/lower-case :group))))
+
+(def dependencies (          
+
+(def simple-sim (->replications 10 
+                  [(->transform 
+                     #(map (merge-stochastic 
+                             {:start (stats/uniform-dist 0 20000)
+                              :duration (stats/normal-dist 500 150)}) %)
+                     (->choice (vec (keys population-context))))]))
 ;These are our primitive nodes....
 ;If we don't have a set of primitive nodes, we need a way to generate them.
 (def p1 {:bar1 {:name "bar1" :start 10 :duration 1}
