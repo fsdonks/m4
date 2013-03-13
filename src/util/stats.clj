@@ -135,7 +135,16 @@
 (def lower-case clojure.string/lower-case)
 
 (def distribution-map
-  {"normal"       normal-dist
+  {:normal        normal-dist
+   :gamma         gamma-dist
+   :beta          beta-dist
+   :triangle      triangle-dist
+   :uniform       uniform-dist
+   :log-normal    log-normal-dist
+   :exponential   exponential-dist
+   :log-logistic  log-logistic-dist
+   :fix           (fn [n] #(round n))
+   "normal"       normal-dist
    "gamma"        gamma-dist
    "beta"         beta-dist
    "triangle"     triangle-dist
@@ -155,8 +164,11 @@
 (defn get-distribution
   "Fetches a canonical distribution constructor from a common string name."
   [distribution-name]
-  (get distribution-map (lower-case distribution-name)
-       (distribution-error distribution-name)))
+  (let [f (if (keyword? distribution-name) 
+            identity 
+            (lower-case distribution-name))]
+    (get distribution-map (f distribution-name)
+         (distribution-error distribution-name))))
 
 ;testing
 (comment 

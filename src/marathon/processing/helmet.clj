@@ -18,6 +18,17 @@
 (def start-fields    ["StartDistribution" "S1" "S2" "S3"])
 (def duration-fields ["DurationDistribution" "D1" "D2" "D3"])
 
+(def legacy-arity
+  {:normal 2
+   :gamma  2
+   :beta   2
+   :triangle  3
+   :uniform   2
+   :log-normal  2
+   :exponential 1
+   :log-logistic 2
+   :fix 1})
+
 (defn sub-record [r fields]
   (let [fset (set fields)]
     (gen/align-fields-by fields 
@@ -28,12 +39,6 @@
   (case (clojure.string/lower-case v)
     ("vignette" "from-data" "data") true 
     nil))
-
-;from stackoverflow...uses Java reflection :/
-(defn arg-count [func] 
-  (let [m (first (.getDeclaredMethods (class func)))
-        p (.getParameterTypes m)]
-    (alength p)))
                  
 (defn derive-data-distribution
   "Given a distribution type, in the form a string value, parses the 
@@ -55,8 +60,10 @@
   [dist-type dist-name args]
   (if (use-data? dist-name) 
     (derive-data-distribution dist-type dist-name)   
-    (let [create-dist (stats/get-distribution dist-name)]
-      (apply create-dist (take (arg-count create-dist) args)))))
+    (let [create-dist (stats/get-distribution dist-name)
+          n   (get legacy-arity (keyword dist-name) 
+                 (throw (Exception.(str "unknown distribution" dist-name))))]
+      (apply create-dist (take n args)))))
 
 (defn parse-legacy-field [v]  
   (cond (symbol? v) (keyword v)
@@ -99,7 +106,8 @@
   {:start (apply legacy-distribution 
                (distribution-args "start" (sub-record r start-fields)))     
    :duration  (apply legacy-distribution 
-                   (distribution-args "duration" (sub-record r duration-fields)))})
+                   (distribution-args "duration" 
+                      (sub-record r duration-fields)))})
 
 (defn get-fields [r xs]
   (vec (map (fn [x] (get r x)) xs)))
@@ -116,5 +124,5 @@
     
 
   
-Node	Frequency	StartDistribution	S1	S2	S3	DurationDistribution	D1	D2	D3	Pool
-GetHoot	2	uniform	0	1000	nil	from-data	nil	nil	nil	[:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]
+;Node	Frequency	StartDistribution	S1	S2	S3	DurationDistribution	D1	D2	D3	Pool
+;GetHoot	2	uniform	0	1000	nil	from-data	nil	nil	nil	[:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]

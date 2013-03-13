@@ -41,6 +41,7 @@
 (defn record->segment
   "Convert a map into a vector of [start duration]"
   [r] [(:start r) (+ (:start r) (:duration r))])
+
 (defn segment->record
   "Convers a vector of [start end] into a record of {start duration}."
   [seg]
