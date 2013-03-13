@@ -161,6 +161,9 @@
 ;since we're likely dealing with tables...or record sets....it'd be nice 
 ;to have an operator for describing them...
 
+;We define a little language for building abstract syntax trees that correspond
+;to a computation that...for now....produces a vector of records.
+
 ;Now...there are operators in our language...
 (defn following-recs [rs]
   (reduce (fn [acc x] 
@@ -187,7 +190,7 @@
    unless an alternate probabilities are provided."
   ([sample-func nodes]
     (fn [ctx] ((sample-func nodes) ctx)))
-  ([nodes] (choice nodes rand-nth)))
+  ([nodes] (choice rand-nth nodes)))
 
 (defn weighted-choice
   "Identical to choice, except it takes a map of node->probability densities.
@@ -217,7 +220,9 @@
   "replicate - takes an positive integer, n, and performs n traversals of the 
    children, implicitly concatenating the results." 
   [n nodes]
-  (fn [ctx] (reduce conj [] (map (fn [i] (nodes ctx)) (range n)))))
+  (let [rep (fn [ctx f]  (reduce conj [] (map (fn [i] (f ctx)) (range n))))]
+    (fn [ctx] 
+      (vec (map (partial rep ctx) (if (sequential? nodes) nodes [nodes]))))))
 
 (defn transform
   "given a function, applies the function to each child, returning the
@@ -271,12 +276,12 @@
 
 ;These are our primitive nodes....
 ;If we don't have a set of primitive nodes, we need a way to generate them.
-(def p1 {:bar1 {:start 10 :duration 1}
-         :bar2 {:start 11 :duration 10}
-         :bar3 {:start 21 :duration 5}
-         :bill {:start 30 :duration 30}
-         :cat  {:start 2  :duration 1}
-         :qux  {:start 50 :duration 1000}})
+(def p1 {:bar1 {:name "bar1" :start 10 :duration 1}
+         :bar2 {:name "bar2" :start 11 :duration 10}
+         :bar3 {:name "bar3" :start 21 :duration 5}
+         :bill {:name "bill" :start 30 :duration 30}
+         :cat  {:name "cat" :start 2  :duration 1}
+         :qux  {:name "qux" :start 50 :duration 1000}})
 ;let's create a set of grouped nodes...
 
 ;Rules for composing primitive nodes, which in turn create new nodes.
@@ -299,62 +304,90 @@
                                                   :duration-max 5000}
                                                   :case1]}]]}})
 
-(def node-ops #{:chain 
-                :transform 
-                :concat 
-                :replications
-                :constrain})
-
 (defn node-type [nd] (get nd :node-type))
-(defn node-data [nd] (get nd :node-data))
+(defn node-data [nd] (get nd :node-data) nd)
+
 
 (defn ->node         [type data] {:node-type type :node-data data})
-(defn ->chain        [nodes]   (->node :chain {:children nodes}))
-(defn ->replications [n nodes] (->node :replications {:reps n 
-                                                      :children nodes}))
-(defn ->choice       [nodes]   (->node :choice {:children nodes}))
-(defn ->transform    [f nodes] (->node :transform 
-                                 {:f (if (map? f) #(merge % f) f) 
-                                  :children nodes})) 
-(defn ->concatenate  [nodes]   (->node :concatenate {:children nodes}))
+(defn ->group        [node-seq] (->node :group {:children node-seq})) 
+(defn ->leaf         [data]     (->node :leaf data))
+(defn ->chain        [nodes]    (->node :chain {:children nodes}))
+(defn ->replications [n nodes]  (->node :replications {:reps n 
+                                                       :children nodes}))
+(defn ->choice       [nodes]    (->node :choice {:children nodes}))
+(defn ->transform    [f nodes]  (->node :transform 
+                                  {:f (if (map? f) #(merge % f) f) 
+                                   :children nodes})) 
+(defn ->concatenate  [nodes]    (->node :concatenate {:children nodes}))
 (defn ->constrain    [constraints nodes] 
   (->node :constrain {:constraints constraints 
                       :children nodes}))
 
 ;nodes take the form {:node-type some-type :node-data  some-data}
-(def simple-root 
-  (->node :root 
-    (->replications 3      
-       {:bar1 {:start 10 :duration 1}}))) 
-                                             
+(def sampler1 
+  (->node :start 
+    (->replications 3 (->leaf :bar1))))
+  
+(def sampler2 
+  (->node :start 
+    (->replications 3
+       (->choice  [:bar1
+                   :bar2
+                   :bar3]))))
+
+(def nested-choices 
+  (->choice  [(->choice [:qux :cat :bill])
+              :bar2
+              :bar3]))
+
+(def weighted-choices
+  (->choice  {:qux 0.25 
+              :cat 0.25
+              :bill 0.5}))
+(def sampler3 
+  (->node :start 
+    (->replications 3
+       (->choice  [(->choice [:bill :cat :qux])
+                   :bar2
+                   :bar3]))))
+
+(defn forever [x] (fn [ctx] x))
+(defn as-behaviors [xs] 
+  (into [] (map (fn [x] (if (or (keyword? x) (fn? x)) x (forever x))))))
+
+(defn render-children [xs] 
+  (into [] (map (fn [x] (cond (or (keyword? x) (fn? x)) x 
+                          (fn [ctx] (render-node x ctx)))) xs)))
+
 (defmulti  render-node
   "A generic method for traversing a sample-tree, collecting records at each 
    step."
   (fn [node ctx] (node-type node)))
 
 (defmethod render-node :default  [node ctx] (if-let [remaining (node-data node)]
-                                              (render-node remaining)
+                                              (render-node remaining ctx)
                                               node))
+(defmethod render-node :leaf     [node ctx] (get ctx (node-data node)))
 (defmethod render-node :chain    [node ctx] ((chain (node-data node)) ctx))
 (defmethod render-node :choice   [node ctx]
-  (let [data (node-data node)]
+  (let [data (:children (node-data node))]
     (cond (map? data) ((weighted-choice data) ctx)
-          :else ((choice data) ctx))))
+          :else ((choice (render-children data)) ctx))))
 
 (defmethod render-node :transform [node ctx]
   (let [{:keys [f children]} (node-data node)]
-      ((transform f children) ctx)))
+      ((transform f  children) ctx)))
 
 (defmethod render-node :replications [node ctx]
   (let [{:keys [reps children]} (node-data node)]
-    ((replications reps children) ctx)))
+    ((replications reps (fn [ctx] (render-node children ctx))) ctx)))
 
 (defmethod render-node :concatenate [node ctx]
   ((concatenate (node-data node)) ctx))
-
-(defn render-graph [sample-graph root-node]
-  (let [nd (get root-node sample-graph)]
-    (render-node root-node 
+;
+;(defn render-graph [sample-graph root-node]
+;  (let [nd (get root-node sample-graph)]
+;    (render-node root-node 
 
 ;(defmethod render-node :constraint [_ node-data ctx]
 ;  (let [[constraints nodes] node-data]
