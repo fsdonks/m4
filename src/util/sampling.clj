@@ -69,6 +69,10 @@
   [[s1 e1] [s2 e2]]
   (and (<= s1 s2) (>= e1 e2)))
 
+(defn segment-intersects?
+  "Predicate to determine if segment s is defined at t."
+  [s t] (segment-encloses? s [t t]))
+
 (defn clip-segment
   "Attempts to project target-segment onto base-segment, were regions of 
    target-segment outside of base-segment are truncated, or clipped, to the 
@@ -151,11 +155,49 @@
     (merge {:start tstart :duration (- tfinal tstart)}
            rec1)))
 
-(defn subsume-by
-  "Allows a user-supplied function to determine the order in which a set of 
-   records should be merged.  f should be a function that returns a value 
-   amenable to comparison, using clojure.core/compare."
-  [f xs])
+(defn split-records-with
+  "Splits any instances of records in xs, which intersect time t, into 2 or more
+   new records by applying split-func to the intersecting records.  Returns the 
+   split records concatenated with the orginal, un-split records."
+  [t split-func xs]
+  (reduce (fn [acc x] (if (segment-intersects? (record->segment x) t)
+                        (reduce conj acc (split-func t x))
+                        (conj acc x))) [] xs))
+
+(defn split-record
+  "Splits record at time t returning a pair of records, [l r], where l ends just 
+   before t, and r begins on t.  Caller may supply a distance parameter to 
+   determine the distance from t."
+  ([t sep record] (let [seprec {:start t :duration sep}
+                        post (- (end-time record)
+                                (end-time seprec))]
+                    [(stretch-to record seprec) 
+                     (lengthen (* -1 post) (follow seprec record))]))
+  ([t record] (split-record t 1 record)))
+
+(defn split-records
+  "Default record-splitting function.  Uses split record, with an optional 
+   separation time uniformly applied around the split time t, to bifurcate 
+   any records in xs that are defined over time t."
+  [t xs] (split-records-with t split-record xs)) 
+
+(defn merge-stochastic
+  "Given a map m, creates a merge function that will associate values from 
+   m into another map, record, with the possibility of evaluating any values 
+   in m that are no-argument functions (assumably with side-effects). Intended
+   to support drawing record fields from distributions of values."
+  [m]
+  (fn [record] 
+    (reduce conj record (for [[k func-val] m] 
+                          [k (if (fn? func-val) 
+                               (func-val)
+                               func-val)]))))
+
+;(defn subsume-by
+;  "Allows a user-supplied function to determine the order in which a set of 
+;   records should be merged.  f should be a function that returns a value 
+;   amenable to comparison, using clojure.core/compare."
+;  [f xs])
 
 ;some convenience operators....
 ;since we're likely dealing with tables...or record sets....it'd be nice 
@@ -274,6 +316,79 @@
 ;This is a slight break with the original version, in that I've developed a 
 ;simple little-language to describe the phenomenon (actually many phenomena).
 
+(defn node-type [nd] (get nd :node-type))
+(defn node-data [nd] (get nd :node-data))
+
+;node constructors
+(defn ->node  [type data] 
+  {:node-type type :node-data data})
+(defn ->chain [nodes]    
+  (->node :chain {:children nodes}))
+(defn ->replications [n nodes] 
+  (->node :replications {:reps n :children nodes}))
+(defn ->choice [nodes]    
+  (->node :choice {:children nodes}))
+(defn ->transform    
+  [f nodes]  
+  (->node :transform {:f  f :children nodes})) 
+(defn ->concatenate  
+  [nodes]    
+  (->node :concatenate {:children nodes}))
+(defn ->constrain    
+  [constraints nodes] 
+  (->node :constrain {:constraints constraints :children nodes}))
+
+(defmulti  sample-node
+  "A generic method for traversing a sample-tree, collecting records at each 
+   step."
+  (fn [node ctx] (node-type node)))
+
+(defn lift-children
+  "Helper function to allow us to ensure that values we need to pass the 
+   rendering context to are able to be evaluated.  Things that are keywords 
+   or functions are fine already, where anything else - like a node - needs to 
+   be lifted using node rendering.  The only reason for this is to allow 
+   inlining node definitions anywhere in the sample graph, but it's useful 
+   enough to justify the overhead."
+  [xs] 
+  (into [] (map (fn [x] (if (or (keyword? x) (fn? x)) x 
+                          (fn [ctx] (sample-node x ctx)))) xs)))
+
+(defmethod sample-node :default  [node ctx] 
+  (if (keyword? node) 
+    (node ctx) 
+    (if-let [remaining (node-data node)]
+      (sample-node remaining ctx)
+      node)))
+
+(defmethod sample-node :leaf     [node ctx] (get ctx (node-data node)))
+(defmethod sample-node :chain    [node ctx] ((chain (node-data node)) ctx))
+(defmethod sample-node :choice   [node ctx]
+  (let [data (:children (node-data node))]
+    (if (map? data) 
+      (let [rendered-map (zipmap (lift-children (keys data))
+                                                  (vals data))]                                             
+        ((weighted-choice rendered-map) ctx))
+      ((choice (lift-children data)) ctx))))
+
+(defmethod sample-node :transform [node ctx]
+  (let [{:keys [f children]} (node-data node)
+        func (if (map? f) 
+               (merge-stochastic f) f)]
+      ((transform func (lift-children children)) ctx)))
+
+(defmethod sample-node :replications [node ctx]
+  (let [{:keys [reps children]} (node-data node)]
+    ((replications reps (fn [ctx] (sample-node children ctx))) ctx)))
+
+(defmethod sample-node :constrain [node ctx]
+  (let [{:keys [constraints children]} (node-data node)]
+    ((with-constraints constraints (sample-node children)))))
+
+(defmethod sample-node :concatenate [node ctx]
+  ((concatenate (node-data node)) ctx))
+
+(comment ;testing
 ;These are our primitive nodes....
 ;If we don't have a set of primitive nodes, we need a way to generate them.
 (def p1 {:bar1 {:name "bar1" :start 10 :duration 1}
@@ -285,48 +400,33 @@
 ;let's create a set of grouped nodes...
 
 ;Rules for composing primitive nodes, which in turn create new nodes.
-(def p2 {:bar {:chain  [:bar1 :bar2 :bar3]}
-         :baz {:choice [:bill 
-                        {:transform [{:start (stats/exponential-dist 10)
-                                      :duration (stats/exponential-dist 2000)}
-                                     :cat]}]}
-         :foo {:transform [{:start (stats/normal-dist 10 1)}
-                           {:choice {:bar 1/3
-                                     :baz 1/3
-                                     :qux 1/3}}]}})
+(def p2 {:bar (->chain  [:bar1 :bar2 :bar3])
+         :baz (->choice [:bill 
+                         (->transform 
+                           {:start    (stats/exponential-dist 10)
+                            :duration (stats/exponential-dist 2000)}
+                           :cat)])
+         :foo (->transform {:start (stats/normal-dist 10 1)}
+                 (->choice {:bar 1/3
+                            :baz 1/3
+                            :qux 1/3}))})
+
 ;Rules for composing previous nodes into a case node.
-(def p3 {:case1 {:concat [{:replications [2  [:foo]]}
-                          {:replications [10 [:qux]]}
-                          {:replications [3  [:baz]]}]}})
+(def p3 {:case1 (->concatenate 
+                  [(->replications 2  [:foo])
+                   (->replications 10 [:qux])
+                   (->replications 3  [:baz])])})
 
 ;Rules for composing everything into a sample. 
-(def p4 {:sample {:replications [3 [{:constrain [{:tfinal 5000 
-                                                  :duration-max 5000}
-                                                  :case1]}]]}})
-
-(defn node-type [nd] (get nd :node-type))
-(defn node-data [nd] (get nd :node-data) nd)
-
-
-(defn ->node         [type data] {:node-type type :node-data data})
-(defn ->group        [node-seq] (->node :group {:children node-seq})) 
-(defn ->leaf         [data]     (->node :leaf data))
-(defn ->chain        [nodes]    (->node :chain {:children nodes}))
-(defn ->replications [n nodes]  (->node :replications {:reps n 
-                                                       :children nodes}))
-(defn ->choice       [nodes]    (->node :choice {:children nodes}))
-(defn ->transform    [f nodes]  (->node :transform 
-                                  {:f (if (map? f) #(merge % f) f) 
-                                   :children nodes})) 
-(defn ->concatenate  [nodes]    (->node :concatenate {:children nodes}))
-(defn ->constrain    [constraints nodes] 
-  (->node :constrain {:constraints constraints 
-                      :children nodes}))
+(def p4 {:sample (->replications 3 [(->constraint {:tfinal 5000 
+                                                   :duration-max 5000}
+                                                  :case1)])})
+(def sample-graph (merge p1 p2 p3 p4))
 
 ;nodes take the form {:node-type some-type :node-data  some-data}
 (def sampler1 
   (->node :start 
-    (->replications 3 (->leaf :bar1))))
+    (->replications 3 :bar1)))
   
 (def sampler2 
   (->node :start 
@@ -343,7 +443,8 @@
 (def weighted-choices
   (->choice  {:qux 0.25 
               :cat 0.25
-              :bill 0.5}))
+              :bill 0.25
+              (->choice [:bar1 :bar2 :bar3]) 0.25}))
 (def sampler3 
   (->node :start 
     (->replications 3
@@ -351,68 +452,6 @@
                    :bar2
                    :bar3]))))
 
-(defn forever [x] (fn [ctx] x))
-(defn as-behaviors [xs] 
-  (into [] (map (fn [x] (if (or (keyword? x) (fn? x)) x (forever x))))))
-
-(defn render-children [xs] 
-  (into [] (map (fn [x] (cond (or (keyword? x) (fn? x)) x 
-                          (fn [ctx] (render-node x ctx)))) xs)))
-
-(defmulti  render-node
-  "A generic method for traversing a sample-tree, collecting records at each 
-   step."
-  (fn [node ctx] (node-type node)))
-
-(defmethod render-node :default  [node ctx] (if-let [remaining (node-data node)]
-                                              (render-node remaining ctx)
-                                              node))
-(defmethod render-node :leaf     [node ctx] (get ctx (node-data node)))
-(defmethod render-node :chain    [node ctx] ((chain (node-data node)) ctx))
-(defmethod render-node :choice   [node ctx]
-  (let [data (:children (node-data node))]
-    (cond (map? data) ((weighted-choice data) ctx)
-          :else ((choice (render-children data)) ctx))))
-
-(defmethod render-node :transform [node ctx]
-  (let [{:keys [f children]} (node-data node)]
-      ((transform f  children) ctx)))
-
-(defmethod render-node :replications [node ctx]
-  (let [{:keys [reps children]} (node-data node)]
-    ((replications reps (fn [ctx] (render-node children ctx))) ctx)))
-
-(defmethod render-node :concatenate [node ctx]
-  ((concatenate (node-data node)) ctx))
-;
-;(defn render-graph [sample-graph root-node]
-;  (let [nd (get root-node sample-graph)]
-;    (render-node root-node 
-
-;(defmethod render-node :constraint [_ node-data ctx]
-;  (let [[constraints nodes] node-data]
-;    (
-    
-;(def ops {:chain 
-;          :choice 
-;          :weighted-choice 
-;          :transform 
-;          :replications 
-;          :concat
-;          :constrain })
-
-(def sample-graph (merge p1 p2 p3 p4))
-(defn walk-samplegraph
-  "Walks a set of nodes representing a sampling graph, starting at the 
-   root node.  Evalutes each node of the sample graph in the context of the 
-   graph as a whole.  Returns a sequence of results from the walk, typically 
-   records."
-  [graph-ctx root]
-  
-)
-
-
-(comment ;testing 
 ;sample from a pdf...
 (def simple-graph {:foo {:name "Foo!"}
                    :bar {:name "Bar!"}
