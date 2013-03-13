@@ -148,6 +148,7 @@
    "log-logistic" log-logistic-dist
    "fix"          (fn [n] #(round n))})
 
+
 (defn distribution-error [dname]
   (throw (Exception. (str "distribution " dname "does not exist!"))))
 
