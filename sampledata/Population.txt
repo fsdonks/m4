@@ -1,4 +1,4 @@
-Type 	Enabled	Priority	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Is 1_8	OITitle	Include	IsHoot	StochasticDuration	DependencyClass	Group	
+Type 	Enabled	Priority	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Is1_8	OITitle	Include	IsHoot	StochasticDuration	DependencyClass	Group	
 DemandRecord	true	1.0	1.0	1.0	1.0	17.0	45.0	Widget-A	Mixture-Initial	A	A 0	A 0-Initial	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
 DemandRecord	true	1.0	4.0	1.0	18.0	43.0	45.0	Widget-A	Mixture-Initial	A	A 1	A 1-Initial	Saucy	0.0	The Widget	true	Hoot			A_Dipper	
 DemandRecord	true	1.0	4.0	1.0	61.0	13.0	45.0	Widget-A	Mixture-Saucy	A	A 1	A 1-Saucy	Saucy	0.0	The Widget	true	Hoot			A_Dipper	

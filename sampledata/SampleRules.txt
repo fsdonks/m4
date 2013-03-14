@@ -1,5 +1,5 @@
-Node	Frequency	StartDistribution	S1	S2	S3	DurationDistribution	D1	D2	D3	Pool	Rule	
-GetHoot	2.0	uniform	0.0	1000.0	nil	from-data	nil	nil	nil	[:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]	{:GetHoot {:replicate 2 {:transform [{:start (uniform 0 1000)} {:choice [:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]}]}}	
-GetHootCumulative	2.0	uniform	0.0	1000.0	nil	from-data	nil	nil	nil	{:A_Dipper 0.25 :Hoot1 0.25 :Hoot3 0.75}	{:GetHootCumulative {:replicate 2 {:transform [{:start (uniform 0 1000)} {:choice {:A_Dipper 0.25 :Hoot1 0.25 :Hoot3 0.75}}]}}}	
-RandomNonHoots	20.0	uniform	0.0	1000.0	nil	from-data	nil	nil	nil	[:Dollar :Ipsum1_Dipper :Some16 :Some18 :Some21 :Some5 :Some6]	{:RandomNonHoots {:replicate 20 {:transform [{:start (uniform 0 1000)} {:choice [:Dollar :Ipsum1_Dipper :Some16 :Some18 :Some21 :Some5 :Some6]}]}}}	
-Static	1.0	from-data	nil	nil	nil	from-data	nil	nil	nil	[:every :Some5 :Some16]	{:Static {:concat [:Some5 :Some16]}}	
+Rule	Frequency	StartDistribution	S1	S2	S3	DurationDistribution	D1	D2	D3	Pool
+GetHoot	2	uniform	0	1000	nil	from-data	nil	nil	nil	[:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]
+GetHootCumulative	2	uniform	0	1000	nil	from-data	nil	nil	nil	{:A_Dipper 0.25 :Hoot1 0.25 :Hoot3 0.75}
+RandomNonHoots	20	uniform	0	1000	nil	from-data	nil	nil	nil	[:Dollar :Ipsum1_Dipper :Some16 :Some18 :Some21 :Some5 :Some6]
+Static	1	from-data	nil	nil	nil	from-data	nil	nil	nil	[:every :Some5 :Some16]

@@ -12,12 +12,16 @@
 
 ;these are the original fields from our legacy excel-based tables....
 (def legacy-rule-fields 
-  ["Node" "Frequency" 
+  ["Rule" "Frequency" 
    "StartDistribution" "S1" "S2" "S3" 
    "DurationDistribution" "D1" "D2" "D3" "Pool"])
+(def legacy-rule-keys (vec (map keyword legacy-rule-fields)))
 
 (def start-fields    ["StartDistribution" "S1" "S2" "S3"])
+(def start-keys (vec (map keyword start-fields)))
+
 (def duration-fields ["DurationDistribution" "D1" "D2" "D3"])
+(def duration-keys (vec (map keyword duration-fields)))
 
 ;We need this to bridge a problem with the legacy data set, namely that 
 ;the arity of distributions was unknown in the data...there are always 
@@ -74,17 +78,21 @@
   (cond (symbol? v) (keyword v)
         (list? v)   (eval v)
         (vector? v) (vec (map parse-legacy-field v))
+        (string? v) (if (= (first v) \") 
+                      v
+                      (parse-legacy-field (read-string v)))
+                      
         :else v)) 
 
 (defn parse-legacy-record
   "Converts a raw legacy record into a normalized record that can be processed 
    into a rule or other data structure."
   [r]
-  (assert (every? (set legacy-rule-fields) 
+  (assert (every? (set legacy-rule-keys) 
                   (keys r)) 
           (str "record does not conform to expected fields! "
                {:record-fields (keys r)
-                :expected-fields legacy-rule-fields}))  
+                :expected-fields legacy-rule-keys}))  
   (into {} (for [[k v] r]
              [k (parse-legacy-field v)]))) 
  
@@ -95,12 +103,13 @@
    missing from the resulting map."
   [r]
   (let [start (apply legacy-distribution 
-               (distribution-args "start" (rec/sub-record r start-fields)))     
+               (distribution-args "start" (rec/sub-record r start-keys)))     
         duration (apply legacy-distribution 
                    (distribution-args "duration" 
-                        (rec/sub-record r duration-fields)))]
+                        (rec/sub-record r duration-keys)))]
     (->> (if start {:start start} {})
          ((fn [m] (if duration (assoc m :duration duration) m))))))
+(defn include-all? [pool] (= :every (first pool)))
 
 (defn legacy-rule-record->sample-rule
   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
@@ -110,10 +119,48 @@
   [rule-record]
   (let [parsed (parse-legacy-record rule-record)
         distributions (get-computed-fields parsed)
-        [name freq pool] (rec/get-fields parsed ["Node"	"Frequency" "Pool"])]
-    {name (sample/->replications freq
-             (sample/->transform distributions
-                 (sample/->choice pool)))}))
+        [name freq pool] (rec/get-fields parsed [:Rule	:Frequency :Pool])]
+    (->> (if (include-all? pool)
+           (sample/->replications 1 (subvec pool 1))
+           (sample/->choice pool))
+         ((fn [nd] (if (empty? distributions) nd 
+                     (sample/->transform distributions nd))))
+         ((fn [nd] (if (> freq 1)
+                     (sample/->replications freq [nd])
+                     nd)))
+         (assoc {} name)))) 
+         
+      
+
+
+
+(defn read-legacy-population
+  "Given a table of demand-records, converts the table into a map of records 
+   according to legacy processing rules.  Specifically, we add two fields to 
+   the table if they don't exist [:start :duration], which are drawn from  
+   StartDay and Duration.  records in the new table are are grouped by their 
+   Group field, where each group key forms a map of entries.  These form the 
+   context for executing rule-based sampling queries."
+  [table & {:keys [group-field start-field duration-field] 
+            :or {group-field :Group 
+                 start-field :StartDay 
+                 duration-field :Duration}}]
+  (let [get-col (fn [fld] (first (vals (tbl/get-field fld table))))]
+    (->> table 
+        (tbl/conj-fields {:start    (get-col start-field)
+                          :duration (get-col duration-field)})
+        (tbl/table-records)
+        (group-by (comp keyword group-field)))))
+  
+(defn read-legacy-rules [table]
+  (->> (map legacy-rule-record->sample-rule (tbl/table-records table))
+       (reduce merge)))
+
+;(defn build-case [rules tfinal duration-max futures]
+;  (sample/->constrain {:tfinal tfinal 
+;                       :duration-max duration-max}
+;      (sample/->replications futures 
+;           (sample/
 
 (comment ;testing
 ;;our test record fields...
@@ -125,18 +172,26 @@
 ;           [:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper 
 ;            :S-Foo-FootLbs]]
 
-  (def sample-fields 
-    '[GetHoot	2	uniform	0	1000	nil	from-data	nil	nil	nil	
-                [:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 
-                 :Ipsum_1Dipper :S-Foo-FootLbs]])
-
-  (def legacy-record 
-    (gen/align-fields-by 
-      legacy-rule-fields
-      (zipmap legacy-rule-fields 
-              sample-fields)))
-  (def parsed-record (parse-legacy-record legacy-record))
-  (def rule (legacy-rule-record->sample-rule parsed-record))
+;  (def sample-fields 
+;    '[GetHoot	2	uniform	0	1000	nil	from-data	nil	nil	nil	
+;                [:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 
+;                 :Ipsum_1Dipper :S-Foo-FootLbs]])
+;
+;  (def legacy-record 
+;    (gen/align-fields-by 
+;      legacy-rule-keys
+;      (zipmap legacy-rule-keys 
+;              sample-fields)))
+;  (def parsed-record (parse-legacy-record legacy-record))
+;  (def rule (legacy-rule-record->sample-rule parsed-record))
+  (require '[marathon.processing.sampledata :as dat])
+  (def demand-records dat/demand-records)
+  (def demand-tbl (tbl/records->table demand-records))
+  (def p (read-legacy-population demand-tbl))  
+  (def rule-records dat/rule-records)
+  (def rule-tbl (tbl/records->table rule-records))
+  (def rules (read-legacy-rules rule-tbl))
+  (def statics (:Static rules))
 
 ;want to transform a rule record into this ->
 ;{:GetHoot {:replicate 2 {:transform [{:start (uniform 0 1000)} 

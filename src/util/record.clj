@@ -1,5 +1,6 @@
 (ns util.record
-  (:use [util.general :only [serial-comparer orient-comparer]]))
+  (:use [util.general :only [serial-comparer orient-comparer
+                             align-fields-by]]))
 
 (defn sub-record
   "Returns a selection of fields from r.  Automatically aligns the record
@@ -8,7 +9,7 @@
   (let [fset (set fields)
         m (into {} (for [[k v] r :when (contains? fset k)] [k v]))]
     (if (sequential? fields)  
-      (gen/align-fields-by fields m)
+      (align-fields-by fields m)
       m)))
 
 (defn get-fields
