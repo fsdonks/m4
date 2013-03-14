@@ -156,11 +156,13 @@
   (->> (map legacy-rule-record->sample-rule (tbl/table-records table))
        (reduce merge)))
 
-;(defn build-case [rules tfinal duration-max futures]
-;  (sample/->constrain {:tfinal tfinal 
-;                       :duration-max duration-max}
-;      (sample/->replications futures 
-;           (sample/
+(defn add-case [case-name rules tfinal duration-max futures]
+  (merge {case-name (sample/->constrain {:tfinal tfinal 
+                                         :duration-max duration-max}
+                (sample/->replications futures rules))}
+         rules))
+
+(defn read-cases 
 
 (comment ;testing
 ;;our test record fields...
