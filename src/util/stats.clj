@@ -159,16 +159,16 @@
 
 
 (defn distribution-error [dname]
-  (throw (Exception. (str "distribution " dname "does not exist!"))))
+  (throw (Exception. (str "distribution " dname " does not exist!"))))
 
 (defn get-distribution
   "Fetches a canonical distribution constructor from a common string name."
   [distribution-name]
-  (let [f (if (keyword? distribution-name) 
-            identity 
-            (lower-case distribution-name))]
-    (get distribution-map (f distribution-name)
-         (distribution-error distribution-name))))
+  (let [k (if (keyword? distribution-name) 
+            distribution-name
+            (lower-case distribution-name))
+        v (get distribution-map k)]
+    (or v (distribution-error k))))
 
 ;testing
 (comment 

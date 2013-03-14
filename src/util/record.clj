@@ -1,6 +1,22 @@
 (ns util.record
   (:use [util.general :only [serial-comparer orient-comparer]]))
 
+(defn sub-record
+  "Returns a selection of fields from r.  Automatically aligns the record
+   by the order of supplied fields, if fields is a seqeuential collection."
+  [r fields]
+  (let [fset (set fields)
+        m (into {} (for [[k v] r :when (contains? fset k)] [k v]))]
+    (if (sequential? fields)  
+      (gen/align-fields-by fields m)
+      m)))
+
+(defn get-fields
+  "Converts fields xs into a vector of values ys, where each value y is 
+   the value associated with x in map r."
+  [r xs]
+  (vec (map (fn [x] (get r x)) xs)))
+
 ;stolen from stack overflow
 (defn static? [field]
   (java.lang.reflect.Modifier/isStatic
