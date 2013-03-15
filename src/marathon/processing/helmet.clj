@@ -124,7 +124,10 @@
            (sample/->replications 1 (subvec pool 1))
            (sample/->choice pool))
          ((fn [nd] (if (empty? distributions) nd 
-                     (sample/->transform distributions nd))))
+                     (sample/->transform 
+                       (fn [xs] 
+                         (map (sample/merge-stochastic
+                                distributions) xs)) nd))))
          ((fn [nd] (if (> freq 1)
                      (sample/->replications freq [nd])
                      nd)))
@@ -162,7 +165,6 @@
                 (sample/->replications futures rules))}
          rules))
 
-(defn read-cases 
 
 (comment ;testing
 ;;our test record fields...
@@ -194,6 +196,7 @@
   (def rule-tbl (tbl/records->table rule-records))
   (def rules (read-legacy-rules rule-tbl))
   (def statics (:Static rules))
+  
 
 ;want to transform a rule record into this ->
 ;{:GetHoot {:replicate 2 {:transform [{:start (uniform 0 1000)} 

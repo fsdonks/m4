@@ -1239,7 +1239,7 @@
  {:S3 "nil",
   :Frequency 2,
   :StartDistribution "uniform",
-  :Pool "{:A_Dipper 0.25 :Hoot1 0.25 :Hoot3 0.75}",
+  :Pool "{:A_Dipper 0.25 :Hoot1 0.25 :Hoot3 0.50}",
   :S1 0,
   :DurationDistribution "from-data",
   :S2 1000,
