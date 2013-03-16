@@ -69,6 +69,12 @@
   [distribution-type rec]
   ((juxt (fn [_] distribution-type) first rest) (vals rec)))
 
+(defn- truthy-string? [s]
+  (case (clojure.string/lower-case s)
+    "true" true
+    "false" false
+    nil))
+
 (defn parse-legacy-field
   "Parses values in legacy record into a normalized representation.  Symbols 
    become keywords, lists are assumed to be expressions that need to be 
@@ -78,24 +84,28 @@
   (cond (symbol? v) (keyword v)
         (list? v)   (eval v)
         (vector? v) (vec (map parse-legacy-field v))
-        (string? v) (if (= (first v) \") 
-                      v
-                      (parse-legacy-field (read-string v)))
+        (string? v) (cond (= (first v) \") v
+                          (truthy-string? v) (read-string 
+                                               (clojure.string/lower-case v))
+                          :else (parse-legacy-field (read-string v)))
                       
         :else v)) 
+
+(defn check-fields [r fields]
+  (assert (every? (set fields) 
+                  (keys r)) 
+          (str "record does not conform to expected fields! "
+               {:record-fields (keys r)
+                :expected-fields fields})))  
 
 (defn parse-legacy-record
   "Converts a raw legacy record into a normalized record that can be processed 
    into a rule or other data structure."
-  [r]
-  (assert (every? (set legacy-rule-keys) 
-                  (keys r)) 
-          (str "record does not conform to expected fields! "
-               {:record-fields (keys r)
-                :expected-fields legacy-rule-keys}))  
-  (into {} (for [[k v] r]
-             [k (parse-legacy-field v)]))) 
- 
+  [r & {:keys [expected-fields]}]
+  (do (if expected-fields (check-fields r expected-fields))
+    (into {} (for [[k v] r]
+               [k (parse-legacy-field v)]))))
+
 (defn get-computed-fields
   "Returns a map that indicates the transformations to apply for start and 
    duration values, if any.  In some cases, start and duration will be 
@@ -117,7 +127,8 @@
    sampling network, and then apply the ruleset to source data - usually demand 
    records."
   [rule-record]
-  (let [parsed (parse-legacy-record rule-record)
+  (let [parsed (parse-legacy-record rule-record 
+                      :expected-fields legacy-rule-keys)
         distributions (get-computed-fields parsed)
         [name freq pool] (rec/get-fields parsed [:Rule	:Frequency :Pool])]
     (->> (if (include-all? pool)
@@ -132,9 +143,6 @@
                      (sample/->replications freq [nd])
                      nd)))
          (assoc {} name)))) 
-         
-      
-
 
 
 (defn read-legacy-population
@@ -159,12 +167,27 @@
   (->> (map legacy-rule-record->sample-rule (tbl/table-records table))
        (reduce merge)))
 
-(defn add-case [case-name rules tfinal duration-max futures]
+(def case-fields 
+  ["CaseName" "Enabled" "Futures" "MaxDuration" 
+   "RandomSeed" "Tfinal" "Replacement"])
+
+(def case-keys (vec (map keyword case-fields)))
+
+(defn parse-legacy-case [record]
+  (parse-legacy-record record :expected-fields case-keys))
+
+(defn add-case 
+  [case-name rules-map future-count duration-max seed tfinal replacement]
   (merge {case-name (sample/->constrain {:tfinal tfinal 
-                                         :duration-max duration-max}
-                (sample/->replications futures rules))}
+                                         :duration-max duration-max
+                                         :seed seed}
+                        (sample/->replications futures rules))}
          rules))
 
+(defn read-legacy-cases [table]
+   (->> (tbl/table-records table)
+        (map parse-legacy-case)
+        (filter :Enabled)))
 
 (comment ;testing
 ;;our test record fields...
@@ -189,12 +212,19 @@
 ;  (def parsed-record (parse-legacy-record legacy-record))
 ;  (def rule (legacy-rule-record->sample-rule parsed-record))
   (require '[marathon.processing.sampledata :as dat])
+  
+  (def case-records dat/cases)
+  (def case-tbl (tbl/records->table case-records))
+  (def cases (read-legacy-cases case-tbl))
+  
   (def demand-records dat/demand-records)
   (def demand-tbl (tbl/records->table demand-records))
+  
   (def p (read-legacy-population demand-tbl))  
-  (def rule-records dat/rule-records)
+  (def rule-records dat/rule-records)  
   (def rule-tbl (tbl/records->table rule-records))
   (def rules (read-legacy-rules rule-tbl))
+  
   (def statics (:Static rules))
   
 

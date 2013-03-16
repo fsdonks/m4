@@ -294,16 +294,17 @@
   "Uses a pre-baked set of constraints, as provided by constraint-map, to filter
    the result of any generated nodes.  I'd like to change this, but for now 
    it'll be somewhat predefined constraints."
-  [{:keys [tstart tfinal duration-max] :as constraint-map} nodes]
+  [{:keys [tstart tfinal duration-max seed] :as constraint-map} nodes]
   (let [tstart       (or tstart Double/NEGATIVE_INFINITY)
         tfinal       (or tfinal Double/POSITIVE_INFINITY)
         duration-max (or duration-max Double/POSITIVE_INFINITY)
-        global-bounds [tstart tfinal]
-        constrain  (if (unbounded-segment?  global-bounds)
-                          identity
-                          #(map (partial truncate-record global-bounds) %))]
-    (fn [ctx] 
-      (->> (flatten (nodes ctx))
+        seed         (or seed (rand-int Integer/MAX_VALUE))
+        global-bounds [tstart tfinal]        
+        constrain    (if (unbounded-segment?  global-bounds)
+                       identity
+                       #(map (partial truncate-record global-bounds) %))]
+    (fn [ctx]
+      (->> (stats/with-seed seed (flatten (nodes ctx)))
            (constrain) 
            (filter (complement nil?))))))    
 

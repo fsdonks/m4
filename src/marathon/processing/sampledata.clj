@@ -1,5 +1,78 @@
 (ns marathon.processing.sampledata)
 
+(def cases 
+	[{:CaseName "Case1",
+	  :Enabled "TRUE",
+	  :Futures 5,
+	  :MaxDuration 5000,
+	  :RandomSeed 5,
+	  :Tfinal 5000,
+	  :Replacement "TRUE"}
+	 {:CaseName "Case2",
+	  :Enabled "FALSE",
+	  :Futures 3,
+	  :MaxDuration 5000,
+	  :RandomSeed 2468,
+	  :Tfinal 5000,
+	  :Replacement "TRUE"}
+	 {:CaseName "Case3",
+	  :Enabled "FALSE",
+	  :Futures 1,
+	  :MaxDuration 5000,
+	  :RandomSeed 2,
+	  :Tfinal 5000,
+	  :Replacement "TRUE"}])
+  
+;a set of notional rules...
+(def rule-records 
+  [{:S3 "nil",
+  :Frequency 2,
+  :StartDistribution "uniform",
+  :Pool
+  "[:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]",
+  :S1 0,
+  :DurationDistribution "from-data",
+  :S2 1000,
+  :D1 "nil",
+  :D2 "nil",
+  :D3 "nil",
+  :Rule "GetHoot"}
+ {:S3 "nil",
+  :Frequency 2,
+  :StartDistribution "uniform",
+  :Pool "{:A_Dipper 0.25 :Hoot1 0.25 :Hoot3 0.50}",
+  :S1 0,
+  :DurationDistribution "from-data",
+  :S2 1000,
+  :D1 "nil",
+  :D2 "nil",
+  :D3 "nil",
+  :Rule "GetHootCumulative"}
+ {:S3 "nil",
+  :Frequency 20,
+  :StartDistribution "uniform",
+  :Pool
+  "[:Dollar :Ipsum1_Dipper :Some16 :Some18 :Some21 :Some5 :Some6]",
+  :S1 0,
+  :DurationDistribution "from-data",
+  :S2 1000,
+  :D1 "nil",
+  :D2 "nil",
+  :D3 "nil",
+  :Rule "RandomNonHoots"}
+ {:S3 "nil",
+  :Frequency 1,
+  :StartDistribution "from-data",
+  :Pool "[:every :Some5 :Some16]",
+  :S1 "nil",
+  :DurationDistribution "from-data",
+  :S2 "nil",
+  :D1 "nil",
+  :D2 "nil",
+  :D3 "nil",
+  :Rule "Static"}]
+)
+
 ;a list of notional demand records, primarily for use with
 ;helmet.
 (def demand-records
@@ -1222,52 +1295,3 @@
   :Overlap 45.0,
   :DemandIndex 1.0}])
 
-;a set of notional rules...
-(def rule-records 
-  [{:S3 "nil",
-  :Frequency 2,
-  :StartDistribution "uniform",
-  :Pool
-  "[:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]",
-  :S1 0,
-  :DurationDistribution "from-data",
-  :S2 1000,
-  :D1 "nil",
-  :D2 "nil",
-  :D3 "nil",
-  :Rule "GetHoot"}
- {:S3 "nil",
-  :Frequency 2,
-  :StartDistribution "uniform",
-  :Pool "{:A_Dipper 0.25 :Hoot1 0.25 :Hoot3 0.50}",
-  :S1 0,
-  :DurationDistribution "from-data",
-  :S2 1000,
-  :D1 "nil",
-  :D2 "nil",
-  :D3 "nil",
-  :Rule "GetHootCumulative"}
- {:S3 "nil",
-  :Frequency 20,
-  :StartDistribution "uniform",
-  :Pool
-  "[:Dollar :Ipsum1_Dipper :Some16 :Some18 :Some21 :Some5 :Some6]",
-  :S1 0,
-  :DurationDistribution "from-data",
-  :S2 1000,
-  :D1 "nil",
-  :D2 "nil",
-  :D3 "nil",
-  :Rule "RandomNonHoots"}
- {:S3 "nil",
-  :Frequency 1,
-  :StartDistribution "from-data",
-  :Pool "[:every :Some5 :Some16]",
-  :S1 "nil",
-  :DurationDistribution "from-data",
-  :S2 "nil",
-  :D1 "nil",
-  :D2 "nil",
-  :D3 "nil",
-  :Rule "Static"}]
-)

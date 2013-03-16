@@ -18,7 +18,7 @@
 (defn ^java.util.Random make-random [^long seed]
   (java.util.Random. seed))
 
-(defn- ^double draw [^java.util.Random gen] 
+(defn ^double draw [^java.util.Random gen] 
   (.nextFloat gen))
 
 (def ^:dynamic *rand* clojure.core/rand) 
@@ -29,11 +29,11 @@
    rand will instead use the seeded generator."
   [gen-expr & body]
   `(let [g# ~gen-expr]
-     (binding [*rand* (~'fn [] (~'draw g#))]
+     (binding [*rand* (~'fn [] (draw g#))]
        ~@body)))
 
 (defmacro with-seed [n & body]
-  `(~'with-generator (~'make-random ~n) ~@body)) 
+  `(with-generator (make-random ~n) ~@body)) 
 
 (defn sample-seq 
   ([gen f]
