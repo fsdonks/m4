@@ -71,8 +71,7 @@
 
 (defn- truthy-string? [s]
   (case (clojure.string/lower-case s)
-    "true" true
-    "false" false
+    ("true" "false") true 
     nil))
 
 (defn parse-legacy-field
@@ -176,18 +175,58 @@
 (defn parse-legacy-case [record]
   (parse-legacy-record record :expected-fields case-keys))
 
-(defn add-case 
-  [case-name rules-map future-count duration-max seed tfinal replacement]
-  (merge {case-name (sample/->constrain {:tfinal tfinal 
-                                         :duration-max duration-max
-                                         :seed seed}
-                        (sample/->replications futures rules))}
-         rules))
-
+(defn compound-key [xs]
+  (->> (interleave (map #(let [x (str %)] 
+                           (if (= (first x) \:) 
+                             (apply str (rest x)) 
+                             x))   xs)
+                   (repeat \-))
+       (butlast)
+       (apply str)
+       (keyword)))
+  
+(defn build-case 
+  [case-name future-count duration-max seed tfinal replacement]
+  {case-name (sample/->constrain 
+               {:tfinal tfinal 
+                :duration-max duration-max
+                :seed seed}
+               (sample/->transform 
+                 (fn [case-futures]
+                   (map-indexed (fn [i reps]
+                                  (map #(merge % {:case-name case-name
+                                                  :case-future i})
+                                       (flatten reps))) case-futures))                     
+                     (sample/->replications future-count 
+                        [(compound-key [case-name "rules"])])))})
+  
 (defn read-legacy-cases [table]
    (->> (tbl/table-records table)
         (map parse-legacy-case)
         (filter :Enabled)))
+
+(defn compose-cases [case-records]
+  (reduce (fn [acc case-record] 
+            (let [{:keys [Futures Tfinal RandomSeed Enabled MaxDuration CaseName 
+                          Replacement]} case-record]
+              (conj acc 
+                    (build-case CaseName Futures MaxDuration 
+                                RandomSeed Tfinal Replacement))))
+          {} case-records))
+
+(defn execute-cases
+  "Given a map of tables, process each case, building its associated rule set, 
+   drawing from a sample population.  The results from each case are returned 
+   as a map of {case-name [records]}, where records are a list of records from
+   futures.  Each record will have the case-name and the case-future added as 
+   fields.  The table map, or the database, is expected to have at least the 
+   following fields [:ValidationRules :DemandRecords :Cases], where each value
+   is a table.  For every value in :Cases table"
+  [database]
+)
+  
+  
+  
 
 (comment ;testing
 ;;our test record fields...
