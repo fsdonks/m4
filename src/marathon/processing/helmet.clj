@@ -143,7 +143,6 @@
                      nd)))
          (assoc {} name)))) 
 
-
 (defn read-legacy-population
   "Given a table of demand-records, converts the table into a map of records 
    according to legacy processing rules.  Specifically, we add two fields to 
@@ -166,9 +165,8 @@
   (->> (map legacy-rule-record->sample-rule (tbl/table-records table))
        (reduce merge)))
 
-(def case-fields 
-  ["CaseName" "Enabled" "Futures" "MaxDuration" 
-   "RandomSeed" "Tfinal" "Replacement"])
+(def case-fields ["CaseName" "Enabled" "Futures" "MaxDuration" 
+                  "RandomSeed" "Tfinal" "Replacement"])
 
 (def case-keys (vec (map keyword case-fields)))
 
@@ -214,7 +212,7 @@
                                 RandomSeed Tfinal Replacement))))
           {} case-records))
 
-(defn execute-cases
+(defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
    drawing from a sample population.  The results from each case are returned 
    as a map of {case-name [records]}, where records are a list of records from
@@ -222,10 +220,7 @@
    fields.  The table map, or the database, is expected to have at least the 
    following fields [:ValidationRules :DemandRecords :Cases], where each value
    is a table.  For every value in :Cases table"
-  [database]
-)
-  
-  
+  [database])
   
 
 (comment ;testing
