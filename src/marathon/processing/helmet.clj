@@ -8,7 +8,8 @@
                   [table :as tbl]
                   [stats :as stats]
                   [record :as rec]
-                  [sampling :as sample]]))
+                  [sampling :as sample]]
+            [util.excel [core :as xl]]))
 
 ;these are the original fields from our legacy excel-based tables....
 (def legacy-rule-fields 
@@ -212,6 +213,35 @@
                                 RandomSeed Tfinal Replacement))))
           {} case-records))
 
+
+(defn read-casebook [& {:keys [wbpath] :or {wbpath (util.gui/select-file)}}]
+  (let [db (xl/xlsx->tables wbpath)        
+        case-records {:Cases (compose-cases 
+                               (read-legacy-cases (get db "Cases")))}
+        demand-records {:DemandRecords 
+                        (read-legacy-population (get db "DemandRecords"))}
+        rules   (into {} (for [k (keys case-records)]
+                           (let [case-name  (compound-key [case-name "rules"])
+                                 rule-table (get db k)]
+                             [case-name (read-legacy-rules rule-table)])))
+        validation ]
+    (reduce merge {} case-records demand-records rules)       
+    )
+)
+        
+        
+                                                          
+  (def case-tbl (tbl/records->table case-records))
+  (def cases (read-legacy-cases case-tbl))
+  
+  (def demand-records dat/demand-records)
+  (def demand-tbl (tbl/records->table demand-records))
+  
+  (def p (read-legacy-population demand-tbl))  
+  (def rule-records dat/rule-records)  
+  (def rule-tbl (tbl/records->table rule-records))
+  (def rules (read-legacy-rules rule-tbl))
+
 (defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
    drawing from a sample population.  The results from each case are returned 
@@ -219,10 +249,12 @@
    futures.  Each record will have the case-name and the case-future added as 
    fields.  The table map, or the database, is expected to have at least the 
    following fields [:ValidationRules :DemandRecords :Cases], where each value
-   is a table.  For every value in :Cases table"
-  [database])
+   is a table.  For every individual case in :Cases, there must be a key in the
+   database that contains the rules for the case, in the form of 
+   :[casename]-rules."
+  [database]  
+)
   
-
 (comment ;testing
 ;;our test record fields...
 ;[Node	Frequency	StartDistribution	S1	S2	S3	
