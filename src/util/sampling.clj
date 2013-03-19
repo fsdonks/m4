@@ -359,14 +359,18 @@
 (defn lift [x] (fn [ctx] (sample-node x ctx)))
 (defn node? [x] (and (map? x) (contains? x :node-type)))
 
-(defmethod sample-node :default  [node ctx] 
-  (if (or (keyword? node) (symbol? node) (number? node) (string? node)) 
-    (let [res (get ctx node)]
-      (if res (sample-node res ctx) ;continue sampling... 
-        (or res (when ((complement node?) node) node))))
-    (if-let [remaining (node-data node)]
-      (sample-node remaining ctx)
-      node)))
+(defmethod sample-node :default  [node ctx]
+  (cond (sequential? node) (map #(sample-node % ctx) node) 
+        (or (keyword? node) 
+            (symbol? node) 
+            (number? node) 
+            (string? node)) 
+          (let [res (get ctx node)]
+            (if res (sample-node res ctx) ;continue sampling... 
+              (or res (when ((complement node?) node) node))))
+        :else (if-let [remaining (node-data node)]
+                (sample-node remaining ctx)
+                node)))
 
 (defmethod sample-node :leaf     [node ctx] (get ctx (node-data node)))
 (defmethod sample-node :chain    [node ctx] ((chain (node-data node)) ctx))

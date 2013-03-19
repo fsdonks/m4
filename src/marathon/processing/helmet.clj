@@ -84,6 +84,9 @@
   (cond (symbol? v) (keyword v)
         (list? v)   (eval v)
         (vector? v) (vec (map parse-legacy-field v))
+        (map? v)    (let [ks (map parse-legacy-field (keys v))
+                          vs (map parse-legacy-field (vals v))]
+                      (zipmap ks vs))
         (string? v) (cond (= (first v) \") v
                           (truthy-string? v) (read-string 
                                                (clojure.string/lower-case v))
@@ -161,7 +164,10 @@
                           :duration (get-col duration-field)})
         (tbl/table-records)
         (group-by (comp keyword group-field)))))
-  
+
+;This is a slight hack, until I get concatenation working in the dsl.
+;We just return a sequence of rule nodes, rather than a map of rule-name 
+;to rules.  
 (defn read-legacy-rules [table]
   (->> (map legacy-rule-record->sample-rule (tbl/table-records table))
        (reduce merge)))
@@ -229,7 +235,10 @@
                                                 (get db (keyword k))
                                                 (throw (Exception. 
                                          (str "Table " k " does not exist"))))]
-                             [case-name (read-legacy-rules rule-table)])))
+                             ;This is a hack at the moment.  We only return the
+                             ;rule nodes of the the rule-table.
+                             ;[case-name (read-legacy-rules rule-table)])))
+                             [case-name (vals (read-legacy-rules rule-table))])))
         validation {:ValidationRules (:ValidationRules db)}]
     (merge case-records population rules validation)))
 
