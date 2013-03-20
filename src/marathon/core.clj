@@ -20,6 +20,11 @@
     (do (add-path! p)
       p)))
 
+(defn select-folder []
+  (let [p (gui/select-folder (active-path))]
+    (do (add-path! p)
+      p)))
+
 (defn notify [msg]
   (fn [] (gui/alert msg)))
 
@@ -111,7 +116,6 @@
   {"Update" "Check for updates to Marathon."
    "Eval"   "Evaluate an expression in the context"})
 
-
 (defn reactive-menu-system
   "Given a map of menu specs, builds a menu-system model with an integrated
    event stream that has a unique event for each menu item selected.  Returns 
@@ -123,21 +127,32 @@
     (mvc/make-modelview nil menus 
       {:menu-events (obs/multimerge-obs (vals menus))})))       
 
+
+(defn casekey->filename [[case-name future]]
+  (str case-name \_ future ".txt"))
+
 (defn spit-tables [futures path]
-  (doseq [[case-name tbl] futures]
-    (io/hock (path  (tbl/table->tabdelimited tbl)
+  (let [root-dir (io/as-directory path)]        
+    (doseq [[case-key tbl] futures]
+      (let [file-name (casekey->filename case-key)]
+        (io/hock  (io/relative-path root-dir [file-name]) 
+                  (tbl/table->tabdelimited tbl))))))
+
+
 
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
   (do (gui/alert "Please select the location of valid case-book.")
-    (let [wbpath   (select-file)
-          cases    (helm/read-casebook wbpath)]
-      (do (case (gui/yes-no-box "Dump cases in same location?")
-            :yes 
-                               
-      (throw (Exception. "Not implemented!")))))
+    (let [wbpath      (select-file)           
+          cases       (helm/futures->tables 
+                        (helm/xlsx->futures wbpath))
+          dump-folder (if(gui/yes-no-box "Dump cases in same location?")
+                        (apply str (interleave (butlast (io/list-path wbpath))
+                                               (repeat "\\")))
+                        (select-folder))
+          _ (print (str "dumping to " dump-folder))]
       
-      
+      (spit-tables cases dump-folder))))
 
 (defn hub [& {:keys [project]}]
   (let [project-menu   (gui/map->reactive-menu "Project-Management"  
@@ -153,7 +168,10 @@
                                       (obs/notify! menu-events :audit)))
 ;        textbox (gui/text-box)
         reflect-selection (->> menu-events 
-                            (obs/subscribe  #(gui/change-label textlog %)))]
+                            (obs/subscribe  #(gui/change-label textlog %)))
+        _                 (->> menu-events 
+                            (obs/filter-obs #(= % :stochastic-demand))
+                            (obs/subscribe (fn [_] (stoch-demand-dialogue))))]
     (mvc/make-modelview 
       (agent {:state (if project {:current-project project} {})
               :routes (merge default-routes project-routes)})       
