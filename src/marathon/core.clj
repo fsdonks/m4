@@ -9,7 +9,8 @@
                            [native :as swing-events]])
   (:use [util.mailbox]
         [marathon.processing.post]
-        [marathon.project]))
+        [marathon.project])
+  (:gen-class :main true))
 
 (def  path-history (atom [(System/getProperty "user.dir")]))
 (defn add-path! [p] (swap! path-history conj p))
@@ -183,7 +184,8 @@
                               audit))
       {:menu-events menu-events})))
 
-(defn -main [] (hub))
+(defn -main [& args] 
+  (hub))
 
 ;       :add-table   
 ;       :clear-project     
