@@ -279,15 +279,21 @@
   [rec nodes]
   (transform #(merge % rec) nodes))
 
+(defn record-segment? [r]
+  (and (map? r) 
+       (contains? r :start)
+       (contains? r :duration)))
 (defn truncate-record
   "Uses the boundary set by base-record to truncate target-record.
    If target record can be fit into the bounds of base, a modified target-record
    is returned.  Otherwise, nil."
   [base-record target-record]
+  (assert (every? record-segment? [base-record target-record])
+          (str "Every record must have :start and :duration"))               
   (let [bounds (record->segment base-record)
         target (record->segment target-record)]
-    (if-let [new-bounds (record->segment (clip-segment bounds target))]
-      (merge target-record (segment->record new-bounds))
+    (if-let [new-bounds (segment->record (clip-segment bounds target))]
+      (merge target-record  new-bounds)
       nil)))
 
 (defn with-constraints
@@ -302,7 +308,8 @@
         global-bounds [tstart tfinal]        
         constrain    (if (unbounded-segment?  global-bounds)
                        identity
-                       #(map (partial truncate-record global-bounds) %))]
+                       #(map (partial truncate-record 
+                                      (segment->record global-bounds)) %))]
     (fn [ctx]
       (->> (stats/with-seed seed (flatten (nodes ctx)))
            (constrain) 
