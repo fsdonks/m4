@@ -10,7 +10,8 @@
 ;Also provides a simple API for zipping files.  Maps can be persisted to 
 ;zipfiles.
 (ns util.io
-    (:require [clojure [string :as strlib] [set :as setlib]]
+    (:require [clojure [string :as strlib] 
+                       [set :as setlib]]
               [clojure.contrib [json :as json]]
               [clojure.java [io :as io]]
               [clojure [pprint :as pp]]))
