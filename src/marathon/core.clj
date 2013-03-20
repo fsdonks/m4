@@ -1,5 +1,6 @@
 (ns marathon.core
   (:require [util [table :as tbl]]
+            [marathon.processing [helmet :as helm]]
             [clojure [pprint :as pprint]]
             [cljgui.components [swing :as gui]]
             [cljgui [mvc :as mvc]]
@@ -77,17 +78,18 @@
 )
 
 (def project-menu-spec  
-   {"Load-Project" "Loads a project into the context."
-    "Save-Project"  "Saves a project into the project path."
+   {"Load-Project"    "Loads a project into the context."
+    "Save-Project"    "Saves a project into the project path."
     "Save-Project-As" "Saves a currently-loaded project into path."
     "Convert-Project" "Convert a project from one format to another."
-    "Derive-Project" "Allows one to derive multiple projects from the current."})
+    "Derive-Project"  "Allows one to derive multiple projects from the current."})
 
 (def processing-menu-spec
   {"Clean" "Cleans a run"
    "High-Water" "Computes HighWater trails"
    "Deployment-Vectors" "Analyzes deployments"
-   "Charts" "Generate plots."   
+   "Charts" "Generate plots."
+   "Stochastic-Demand" "Generate stochastic demand files from a casebook."   
    "Custom" "Run a custom script on the project"
    "Eval"   "Evaluate an expression in the context"})
 
@@ -98,6 +100,7 @@
 (def preferences-menu-spec
   {"Update" "Check for updates to Marathon."
    "Eval"   "Evaluate an expression in the context"})
+
 
 (defn reactive-menu-system
   "Given a map of menu specs, builds a menu-system model with an integrated
@@ -110,6 +113,16 @@
     (mvc/make-modelview nil menus 
       {:menu-events (obs/multimerge-obs (vals menus))})))       
 
+;a quick plugin for stochastic demand generation.
+(defn stoch-demand-dialogue []
+  (do (gui/alert "Please select the location of valid case-book.")
+    (let [wbpath   (gui/select-file)
+          cases    (helm/read-casebook wbpath)]
+      ;Fill in the body here! 
+      (throw (Exception. "Not implemented!"))
+      )))
+      
+      
 
 (defn hub [& {:keys [project]}]
   (let [project-menu   (gui/map->reactive-menu "Project-Management"  

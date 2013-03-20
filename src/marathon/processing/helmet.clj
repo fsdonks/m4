@@ -24,6 +24,12 @@
 (def duration-fields ["DurationDistribution" "D1" "D2" "D3"])
 (def duration-keys (vec (map keyword duration-fields)))
 
+(def demand-fields ["Type" "Enabled" "Priority" "Quantity" 
+                    "DemandIndex" "StartDay" "Duration" "Overlap" 
+                    "SRC" "SourceFirst" "DemandGroup" "Vignette" 
+                    "Operation" "Category" "OITitle"])
+(def demand-keys (vec (map keyword demand-fields)))
+
 ;We need this to bridge a problem with the legacy data set, namely that 
 ;the arity of distributions was unknown in the data...there are always 
 ;four arguments associated with a distribution, [name arg1 arg2 arg3], 
@@ -254,7 +260,6 @@
         cases {:Cases (compose-cases case-records rules)} 
         validation {:ValidationRules (:ValidationRules db)}]
     (merge cases population validation)))
-
   
 (defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
@@ -263,12 +268,18 @@
    futures.  Each record will have the case-name and the case-future added as 
    fields.  The table map, or the database, is expected to have at least the 
    following fields [:ValidationRules :DemandRecords :Cases], where each value
-   is a table.  For every individual case in :Cases, there must be a key in the
-   database that contains the rules for the case, in the form of
-   :[casename]-rules."
-  [database]
-  )
-  
+   is a table.  Each enabled case will be evaluated, returning a map of 
+   {[case-name case-future] records}"
+  [database & {:keys [field-map field-order] 
+               :or {field-map  {:start :StartDay 
+                                :duration :Duration}
+                    field-order [:case-name :case-future]}}]
+  (let [case-key (juxt :case-name :case-future)]
+    (into {} (for [[case-name c] (:Cases database)]
+               (->> (sample/sample-from (:Population database) c)
+                    (group-by case-key)
+                    (seq))))))
+
 (comment ;testing
 ;;our test record fields...
 ;[Node	Frequency	StartDistribution	S1	S2	S3	

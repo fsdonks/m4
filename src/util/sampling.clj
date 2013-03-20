@@ -235,6 +235,11 @@
     (fn [ctx] ((sample-func nodes) ctx)))
   ([nodes] (choice rand-nth nodes)))
 
+;(defn viable-weights? [pdf-map]
+;  (or (every? integer? (vals pdf-map))
+;      (and (every? float? (vals pdf-map)) 
+;           (= 1.0 (float (reduce + (vals pdf-map))))))) 
+        
 (defn weighted-choice
   "Identical to choice, except it takes a map of node->probability densities.
    Where the keys are resolvable nodes, and the densities are the probabilities
@@ -307,7 +312,6 @@
         duration-max (or duration-max Double/POSITIVE_INFINITY)
         seed         (or seed (rand-int Integer/MAX_VALUE))
         global-bounds [tstart tfinal]
-        _ (print global-bounds)
         constrain    (if (unbounded-segment?  global-bounds)
                        identity
                        #(map (partial truncate-record 
