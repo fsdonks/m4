@@ -261,6 +261,17 @@
         validation {:ValidationRules (:ValidationRules db)}]
     (merge cases population validation)))
   
+(defn collapse-fields [fields r]
+  (reduce (fn [acc [from-field to-field]]
+            (-> (assoc acc to-field (get acc from-field))
+                (dissoc from-field))) r fields))
+
+(defn integral-times [r]
+  (let [s (get r :start)
+        d (get r :duration)]
+    (merge r {:start (quot s 1)
+              :duration (quot d 1)})))
+
 (defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
    drawing from a sample population.  The results from each case are returned 
@@ -270,15 +281,28 @@
    following fields [:ValidationRules :DemandRecords :Cases], where each value
    is a table.  Each enabled case will be evaluated, returning a map of 
    {[case-name case-future] records}"
-  [database & {:keys [field-map field-order] 
-               :or {field-map  {:start :StartDay 
-                                :duration :Duration}
-                    field-order [:case-name :case-future]}}]
-  (let [case-key (juxt :case-name :case-future)]
+  [database & {:keys [field-merges] 
+               :or   {field-merges {:start :StartDay 
+                                    :duration :Duration}}}]
+  (let [case-key (juxt :case-name :case-future)
+        fix-fields (comp (partial collapse-fields field-merges) integral-times)]
     (into {} (for [[case-name c] (:Cases database)]
                (->> (sample/sample-from (:Population database) c)
+                    (map fix-fields) 
                     (group-by case-key)
                     (seq))))))
+
+(defn xlsx->futures [wbpath]
+  (compile-cases (read-casebook :wbpath wbpath)))
+
+(defn futures->tables [future-map & {:keys [field-order] :or
+                                     {field-order (into demand-keys 
+                                                    [:case-name :case-future])}}]
+  (into {} 
+        (for [[case-name records] future-map]
+          [case-name (->> (tbl/records->table records)
+                       (tbl/order-fields-by field-order))]))) 
+       
 
 (comment ;testing
 ;;our test record fields...
