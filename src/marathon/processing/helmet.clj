@@ -300,9 +300,9 @@
                                                     [:case-name :case-future])}}]
   (into {} 
         (for [[case-name records] future-map]
-          [case-name (->> (tbl/records->table records)
-                       (tbl/order-fields-by field-order))]))) 
-       
+          [case-name  (->> (tbl/records->table records)
+                           (tbl/order-fields-by field-order)
+                           (tbl/stringify-field-names))]))) 
 
 (comment ;testing
 ;;our test record fields...
