@@ -145,6 +145,7 @@
          ((fn [nd] (if (> freq 1)
                      (sample/->replications freq [nd])
                      nd)))
+         (sample/->transform flatten)
          (assoc {} name)))) 
 
 (defn read-legacy-population
@@ -191,56 +192,68 @@
        (keyword)))
   
 (defn build-case 
-  [case-name future-count duration-max seed tfinal replacement]
+  [case-name case-rules future-count duration-max seed tfinal replacement]
   {case-name (sample/->constrain 
                {:tfinal tfinal 
                 :duration-max duration-max
                 :seed seed}
-               (sample/->transform 
+              (sample/->transform 
                  (fn [case-futures]
                    (map-indexed (fn [i reps]
-                                  (map #(merge % {:case-name case-name
+                                  (map #(merge % {:case-name 
+                                                  (tbl/field->string case-name)
                                                   :case-future i})
-                                       (flatten reps))) case-futures))                     
+                                       (flatten  reps))) (first case-futures)))                     
                      (sample/->replications future-count 
-                        [(compound-key [case-name "rules"])])))})
-  
-(defn read-legacy-cases [table]
-   (->> (tbl/table-records table)
-        (map parse-legacy-case)
-        (filter :Enabled)))
+                        case-rules)))})
+;
+;(defn build-case 
+;  [case-name case-rules future-count duration-max seed tfinal replacement]
+;  {case-name  (sample/->transform 
+;                 (fn [case-futures]
+;                   (map-indexed (fn [i reps]
+;                                  (map #(merge % {:case-name 
+;                                                  (tbl/field->string case-name)
+;                                                  :case-future i})
+;                                       (flatten  reps))) (first case-futures)))                     
+;                     (sample/->replications future-count 
+;                        case-rules))}) 
 
-(defn compose-cases [case-records]
+  
+(defn read-legacy-cases [table] (->> (tbl/table-records table)
+                                  (map parse-legacy-case)
+                                  (filter :Enabled)))
+
+(defn compose-cases [case-records case-rules]
   (reduce (fn [acc case-record] 
             (let [{:keys [Futures Tfinal RandomSeed Enabled MaxDuration CaseName 
                           Replacement]} case-record]
               (conj acc 
-                    (build-case CaseName Futures MaxDuration 
-                                RandomSeed Tfinal Replacement))))
+                    (build-case CaseName (get case-rules CaseName) 
+                                Futures MaxDuration RandomSeed 
+                                Tfinal Replacement))))
           {} case-records))
-
 
 (defn read-casebook [& {:keys [wbpath]}]
   (let [db (into {} (for [[k table] (xl/xlsx->tables 
                                       (or wbpath (util.gui/select-file)))]
                       [k (tbl/keywordize-field-names table)]))
-        case-records {:Cases (compose-cases 
-                               (read-legacy-cases (get db "Cases")))}
-        active-cases   (map tbl/field->string (keys (:Cases case-records)))
+        case-records (read-legacy-cases (get db "Cases"))
+        active-cases (map :CaseName case-records)
         population {:Population
                         (read-legacy-population (get db "DemandRecords"))}
         rules   (into {} (for [k  active-cases]
-                           (let [case-name  (compound-key [k "rules"])
-                                 rule-table (or (get db k)
-                                                (get db (keyword k))
+                           (let [rule-table (or (get db k)
+                                                (get db (tbl/field->string k))                                                
                                                 (throw (Exception. 
                                          (str "Table " k " does not exist"))))]
                              ;This is a hack at the moment.  We only return the
                              ;rule nodes of the the rule-table.
                              ;[case-name (read-legacy-rules rule-table)])))
-                             [case-name (vals (read-legacy-rules rule-table))])))
+                             [k (vals (read-legacy-rules rule-table))])))
+        cases {:Cases (compose-cases case-records rules)} 
         validation {:ValidationRules (:ValidationRules db)}]
-    (merge case-records population rules validation)))
+    (merge cases population validation)))
 
   
 (defn compile-cases

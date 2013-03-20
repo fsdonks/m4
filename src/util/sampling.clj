@@ -385,7 +385,8 @@
 (defmethod sample-node :transform [node ctx]
   (let [{:keys [f children]} (node-data node)
         func (if (map? f) 
-               (merge-stochastic f) f)]
+               (merge-stochastic f)
+               f)]
       ((transform func (lift children)) ctx)))
 
 (defmethod sample-node :replications [node ctx]
@@ -394,7 +395,7 @@
 
 (defmethod sample-node :constrain [node ctx]
   (let [{:keys [constraints children]} (node-data node)]
-    ((with-constraints constraints (sample-node children)))))
+    ((with-constraints constraints (sample-node children ctx)) ctx)))
 
 (defmethod sample-node :concatenate [node ctx]
   ((concatenate (node-data node)) ctx))
@@ -530,89 +531,6 @@
                         (sample-context simple-graph)))
                                             
 )
-
-
-
-;constrain - modifies the contextual constraints applied when generating node
-;records.  We can probably replace this with filter.
-
-;each of our operators can be serialized...
-
-;fyi  we can use a similar rule-base for determining a validation network.
-
-;Whenever we sample records...we can pass the samples through a validation 
-;network, composed of simple rules, that ensures the sample maintains some 
-;invariant...
-
-;the current case is a form of "collision" that can occur between samples.
-;Basically, we can define collision rules, and collision responses.
-;The collision rules will match on every record, and determine if they should
-;run...
-;Notice that a collision requires context, specifically a relation between 
-;one or more records in the sample.  The typical context is a temporal 
-;intersection, but there could be other contexts.
-
-;The original concrete algorithm attempted to insert records onto a timeline, 
-;then scanned the timeline for collisions to affirm validity.
-;Collisions could only occur for certain classes of records, defined by 
-;demand classes, which related records from the population. 
-
-;It occurs to me that when we're computing "overlap", we're really just 
-;performing a prejudiced XOR on a subset of the records....specifically 
-;records that may "overlap", where overlap occurs temporally.
-;We detect temporal overlaps by 
-
-;legacy implementation
-
-;This is on hold temporarily....probably punt off on Dwight!
-
-
-
-
-(defn legacy-distribution
-  "A patch to allow us to parse old data for defining distributions.
-   Returns a map of field to field value, where field-value is a function 
-   applied to a record's original field value.  The resulting value is returned
-   as a modified field value, to be merged with the record."
-  [name & args]
-  (case (keyword (clojure.string/lower-case name))
-    :uniform (let [g (stats/uniform-dist (first args) (second args))]
-               (fn [_](g)))
-    :vignette identity 
-    :constant identity    
-    :fixed    (fn [x] (first args))
-    (throw (Exception. "Unknown distribution!"))))
-
-(defn legacy-record? [r] (contains? r :StartDistribution))
-(defn derive-distributions
-  "A simple patch to allow us to pull in old data."
-  [r]
-  {:start 
-     (apply legacy-distribution 
-            (juxt [:StartDistribution :Start1 :Start2 :Start3] r))
-   :duration 
-     (apply legacy-distribution 
-          (juxt [:DurationDistribution :Duration1 :Duration2 :Duration3] r))}) 
-
-(defn legacy-record->generator-spec
-  "Turns a legacy record into something that conforms to a valid generator.  
-   We typically only had start and duration in the legacy spec."  
-  [r]
-  (merge r {:computed-fields (derive-distributions r)}))  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
