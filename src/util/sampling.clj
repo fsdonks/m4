@@ -292,8 +292,8 @@
           (str "Every record must have :start and :duration"))               
   (let [bounds (record->segment base-record)
         target (record->segment target-record)]
-    (if-let [new-bounds (segment->record (clip-segment bounds target))]
-      (merge target-record  new-bounds)
+    (if-let [new-bounds (clip-segment bounds target)]
+      (merge target-record  (segment->record  new-bounds))
       nil)))
 
 (defn with-constraints
