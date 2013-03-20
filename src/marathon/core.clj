@@ -146,10 +146,11 @@
     (let [wbpath      (select-file)           
           cases       (helm/futures->tables 
                         (helm/xlsx->futures wbpath))
-          dump-folder (if(gui/yes-no-box "Dump cases in same location?")
+          ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
+          dump-folder ;(if dump-same?
                         (apply str (interleave (butlast (io/list-path wbpath))
                                                (repeat "\\")))
-                        (select-folder))
+                        ;(select-folder))
           _ (print (str "dumping to " dump-folder))]
       
       (spit-tables cases dump-folder))))
@@ -181,6 +182,9 @@
                               (gui/text-box) 
                               audit))
       {:menu-events menu-events})))
+
+(defn -main [] (hub))
+
 ;       :add-table   
 ;       :clear-project     
 ;       :load-project   

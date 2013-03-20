@@ -212,19 +212,6 @@
                                        (flatten  reps))) (first case-futures)))                     
                  (sample/->replications future-count 
                                         [case-rules])))})
-;
-;(defn build-case 
-;  [case-name case-rules future-count duration-max seed tfinal replacement]
-;  {case-name  (sample/->transform 
-;                 (fn [case-futures]
-;                   (map-indexed (fn [i reps]
-;                                  (map #(merge % {:case-name 
-;                                                  (tbl/field->string case-name)
-;                                                  :case-future i})
-;                                       (flatten  reps))) (first case-futures)))                     
-;                     (sample/->replications future-count 
-;                        case-rules))}) 
-
   
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
                                   (map parse-legacy-case)
