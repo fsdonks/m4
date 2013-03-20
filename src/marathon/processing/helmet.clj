@@ -197,15 +197,15 @@
                {:tfinal tfinal 
                 :duration-max duration-max
                 :seed seed}
-              (sample/->transform 
+               (sample/->transform 
                  (fn [case-futures]
                    (map-indexed (fn [i reps]
                                   (map #(merge % {:case-name 
                                                   (tbl/field->string case-name)
                                                   :case-future i})
                                        (flatten  reps))) (first case-futures)))                     
-                     (sample/->replications future-count 
-                        case-rules)))})
+                 (sample/->replications future-count 
+                                        [case-rules])))})
 ;
 ;(defn build-case 
 ;  [case-name case-rules future-count duration-max seed tfinal replacement]

@@ -283,6 +283,7 @@
   (and (map? r) 
        (contains? r :start)
        (contains? r :duration)))
+
 (defn truncate-record
   "Uses the boundary set by base-record to truncate target-record.
    If target record can be fit into the bounds of base, a modified target-record
@@ -301,11 +302,12 @@
    the result of any generated nodes.  I'd like to change this, but for now 
    it'll be somewhat predefined constraints."
   [{:keys [tstart tfinal duration-max seed] :as constraint-map} nodes]
-  (let [tstart       (or tstart Double/NEGATIVE_INFINITY)
+  (let [tstart       (or tstart 0)
         tfinal       (or tfinal Double/POSITIVE_INFINITY)
         duration-max (or duration-max Double/POSITIVE_INFINITY)
         seed         (or seed (rand-int Integer/MAX_VALUE))
-        global-bounds [tstart tfinal]        
+        global-bounds [tstart tfinal]
+        _ (print global-bounds)
         constrain    (if (unbounded-segment?  global-bounds)
                        identity
                        #(map (partial truncate-record 
@@ -402,7 +404,7 @@
 
 (defmethod sample-node :constrain [node ctx]
   (let [{:keys [constraints children]} (node-data node)]
-    ((with-constraints constraints (sample-node children ctx)) ctx)))
+    ((with-constraints constraints (lift children)) ctx)))
 
 (defmethod sample-node :concatenate [node ctx]
   ((concatenate (node-data node)) ctx))
