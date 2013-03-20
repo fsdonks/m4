@@ -1,5 +1,6 @@
 (ns marathon.core
-  (:require [util [table :as tbl]]
+  (:require [util [table :as tbl]
+                  [io :as io]]
             [marathon.processing [helmet :as helm]]
             [clojure [pprint :as pprint]]
             [cljgui.components [swing :as gui]]
@@ -9,6 +10,15 @@
   (:use [util.mailbox]
         [marathon.processing.post]
         [marathon.project]))
+
+(def  path-history (atom [(System/getProperty "user.dir")]))
+(defn add-path! [p] (swap! path-history conj p))
+(defn active-path [] (last @path-history))
+
+(defn select-file []
+  (let [p (gui/select-file (active-path))]
+    (do (add-path! p)
+      p)))
 
 (defn notify [msg]
   (fn [] (gui/alert msg)))
@@ -113,14 +123,19 @@
     (mvc/make-modelview nil menus 
       {:menu-events (obs/multimerge-obs (vals menus))})))       
 
+(defn spit-tables [futures path]
+  (doseq [[case-name tbl] futures]
+    (io/hock (path  (tbl/table->tabdelimited tbl)
+
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
   (do (gui/alert "Please select the location of valid case-book.")
-    (let [wbpath   (gui/select-file)
+    (let [wbpath   (select-file)
           cases    (helm/read-casebook wbpath)]
-      ;Fill in the body here! 
-      (throw (Exception. "Not implemented!"))
-      )))
+      (do (case (gui/yes-no-box "Dump cases in same location?")
+            :yes 
+                               
+      (throw (Exception. "Not implemented!")))))
       
       
 
