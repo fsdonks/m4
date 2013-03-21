@@ -16,6 +16,7 @@
   ["Rule" "Frequency" 
    "StartDistribution" "S1" "S2" "S3" 
    "DurationDistribution" "D1" "D2" "D3" "Pool"])
+
 (def legacy-rule-keys (vec (map keyword legacy-rule-fields)))
 
 (def start-fields    ["StartDistribution" "S1" "S2" "S3"])
@@ -130,6 +131,30 @@
          ((fn [m] (if duration (assoc m :duration duration) m))))))
 (defn include-all? [pool] (= :every (first pool)))
 
+;(defn legacy-rule-record->sample-rule
+;  "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
+;   We build a set of rules from the legacy rule records, forming them into a 
+;   sampling network, and then apply the ruleset to source data - usually demand 
+;   records."
+;  [rule-record]
+;  (let [parsed (parse-legacy-record rule-record 
+;                      :expected-fields legacy-rule-keys)
+;        distributions (get-computed-fields parsed)
+;        [name freq pool] (rec/get-fields parsed [:Rule :Frequency :Pool])]
+;    (->> (if (include-all? pool)
+;           (sample/->replications 1 (subvec pool 1))
+;           (sample/->choice pool))
+;         ((fn [nd] (if (empty? distributions) nd 
+;                     (sample/->transform 
+;                       (fn [xs] 
+;                         (map (sample/merge-stochastic
+;                                distributions) xs)) nd))))
+;         ((fn [nd] (if (> freq 1)
+;                     (sample/->replications freq [nd])
+;                     nd)))
+;         (sample/->transform flatten)
+;         (assoc {} name))))
+
 (defn legacy-rule-record->sample-rule
   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
    We build a set of rules from the legacy rule records, forming them into a 
@@ -139,9 +164,10 @@
   (let [parsed (parse-legacy-record rule-record 
                       :expected-fields legacy-rule-keys)
         distributions (get-computed-fields parsed)
-        [name freq pool] (rec/get-fields parsed [:Rule	:Frequency :Pool])]
+        [name freq pool] (rec/get-fields parsed [:Rule :Frequency :Pool])]
     (->> (if (include-all? pool)
-           (sample/->replications 1 (subvec pool 1))
+           (sample/->transform flatten 
+               (sample/->replications 1 (subvec pool 1)))
            (sample/->choice pool))
          ((fn [nd] (if (empty? distributions) nd 
                      (sample/->transform 
@@ -152,7 +178,7 @@
                      (sample/->replications freq [nd])
                      nd)))
          (sample/->transform flatten)
-         (assoc {} name)))) 
+         (assoc {} name))))
 
 (defn read-legacy-population
   "Given a table of demand-records, converts the table into a map of records 
@@ -212,6 +238,22 @@
                                        (flatten  reps))) (first case-futures)))                     
                  (sample/->replications future-count 
                                         [case-rules])))})
+
+;(defn build-case 
+;  [case-name case-rules future-count duration-max seed tfinal replacement]
+;  {case-name (sample/->constrain 
+;               {:tfinal tfinal 
+;                :duration-max duration-max
+;                :seed seed}
+;               (sample/->transform 
+;                 (fn [case-futures]
+;                   (map-indexed (fn [i reps]
+;                                  (map #(merge % {:case-name 
+;                                                  (tbl/field->string case-name)
+;                                                  :case-future i})
+;                                       (flatten  reps)))  case-futures))                     
+;                 (sample/->replications future-count 
+;                                        case-rules)))})
   
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
                                   (map parse-legacy-case)
@@ -328,8 +370,17 @@
   (def rules (read-legacy-rules rule-tbl))
   
   (def statics (:Static rules))
-  
+ 
 
+  (def demand-tbl (get db "DemandRecords"))  
+  (def p (read-legacy-population demand-tbl))  
+  (def rule-tbl (get db "Case3"))
+  (def rules (read-legacy-rules rule-tbl))
+  
+  (def statics (:Static rules))
+
+  
+  
 ;want to transform a rule record into this ->
 ;{:GetHoot {:replicate 2 {:transform [{:start (uniform 0 1000)} 
 ;                                     {:choice [:A_Dipper :Dollar :Hoot1 :Hoot2 
