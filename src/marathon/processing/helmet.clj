@@ -226,7 +226,7 @@
              (let [indexed-reps 
                    (->> (reduce conj reps)
                         (map-indexed 
-                          (fn [i xs] (map #(assoc % :draw-index i)))))]                         
+                          (fn [i xs] (map #(assoc % :draw-index i) xs))))]                         
                (map #(merge % {:case-name  (tbl/field->string case-name)
                                :case-future i
                                :Operation (str (:Operation %) "_" 
