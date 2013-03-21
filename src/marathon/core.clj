@@ -139,8 +139,6 @@
         (io/hock  (io/relative-path root-dir [file-name]) 
                   (tbl/table->tabdelimited tbl))))))
 
-
-
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
   (do (gui/alert "Please select the location of valid case-book.")
