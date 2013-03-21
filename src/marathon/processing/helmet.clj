@@ -11,6 +11,20 @@
                   [sampling :as sample]]
             [util.excel [core :as xl]]))
 
+;utility-functions                        
+(defn collapse-fields [fields r]
+  (reduce (fn [acc [from-field to-field]]
+            (-> (assoc acc to-field (get acc from-field))
+                (dissoc from-field))) r fields))
+
+(defn integral-times [r]
+  (let [s (get r :start)
+        d (get r :duration)]
+    (merge r {:start (quot s 1)
+              :duration (quot d 1)})))
+
+;legacy definitions
+
 ;these are the original fields from our legacy excel-based tables....
 (def legacy-rule-fields 
   ["Rule" "Frequency" 
@@ -150,7 +164,7 @@
                      (sample/->transform 
                        (fn [xs] 
                          (let [sampled-fields ((sample/merge-stochastic
-                                               distributions) {})]
+                                                distributions) {})]
                                (map #(merge % sampled-fields) xs))) nd))))
          ((fn [nd] (if (> freq 1)
                      (sample/->replications freq [nd])
@@ -200,39 +214,27 @@
        (butlast)
        (apply str)
        (keyword)))
-  
+                   
 (defn build-case 
   [case-name case-rules future-count duration-max seed tfinal replacement]
-  {case-name (sample/->constrain 
-               {:tfinal tfinal 
-                :duration-max duration-max
-                :seed seed}
-               (sample/->transform 
-                 (fn [case-futures]
-                   (map-indexed (fn [i reps]
-                                  (map #(merge % {:case-name 
-                                                  (tbl/field->string case-name)
-                                                  :case-future i})
-                                       (flatten  reps))) (first case-futures)))                     
-                 (sample/->replications future-count 
-                                        [case-rules])))})
+  {case-name 
+   (sample/->constrain {:tfinal tfinal :duration-max duration-max  :seed seed}
+     (sample/->transform 
+       (fn [case-futures] 
+         (map-indexed 
+           (fn [i reps] 
+             (let [indexed-reps 
+                   (->> (reduce conj reps)
+                        (map-indexed 
+                          (fn [i xs] (map #(assoc % :draw-index i)))))]                         
+               (map #(merge % {:case-name  (tbl/field->string case-name)
+                               :case-future i
+                               :Operation (str (:Operation %) "_" 
+                                               (:draw-index %))}) 
+                    indexed-reps)))
+           (first case-futures)))                     
+       (sample/->replications future-count [case-rules])))})
 
-;(defn build-case 
-;  [case-name case-rules future-count duration-max seed tfinal replacement]
-;  {case-name (sample/->constrain 
-;               {:tfinal tfinal 
-;                :duration-max duration-max
-;                :seed seed}
-;               (sample/->transform 
-;                 (fn [case-futures]
-;                   (map-indexed (fn [i reps]
-;                                  (map #(merge % {:case-name 
-;                                                  (tbl/field->string case-name)
-;                                                  :case-future i})
-;                                       (flatten  reps)))  case-futures))                     
-;                 (sample/->replications future-count 
-;                                        case-rules)))})
-  
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
                                   (map parse-legacy-case)
                                   (filter :Enabled)))
@@ -268,31 +270,7 @@
         validation {:ValidationRules (:ValidationRules db)}]
     (merge cases population validation)))
   
-(defn ensure-unique-field [fld f xs]
-  (reduce (fn [acc rec]
-            (let [values   (get acc :values)
-                  records  (get acc :records)
-                  v        (get rec fld)]
-              (if (contains? names v) 
-                (let [newval (f v values)
-                      newrec (assoc rec fld newval)]
-                  {:records (conj records newrec) 
-                   :values (conj values newval)})
-                {:records (conj records rec)
-                 :values (conj values v)})))
-          {:records [] :values #{}} xs))
-                    
 
-(defn collapse-fields [fields r]
-  (reduce (fn [acc [from-field to-field]]
-            (-> (assoc acc to-field (get acc from-field))
-                (dissoc from-field))) r fields))
-
-(defn integral-times [r]
-  (let [s (get r :start)
-        d (get r :duration)]
-    (merge r {:start (quot s 1)
-              :duration (quot d 1)})))
 
 (defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
