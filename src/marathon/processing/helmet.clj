@@ -129,31 +129,8 @@
                         (rec/sub-record r duration-keys)))]
     (->> (if start {:start start} {})
          ((fn [m] (if duration (assoc m :duration duration) m))))))
-(defn include-all? [pool] (= :every (first pool)))
 
-;(defn legacy-rule-record->sample-rule
-;  "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
-;   We build a set of rules from the legacy rule records, forming them into a 
-;   sampling network, and then apply the ruleset to source data - usually demand 
-;   records."
-;  [rule-record]
-;  (let [parsed (parse-legacy-record rule-record 
-;                      :expected-fields legacy-rule-keys)
-;        distributions (get-computed-fields parsed)
-;        [name freq pool] (rec/get-fields parsed [:Rule :Frequency :Pool])]
-;    (->> (if (include-all? pool)
-;           (sample/->replications 1 (subvec pool 1))
-;           (sample/->choice pool))
-;         ((fn [nd] (if (empty? distributions) nd 
-;                     (sample/->transform 
-;                       (fn [xs] 
-;                         (map (sample/merge-stochastic
-;                                distributions) xs)) nd))))
-;         ((fn [nd] (if (> freq 1)
-;                     (sample/->replications freq [nd])
-;                     nd)))
-;         (sample/->transform flatten)
-;         (assoc {} name))))
+(defn include-all? [pool] (= :every (first pool)))
 
 (defn legacy-rule-record->sample-rule
   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
@@ -172,8 +149,9 @@
          ((fn [nd] (if (empty? distributions) nd 
                      (sample/->transform 
                        (fn [xs] 
-                         (map (sample/merge-stochastic
-                                distributions) xs)) nd))))
+                         (let [sampled-fields ((sample/merge-stochastic
+                                               distributions) {})]
+                               (map #(merge % sampled-fields) xs))) nd))))
          ((fn [nd] (if (> freq 1)
                      (sample/->replications freq [nd])
                      nd)))
@@ -290,6 +268,21 @@
         validation {:ValidationRules (:ValidationRules db)}]
     (merge cases population validation)))
   
+(defn ensure-unique-field [fld f xs]
+  (reduce (fn [acc rec]
+            (let [values   (get acc :values)
+                  records  (get acc :records)
+                  v        (get rec fld)]
+              (if (contains? names v) 
+                (let [newval (f v values)
+                      newrec (assoc rec fld newval)]
+                  {:records (conj records newrec) 
+                   :values (conj values newval)})
+                {:records (conj records rec)
+                 :values (conj values v)})))
+          {:records [] :values #{}} xs))
+                    
+
 (defn collapse-fields [fields r]
   (reduce (fn [acc [from-field to-field]]
             (-> (assoc acc to-field (get acc from-field))
