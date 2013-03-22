@@ -160,9 +160,9 @@
 (defn apply-computed-fields [computed-fields original-fields]
     (let [newstart (if (contains? computed-fields :start)
                      (+ (get computed-fields :start) 
-                        (get original-fields :start)))]
-      (merge (assoc computed-fields :start newstart) original-fields)))
-      
+                        (get original-fields :start))
+                     (get original-fields :start))]
+      (merge original-fields (assoc computed-fields :start newstart))))
   
 (defn legacy-rule-record->sample-rule
   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.

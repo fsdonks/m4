@@ -78,25 +78,14 @@
   :Frequency 2,
   :StartDistribution "uniform",
   :Pool
-  "[:A_Dipper :Dollar :Hoot1 :Hoot2 :Hoot3 :Hoot4 :Ipsum_1Dipper :S-Foo-FootLbs]",
+  "[:Some5 :Some16]",
   :S1 0,
-  :DurationDistribution "from-data",
+  :DurationDistribution "uniform",
   :S2 1000,
-  :D1 "nil",
-  :D2 "nil",
+  :D1 1,
+  :D2 100,
   :D3 "nil",
-  :Rule "GetHoot"}
-   {:S3 "nil",
-    :Frequency 1,
-    :StartDistribution "from-data",
-    :Pool "[:every :Some5 :Some16]",
-    :S1 "nil",
-    :DurationDistribution "from-data",
-    :S2 "nil",
-    :D1 "nil",
-    :D2 "nil",
-    :D3 "nil",
-    :Rule "Static"}]
+  :Rule "GetHoot"}]
 )
 
 ;a list of notional demand records, primarily for use with
