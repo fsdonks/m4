@@ -157,6 +157,13 @@
                    (map (fn [r] (assoc r :draw-index idx)) draws)))
     nd))
 
+(defn apply-computed-fields [computed-fields original-fields]
+    (let [newstart (if (contains? computed-fields :start)
+                     (+ (get computed-fields :start) 
+                        (get original-fields :start)))]
+      (merge (assoc computed-fields :start newstart) original-fields)))
+      
+  
 (defn legacy-rule-record->sample-rule
   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
    We build a set of rules from the legacy rule records, forming them into a 
@@ -175,8 +182,9 @@
                      (sample/->transform 
                        (fn [xs] 
                          (let [sampled-fields ((sample/merge-stochastic
-                                                distributions) {})]
-                               (map #(merge % sampled-fields) xs))) nd))))
+                                                distributions) {})
+                               f (partial apply-computed-fields sampled-fields)]
+                               (map f xs))) nd))))
          ((fn [nd] (if (> freq 1)                              
                      (sample/->replications freq [(->record-draw nd)])
                      (->record-draw nd))))
@@ -233,15 +241,14 @@
      (sample/->transform 
        (fn [case-futures] 
          (map-indexed 
-           (fn [i reps] 
-               (assert (map? (first reps)) (str "Expected a sequence of records"))
+           (fn [i rule-reps]               
                (map #(merge % {:case-name  (tbl/field->string case-name)
                                :case-future i
-                               :Operation (str (:Operation %) "_" 
-                                               (:draw-index %))}) 
-                    reps))
+                               :Operation  (str (:Operation %) "_" 
+                                                (:draw-index %))}) 
+                    (flatten rule-reps)))
            (first case-futures)))                     
-       (sample/->replications future-count case-rules)))})
+       (sample/->replications future-count [case-rules])))})
 ;       (sample/->replications future-count [case-rules])))})
 
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
