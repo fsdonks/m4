@@ -139,6 +139,7 @@
    :gamma         gamma-dist
    :beta          beta-dist
    :triangle      triangle-dist
+   :triangular    triangle-dist
    :uniform       uniform-dist
    :log-normal    log-normal-dist
    :exponential   exponential-dist
@@ -148,6 +149,7 @@
    "gamma"        gamma-dist
    "beta"         beta-dist
    "triangle"     triangle-dist
+   "triangular"    triangle-dist
    "uniform"      uniform-dist
    "log normal"   log-normal-dist
    "log-normal"   log-normal-dist
