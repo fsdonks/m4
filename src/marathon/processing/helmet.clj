@@ -145,6 +145,17 @@
          ((fn [m] (if duration (assoc m :duration duration) m))))))
 
 (defn include-all? [pool] (= :every (first pool)))
+(def draws (atom 0))
+(defn next-draw-index! []
+  (let [v @draws]
+    (do (swap! draws inc)
+      v)))
+  
+(defn ->record-draw [nd]
+  (sample/->transform 
+    (fn [draws]  (let [idx (next-draw-index!)]
+                   (map (fn [r] (assoc r :draw-index idx)) draws)))
+    nd))
 
 (defn legacy-rule-record->sample-rule
   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
@@ -166,9 +177,9 @@
                          (let [sampled-fields ((sample/merge-stochastic
                                                 distributions) {})]
                                (map #(merge % sampled-fields) xs))) nd))))
-         ((fn [nd] (if (> freq 1)
-                     (sample/->replications freq [nd])
-                     nd)))
+         ((fn [nd] (if (> freq 1)                              
+                     (sample/->replications freq [(->record-draw nd)])
+                     (->record-draw nd))))
          (sample/->transform flatten)
          (assoc {} name))))
 
@@ -223,17 +234,15 @@
        (fn [case-futures] 
          (map-indexed 
            (fn [i reps] 
-             (let [indexed-reps 
-                   (->> (reduce conj reps)
-                        (map-indexed 
-                          (fn [i xs] (map #(assoc % :draw-index i) xs))))]                         
+               (assert (map? (first reps)) (str "Expected a sequence of records"))
                (map #(merge % {:case-name  (tbl/field->string case-name)
                                :case-future i
                                :Operation (str (:Operation %) "_" 
                                                (:draw-index %))}) 
-                    indexed-reps)))
+                    reps))
            (first case-futures)))                     
-       (sample/->replications future-count [case-rules])))})
+       (sample/->replications future-count case-rules)))})
+;       (sample/->replications future-count [case-rules])))})
 
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
                                   (map parse-legacy-case)
@@ -326,6 +335,17 @@
 ;              sample-fields)))
 ;  (def parsed-record (parse-legacy-record legacy-record))
 ;  (def rule (legacy-rule-record->sample-rule parsed-record))
+
+;(def simple-pop 
+;  (reduce #(assoc %1 %2 %2) {} 
+;    (map keyword (flatten 
+;                   '[[A_Dipper Dollar  Hoot1 Hoot2 Hoot3 Hoot4 Ipsum1_Dipper S-Foo-FootLbs]
+;                     [A_Dipper Hoot1 Hoot3]
+;                     [Dollar Ipsum1_Dipper Some16 Some18 Some21 Some5 Some6]
+;                     [Some5]
+;                     [Some5 Some16]
+;                     [Some5 Some16]]))))
+
   (require '[marathon.processing.sampledata :as dat])
   
   (def case-records dat/cases)
@@ -339,9 +359,10 @@
   (def rule-records dat/rule-records)  
   (def rule-tbl (tbl/records->table rule-records))
   (def rules (read-legacy-rules rule-tbl))
+  (def case-rules {:Case1 (vals rules)})
   
   (def statics (:Static rules))
- 
+  (def composed (compose-cases cases case-rules))
 
   (def demand-tbl (get db "DemandRecords"))  
   (def p (read-legacy-population demand-tbl))  
