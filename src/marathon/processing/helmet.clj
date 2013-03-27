@@ -265,9 +265,10 @@
                                 Tfinal Replacement))))
           {} case-records))
 
-(defn read-casebook [& {:keys [wbpath]}]
+(defn read-casebook [& {:keys [wbpath ignore-dates?]}]
   (let [db (into {} (for [[k table] (xl/xlsx->tables 
-                                      (or wbpath (util.gui/select-file)))]
+                                      (or wbpath (util.gui/select-file))
+                                      :ignore-dates? ignore-dates?)]
                       [k (tbl/keywordize-field-names table)]))
         case-records (read-legacy-cases (get db "Cases"))
         active-cases (map :CaseName case-records)
@@ -308,8 +309,10 @@
                     (group-by case-key)
                     (seq))))))
 
-(defn xlsx->futures [wbpath]
-  (compile-cases (read-casebook :wbpath wbpath)))
+(defn xlsx->futures [wbpath & {:keys [ignore-dates?] 
+                               :or {ignore-dates? true}}]
+  (compile-cases (read-casebook :wbpath wbpath
+                                :ignore-dates? ignore-dates?)))
 
 (defn futures->tables [future-map & {:keys [field-order] :or
                                      {field-order (into demand-keys 

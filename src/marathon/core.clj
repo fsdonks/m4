@@ -144,14 +144,13 @@
   (do (gui/alert "Please select the location of valid case-book.")
     (let [wbpath      (select-file)           
           cases       (helm/futures->tables 
-                        (helm/xlsx->futures wbpath))
+                        (helm/xlsx->futures wbpath :ignore-dates? true))
           ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
           dump-folder ;(if dump-same?
                         (apply str (interleave (butlast (io/list-path wbpath))
                                                (repeat "\\")))
                         ;(select-folder))
-          _ (print (str "dumping to " dump-folder))]
-      
+          _ (print (str "dumping to " dump-folder))]      
       (spit-tables cases dump-folder))))
 
 (defn hub [& {:keys [project]}]

@@ -632,17 +632,32 @@
 (defn get-fields [t] (table-fields t))
 (defn last-record [t] (get-record t (dec (record-count t))))
 
-(defn table->tabdelimited 
-  "Render a table into a tab delimited representation.
-   Rerouted to use the new API."
-  [tbl & {:keys [stringify-fields?]
-                               :or {stringify-fields? true}}]
-  (reduce 
-    (fn [acc rec] (str (apply str acc (interleave rec (repeat \tab))) \newline))
-    "" (concat (if stringify-fields? 
-                 [(vec (map field->string (table-fields tbl)))] 
-                 [(table-fields tbl)]) (table-rows tbl))))
+;(defn table->tabdelimited 
+;  "Render a table into a tab delimited representation.
+;   Rerouted to use the new API."
+;  [tbl & {:keys [stringify-fields?]
+;          :or {stringify-fields? true}}]
+;  (reduce 
+;    (fn [acc rec] (str (apply str acc (interleave rec (repeat \tab))) \newline))
+;    "" (concat (if stringify-fields? 
+;                 [(vec (map field->string (table-fields tbl)))] 
+;                 [(table-fields tbl)]) (table-rows tbl))))
 
+
+(defn table->tabdelimited 
+  "Render a table into a tab delimited representation.  Uses a stringbuilder 
+   for speed.  Rerouted to use the new API."
+  [tbl & {:keys [stringify-fields?]
+          :or {stringify-fields? true}}]
+  (let [render-rec (fn [rec] 
+                     (str (apply str (butlast (interleave rec (repeat \tab)))) 
+                          \newline))]
+    (loop [sb (StringBuilder.)
+           remaining (concat (if stringify-fields? 
+                               [(vec (map field->string (table-fields tbl)))] 
+                               [(table-fields tbl)]) (table-rows tbl))]
+      (if (empty? remaining) (.toString sb)
+        (recur (.append sb (render-rec (first remaining))) (rest remaining))))))
 
 (defmulti as-table
   "Generic function to create abstract tables."
