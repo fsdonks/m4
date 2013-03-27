@@ -2,9 +2,12 @@
 ;piping data do excel workbooks programatically.  Uses Docjure, which in 
 ;turn uses the Apache POI libraries to interact with Excel docs.
 (ns util.excel.core
-  (:use [dk.ative.docjure.spreadsheet])
-  (:require [util [table :as tbl] [vector :as v] [io :as io]]))
+;  (:use [dk.ative.docjure.spreadsheet])
+  (:use [util.excel.docjure])
+  (:require [util [table :as tbl] [vector :as v] [io :as io]])
+  (:import (org.apache.poi.ss.usermodel  Sheet Cell Row)))
 
+(set! *warn-on-reflection* true)
 
 (comment 
 ; Load a spreadsheet and read the first two columns from the 
@@ -26,22 +29,29 @@
     (save-workbook! "spreadsheet.xlsx" wb)))
 )
 
-(defn row->vec [r]  
-  (vec (map read-cell (into-seq r))))
+;(defn row->vec [r]  
+;  (vec (map read-cell (into-seq r))))
 
-(defn row->indexed-cells [r] 
-  (map #(vector (.getColumnIndex %) (read-cell %)) (into-seq r)))
 
-(defn row->vec [r & [bound]]
+(defn row->seq
+  [^Row r]
+  (vec (for [^Cell item (iterator-seq (.iterator r))] item)))
+
+(defn row->indexed-cells [^Row r] 
+  (map (fn [^Cell c] 
+         (vector (.getColumnIndex c) (read-cell c))) 
+       (iterator-seq (.iterator r))))
+
+(defn row->vec [^Row r & [bound]]
   (let [bounded? (if (not (nil? bound)) 
                    (fn [n] (> n bound))
                    (fn [_] false))]                   
     (loop [acc []
-           idx 0
-           xs (into-seq r)]
+           idx (int 0)
+           xs  (iterator-seq (.iterator r))]
       (cond (empty? xs) acc           
             (bounded? idx) (subvec acc 0 bound)
-            :else (let [x (first xs)
+            :else (let [^Cell x (first xs)
                         y (read-cell x)
                         i (.getColumnIndex x)
                         missed (reduce conj acc (take (- i idx) (repeat nil)))]
@@ -63,7 +73,7 @@
 
 (defn ucase [^String s] (.toUpperCase s))
 (defn lcase [^String s] (.toLowerCase s))
-(defn nth-row [idx sheet] (.getRow sheet idx))
+(defn nth-row [idx ^Sheet sheet] (.getRow sheet idx))
 (defn first-row [sheet] (nth-row 0 sheet))
 (defn truncate-row [v] 
   (let [n (dec (count v))]
@@ -169,8 +179,13 @@
   "Extract one or more worksheets from an xls or xlsx workbook as a map of 
    tables, where each sheet is rendered as a contiguous table, with first row 
    equal to field names."
-  [wbpath & {:keys [sheetnames] :or {sheetnames :all}}]
-  (wb->tables (load-workbook wbpath) :sheetnames sheetnames))  
+  [wbpath & {:keys [sheetnames ignore-dates?] 
+             :or {sheetnames :all ignore-dates? false}}]
+  (if ignore-dates?
+    (ignoring-dates
+      (wb->tables (load-workbook wbpath) :sheetnames sheetnames))
+    (wb->tables (load-workbook wbpath) :sheetnames sheetnames)))
+   
 
 (defn xlsx->wb
   "API wrapper for docjure/load-workbook.  Loads an excel workbook from 
