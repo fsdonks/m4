@@ -57,6 +57,7 @@
                         missed (reduce conj acc (take (- i idx) (repeat nil)))]
                     (recur (conj missed y) (inc i) (rest xs)))))))
 
+
 (defn rows->table
   "Converts an excel worksheet into a columnar table.  Assumes first row defines 
    field names."
@@ -82,13 +83,40 @@
             (nil? (get v idx)) (subvec v 0 idx)
             :else (recur (inc idx))))))
 
+;(defn contiguous-rows
+;  "Fetch a seq of contiguous rows, starting at startrow.  Rows may have
+;   noncontiguous cells, however...."
+;  [sheet & {:keys [startrow] :or {startrow 0}}]
+;  (->> (iterate inc startrow)
+;       (map (fn [idx] (nth-row idx sheet)))
+;       (take-while #(not (nil? %)))))
+
+
 (defn contiguous-rows
   "Fetch a seq of contiguous rows, starting at startrow.  Rows may have
    noncontiguous cells, however...."
-  [sheet & {:keys [startrow] :or {startrow 0}}]
-  (->> (iterate inc startrow)
-       (map (fn [idx] (nth-row idx sheet)))
-       (take-while #(not (nil? %)))))
+  [sheet]
+  (->> (row-seq sheet)       
+    (map (fn [^Row row] [(.getRowNum row) row]))
+    (partition 2 1)
+    (filter (fn [[[i1 _] [i2 _]]] (= i1 (dec i2))))            
+    (map (comp second first))))
+
+;(defn tabular-region
+;  "Assumes that sheet represents a table, in which case, the upper-left 
+;   corner, cell A1, is the beginning of a set of adjacent cells, which form
+;   a rectangle.  Nil values are allowed in cells in each row, except for the 
+;   first row, which is assumed to denote field names.  The rectangular region 
+;   will be truncated after the first nil is found in the field names."
+;  [sheet]
+;  (let [rows   (contiguous-rows sheet)
+;        fields (truncate-row (row->vec (first rows)))
+;        fieldcount (count fields)]    
+;      (reduce (fn [acc r]
+;                (let [r (row->vec r)]
+;                  (conj acc (if (= (count r) fieldcount) r  
+;                              (subvec r 0 (count fields))))))
+;              [fields] (rest rows))))
 
 (defn tabular-region
   "Assumes that sheet represents a table, in which case, the upper-left 
@@ -97,23 +125,33 @@
    first row, which is assumed to denote field names.  The rectangular region 
    will be truncated after the first nil is found in the field names."
   [sheet]
-  (let [rows (contiguous-rows sheet)
-        fields (truncate-row (row->vec (first rows)))
+  (let [fields (truncate-row (row->vec (first (contiguous-rows sheet))))
         fieldcount (count fields)]    
-      (reduce (fn [acc r]
-                (let [r (row->vec r)]
-                  (conj acc (if (= (count r) fieldcount) r  
-                              (subvec r 0 (count fields))))))
-              [fields] (rest rows))))
+    (map (fn [r]
+           (let [r (row->vec r)]
+             (if (= (count r) fieldcount) 
+               r  
+               (subvec r 0 (count fields)))))
+           (contiguous-rows sheet))))
+
+;(defn sheet->table
+;  "Converts an excel worksheet into a columnar table.  Assumes first row defines 
+;   field names.  Truncates remaining dataset to the contiguous, non-nil fields 
+;   in the first row."
+;  [sheet] 
+;  (let [rows   (tabular-region sheet)
+;        fields (first (subvec rows 0 1))
+;        records (v/transpose (subvec rows 1))]      
+;      (tbl/make-table fields records)))
 
 (defn sheet->table
   "Converts an excel worksheet into a columnar table.  Assumes first row defines 
    field names.  Truncates remaining dataset to the contiguous, non-nil fields 
    in the first row."
   [sheet] 
-  (let [rows (tabular-region sheet)
-        fields (first (subvec rows 0 1))
-        records (v/transpose (subvec rows 1))]
+  (let [rows    (tabular-region sheet)
+        fields  (first (subvec rows 0 1))
+        records (v/transpose (subvec rows 1))]      
       (tbl/make-table fields records)))  
 
 (defn wb->tables
@@ -209,6 +247,9 @@
   (throw (Exception. (str "Method not implemented for type " (type sheet)))))
 
 (comment 
+(def wbpath
+  "C:\\Users\\thomas.spoon\\Documents\\sampling-utils\\record-rules-large.xlsx")
+
 ;testing  
 (def wbpath   
   "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\MPI_3.76029832.xlsm")
@@ -229,5 +270,9 @@
 (def supply (select-sheet "SupplyRecords" wb))
 (def demand (select-sheet "DemandRecords" wb))
 (def tmap (wb->tables wb :sheetnames tables))
+
+
+(def bigpath 
+  "C:\\Users\\thomas.spoon\\Documents\\sampling-utils\\record-rules-large.xlsx")
 )
 
