@@ -643,21 +643,75 @@
 ;                 [(vec (map field->string (table-fields tbl)))] 
 ;                 [(table-fields tbl)]) (table-rows tbl))))
 
+(defn row->string 
+  ([separator r] (strlib/join separator r))
+  ([r] (record->string \tab)))
 
-(defn table->tabdelimited 
-  "Render a table into a tab delimited representation.  Uses a stringbuilder 
-   for speed.  Rerouted to use the new API."
-  [tbl & {:keys [stringify-fields?]
-          :or {stringify-fields? true}}]
-  (let [render-rec (fn [rec] 
-                     (str (apply str (butlast (interleave rec (repeat \tab)))) 
-                          \newline))]
-    (loop [sb (StringBuilder.)
-           remaining (concat (if stringify-fields? 
-                               [(vec (map field->string (table-fields tbl)))] 
-                               [(table-fields tbl)]) (table-rows tbl))]
-      (if (empty? remaining) (.toString sb)
-        (recur (.append sb (render-rec (first remaining))) (rest remaining))))))
+(defn record->string [rec separator] (row->string (vals rec) separator)) 
+(defn table->string 
+  "Render a table into a string representation.  Uses clojure.string/join for
+   speed, which uses a string builder internally...if you pass it a separator.
+   By default, converts keyword-valued field names into strings.  Caller 
+   may supply a different function for writing each row via row-writer, as 
+   well as a different row-separator.  row-writer::vector->string, 
+   row-separator::char||string"
+  [tbl & {:keys [stringify-fields? row-writer row-separator]
+          :or   {stringify-fields? true 
+                 row-writer (partial row->string \tab)
+                 row-separator \newline}}]
+  (let [xs (concat (if stringify-fields? 
+                     [(vec (map field->string (table-fields tbl)))] 
+                     [(table-fields tbl)]) 
+                   (table-rows tbl))]
+    (strlib/join row-separator xs)))
+
+(defn table->tabdelimited
+  "Render a table into a tab delimited representation."  
+  [tbl & {:keys [stringify-fields?]}] 
+  (table->string :stringify-fields? stringify-fields?))
+
+
+;(defn table->tabdelimited 
+;  "Render a table into a tab delimited representation.  Uses a stringbuilder 
+;   for speed.  Rerouted to use the new API."
+;  [tbl & {:keys [stringify-fields?]
+;          :or {stringify-fields? true}}]
+;  (let [render-rec (fn [rec] 
+;                     (str (apply str (butlast (interleave rec (repeat \tab)))) 
+;                          \newline))]
+;    (loop [sb (StringBuilder.)
+;           remaining (concat (if stringify-fields? 
+;                               [(vec (map field->string (table-fields tbl)))] 
+;                               [(table-fields tbl)]) (table-rows tbl))]
+;      (if (empty? remaining) (.toString sb)
+;        (recur (.append sb (render-rec (first remaining))) (rest remaining))))))
+
+(defn infer-format [path]
+  (case (strlib/lower-case (last (strlib/split path \.)))
+    "txt" :tab
+    "clj" :clj 
+    nil))
+      
+(defmulti table->file (fn [tbl path & {:keys [stringify-fields? data-format]}]
+                        data-format))
+
+(defn table->file :tab [tbl path & {:keys [stringify-fields? data-format]}]
+  (spit (clojure.io/file path) 
+        (table->tabdelimited tbl :stringify-fields? stringify-fields?)))
+
+(defn table->file :clj [tbl path & {:keys [stringify-fields? data-format]}]
+  (with-open [dest (clojure.io/writer (clojure.io/file path))]
+    (binding [*out* dest]
+      (print tbl))))
+
+(defn table->file :clj-pretty [tbl path & {:keys [stringify-fields? data-format]}]
+  (with-open [dest (clojure.io/writer (clojure.io/file path))]
+    (binding [*out* dest]
+      (pprint tbl))))
+
+(defn table->file :default [tbl path & {:keys [stringify-fields? data-format]}]
+  (spit (clojure.io/file path) 
+        (table->tabdelimited tbl :stringify-fields? stringify-fields?)))  
 
 (defmulti as-table
   "Generic function to create abstract tables."
@@ -667,10 +721,7 @@
 (defmethod as-table clojure.lang.PersistentArrayMap [t] t)
 
 (defmulti read-table (fn [t & opts] (class t)))
-(defmethod read-table  java.io.File [t & opts]
-  (let [s (slurp t)]
-    (as-table s)))
-    
+(defmethod read-table  java.io.File [t & opts] (as-table (slurp t)))
 
 (defn copy-table!
   "Copies a table from the system clipboard, assuming that the clipboard
