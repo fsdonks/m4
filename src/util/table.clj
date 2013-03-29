@@ -663,35 +663,19 @@
                      [(vec (map field->string (table-fields tbl)))] 
                      [(table-fields tbl)]) 
                    (table-rows tbl))]
-    (strlib/join row-separator xs)))
+    (strlib/join row-separator (map row-writer xs))))
 
 (defn table->tabdelimited
   "Render a table into a tab delimited representation."  
-  [tbl & {:keys [stringify-fields?]}] 
-  (table->string :stringify-fields? stringify-fields?))
-
-
-;(defn table->tabdelimited 
-;  "Render a table into a tab delimited representation.  Uses a stringbuilder 
-;   for speed.  Rerouted to use the new API."
-;  [tbl & {:keys [stringify-fields?]
-;          :or {stringify-fields? true}}]
-;  (let [render-rec (fn [rec] 
-;                     (str (apply str (butlast (interleave rec (repeat \tab)))) 
-;                          \newline))]
-;    (loop [sb (StringBuilder.)
-;           remaining (concat (if stringify-fields? 
-;                               [(vec (map field->string (table-fields tbl)))] 
-;                               [(table-fields tbl)]) (table-rows tbl))]
-;      (if (empty? remaining) (.toString sb)
-;        (recur (.append sb (render-rec (first remaining))) (rest remaining))))))
+  [tbl & {:keys [stringify-fields?] :or {stringify-fields? true}}] 
+  (table->string tbl :stringify-fields? stringify-fields?))
 
 (defn infer-format [path]
-  (case (strlib/lower-case (last (strlib/split path \.)))
+  (case (strlib/lower-case (last (strlib/split path #"\.")))
     "txt" :tab
     "clj" :clj 
     nil))
-      
+
 (defmulti table->file (fn [tbl path & {:keys [stringify-fields? data-format]}]
                         data-format))
 
