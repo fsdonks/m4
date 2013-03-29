@@ -645,7 +645,7 @@
 
 (defn row->string 
   ([separator r] (strlib/join separator r))
-  ([r] (record->string \tab)))
+  ([r] (row->string \tab)))
 
 (defn record->string [rec separator] (row->string (vals rec) separator)) 
 (defn table->string 
@@ -695,22 +695,26 @@
 (defmulti table->file (fn [tbl path & {:keys [stringify-fields? data-format]}]
                         data-format))
 
-(defn table->file :tab [tbl path & {:keys [stringify-fields? data-format]}]
+(defmethod table->file :tab 
+  [tbl path & {:keys [stringify-fields? data-format]}]
   (spit (clojure.io/file path) 
         (table->tabdelimited tbl :stringify-fields? stringify-fields?)))
 
-(defn table->file :clj [tbl path & {:keys [stringify-fields? data-format]}]
-  (with-open [dest (clojure.io/writer (clojure.io/file path))]
+(defmethod table->file :clj 
+  [tbl path & {:keys [stringify-fields? data-format]}]
+  (with-open [dest (clojure.java.io/writer (clojure.java.io/file path))]
     (binding [*out* dest]
       (print tbl))))
 
-(defn table->file :clj-pretty [tbl path & {:keys [stringify-fields? data-format]}]
-  (with-open [dest (clojure.io/writer (clojure.io/file path))]
+(defmethod table->file :clj-pretty 
+  [tbl path & {:keys [stringify-fields? data-format]}]
+  (with-open [dest (clojure.java.io/writer (clojure.java.io/file path))]
     (binding [*out* dest]
       (pprint tbl))))
 
-(defn table->file :default [tbl path & {:keys [stringify-fields? data-format]}]
-  (spit (clojure.io/file path) 
+(defmethod table->file :default 
+  [tbl path & {:keys [stringify-fields? data-format]}]
+  (spit (clojure.java.io/file path) 
         (table->tabdelimited tbl :stringify-fields? stringify-fields?)))  
 
 (defmulti as-table
