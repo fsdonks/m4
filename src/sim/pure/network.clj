@@ -312,9 +312,8 @@
     (->> (propogate-event 
            (merge ctx {:type (event-type event) 
                        :data (event-data event)})
-           (:net ctx)))))
-                  
-                  
+           (:net ctx))
+      :state)))
 
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 
@@ -390,12 +389,9 @@
 ;             (let [s (:state ctx)]
 ;               (if (coll? s) (first s))
 
-
 ;we can imagine this as an event network in that we push a single type around..
 ;where the medium being propogated is a compatible event context...really 
 ;a map.
-
-
 
 ;;We'll see if we actually need this guy later...might not need to macroize 
 ;this stuff yet....
@@ -448,8 +444,8 @@
        :messaging {:append (fn [{:keys [state] :as ctx} edata name] 
                                    (update-in ctx [:state :message] conj edata))}})))
 
-(defn test-echo [&[msg]]
-  (propogate-event (->handler-context :echo-state nil [msg]) message-net))
+(defn test-echo [& [msg]]
+  (propogate-event (->handler-context :echo nil [msg]) message-net))
 
 ;this is a round-about way of doing business....
 (defn test-conj [& xs]
@@ -460,7 +456,8 @@
 ;this is an attempt to get at the composable workflow from observable.
 (def time-stamped-messages
   (let [print-route (->propogation {:in {:all (fn [ctx edata name] 
-                           (do (pprint (:state ctx)) ctx))}})
+                                                (do (pprint (:state ctx))
+                                                  ctx))}})
         add-current-time (fn [ctx] (assoc-in ctx [:state :date]
                                              (util.datetime/get-date)))] 
     (->> print-route
