@@ -681,7 +681,7 @@
 
 (defmethod table->file :tab 
   [tbl path & {:keys [stringify-fields? data-format]}]
-  (spit (clojure.io/file path) 
+  (spit (clojure.java.io/file path) 
         (table->tabdelimited tbl :stringify-fields? stringify-fields?)))
 
 (defmethod table->file :clj 
