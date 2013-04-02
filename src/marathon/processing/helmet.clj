@@ -326,29 +326,32 @@
 
 ;helmet post processing....
 ;we need to process each future using two scripts.
+;This is a little bit of a hack, but it's fairly general...
 (defn split-group
   "Given a sequence of records, xs, scans the records up to the time  t defined 
    by [k :DayRule] in splitmap, applying a \"split\" that logically partitions
    the records into two groups: those that happen before t, and those that 
    happen after t.  Records that happen after t are additionally transformed 
-   by mapping f to the records after t."
-  [f t xs]
-  (let [seg [t t]]
+   by an optional function f."
+  ([f t xs]
     (loop [status :before-split
            remaining xs
            acc [] ]
-      (if (empty? remaining)
-        acc
+    (if (empty? remaining) acc
         (let [x (first remaining)]         
-          (if (= status :before-split)
-            (if (sample/segment-intersects? (sample/record->segment r) seg)
-              (let [[l r] (sample/split-record
-          
-                        
+          (cond 
+            (and (= status :before-split) 
+                 (sample/segment-intersects? (sample/record->segment r) t))
+                   (let [[l r] (sample/split-record t x)]
+                     (recur :after-split (cons r (rest xs)) (conj acc l)))
+            (= status :before-split)
+              (recur :before-split (remaining xs) (conj acc x))
+            :else (recur :after-split (rest xs) (conj acc (f x))))))))
+  ([t xs] (split-group identity t xs)))
 
 (defn split-future
-  "Given a map of {demandgroup1 {dayrule x sourcefirst y},
-                   demandgroup2 {dayrule x sourcefirst y}}
+  "Given a map of {demandgroup1 {:DayRule x :SourceFirst y},
+                   demandgroup2 {:DayRule x :SourceFirst y}}
    Applies the rules defined by the demand group to the records in xs."
   [split-map xs]
   (let [grouped (->> xs 
