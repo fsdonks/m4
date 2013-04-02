@@ -721,6 +721,9 @@
   "Copes a table from the system clipboard.  Does not keywordize anything..."
   (copy-table! :no-science false))
 
+(defn slurp-records [s] (record-seq (as-table s)))
+(defn copy-records! [] (slurp-records (board/copy!)))
+
 ;establishes a simple table-viewer.
 ;we can probably create more complicated views later....
 (defmethod gui/view util.table.column-table [obj & {:keys [title sorted] 

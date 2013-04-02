@@ -327,43 +327,44 @@
 ;helmet post processing....
 ;we need to process each future using two scripts.
 ;This is a little bit of a hack, but it's fairly general...
-(defn split-group
+(defn split-by-time
   "Given a sequence of records, xs, scans the records up to the time  t defined 
    by [k :DayRule] in splitmap, applying a \"split\" that logically partitions
    the records into two groups: those that happen before t, and those that 
    happen after t.  Records that happen after t are additionally transformed 
    by an optional function f."
   ([f t xs]
-    (loop [status :before-split
+    (loop [status :scanning
            remaining xs
            acc [] ]
     (if (empty? remaining) acc
         (let [x (first remaining)]         
           (cond 
-            (and (= status :before-split) 
-                 (sample/segment-intersects? (sample/record->segment r) t))
-                   (let [[l r] (sample/split-record t x)]
-                     (recur :after-split (cons r (rest xs)) (conj acc l)))
-            (= status :before-split)
-              (recur :before-split (remaining xs) (conj acc x))
-            :else (recur :after-split (rest xs) (conj acc (f x))))))))
-  ([t xs] (split-group identity t xs)))
+            (and (= status :scanning) 
+                 (sample/segment-intersects? (sample/record->segment x) t))
+              (let [[l r] (sample/split-record t x)]
+                (recur nil (cons r (rest xs)) (conj acc l)))
+            (= status :scanning)
+              (recur :scanning (remaining xs) (conj acc x))
+            :else (recur status (rest xs) (conj acc (f x))))))))
+  ([t xs] (split-by-time identity t xs)))
 
 (defn split-future
   "Given a map of {demandgroup1 {:DayRule x :SourceFirst y},
                    demandgroup2 {:DayRule x :SourceFirst y}}
    Applies the rules defined by the demand group to the records in xs."
-  [split-map xs]
+  [splitmap xs]
   (let [grouped (->> xs 
                   (map (fn [r] (merge r {:start (get r :StartDay)
                                          :duration (get r :Duration)}))) 
                   (group-by #(get % :DemandGroup)))]
     (for [[groupkey recs] grouped]
-      (if-let [t (get split-map group-key)]
-        (split-group t recs)
+      (if-let [{:keys [SourceFirst DayRule]} (get splitmap groupkey)]
+        (split-by-time #(assoc % :SourceFirst SourceFirst) DayRule recs)
         recs))))
 
-      
+
+
 (comment ;testing
 ;;our test record fields...
 ;[Node	Frequency	StartDistribution	S1	S2	S3	
