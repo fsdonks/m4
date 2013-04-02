@@ -343,10 +343,10 @@
             (and (= status :scanning) 
                  (sample/segment-intersects? (sample/record->segment x) t))
               (let [[l r] (sample/split-record t x)]
-                (recur nil (cons r (rest xs)) (conj acc l)))
+                (recur nil (cons r (rest remaining)) (conj acc l)))
             (= status :scanning)
-              (recur :scanning (remaining xs) (conj acc x))
-            :else (recur status (rest xs) (conj acc (f x))))))))
+              (recur :scanning (rest remaining) (conj acc x))
+            :else (recur status (rest remaining) (conj acc (f x))))))))
   ([t xs] (split-by-time identity t xs)))
 
 (defn split-future

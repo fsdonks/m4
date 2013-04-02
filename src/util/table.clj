@@ -730,6 +730,17 @@
    format, and returns a record sequence."
   [] (slurp-records (board/copy!)))
 
+(defn spit-records
+  "Spits a sequence of records, xs, assumed to be identical in keys, as if it 
+   were a tab delimited table."
+  [xs] 
+  (table->tabdelimited (records->table xs)))
+(defn paste-records!
+  "Pastes a sequence of records, xs, to the clipboard as a string that assumes 
+   xs are records in a tabdelimited table."
+  [xs]
+  (board/paste! (spit-records xs)))
+
 ;establishes a simple table-viewer.
 ;we can probably create more complicated views later....
 (defmethod gui/view util.table.column-table [obj & {:keys [title sorted] 
