@@ -721,8 +721,14 @@
   "Copes a table from the system clipboard.  Does not keywordize anything..."
   (copy-table! :no-science false))
 
-(defn slurp-records [s] (record-seq (as-table s)))
-(defn copy-records! [] (slurp-records (board/copy!)))
+(defn slurp-records 
+  "Parses string s into a record sequence."
+  [s] (record-seq (as-table s)))
+
+(defn copy-records!
+  "Copies a string from the system clipboard, assumed to be in tab delimited 
+   format, and returns a record sequence."
+  [] (slurp-records (board/copy!)))
 
 ;establishes a simple table-viewer.
 ;we can probably create more complicated views later....
