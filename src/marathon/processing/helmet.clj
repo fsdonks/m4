@@ -314,9 +314,10 @@
   (compile-cases (read-casebook :wbpath wbpath
                                 :ignore-dates? ignore-dates?)))
 
-(defn futures->tables [future-map & {:keys [field-order] :or
-                                     {field-order (into demand-keys 
-                                                    [:case-name :case-future])}}]
+(defn futures->tables [future-map & 
+                       {:keys [field-order] :or
+                        {field-order 
+                         (into demand-keys [:case-name :case-future])}}]
   (into {} 
         (for [[case-name records] future-map]
           [case-name  (->> (tbl/records->table records)
@@ -324,8 +325,42 @@
                            (tbl/stringify-field-names))]))) 
 
 ;helmet post processing....
+;we need to process each future using two scripts.
+(defn split-group
+  "Given a sequence of records, xs, scans the records up to the time  t defined 
+   by [k :DayRule] in splitmap, applying a \"split\" that logically partitions
+   the records into two groups: those that happen before t, and those that 
+   happen after t.  Records that happen after t are additionally transformed 
+   by mapping f to the records after t."
+  [f t xs]
+  (let [seg [t t]]
+    (loop [status :before-split
+           remaining xs
+           acc [] ]
+      (if (empty? remaining)
+        acc
+        (let [x (first remaining)]         
+          (if (= status :before-split)
+            (if (sample/segment-intersects? (sample/record->segment r) seg)
+              (let [[l r] (sample/split-record
+          
+                        
 
+(defn split-future
+  "Given a map of {demandgroup1 {dayrule x sourcefirst y},
+                   demandgroup2 {dayrule x sourcefirst y}}
+   Applies the rules defined by the demand group to the records in xs."
+  [split-map xs]
+  (let [grouped (->> xs 
+                  (map (fn [r] (merge r {:start (get r :StartDay)
+                                         :duration (get r :Duration)}))) 
+                  (group-by #(get % :DemandGroup)))]
+    (for [[groupkey recs] grouped]
+      (if-let [t (get split-map group-key)]
+        (split-group t recs)
+        recs))))
 
+      
 (comment ;testing
 ;;our test record fields...
 ;[Node	Frequency	StartDistribution	S1	S2	S3	
