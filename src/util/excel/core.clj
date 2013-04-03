@@ -155,8 +155,8 @@
    in the first row."
   [sheet] 
   (let [rows    (tabular-region sheet)
-        fields  (first (subvec rows 0 1))
-        records (v/transpose (subvec rows 1))]      
+        fields  (first rows)
+        records (v/transpose (vec (rest rows)))]      
       (tbl/make-table fields records)))  
 
 (defn wb->tables
