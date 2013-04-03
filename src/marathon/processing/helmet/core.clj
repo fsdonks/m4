@@ -326,8 +326,8 @@
    handling collisions, and split the resulting data according to the 
    rules defined by DemandSplit."
   [db futures]
-  (let [splitmap (table->lookup db :DemandSplit     :DemandGroup r)
-        classes  (table->lookup db :ValidationRules :DependencyClass r)]
+  (let [splitmap (table->lookup db :DemandSplit     :DemandGroup)
+        classes  (table->lookup db :ValidationRules :DependencyClass)]
     (for [[case-key case-records] futures]
       [case-key (collide-and-split splitmap classes case-records)])))
 

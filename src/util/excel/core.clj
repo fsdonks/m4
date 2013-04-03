@@ -96,11 +96,16 @@
   "Fetch a seq of contiguous rows, starting at startrow.  Rows may have
    noncontiguous cells, however...."
   [sheet]
-  (->> (row-seq sheet)       
-    (map (fn [^Row row] [(.getRowNum row) row]))
-    (partition 2 1)
-    (filter (fn [[[i1 _] [i2 _]]] (= i1 (dec i2))))            
-    (map (comp second first))))
+  (let [parts 
+        (->> (row-seq sheet)       
+          (map    (fn [^Row row] [(.getRowNum row) row]))    
+          (partition 2 1)
+          (filter (fn [[[i1 _] [i2 _]]] (= i1 (dec i2)))))]
+    (flatten 
+      (concat (map second (first parts)) (map (comp second first) (rest parts))))))
+
+  
+
 
 ;(defn tabular-region
 ;  "Assumes that sheet represents a table, in which case, the upper-left 
