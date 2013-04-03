@@ -1,7 +1,7 @@
 (ns marathon.core
   (:require [util [table :as tbl]
                   [io :as io]]
-            [marathon.processing [helmet :as helm]]
+            [marathon.processing.helmet [core :as helm]]
             [clojure [pprint :as pprint]]
             [cljgui.components [swing :as gui]]
             [cljgui [mvc :as mvc]]

@@ -1,4 +1,4 @@
-(ns marathon.processing.collisions)
+(ns marathon.processing.helmet.collisions)
 
 (defn start-time [record] (:StartDay record))
 (defn end-time [record] (+ (:StartDay record) (:Duration record)))
