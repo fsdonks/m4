@@ -12,7 +12,6 @@
             [util.excel [core :as xl]]
             [marathon.processing.helmet [split :as split] 
                                         [collision :as collision]]))
-
 ;utility-functions                        
 (defn collapse-fields [fields r]
   (reduce (fn [acc [from-field to-field]]
@@ -288,8 +287,17 @@
         cases {:Cases (compose-cases case-records rules)} 
         validation {:ValidationRules (:ValidationRules db)}]
     (merge cases population validation)))
-  
 
+(defn collide-and-split
+  "Given a seq of records, a map of split timings and a map of collision 
+   classes, processes the sequence of records by handling collisions, then 
+   applying the split logic. "
+  [splitmap classes xs]
+  (split/split-future splitmap (collision/process-collisions classes xs)))
+
+(defn table->lookup [db tbl-name lookup-field]
+  (into {} (for [r (tbl/table-records (get db tbl-name))]
+             [(get r lookup-field) r])))
 
 (defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
@@ -310,6 +318,17 @@
                     (map fix-fields) 
                     (group-by case-key)
                     (seq))))))
+
+(defn post-process-cases
+  "Default post processing for each case.  We validate the case records by 
+   handling collisions, and split the resulting data according to the 
+   rules defined by DemandSplit."
+  [db casemap]
+  (let [splitmap (table->lookup db :DemandSplit :DemandGroup r)
+        classes (table->lookup db :ValidationRules :DependencyClass r)]
+    (into {} (for [[case-key case-records] casemap]
+               [case-key (collide-and-split splitmap classes case-records)]))))
+
 
 (defn xlsx->futures [wbpath & {:keys [ignore-dates?] 
                                :or {ignore-dates? true}}]

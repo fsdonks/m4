@@ -40,6 +40,7 @@
   ([t xs] (split-by-time identity t xs)))
 
 (defn title32? [r] (= (int (:Title10_32 r)) 32))
+
 (defn add-start-dur [r] 
   (merge r {:start (get r :StartDay)
             :duration (get r :Duration)}))
