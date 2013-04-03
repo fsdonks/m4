@@ -23,30 +23,36 @@
    by [k :DayRule] in splitmap, applying a \"split\" that logically partitions
    the records into two groups: those that happen before t, and those that 
    happen after t.  Records that happen after t are additionally transformed 
-   by an optional function f."
+   by an optional function f.  Note -> t is assumed to be a time relative to the
+   records xs, such that xs will be split according to the earliest start in xs
+   plus t."
   ([f t xs]
-    (loop [status :scanning
-           remaining (sort-by :start xs)
-           acc [] ]
-    (if (empty? remaining) acc
-        (let [x (first remaining)]         
-          (cond 
-            (and (= status :scanning) 
-                 (sample/segment-intersects? (sample/record->segment x) t))
-              (let [[l r] (split-record t x)]
+    (let [recs    (sort-by :start xs)          
+          t-start (:start (first recs))
+          t0      (+ t-start t)]
+      (loop [status :scanning
+             remaining recs
+             acc [] ]
+        (if (empty? remaining) acc
+          (let [x (first remaining)]         
+            (cond 
+              (and (= status :scanning) 
+                   (sample/segment-intersects? (sample/record->segment x) t0))
+              (let [[l r] (split-record t0 x)]
                 (recur nil (cons r (rest remaining)) (conj acc l)))
-            (= status :scanning)
+              (= status :scanning)
               (recur :scanning (rest remaining) (conj acc x))
-            :else (recur status (rest remaining) (conj acc (f x))))))))
-  ([t xs] (split-by-time identity t xs)))
-
+              :else (recur status (rest remaining) (conj acc (f x)))))))))
+    ([t xs] (split-by-time identity t xs)))
+  
 (defn title32? [r] (= (int (:Title10_32 r)) 32))
 
 (defn add-start-dur [r] 
   (merge r {:start (get r :StartDay)
             :duration (get r :Duration)}))
 (defn drop-start-dur [r]
-  (-> (merge r {:StartDay (get r :start) :Duration (get r :duration)})
+  (-> (merge r {:StartDay (get r :start) 
+                :Duration (get r :duration)})
     (dissoc :start)
     (dissoc :duration)))
 
@@ -56,9 +62,10 @@
    Applies the rules defined by the demand group to the records in xs."
   [splitmap xs & {:keys [exclude?] 
                   :or   {exclude? title32?}}]
-  (let [grouped (->> xs 
+  (let [_ (clojure.pprint/pprint splitmap)
+        grouped (->> xs 
                   (map add-start-dur) 
-                  (group-by #(get % :DemandGroup)))]
+                  (group-by :DemandGroup))]
     (->>
       (for [[groupkey recs] grouped]
         (if-let [{:keys [SourceFirst DayRule]} (get splitmap groupkey)]

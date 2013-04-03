@@ -284,8 +284,8 @@
                              ;[case-name (read-legacy-rules rule-table)])))
                              [k (vals (read-legacy-rules rule-table))])))
         cases       {:Cases (compose-cases case-records rules)} 
-        validation  {:ValidationRules (:ValidationRules db)}
-        demandsplit {:DemandSplit (:DemandSplit db)}]
+        validation  {:ValidationRules (get db "ValidationRules")}
+        demandsplit {:DemandSplit (get db "DemandSplit")}]
     (merge cases population validation demandsplit)))
 
 
@@ -304,18 +304,20 @@
                                     :duration :Duration}}}]
   (let [case-key (juxt :case-name :case-future)
         fix-fields (comp (partial collapse-fields field-merges) integral-times)]
-    (for [[case-name c] (:Cases db)]
-      (->> (sample/sample-from (:Population db) c)
-        (map fix-fields) 
-        (group-by case-key)
-        (seq)))))
+    (into {} 
+          (for [[case-name c] (:Cases db)]
+            (->> (sample/sample-from (:Population db) c)
+              (map fix-fields) 
+              (group-by case-key)
+        (seq))))))
 
 (defn collide-and-split
   "Given a seq of records, a map of split timings and a map of collision 
    classes, processes the sequence of records by handling collisions, then 
    applying the split logic. "
   [splitmap classes xs]
-  (split/split-future splitmap (collision/process-collisions classes xs)))
+  ;(split/split-future splitmap (collision/process-collisions classes xs)))
+  (split/split-future splitmap xs))
 
 (defn table->lookup [db tbl-name lookup-field]
   (into {} (for [r (tbl/table-records (get db tbl-name))]
@@ -328,12 +330,14 @@
   [db futures]
   (let [splitmap (table->lookup db :DemandSplit     :DemandGroup)
         classes  (table->lookup db :ValidationRules :DependencyClass)]
-    (for [[case-key case-records] futures]
-      [case-key (collide-and-split splitmap classes case-records)])))
+    (into {} 
+          (for [[case-key case-records] futures]
+            [case-key (collide-and-split splitmap classes case-records)]))))
 
 (defn xlsx->futures [wbpath & {:keys [ignore-dates?] 
                                :or {ignore-dates? true}}]
   (let [db (read-casebook :wbpath wbpath :ignore-dates? ignore-dates?)]
+    ;(compile-cases db)))
     (post-process-cases db (compile-cases db))))
 
 (defn futures->tables [futures & 

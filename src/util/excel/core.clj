@@ -102,10 +102,8 @@
           (partition 2 1)
           (filter (fn [[[i1 _] [i2 _]]] (= i1 (dec i2)))))]
     (flatten 
-      (concat (map second (first parts)) (map (comp second first) (rest parts))))))
-
-  
-
+      (concat (map second (first parts)) 
+              (map (comp second second) (rest parts))))))
 
 ;(defn tabular-region
 ;  "Assumes that sheet represents a table, in which case, the upper-left 
