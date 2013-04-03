@@ -328,9 +328,9 @@
   "Default post processing for each case.  We validate the case records by 
    handling collisions, and split the resulting data according to the 
    rules defined by DemandSplit."
-  [db futures]
+  [db futures & {:keys [logging?]}]
   (let [splitmap (table->lookup db :DemandSplit     :DemandGroup)
-        classes  (table->lookup db :ValidationRules :DependencyClass)]
+        classes  (table->lookup db :ValidationRules :DependencyClass)]    
     (into {} 
           (for [[case-key case-records] futures]
             [case-key (collide-and-split splitmap classes case-records)]))))

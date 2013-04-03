@@ -1,3 +1,7 @@
+;This is a small script for handling a set of business rules that define 
+;classes of collisions between data records.  In retrospect, a better solution
+;would be to define classes of collisions via some pattern construct, and then
+;add to the patterns as needed.  Anyway, this guy works for now..
 (ns marathon.processing.helmet.collision)
 
 (def ^:dynamic *log-collisions* nil) 
@@ -23,6 +27,7 @@
 (defn- log-fix [cause in result]
   (println (str "Resolved collision " cause \newline " In: " in 
                     \newline " Out: " result)))
+
 (defmacro with-logging [& body]
   `(binding [*log-collisions* true]
      ~@body))
