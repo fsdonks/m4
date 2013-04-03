@@ -250,7 +250,6 @@
                     (flatten rule-reps)))
            (first case-futures)))                     
        (sample/->replications future-count [case-rules])))})
-;       (sample/->replications future-count [case-rules])))})
 
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
                                   (map parse-legacy-case)
@@ -284,9 +283,32 @@
                              ;rule nodes of the the rule-table.
                              ;[case-name (read-legacy-rules rule-table)])))
                              [k (vals (read-legacy-rules rule-table))])))
-        cases {:Cases (compose-cases case-records rules)} 
-        validation {:ValidationRules (:ValidationRules db)}]
-    (merge cases population validation)))
+        cases       {:Cases (compose-cases case-records rules)} 
+        validation  {:ValidationRules (:ValidationRules db)}
+        demandsplit {:DemandSplit (:DemandSplit db)}]
+    (merge cases population validation demandsplit)))
+
+
+
+(defn compile-cases
+  "Given a map of tables, process each case, building its associated rule set, 
+   drawing from a sample population.  The results from each case are returned 
+   as a map of {case-name [records]}, where records are a list of records from
+   futures.  Each record will have the case-name and the case-future added as 
+   fields.  The table map, or the database, is expected to have at least the 
+   following fields [:ValidationRules :DemandRecords :Cases], where each value
+   is a table.  Each enabled case will be evaluated, returning a map of 
+   {[case-name case-future] records}"
+  [db & {:keys [field-merges] 
+               :or   {field-merges {:start :StartDay 
+                                    :duration :Duration}}}]
+  (let [case-key (juxt :case-name :case-future)
+        fix-fields (comp (partial collapse-fields field-merges) integral-times)]
+    (for [[case-name c] (:Cases db)]
+      (->> (sample/sample-from (:Population db) c)
+        (map fix-fields) 
+        (group-by case-key)
+        (seq)))))
 
 (defn collide-and-split
   "Given a seq of records, a map of split timings and a map of collision 
@@ -299,51 +321,29 @@
   (into {} (for [r (tbl/table-records (get db tbl-name))]
              [(get r lookup-field) r])))
 
-(defn compile-cases
-  "Given a map of tables, process each case, building its associated rule set, 
-   drawing from a sample population.  The results from each case are returned 
-   as a map of {case-name [records]}, where records are a list of records from
-   futures.  Each record will have the case-name and the case-future added as 
-   fields.  The table map, or the database, is expected to have at least the 
-   following fields [:ValidationRules :DemandRecords :Cases], where each value
-   is a table.  Each enabled case will be evaluated, returning a map of 
-   {[case-name case-future] records}"
-  [database & {:keys [field-merges] 
-               :or   {field-merges {:start :StartDay 
-                                    :duration :Duration}}}]
-  (let [case-key (juxt :case-name :case-future)
-        fix-fields (comp (partial collapse-fields field-merges) integral-times)]
-    (into {} (for [[case-name c] (:Cases database)]
-               (->> (sample/sample-from (:Population database) c)
-                    (map fix-fields) 
-                    (group-by case-key)
-                    (seq))))))
-
 (defn post-process-cases
   "Default post processing for each case.  We validate the case records by 
    handling collisions, and split the resulting data according to the 
    rules defined by DemandSplit."
-  [db casemap]
-  (let [splitmap (table->lookup db :DemandSplit :DemandGroup r)
-        classes (table->lookup db :ValidationRules :DependencyClass r)]
-    (into {} (for [[case-key case-records] casemap]
-               [case-key (collide-and-split splitmap classes case-records)]))))
-
+  [db futures]
+  (let [splitmap (table->lookup db :DemandSplit     :DemandGroup r)
+        classes  (table->lookup db :ValidationRules :DependencyClass r)]
+    (for [[case-key case-records] futures]
+      [case-key (collide-and-split splitmap classes case-records)])))
 
 (defn xlsx->futures [wbpath & {:keys [ignore-dates?] 
                                :or {ignore-dates? true}}]
-  (compile-cases (read-casebook :wbpath wbpath
-                                :ignore-dates? ignore-dates?)))
+  (let [db (read-casebook :wbpath wbpath :ignore-dates? ignore-dates?)]
+    (post-process-cases db (compile-cases db))))
 
-(defn futures->tables [future-map & 
+(defn futures->tables [futures & 
                        {:keys [field-order] :or
                         {field-order 
                          (into demand-keys [:case-name :case-future])}}]
-  (into {} 
-        (for [[case-name records] future-map]
-          [case-name  (->> (tbl/records->table records)
-                           (tbl/order-fields-by field-order)
-                           (tbl/stringify-field-names))]))) 
+  (for [[case-name records] futures]
+    [case-name  (->> (tbl/records->table records)
+                  (tbl/order-fields-by field-order)
+                  (tbl/stringify-field-names))])) 
 
 
 
