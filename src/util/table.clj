@@ -735,6 +735,7 @@
    were a tab delimited table."
   [xs] 
   (table->tabdelimited (records->table xs)))
+
 (defn paste-records!
   "Pastes a sequence of records, xs, to the clipboard as a string that assumes 
    xs are records in a tabdelimited table."

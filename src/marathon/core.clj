@@ -153,6 +153,22 @@
           _ (print (str "dumping to " dump-folder))]      
       (spit-tables cases dump-folder))))
 
+(defn clean-demand-dialogue []
+  (do (gui/alert "Please select the location of valid case-files.")
+    (let [wbpath      (select-file)
+          fl          (clojure.java.io/file wbpath)
+          cases       {(str (io/fname fl) \_ "split.txt") (tbl/read-table fl)}
+          ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
+          dump-folder ;(if dump-same?
+          (apply str (interleave (butlast (io/list-path wbpath))
+                                 (repeat "\\")))
+          ;(select-folder))
+          _ (print (str "dumping to " dump-folder))]      
+      (spit-tables cases dump-folder))))
+
+(defn split-demand-dialogue [])
+
+
 (defn hub [& {:keys [project]}]
   (let [project-menu   (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)

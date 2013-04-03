@@ -394,6 +394,7 @@
       (flatten)
       (map drop-start-dur))))
 
+
 (comment ;testing
 ;;our test record fields...
 ;[Node	Frequency	StartDistribution	S1	S2	S3	
