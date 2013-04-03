@@ -1,5 +1,7 @@
 (ns marathon.processing.helmet.collision)
 
+(def ^:dynamic *log-collisions* nil) 
+
 (defn start-time [record] (:StartDay record))
 (defn end-time [record] (+ (:StartDay record) (:Duration record)))
 (defn duration [record] (:Duration record))
@@ -17,17 +19,34 @@
   (= (:Priority record1) (:Priority record2)))
 (defn priority-greater? [record1 record2]
   (< (:Priority record1) (:Priority record2)))
+
+(defn- log-fix [cause in result]
+  (println (str "Resolved collision " cause \newline " In: " in 
+                    \newline " Out: " result)))
+(defmacro with-logging [& body]
+  `(binding [*log-collisions* true]
+     ~@body))
+(defmacro with-response [msg in & body]
+  `(let [res# ~@body]
+     (do (if *log-collisions*      
+           (log-fix ~msg ~in res#))
+       res#)))
+
 ;assumes left subsumes right.
 (defn merge-records [l r]
-  [(assoc l :Duration (- (max (end-time r) (end-time l)) (start-time l)))])
+  (with-response :simple-merge [l r]
+    [(assoc l :Duration (- (max (end-time r) (end-time l)) (start-time l)))]))
+
 ;assumes left contains right, returns 3 records.
 (defn fix-contained [l r]
   (if (priority-greater? l r)
-    [l]; return 1 if it has higher priority and envelops r
-    [(assoc l :Duration (- (start-time r) (start-time l)))
-     r
-     (merge l {:StartDay (end-time r)
-               :Duration (- (end-time l) (end-time r))})]))
+    (with-response :left-envelops-right [l]
+      [l]); return l if it has higher priority and envelops r
+    (with-response :right-partitions-left [l r]
+      [(assoc l :Duration (- (start-time r) (start-time l)))
+       r
+       (merge l {:StartDay (end-time r)
+                 :Duration (- (end-time l) (end-time r))})])))
 
 ;fix two overlapping records, depending on their priority.
 (defn fix-overlapped
@@ -35,10 +54,12 @@
   (let [[pl pr] (map :Priority [l r])]
         (if (< pr pl) ; if the second record has higher priority
               ;truncate end of first record where the second record starts
-                      [(assoc l :Duration (- (start-time r) (start-time l))) r]
-                      ;else if the first record has higher priority, truncate to
-                      [l (merge r {:StartDay    (end-time l)
-                                   :Duration (- (end-time r) (end-time l))})])))
+          (with-response :right-truncates-left [l r]
+            [(assoc l :Duration (- (start-time r) (start-time l))) r])
+          ;else if the first record has higher priority, truncate to
+          (with-response :left-truncates-right [l r]
+            [l (merge r {:StartDay    (end-time l)
+                         :Duration (- (end-time r) (end-time l))})]))))
 
 ;fix-collision::record -> record -> [record]
 (defn fix-collision [tmin l r]
@@ -112,7 +133,7 @@
 
 
 (defn process-collisions
-  [xs classes & {:keys [src]}]
+  [classes xs & {:keys [src]}]
   (let [f (if src
             #(filter (fn [r] (= (:SRC r) src)) %)
             identity)

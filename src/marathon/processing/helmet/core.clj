@@ -316,8 +316,9 @@
    classes, processes the sequence of records by handling collisions, then 
    applying the split logic. "
   [splitmap classes xs]
+  (collision/process-collisions classes xs))
   ;(split/split-future splitmap (collision/process-collisions classes xs)))
-  (split/split-future splitmap xs))
+  ;(split/split-future splitmap xs))
 
 (defn table->lookup [db tbl-name lookup-field]
   (into {} (for [r (tbl/table-records (get db tbl-name))]
@@ -334,10 +335,10 @@
           (for [[case-key case-records] futures]
             [case-key (collide-and-split splitmap classes case-records)]))))
 
-(defn xlsx->futures [wbpath & {:keys [ignore-dates?] 
-                               :or {ignore-dates? true}}]
+(defn xlsx->futures [wbpath & {:keys [ignore-dates? logging?] 
+                               :or {ignore-dates? true
+                                    logging? false}}]
   (let [db (read-casebook :wbpath wbpath :ignore-dates? ignore-dates?)]
-    ;(compile-cases db)))
     (post-process-cases db (compile-cases db))))
 
 (defn futures->tables [futures & 
