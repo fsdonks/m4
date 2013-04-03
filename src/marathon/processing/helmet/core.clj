@@ -315,8 +315,8 @@
   "Given a seq of records, a map of split timings and a map of collision 
    classes, processes the sequence of records by handling collisions, then 
    applying the split logic. "
-  [splitmap classes xs]
-  (collision/process-collisions classes xs))
+  [splitmap classes xs & {:keys [log?]}]
+  (collision/process-collisions classes xs :log? log?))
   ;(split/split-future splitmap (collision/process-collisions classes xs)))
   ;(split/split-future splitmap xs))
 
@@ -328,18 +328,18 @@
   "Default post processing for each case.  We validate the case records by 
    handling collisions, and split the resulting data according to the 
    rules defined by DemandSplit."
-  [db futures & {:keys [logging?]}]
+  [db futures & {:keys [log?]}]
   (let [splitmap (table->lookup db :DemandSplit     :DemandGroup)
         classes  (table->lookup db :ValidationRules :DependencyClass)]    
     (into {} 
           (for [[case-key case-records] futures]
             [case-key (collide-and-split splitmap classes case-records)]))))
 
-(defn xlsx->futures [wbpath & {:keys [ignore-dates? logging?] 
+(defn xlsx->futures [wbpath & {:keys [ignore-dates? log?] 
                                :or {ignore-dates? true
-                                    logging? false}}]
+                                    log? nil}}]
   (let [db (read-casebook :wbpath wbpath :ignore-dates? ignore-dates?)]
-    (post-process-cases db (compile-cases db))))
+    (post-process-cases db (compile-cases db) :log? log?)))
 
 (defn futures->tables [futures & 
                        {:keys [field-order] :or

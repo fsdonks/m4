@@ -7,8 +7,8 @@
 (def ^:dynamic *log-collisions* nil) 
 
 (defn start-time [record] (:StartDay record))
-(defn end-time [record] (+ (:StartDay record) (:Duration record)))
-(defn duration [record] (:Duration record))
+(defn end-time [record]   (+ (:StartDay record) (:Duration record)))
+(defn duration [record]   (:Duration record))
 (defn record->segment [r] [(start-time r) (end-time r)])
 ;assumes record2 has bigger start time than record1
 (defn near? [space record1 record2]
@@ -24,13 +24,11 @@
 (defn priority-greater? [record1 record2]
   (< (:Priority record1) (:Priority record2)))
 
+
 (defn- log-fix [cause in result]
   (println (str "Resolved collision " cause \newline " In: " in 
                     \newline " Out: " result)))
 
-(defmacro with-logging [& body]
-  `(binding [*log-collisions* true]
-     ~@body))
 (defmacro with-response [msg in & body]
   `(let [res# ~@body]
      (do (if *log-collisions*      
@@ -44,9 +42,9 @@
 
 ;assumes left contains right, returns 3 records.
 (defn fix-contained [l r]
-  (if (priority-greater? l r)
-    (with-response :left-envelops-right [l]
-      [l]); return l if it has higher priority and envelops r
+  (if (priority-greater? l r) 
+    ; return l if it has higher priority and envelops r
+    (with-response :left-envelops-right [l] [l])
     (with-response :right-partitions-left [l r]
       [(assoc l :Duration (- (start-time r) (start-time l)))
        r
@@ -136,20 +134,20 @@
   [classes xs]
   (:records (reduce merge-groups (prioritize-groups classes xs))))
 
-
 (defn process-collisions
-  [classes xs & {:keys [src]}]
-  (let [f (if src
-            #(filter (fn [r] (= (:SRC r) src)) %)
-            identity)
-        {:keys [collides static]} (work-groups classes (f xs))]
-    (->> collides
-      (group-by (fn [r] (str (:SRC r) (:Title10_32 r) (:Operation r))))
-      (vals)
-      (map (partial process-collisions-sub classes))
-      (concat)
-      (flatten)
-      (into static))))
+  [classes xs & {:keys [src log?]}]
+  (binding [*log-collisions* log?]
+	  (let [f (if src
+	            #(filter (fn [r] (= (:SRC r) src)) %)
+	            identity)
+	        {:keys [collides static]} (work-groups classes (f xs))]
+	    (->> collides
+	      (group-by (fn [r] (str (:SRC r) (:Title10_32 r) (:Operation r))))
+	      (vals)
+	      (map (partial process-collisions-sub classes))
+	      (concat)
+	      (flatten)
+	      (into static)))))
 
 ;(defn read-recs [somefile]
 ;  (read-string (slurp somefile)))
