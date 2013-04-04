@@ -37,57 +37,32 @@
 
 ;assumes left subsumes right.
 (defn merge-records [l r]
-    [(assoc l :Duration (- (max (end-time r) (end-time l)) (start-time l)))])
+  (with-response :simple-merge [l r]
+    [(assoc l :Duration (- (max (end-time r) (end-time l)) (start-time l)))]))
 
 ;assumes left contains right, returns 3 records.
 (defn fix-contained [l r]
   (if (priority-greater? l r) 
     ; return l if it has higher priority and envelops r
-    [l]
-    [(assoc l :Duration (- (start-time r) (start-time l)))
-     r
-     (merge l {:StartDay (end-time r)
-               :Duration (- (end-time l) (end-time r))})]))
+    (with-response :left-envelops-right [l] [l])
+    (with-response :right-partitions-left [l r]
+      [(assoc l :Duration (- (start-time r) (start-time l)))
+       r
+       (merge l {:StartDay (end-time r)
+                 :Duration (- (end-time l) (end-time r))})])))
 
 ;fix two overlapping records, depending on their priority.
 (defn fix-overlapped
   [l r]
   (let [[pl pr] (map :Priority [l r])]
-    (if (< pr pl) ; if the second record has higher priority
-          ;truncate end of first record where the second record starts
-          [(assoc l :Duration (- (start-time r) (start-time l))) r]
+        (if (< pr pl) ; if the second record has higher priority
+              ;truncate end of first record where the second record starts
+          (with-response :right-truncates-left [l r]
+            [(assoc l :Duration (- (start-time r) (start-time l))) r])
           ;else if the first record has higher priority, truncate to
-          [l (merge r {:StartDay    (end-time l)
-                       :Duration (- (end-time r) (end-time l))})])))
-
-;assumes left subsumes right.
-;(defn merge-records [l r]
-;  (with-response :simple-merge [l r]
-;    [(assoc l :Duration (- (max (end-time r) (end-time l)) (start-time l)))]))
-
-;assumes left contains right, returns 3 records.
-;(defn fix-contained [l r]
-;  (if (priority-greater? l r) 
-;    ; return l if it has higher priority and envelops r
-;    (with-response :left-envelops-right [l] [l])
-;    (with-response :right-partitions-left [l r]
-;      [(assoc l :Duration (- (start-time r) (start-time l)))
-;       r
-;       (merge l {:StartDay (end-time r)
-;                 :Duration (- (end-time l) (end-time r))})])))
-
-;fix two overlapping records, depending on their priority.
-;(defn fix-overlapped
-;  [l r]
-;  (let [[pl pr] (map :Priority [l r])]
-;        (if (< pr pl) ; if the second record has higher priority
-;              ;truncate end of first record where the second record starts
-;          (with-response :right-truncates-left [l r]
-;            [(assoc l :Duration (- (start-time r) (start-time l))) r])
-;          ;else if the first record has higher priority, truncate to
-;          (with-response :left-truncates-right [l r]
-;            [l (merge r {:StartDay    (end-time l)
-;                         :Duration (- (end-time r) (end-time l))})]))))
+          (with-response :left-truncates-right [l r]
+            [l (merge r {:StartDay    (end-time l)
+                         :Duration (- (end-time r) (end-time l))})]))))
 
 ;fix-collision::record -> record -> [record]
 (defn fix-collision [tmin l r]
@@ -177,10 +152,10 @@
 	    (->> collides
 	      (group-by (partial fields->key key-fields))
 	      (vals)        
-	      (map (partial process-collisions-sub classes))))))       
-;	      (concat)
-;	      (flatten)        
-;	      (into static)))))
+	      (map (partial process-collisions-sub classes))       
+	      (concat)
+	      (flatten)        
+	     (into static)))))
 
 ;(defn read-recs [somefile]
 ;  (read-string (slurp somefile)))
