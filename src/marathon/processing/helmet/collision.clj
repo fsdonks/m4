@@ -134,15 +134,20 @@
   [classes xs]
   (:records (reduce merge-groups (prioritize-groups classes xs))))
 
+(defn fields->key [fields r]  (apply str (map #(get r %) fields)))
+
 (defn process-collisions
-  [classes xs & {:keys [src log?]}]
+  [classes xs & {:keys [src log? key-fields]
+                 :or {src nil 
+                      log? nil 
+                      key-fields [:SRC :Title10_32]}}]
   (binding [*log-collisions* log?]
 	  (let [f (if src
 	            #(filter (fn [r] (= (:SRC r) src)) %)
 	            identity)
 	        {:keys [collides static]} (work-groups classes (f xs))]
 	    (->> collides
-	      (group-by (fn [r] (str (:SRC r) (:Title10_32 r))))
+	      (group-by (partial fields->key key-fields))
 	      (vals)
 	      (map (partial process-collisions-sub classes))
 	      (concat)

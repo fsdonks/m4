@@ -131,10 +131,12 @@
   (let [fields (truncate-row (row->vec (first (contiguous-rows sheet))))
         fieldcount (count fields)]    
     (map (fn [r]
-           (let [r (row->vec r)]
-             (if (= (count r) fieldcount) 
-               r  
-               (subvec r 0 (count fields)))))
+           (let [r (row->vec r)
+                 rcount (count r)]
+             (cond (= rcount fieldcount) r
+                   (> rcount fieldcount) (subvec r 0 (count fields))
+                   (< rcount fieldcount) (into r (take (- fieldcount rcount) 
+                                                       (repeat nil))))))
            (contiguous-rows sheet))))
 
 ;(defn sheet->table
