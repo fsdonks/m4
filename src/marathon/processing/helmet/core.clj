@@ -292,8 +292,6 @@
         demandsplit {:DemandSplit (get db "DemandSplit")}]
     (merge cases population validation demandsplit)))
 
-
-
 (defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
    drawing from a sample population.  The results from each case are returned 
