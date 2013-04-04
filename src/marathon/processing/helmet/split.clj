@@ -62,19 +62,19 @@
    Applies the rules defined by the demand group to the records in xs."
   [splitmap xs & {:keys [exclude?] 
                   :or   {exclude? title32?}}]
-  (let [_ (clojure.pprint/pprint splitmap)
-        grouped (->> xs 
+  (let [grouped (->> xs 
                   (map add-start-dur) 
                   (group-by :DemandGroup))]
     (->>
       (for [[groupkey recs] grouped]
         (if-let [{:keys [SourceFirst DayRule]} (get splitmap groupkey)]
-          (let [{:keys [in out]} (group-by #(if (exclude? %) :out :in) recs)]
+          (let  [{:keys [in out]} (group-by #(if (exclude? %) :out :in) recs)]
             (into out 
-                  (split-by-time #(merge % {:SourceFirst SourceFirst
-                                            :Operation  (str (:Operation %) 
-                                                             \_ "Rotational")}) 
-                                 DayRule in)))
+              (when in 
+                (split-by-time #(merge % {:SourceFirst SourceFirst
+                                          :Operation  (str (:Operation %) 
+                                                           \_ "Rotational")}) 
+                               DayRule in))))
           recs))
       (flatten)
       (map drop-start-dur))))

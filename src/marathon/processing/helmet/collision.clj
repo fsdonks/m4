@@ -155,7 +155,7 @@
 	      (map (partial process-collisions-sub classes))       
 	      (concat)
 	      (flatten)        
-	     (into static)))))
+	      (into static)))))
 
 ;(defn read-recs [somefile]
 ;  (read-string (slurp somefile)))

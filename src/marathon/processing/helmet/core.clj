@@ -318,9 +318,8 @@
    classes, processes the sequence of records by handling collisions, then 
    applying the split logic. "
   [splitmap classes xs & {:keys [log?]}]
-  (collision/process-collisions classes xs :log? log?))
-  ;(split/split-future splitmap (collision/process-collisions classes xs)))
-  ;(split/split-future splitmap xs))
+  (split/split-future splitmap  
+    (collision/process-collisions classes xs :log? log?)))
 
 (defn table->lookup [db tbl-name lookup-field]
   (into {} (for [r (tbl/table-records (get db tbl-name))]
