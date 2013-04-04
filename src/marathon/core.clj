@@ -10,6 +10,7 @@
   (:use [util.mailbox]
         [marathon.processing.post]
         [marathon.project])
+  (:import [javax.swing JFrame]) ;Bah!
   (:gen-class :main true))
 
 (def  path-history (atom [(System/getProperty "user.dir")]))
@@ -169,8 +170,12 @@
 (defn split-demand-dialogue [])
 
 
-(defn hub [& {:keys [project]}]
-  (let [project-menu   (gui/map->reactive-menu "Project-Management"  
+(defn hub [& {:keys [project exit?]}]
+  (let [close-beh (if exit? (fn [^JFrame fr] 
+                        (doto fr
+                          (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
+                    identity)
+        project-menu   (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"
                                                 processing-menu-spec)
@@ -190,7 +195,8 @@
     (mvc/make-modelview 
       (agent {:state (if project {:current-project project} {})
               :routes (merge default-routes project-routes)})       
-      (gui/display (->> (gui/empty-frame "Marathon Project Management")
+      (gui/display (->> (close-beh 
+                          (gui/empty-frame "Marathon Project Management")) 
                      (gui/add-menu main-menu))
                    (gui/stack textlog  
                               (gui/text-box) 
@@ -198,7 +204,7 @@
       {:menu-events menu-events})))
 
 (defn -main [& args] 
-  (hub))
+  (hub :exit? true))
 
 ;       :add-table   
 ;       :clear-project     
