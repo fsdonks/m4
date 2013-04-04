@@ -214,8 +214,12 @@
 ;We just return a sequence of rule nodes, rather than a map of rule-name 
 ;to rules.  
 (defn read-legacy-rules [table]
-  (->> (map legacy-rule-record->sample-rule (tbl/table-records table))
-       (reduce merge)))
+  (let [recs (tbl/table-records table)]
+    (assert (= (count (distinct (map :Rule recs)))
+               (count recs)) (str "Detected indentical rules, " 
+                                "ensure that Rule field is distinct" 
+                                "for each case"))
+       (reduce merge (map legacy-rule-record->sample-rule recs))))
 
 (def case-fields ["CaseName" "Enabled" "Futures" "MaxDuration" 
                   "RandomSeed" "Tfinal" "Replacement"])
@@ -332,8 +336,8 @@
   (let [splitmap (table->lookup db :DemandSplit     :DemandGroup)
         classes  (table->lookup db :ValidationRules :DependencyClass)]    
     (into {} 
-          (for [[case-key case-records] futures]
-            [case-key (collide-and-split splitmap classes case-records)]))))
+      (for [[case-key case-records] futures]
+        [case-key (collide-and-split splitmap classes case-records :log? log?)]))))
 
 (defn xlsx->futures [wbpath & {:keys [ignore-dates? log?] 
                                :or {ignore-dates? true
