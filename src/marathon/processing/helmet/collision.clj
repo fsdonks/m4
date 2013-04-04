@@ -142,7 +142,7 @@
 	            identity)
 	        {:keys [collides static]} (work-groups classes (f xs))]
 	    (->> collides
-	      (group-by (fn [r] (str (:SRC r) (:Title10_32 r) (:Operation r))))
+	      (group-by (fn [r] (str (:SRC r) (:Title10_32 r))))
 	      (vals)
 	      (map (partial process-collisions-sub classes))
 	      (concat)
