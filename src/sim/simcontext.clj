@@ -46,7 +46,7 @@
 
 (ns sim.simcontext
   (:require [sim [data :as sim] [agenda :as agenda] [updates :as updates]]
-            [sim.pure [net :as simnet]]))
+            [sim.pure [network :as simnet]]))
 ;probably need to move from marathon.updates to something in the sim namespace.
 
 (defn next-type

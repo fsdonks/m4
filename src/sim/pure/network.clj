@@ -314,6 +314,8 @@
                        :data (event-data event)})
            (:net ctx))
       :state)))
+(defn handle-events [init-state net xs]
+  (reduce (fn [state e] (handle-event e state net)) init-state xs))
 
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 
@@ -453,6 +455,13 @@
             (handle-event (->simple-event :append 0 x) acc message-net))
           {:message []} xs))
 
+;a test of multiple events being 'queued' and handled by the message network.
+(defn test-messaging [] (handle-events {:message []}
+                                       message-net
+                                       [[:echo]
+                                        [:append 2]
+                                        [:append 3]]))
+  
 ;this is an attempt to get at the composable workflow from observable.
 (def time-stamped-messages
   (let [print-route (->propogation {:in {:all (fn [ctx edata name] 
@@ -461,8 +470,8 @@
         add-current-time (fn [ctx] (assoc-in ctx [:state :date]
                                              (util.datetime/get-date)))] 
     (->> print-route
-      (map-handler add-current-time)
-      (union-handlers message-net))))
+      (map-handler add-current-time) ;should wrap the whole thing...
+      (union-handlers message-net)))) ;combine it with the message-net.
 
 )
 
