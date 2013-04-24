@@ -457,16 +457,18 @@
           {:message []} xs))
 
 ;a test of multiple events being 'queued' and handled by the message network.
-(defn test-messaging [] (handle-events {:message []}
-                                       message-net
-                                       [[:echo]
-                                        [:append 2]
-                                        [:append 3]]))
+(defn test-messaging [] 
+  (handle-events {:message []}
+                 message-net
+                 [[:echo]
+                  [:append 2]
+                  [:append 3]]))
+
 ;add some capabilities to the network...
 ;like a better message.
 (use 'clojure.pprint)
 (def message-net2 
-  (register-routes {:messaging {:echo (fn [{:keys [state] :as ctx} edata name]
+  (register-routes {:messaging2 {:echo (fn [{:keys [state] :as ctx} edata name]
                                         (do (println "The message is: ")
                                           (pprint (:message state))
                                           ctx))}} message-net)) 
