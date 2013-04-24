@@ -217,3 +217,15 @@
       :or {debug-handler 
            (fn [type edata name] (println [type edata name]))}}]    
   (add-listener :debugger debug-handler  (make-context)))
+
+(comment ;testing
+  (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))
+  (def echo-name (fn [ctx e name] (do (println name) ctx)))
+  (def bare-routes {:supply-manager {:supply-events echo-name}
+                    :demand-manager {:demand-events echo-name}    
+                    :policy-manager {:policy-events echo-name}
+                    :output-manager {:output-events echo-name}})
+  (def simple-ctx (->> (make-debug-context)
+                    (simnet/register-routes bare-routes)))
+)
+

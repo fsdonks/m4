@@ -1,5 +1,6 @@
 (ns sim.updates
-  (:require [sim.pure [network :as simnet]]))
+  (:require [sim [data :as sim]]
+            [sim.pure [network :as simnet]]))
 
 ;'All the update manager does is listen for update request traffic.
 ;'It records the time of the update request, who made the request, and the future update.
@@ -85,13 +86,13 @@
    inside the context's state.  Passes requests for update to the update-store."
   [ctx edata name]
   (let [{:keys [update-time requested-by update-type trequest]}
-        (event-data edata)]
+        (sim/event-data edata)]
     (update-in ctx [:state :update-store] 
                request-update update-time requested-by update-type trequest)))
   
 (def routes {:supply-update record-update-handler 
              :demand-update record-update-handler
-             :update-request request-update-handler})
+             :update-request update-request-handler})
 
 (defn add-routes
   "Registers default event-handlers for update events."
