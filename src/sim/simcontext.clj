@@ -52,9 +52,8 @@
 (defn next-type
   "Gets the type of the next event, based off of its :type field."
   [ec] (-> ec
-         (get-events)
-         (next-event)
-         (event-type)))
+         (sim/first-event)
+         (sim/event-type)))
 
 (defrecord simcontext 
   [scheduler ;supported by agenda.  
@@ -98,7 +97,7 @@
     (->> ctx 
       (add-time t)
       (simnet/handle-event 
-        (->simple-event :update-request t req-data)))))    
+        (sim/->simple-event :update-request t req-data)))))    
 
 (defn add-listener 
   "Legacy proxy for adding event handlers to the context.  Given a client-name, 
@@ -123,7 +122,7 @@
    identical.  Also time-stamps the packet with the current-time."
   [t type from to & {:keys [msg data] 
                    :or {msg nil data nil}}] 
-  (sim/->event event-type {:msg msg :data data} nil t entity-from entity-to))
+  (sim/->event sim/event-type {:msg msg :data data}   nil t from to))
 
 (defn packet-message
   "Fetches the message, if any from an event that carries a packet."
@@ -131,7 +130,7 @@
 
 (defn packet-data 
   "Fetches associated data, if any, from an event that carries a packet."
-  [p] (get (sim-event-data p) :data))
+  [p] (get (sim/event-data p) :data))
 
 ;Functions ported from Marathon.SimLib 
 (defn trigger-event
@@ -163,7 +162,7 @@
 
 (defn get-final-time
   "Returns the upper bound on the simulation time, if bounded."
-  [ctx] (agenda/get-final-time (:scheduler ctx)))
+  [ctx] (agenda/final-time (:scheduler ctx)))
 
 (defn get-next-time
   "Returns the time of the next event in the context."
@@ -192,7 +191,7 @@
   [& {:keys [scheduler updater events state]}]
   (let [ustore (or updater updates/empty-updatestore)] 
     (updates/add-routes ustore 
-      (->sim-context (or scheduler agenda/empty-agenda)  ustore 
+      (->simcontext (or scheduler agenda/empty-agenda)  ustore 
             (or events (simnet/empty-network :event-propogation)) state))))
 
 (defn last-update
