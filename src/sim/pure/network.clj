@@ -303,19 +303,20 @@
   "High level function to handle an IEvent, in the context of some state, using 
    an event-network defined by net.  Alternatively, the state and the network 
    can be bundled in a associative structure (a map), in which case only two 
-   values are required.  Returns the resulting state."
+   values are required.  Returns the resulting state, with the context as 
+   meta data."
   ([event state net]
-    (->> (propogate-event 
-           (->handler-context (event-type event) (event-data event) state) net)
-      :state))
+    (propogate-event 
+      (->handler-context (event-type event) (event-data event) state) net))
   ([event ctx]
-    (->> (propogate-event 
-           (merge ctx {:type (event-type event) 
-                       :data (event-data event)})
-           (:net ctx))
-      :state)))
-(defn handle-events [init-state net xs]
-  (reduce (fn [state e] (handle-event e state net)) init-state xs))
+    (propogate-event 
+      (merge ctx {:type (event-type event) 
+                  :data (event-data event)})
+      (:net ctx))))
+
+(defn handle-events [init-ctx net xs]
+  (reduce (fn [ctx e] (handle-event e ctx)) (assoc init-ctx :net net) xs))
+
 
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 
@@ -461,6 +462,14 @@
                                        [[:echo]
                                         [:append 2]
                                         [:append 3]]))
+;add some capabilities to the network...
+;like a better message.
+(use 'clojure.pprint)
+(def message-net2 
+  (register-routes {:messaging {:echo (fn [{:keys [state] :as ctx} edata name]
+                                        (do (println "The message is: ")
+                                          (pprint (:message state))
+                                          ctx))}} message-net)) 
   
 ;this is an attempt to get at the composable workflow from observable.
 (def time-stamped-messages
