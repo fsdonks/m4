@@ -137,7 +137,7 @@
     (if (contains? clients client-name)
       (if (= (count events) 1)        
         (assoc obs :clients (dissoc clients client-name))
-        (assoc-in obs [:clients client-name] (dissoc events event-type)))      
+        (assoc-in obs [:clients client-name] (disj events event-type)))      
       (throw (Exception. 
                (str "Client does not exist" client-name))))))
 
@@ -208,11 +208,12 @@
               (reduce (fn [o e-type] (un-register o client-name e-type))
                       next-obs (disj evts :all))
               :else  ;registered a specific subscription.
-              (if (= evts #{:all}) 
+              (if (or (not (contains? evts :all)) 
+                      (= evts #{:all}))                      
                 next-obs
                 (reduce (fn [o e-type] (un-register o client-name e-type))
-                        next-obs (clojure.set/difference  
-                                   evts #{:all event-type})))))))
+                        next-obs 
+                        (clojure.set/difference evts #{:all event-type})))))))
   ([obs client-name handler] (register obs client-name handler :all)))
 
 (defn register-routes
