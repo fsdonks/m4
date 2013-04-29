@@ -78,7 +78,7 @@
   "A handler that assumes an update-store is present in the event context,
    inside the context's state."
   [ctx edata name]
-  (update-in ctx [:state :update-store] 
+  (update-in ctx [:updater] 
        record-update (get edata :entity-to) (get edata :t)))
 
 (defn update-request-handler
@@ -86,8 +86,9 @@
    inside the context's state.  Passes requests for update to the update-store."
   [ctx edata name]
   (let [{:keys [update-time requested-by update-type trequest]}
-        (sim/event-data edata)]
-    (update-in ctx [:state :update-store] 
+        (sim/event-data edata)
+        _ (println (str name " handling " edata))]
+    (update-in ctx [:updater] 
                request-update update-time requested-by update-type trequest)))
   
 (def routes {:supply-update record-update-handler 
