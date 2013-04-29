@@ -119,6 +119,17 @@
   "Fetches associated data, if any, from an event that carries a packet."
   [p] (get (sim/event-data p) :data))
 
+;This is a total hack, we're just packaging the context....
+(defn ctx->state [ctx] 
+  {:state     (:state ctx)
+   :net       (:propogator ctx)
+   :updater   (:updater ctx)
+   :scheduler (:scheduler ctx)})
+
+;This is a total hack, we're just un-packaging the context....
+(defn state->ctx [{:keys [scheduler net updater state]}]
+  (->simcontext scheduler updater net state)) 
+
 ;Functions ported from Marathon.SimLib 
 (defn trigger-event
   "Shorthand convenience function for triggering immediate, synchronous events
@@ -126,10 +137,11 @@
    Returns the resulting simulation context."
   ([event-type entity-from entity-to msg data ctx]
     (trigger-event (->packet (current-time ctx) event-type entity-from 
-                                 entity-to :msg msg :data data)    ctx))
-  ([event ctx] (let [next-state (simnet/handle-event event 
-                                     (:state ctx) (:propogator ctx))]
-                 (assoc ctx :state (:state next-state)))))
+                                 entity-to :msg msg :data data)  ctx))
+  ([event ctx]
+    (state->ctx (simnet/handle-event event (ctx->state ctx)))))
+      
+
 
 (defn trigger-events [xs ctx] (reduce #(trigger-event %2 %1) ctx xs))
 
@@ -212,18 +224,21 @@
   "Accesses the state of the simulation context."
   [ctx] (:state ctx))
 
+(defn debug-msg [& xs] (apply str "<Debug>" xs))
+
 (defn make-debug-context
   "Creates a simulation context that pipes every event through a debug handler, 
    which the caller can specify."
   [& {:keys [debug-handler] 
       :or {debug-handler 
            (fn [ctx edata name] 
-             (do (println (str ":debugger saw " [(:type ctx) edata])) ctx))}}]    
+             (do (println (debug-msg ":debugger saw " [(:type ctx) edata])) ctx))}}]    
   (add-listener :debugger debug-handler [:all] (make-context)))
 
 (comment ;testing
 ;  (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))
-  (def echo-name (fn [ctx e name] (do (println (str name " says 'Ping!'")) ctx)))
+  (def echo-name 
+    (fn [ctx e name] (do (println (debug-msg name " says 'Ping!'")) ctx)))
   (def bare-routes {:supply-manager {:supply-events echo-name}
                     :demand-manager {:demand-events echo-name}    
                     :policy-manager {:policy-events echo-name}

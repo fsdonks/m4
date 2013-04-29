@@ -39,7 +39,7 @@
    utype is a key for updates, and t is a time index.  Updates are represented
    as update-packets."
   [store update-type  t]
-  (get-in store [update-type t] {}))
+  (get-in store [:updates update-type t] {}))
 
 (defn last-update
   "Returns the last time the entity was updated, if ever."
@@ -49,8 +49,8 @@
 (defn request-update
   "Schedule an update for requestor, of type request, at"
   [store update-time requested-by update-type trequest]
-  (let [pending-updates (get-in store [update-type update-time] {})] 
-    (assoc-in store [update-type update-time]
+  (let [pending-updates (get-in store [:updates update-type update-time] {})] 
+    (assoc-in store [:updates update-type update-time]
       (assoc pending-updates requested-by
        (->update-packet update-time requested-by update-type trequest)))))
 
