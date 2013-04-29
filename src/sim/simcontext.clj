@@ -110,8 +110,10 @@
    restriction, and allows a single client to handle multiple event types 
    differently."
   [client-name handler subscriptions ctx]
-  (reduce (fn [context e] (simnet/register context client-name handler e))
-          ctx subscriptions))
+  (let [net (:propogator ctx)]
+    (->> (reduce (fn [context e] (simnet/register context client-name handler e))
+                 net subscriptions)
+      (assoc ctx :propogator))))
 
 (defn ->packet
   "Creates an event record that - possibly - carries a message and some data.
@@ -189,10 +191,10 @@
    for the context - specifically ensures that update requests are routed to 
    the updater.  Returns the simulation context."
   [& {:keys [scheduler updater events state]}]
-  (let [ustore (or updater updates/empty-updatestore)] 
-    (updates/add-routes ustore 
-      (->simcontext (or scheduler agenda/empty-agenda)  ustore 
-            (or events (simnet/empty-network :event-propogation)) state))))
+  (let [ustore (or updater updates/empty-updatestore)
+        events (-> (or events (simnet/empty-network :event-propogation))
+                   (updates/add-routes ustore))] 
+    (->simcontext (or scheduler agenda/empty-agenda) ustore events state)))
 
 (defn last-update
   "Returns the last time the entity was updated in the simulation context."
@@ -215,7 +217,7 @@
   [& {:keys [debug-handler] 
       :or {debug-handler 
            (fn [type edata name] (println [type edata name]))}}]    
-  (add-listener :debugger debug-handler  (make-context)))
+  (add-listener :debugger debug-handler [:all] (make-context)))
 
 (comment ;testing
   (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))

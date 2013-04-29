@@ -33,7 +33,7 @@
       (- tnow last-update)))
   ([update-packet tnow] (elapsed update-packet tnow 0)))
 
-(def empty-updatestore (->updatestore "UpdateStore" {} {}))
+(def empty-updatestore (->updatestore :UpdateStore {} {}))
 (defn get-updates
   "Return a list of all requested updates from the updatestore, where 
    utype is a key for updates, and t is a time index.  Updates are represented
