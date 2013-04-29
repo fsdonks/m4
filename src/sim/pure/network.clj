@@ -113,7 +113,9 @@
 ;logging, visualization, etc.  In this case, they must still return the input
 ;state after performing the side-effect.
 
-(defrecord event-network [name clients subscriptions])
+
+(defrecord event-network [name clients subscriptions]
+
 
 (defn- drop-event-client
   "Remove the relation from event-type to client-name.  If no relations 
@@ -317,7 +319,6 @@
 
 (defn handle-events [init-ctx net xs]
   (reduce (fn [ctx e] (handle-event e ctx)) (assoc init-ctx :net net) xs))
-
 
 ;these are combinators for defining ways to compose event handlers, where an 
 ;event handler is a function of the form: 

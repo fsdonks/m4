@@ -140,10 +140,13 @@
    inline, according to the simulation context's event propogation scheme.
    Returns the resulting simulation context."
   ([event-type entity-from entity-to msg data ctx]
-    (simnet/handle-event 
-      (->packet (current-time ctx) event-type entity-from :msg msg :data data)
-      ctx))
-  ([event ctx] (simnet/handle-event event ctx)))
+    (trigger-event (->packet (current-time ctx) event-type entity-from 
+                                 entity-to :msg msg :data data)    ctx))
+  ([event ctx] (let [next-state (simnet/handle-event event 
+                                     (:state ctx) (:propogator ctx))]
+                 (assoc ctx :state (:state next-state)))))
+
+(defn trigger-events [xs ctx] (reduce #(trigger-event %2 %1) ctx xs))
 
 (defn set-time-horizon
   "Ensures that time events exist for both tstart and tfinal, and sets the 
@@ -216,17 +219,20 @@
    which the caller can specify."
   [& {:keys [debug-handler] 
       :or {debug-handler 
-           (fn [type edata name] (println [type edata name]))}}]    
+           (fn [ctx edata name] 
+             (do (println (str ":debugger saw " [(:type ctx) edata])) ctx))}}]    
   (add-listener :debugger debug-handler [:all] (make-context)))
 
 (comment ;testing
-  (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))
-  (def echo-name (fn [ctx e name] (do (println name) ctx)))
+;  (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))
+  (def echo-name (fn [ctx e name] (do (println (str name " says 'Ping!'")) ctx)))
   (def bare-routes {:supply-manager {:supply-events echo-name}
                     :demand-manager {:demand-events echo-name}    
                     :policy-manager {:policy-events echo-name}
                     :output-manager {:output-events echo-name}})
-  (def simple-ctx (->> (make-debug-context)
-                    (simnet/register-routes bare-routes)))
+  (def simple-ctx (let [c (make-debug-context)
+                        p (:propogator c)]
+                    (assoc c :propogator 
+                           (simnet/register-routes  bare-routes p))))
 )
 
