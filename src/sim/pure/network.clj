@@ -114,7 +114,7 @@
 ;state after performing the side-effect.
 
 
-(defrecord event-network [name clients subscriptions]
+(defrecord event-network [name clients subscriptions])
 
 
 (defn- drop-event-client
