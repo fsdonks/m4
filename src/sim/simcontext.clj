@@ -119,6 +119,8 @@
   "Fetches associated data, if any, from an event that carries a packet."
   [p] (get (sim/event-data p) :data))
 
+;Data marshalling crap.  We shouldn't have to do this...should be using
+;a protocol.
 ;This is a total hack, we're just packaging the context....
 (defn ctx->state [ctx] 
   {:state     (:state ctx)
@@ -212,7 +214,7 @@
 (defn last-update
   "Returns the last time the entity was updated in the simulation context."
   [entity-name ctx]
-  (updates/last-update (:updater ctx) entity-name ))
+  (updates/last-update (:updater ctx) entity-name))
 
 (defn get-updates
   "Returns a list of updates, by type, scheduled for time t in the simulation

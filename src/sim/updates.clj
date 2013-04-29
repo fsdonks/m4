@@ -85,9 +85,9 @@
   "A handler that assumes an update-store is present in the event context,
    inside the context's state.  Passes requests for update to the update-store."
   [ctx edata name]
-  (let [{:keys [update-time requested-by update-type trequest]}
-        (sim/event-data edata)
-        _ (println (str name " handling " edata))]
+  (let [{:keys [update-time requested-by update-type trequest]}  edata
+        _ (println (str name " handling " edata))
+        _ (println [update-time requested-by update-type trequest])]
     (update-in ctx [:updater] 
                request-update update-time requested-by update-type trequest)))
   
