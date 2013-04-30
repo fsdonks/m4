@@ -142,8 +142,6 @@
                                  entity-to :msg msg :data data)  ctx))
   ([event ctx]
     (state->ctx (simnet/handle-event event (ctx->state ctx)))))
-      
-
 
 (defn trigger-events [xs ctx] (reduce #(trigger-event %2 %1) ctx xs))
 

@@ -124,17 +124,17 @@
 ;
 ;
 
-(defrecord policy [name cyclelength mindwell 
-                   maxdwell maxbog maxMOB
-                   recovery startdeployable stopdeployable
-                   positiongraph startstate endstate
-                   overlap subscribers]) 
-
-(def empty-policy (policy. "BlankPolicy" :inf 0
-                           :inf :inf :inf 
-                           90   0    :inf 
-                           nil  :spawn :spawn 
-                           45   {}))
+;(defrecord policy [name cyclelength mindwell 
+;                   maxdwell maxbog maxMOB
+;                   recovery startdeployable stopdeployable
+;                   positiongraph startstate endstate
+;                   overlap subscribers]) 
+;
+;(def empty-policy (policy. "BlankPolicy" :inf 0
+;                           :inf :inf :inf 
+;                           90   0    :inf 
+;                           nil  :spawn :spawn 
+;                           45   {}))
 
 ;Private ptr As Dictionary
 ;Private memoize As Dictionary
