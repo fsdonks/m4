@@ -1,4 +1,5 @@
-(ns marathon.sim.engine)
+(ns marathon.sim.engine
+  (:require [sim [simcontext :as sim]]))
 
 ;'The TimeStep_Engine is basically the essence of Marathon.  It acts as a harness around the simulation
 ;'state, and dictates the flow of control through the simulation.  At a high level of abstraction, the
@@ -13,9 +14,61 @@
 ;'Engine's entire purpose is to prosecute a simulation, and wrap some parameters.
 ;'Really, we should push all the parameters into TimeStep_Parameters.
 
+(defn now [] (System/currentTimeMillis))
+(defn not-implemented [msg] (throw (Exception. msg)))
 
-;'Timestep_simulation from given parameters.
+(defn guess-last-day [state & [last-day]]  (not-implemented "guess-last-day"))  
+(defn set-time [ctx last-day] 
+  (sim/set-time-horizon 1 (guess-last-day state last-day) ctx))
+
+
+;'TOM Change 17 Aug 2012 -> control system to allow the engine to handle system-wide requests
+;'for things like updates, etc.
+Sub ControlIO(msgid As Long, Optional data As GenericPacket)
+If msgid = TimeStep_Msg.updateAllUnits Then
+    'TOM Change, relying on a binding to global simState.
+    MarathonOpSupply.updateALL data.t, simstate.supplystore, simstate.context
+Else
+    Err.Raise 101, , "No other events are explicitly handled..."
+End If
+
+End Sub
+
+(defn control-io [ctx edata]
+  (if (= (:type ctx) :update-all-units)
+    (update-all-supply ctx)
+    (throw (Exception. (str "Unknown event type " edata)))))
+
+;'TOM Change 18 Aug 2012
+;'registers simulation-wide events, like updateAll__ with the engine.
+;'Allows the engine to perform system-wide IO operations via its handler.
+Sub InitializeControl(ctx As TimeStep_SimContext)
+With ctx.events
+    If Not .GetObserver.clients.exists(name) Then
+        .AddListener name, Me, TimeStep_Msg.updateAllUnits
+    End If
+End With
+End Sub
+
+(defn initialize-control [ctx]
+  (sim/add-listener :Engine (fn [ctx edata name] (control-io ctx edata))
+
+                    
+                    
+                    ;'Timestep_simulation from given parameters.
 ;'Right now, we read parameters/demand from Excel Host
+
+(defn initialize-sim [state & [last-day]]
+  (-> state 
+    (start-state)
+    (assoc :time-start (now))
+    (assoc-in [:parameters :work-state] :simulating)
+    (update-in [:context]  set-time last-day)
+    (notify-watches) ;might need to expand on this, since watches will involve effects.
+    (initialize-control))
+    
+  )
+
 
 ;'Prep the system for day 0
 Private Sub InitializeSim(state As TimeStep_SimState, Optional lastday As Single)
@@ -54,29 +107,6 @@ End Sub
 ;'TOM Change 26 Oct -> decoupled output creation.
 Private Sub initializeOutput(simstate As TimeStep_SimState, Optional path As String)
 Call MarathonSetup.initializeOutput(simstate, path)
-End Sub
-
-;'TOM Change 18 Aug 2012
-;'registers simulation-wide events, like updateAll__ with the engine.
-;'Allows the engine to perform system-wide IO operations via its handler.
-Sub InitializeControl(ctx As TimeStep_SimContext)
-With ctx.events
-    If Not .GetObserver.clients.exists(name) Then
-        .AddListener name, Me, TimeStep_Msg.updateAllUnits
-    End If
-End With
-End Sub
-
-;'TOM Change 17 Aug 2012 -> control system to allow the engine to handle system-wide requests
-;'for things like updates, etc.
-Sub ControlIO(msgid As Long, Optional data As GenericPacket)
-If msgid = TimeStep_Msg.updateAllUnits Then
-    'TOM Change, relying on a binding to global simState.
-    MarathonOpSupply.updateALL data.t, simstate.supplystore, simstate.context
-Else
-    Err.Raise 101, , "No other events are explicitly handled..."
-End If
-
 End Sub
 
 ;'The main engine of the Marathon simulation.  This function comprises a single-threaded, discrete event
