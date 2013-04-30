@@ -1,4 +1,4 @@
-(ns marathon.fill.filldata
+(ns marathon.fill.fillstore
   (:use [util.record :only [defrecord+ with-record]]))
 
 ;Container to store all the data associated with matching supply to demand, 

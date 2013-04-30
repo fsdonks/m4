@@ -1,4 +1,5 @@
-(ns marathon.policy.policystore)
+(ns marathon.policy.policystore
+  (:use [util.record :only [defrecord+]]))
 
 ;This is for centralizing control over rotational policy, as well as substition 
 ;policy. 
@@ -22,3 +23,4 @@
    [composites {}]]) ;set of composite policies....only really mattered for resetting.
 ;   [permanents {}] 
 ;   canghost ;eh...probably don't need to store this here.])
+(def empty-policystore (make-policystore))

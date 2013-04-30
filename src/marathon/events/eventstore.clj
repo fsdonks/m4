@@ -93,19 +93,19 @@
     :LocationDecrement "Location Decrement",
     :LocationIncrement "Location Increment"}})
 
-(defn get-observer [estream]) 
+(defn get-observer [estream]) ;not necessary
 
-(defn add-listener [estream client-name client ids])  
-(defn remove-listener [estream client-name ids])
-(defn clear-listener [estream client-name])
+(defn add-listener [estream client-name client ids]) ;maybe  
+(defn remove-listener [estream client-name ids]) ;not necessary
+(defn clear-listener [estream client-name]) ;not necessary
 
 (defn csv-string [xs] (apply str (interleave xs (repeat \.))))
-(defn dispatch [estream t event-type entity-from entity-to msg & [extra-data]]
-  ;str = t & "," & eventtype & "," & entityFrom & "," & entityTo & "," & msg
-  (let [msg  (csv-string t event-type entity-from entity-to msg)
-        p (make-packet event-type (get events msg) entity-from 
-             entity-to msg  extra-data)]                       
-    (trigger estream p))
+;(defn dispatch [estream t event-type entity-from entity-to msg & [extra-data]]
+;  ;str = t & "," & eventtype & "," & entityFrom & "," & entityTo & "," & msg
+;  (let [msg  (csv-string t event-type entity-from entity-to msg)
+;        p (make-packet event-type (get events msg) entity-from 
+;             entity-to msg  extra-data)]                       
+;    (trigger estream p))
   
 ;Note ------>  
   ;TOM Note 6 April 2011 ->

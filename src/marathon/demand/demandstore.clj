@@ -2,8 +2,7 @@
 (ns marathon.demand.demandstore
   (use [util.record :only [defrecord+ with-record]]))
 
-
-(rec/defrecord+ demandstore 
+(defrecord+ demandstore 
   [[name "DemandStore"] 
    [demandmap  {}]
    [infeasible-demands {}] 

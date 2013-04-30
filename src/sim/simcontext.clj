@@ -209,6 +209,8 @@
                    (updates/add-routes ustore))] 
     (->simcontext (or scheduler agenda/empty-agenda) ustore events state)))
 
+(def empty-context (make-context))
+
 (defn last-update
   "Returns the last time the entity was updated in the simulation context."
   [entity-name ctx]

@@ -16,6 +16,7 @@
    has-ghosts ;boolean flag to determine if the supply can generate ghosts..might change.
    follow-ons]) ;map of entity-names to units that are in follow-on status.
 
+(def empty-supplystore (make-supplystore))
 
 
 ;------>Note 

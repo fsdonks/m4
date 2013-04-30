@@ -3,8 +3,15 @@
 ;an entity store, which is basically a fancy database with some special 
 ;properties.
 (ns marathon.data.simstate
-  (:use [util.record :only [defrecord+]])
-  (:require [entitysystem [store :as store]]))
+  (:use [util.record :only [defrecord+]]
+        [marathon.supply.supplystore]
+        [marathon.demand.demandstore] 
+        [marathon.policy.policystore]
+        [marathon.output.outputstore]
+        [marathon.events.eventstore]
+        [marathon.fill.fillstore])
+  (:require  [sim [simcontext :as sim]]))
+             ;[entitysystem [store :as store]]))
 
 ;simstate is a consolidation of all the simulation state required for Marathon 
 ;to do its thing.  Each of these bits used to be part of a hierarchical object 
@@ -22,15 +29,15 @@
 ;simultaneously CAN. 
 
 (defrecord+ simstate 
-  [supplystore ;Chunk of state for unit entity data.
-   demandstore ;Chunk of state for demand entity data.
-   policystore ;Chunk of state for rotational policy, and policy periods.
-   outputstore ;Chunk of state for output streams, file I/O.
-   parameters  ;Chunk of state for simulation parameters, as key/val pairs.
+  [[supplystore empty-supplystore];Chunk of state for unit entity data.
+   [demandstore empty-demandstore];Chunk of state for demand entity data.
+   [policystore empty-policystore];Chunk of state for rotational policy, and policy periods.
+   [outputstore empty-outputstore];Chunk of state for output streams, file I/O.
+   [parameters  {}];Chunk of state for simulation parameters, as key/val pairs.
    behaviormanager ;Possibly deprecated.  Repository for unit behaviors.
-   fillstore ;Chunk of state for managing Fill Rules, Fill Graph,
+   [fillstore empty-fillstore];Chunk of state for managing Fill Rules, Fill Graph,
              ;Fill Functions, etc.
-   context ;Bread and butter for any simulation.  Contains even stream, 
+   [context sim/empty-context];Bread and butter for any simulation.  Contains even stream, 
            ;scheduler, and update manager. Analagous to a message-dispatch, 
            ;scheduler, and thread-manager.
    ;imported parameters from timestep_engine, to be deprecated.   
@@ -49,8 +56,8 @@
                      ;Necessary for requirements analysis.
    no-demand-warning ;Ignore lack of demand warnings when set.  
                      ;Necessary for supply-only analysis.
-   [earlyscoping true]      ;Flag that tells the preprocessor to try to eliminate 
-                     ;unusable data early on.
+   [earlyscoping true] ;Flag that tells the preprocessor to try to eliminate 
+                       ;unusable data early on.
    truncate-time     ;used for requirements analysis.  Allows us to tell 
                      ;Marathon to stop the simulation AS SOON as the last demand 
                      ;has ended.  If there are no pending demand activations
