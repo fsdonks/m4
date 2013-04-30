@@ -9,7 +9,7 @@
 ;I'm still uncertain as to how to use this guy, since most of the side-effecting
 ;observer-driven simulation from the vba version is going to go by the wayside.
 ;Still, it's the vocabulary of the simluation, so the content is important.
-(defrecord+ managerofevents [[name "EventManager"]
+(defrecord+ managerofevents [[name :EventManager]
                              [userevents default-events] 
                              evtstream 
                              streams]) 

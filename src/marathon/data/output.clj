@@ -3,7 +3,6 @@
 ;until the new design emerges.
 (ns marathon.port.data.output)
 
-
 (defrecord outputstore [name observers filestreams 
                         defaultstreams defaultfiles mypath
                         activestreams])

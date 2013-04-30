@@ -3,7 +3,7 @@
   (:use [util.record :only [defrecord+]]))
 
 (defrecord+ supplystore 
-  [[name "SupplyStore"]
+  [[name :SupplyStore]
    srcs-in-scope ;Set of unique SRCs in scope.
    deployable-buckets ;Map of entities to supply categories that can fill demands.
    followon-buckets ;Map of entities to supply categories, eligible for follow-on.

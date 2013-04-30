@@ -3,7 +3,7 @@
   (use [util.record :only [defrecord+ with-record]]))
 
 (defrecord+ demandstore 
-  [[name "DemandStore"] 
+  [[name :DemandStore] 
    [demandmap  {}]
    [infeasible-demands {}] 
    unfilledq 

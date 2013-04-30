@@ -4,7 +4,7 @@
 ;Container to store all the data associated with matching supply to demand, 
 ;namely substitution rules, scoping (both in and out of scope) for the current
 ;run, and any other associated data.
-(defrecord+ fillstore [[name "FillStore"] 
+(defrecord+ fillstore [[name :FillStore] 
                        fillgraph 
                        fillfunction 
                        [fills {}]

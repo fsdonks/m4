@@ -18,7 +18,7 @@
 ;outputstore will maintain a set of files, as well as output-specific observers
 ;that record logs and statistics as the simulation progresses.  This may change
 ;in the near future.
-(defrecord+ outputstore [[name "Outputstore"] 
+(defrecord+ outputstore [[name :Outputstore] 
                          [observers {}] 
                          [filestreams {}] 
                          [defaultstreams dstreams]

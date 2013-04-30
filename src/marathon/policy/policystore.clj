@@ -6,7 +6,7 @@
 ;We maintain all the data structures necessary for managing this stuff.
 ;    Also manage all feasible locations through this object.
 (defrecord+ policystore   
-  [[name "PolicyStore"] 
+  [[name :PolicyStore] 
    [locationmap {} ];kvp mapping of location names to indices ... 
    [positions {}] ;set of all known positions. <couldn't find any refernece to this.
    [locations {}] ;set of all known locations, superset of positions.
