@@ -23,9 +23,6 @@ factory.DemandsFromTable getTable("DemandRecords"), state.demandstore
 
 End Sub
 
-Public Function CanSimulate(demandstore As TimeStep_ManagerOfDemand) As Boolean
-CanSimulate = demandstore.tags.getSubjects("Enabled").count > 0
-End Function
 
 Public Sub NewDemand(name As String, tstart As Single, duration As Single, overlap As Single, _
                             primaryunit As String, quantity As Long, priority As Single, demandstore As TimeStep_ManagerOfDemand, _
@@ -43,8 +40,11 @@ End Sub
 ;                  policystore ctx operation vignette source-first]
 ;
 ;>>>>>>>>>>>>>>>>>Missing Functionality>>>>>>>>>>>>>>>>>>>>
-(defn schedule-demand [demandstore demand ctx] :blah!)
+
+
 ;<<<<<<<<<<<<<<<<<Missing Functionality<<<<<<<<<<<<<<<<<<<<
+(defn can-simulate? [demandstore]
+  (> (count (tag/get-subjects (:tags demandstore) :enabled)) 0))
 
 (defn register-demand [demand demandstore policystore ctx]
   (let [dname  (:name demand)
@@ -107,6 +107,7 @@ End Sub
 
 (defn fill-follow-ons 
   [t {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}]
+)
 
 Dim i As Long
 ;TOM Change 6 Dec 2010 -Added several variables, used for dictionary access
@@ -291,8 +292,6 @@ End With
 ;After all categories processed, we;re done. Remaining code is legacy, has been moved, etc.
 End Sub
 
-
-
 ;Return a list of demands that are currently eligible for follow-on
 ;The returned dictionary is a nested dictionary, nested by Group (FillRule demands)
 ;This is a subset of the original unfilledQ.
@@ -346,45 +345,27 @@ End Sub
 ;TOM Change 7 Dec 2010
 (defn add-activation [t demandname demandstore ctx]
   (let [actives (get-in demandstore [:activations t] #{})]
-    (request-demand-update t demandname ctx) ;WRONG
+    (request-demand-update t demandname ctx) ;WRONG - fix side effect
     (assoc-in demandstore [:activations t] (conj actives demandname))))
 
 ;Simple wrapper for demand update requests.
 (defn request-demand-update [t demandname ctx]
   (sim/request-update t demandname :demand-update ctx))
 
-(defn add-deactivation [t demandname demandstore ctx
-;TOM Change 27 MAr 2011 -> refactored this to a one-liner.
 ;Register demand deactviation for a given day, given demand.
-;TOM Change 7 Dec 2010
-Public Sub AddDeActivation(t As Single, demandname As String, demandstore As TimeStep_ManagerOfDemand, ctx As TimeStep_SimContext)
-AddActivation t, demandname, demandstore, ctx, demandstore.deactivations ;<- points to a different dictionary
+(defn add-deactivation [t demandname demandstore ctx]
+  (let [inactives (get-in demandstore [:deactivations t] #{})
+        tlast  (max (:tlastdeactivation demandstore) t)]
+    (request-demand-update t demandname ctx) ;WRONG - fix side effect
+    (-> (assoc demandstore :tlastdeactivation tlast)
+      (assoc-in [:deactivations t] (conj actives demandname)))))
 
-If t > demandstore.tLastDeactivation Then
-   demandstore.tLastDeactivation = t
-End If
+;Schedule activation and deactivation for demand. -> WRONG
+(defn schedule-demand [demand demandstore ctx]
+  (let [{:keys [startday demand-name duration]} demand]
+    (add-activation startday demand-name demandstore ctx)
+    (add-deactviation (+ startday duration) demand-name demandstore ctx)))
 
-End Sub
-
-Public Sub scheduleDemand(demand As TimeStep_DemandData, demandstore As TimeStep_ManagerOfDemand, ctx As TimeStep_SimContext)
-    With demand
-        AddActivation .startday, .name, demandstore, ctx ;register activation
-        AddDeActivation (.startday + .duration), .name, demandstore, ctx
-    End With
-End Sub
-;
-Public Sub rescheduleDemands(demandstore As TimeStep_ManagerOfDemand, ctx As TimeStep_SimContext)
-Static demand As TimeStep_DemandData
-Static itm
-With demandstore
-    For Each itm In .demandmap
-        Set demand = (.demandmap(itm))
-        scheduleDemand demand, demandstore, ctx
-        demand.reset
-    Next itm
-End With
-
-End Sub
 ;
 ;TOM Change 6 Dec 2010
 ;Introducing this sub, to be inserted into the mainmodel loop.
@@ -396,6 +377,10 @@ End Sub
 ;activations and deactivations, could easily be extended to a general "days of interest" manager, with
 ;subscribed handlers and subroutines to run. In fact, this is exactly what an event step simulation does.
 ;We;re just copping techniques and modifying them for use in a timestep sim to make it more efficient.
+(defn manage-demands [t {:keys [demandstore context] :as state}]
+  (let [{:keys [activations 
+)
+
 Public Sub ManageDemands(t As Single, state As TimeStep_SimState)
 Dim DemandKey
 Dim demand As TimeStep_DemandData
@@ -462,50 +447,7 @@ With demandstore
 End With
 
 End Sub
-;;TOM Change 21 Sep 2011 -> register a demand as being eligible for follow-on fills
-;;Private Sub addEligible(demand As TimeStep_DemandData)
-;;
-;;Dim grp As String
-;;Dim ptr As Dictionary
-;;
-;;grp = demand.demandgroup
-;;
-;;If grp <> vbNullString Then
-;;    With eligibleDemands
-;;        If .exists(grp) Then
-;;            Set ptr = .item(grp)
-;;        Else
-;;            Set ptr = New Dictionary
-;;            .add grp, ptr
-;;        End If
-;;    End With
-;;    ptr.add demand.src, demand.name
-;;End If
-;;
-;;End Sub
-;;TOM Change 21 Sep 2011 -> unregister a demand as being eligible for follow-on fills
-;;Private Sub removeEligible(demand As TimeStep_DemandData)
-;;
-;;Dim grp As String
-;;Dim ptr As Dictionary
-;;
-;;grp = demand.demandgroup
-;;If grp <> vbNullString Then
-;;    With eligibleDemands
-;;        If .exists(grp) Then
-;;            Set ptr = .item(grp)
-;;        Else
-;;            Err.Raise 101, , "Trying in remove an eligible demand that was never recorded as eligible!"
-;;        End If
-;;    End With
-;;    If ptr.exists(demand.name) Then
-;;        ptr.remove demand.src
-;;    Else
-;;       Err.Raise 101, , "Trying in remove an eligible demand that was never recorded as eligible!"
-;;    End If
-;;End If
-;;
-;;End Sub
+
 Public Sub ManageChangedDemands(day As Single, state As TimeStep_SimState)
 state.demandstore.changed.RemoveAll
 End Sub
@@ -522,90 +464,55 @@ End Sub
 ;TODO -> Remove convention of negative cycle time = BOG, transition to stateful information contained in
 ;unit data, or derived from Policy data.
 ;TOM Change 14 Mar 2011 <- provide the ability to send home all units or one unit...default is all units
-Public Sub SendHome(t As Single, demand As TimeStep_DemandData, unitname As String, ctx As TimeStep_SimContext)
+(defn send-home [t demand unitname ctx] 
+  (if (zero? (count (:units-assigned demand))) 
+    (sim/trigger-event :DeActivateDemand :DemandStore (:name demand)  
+       (str "Demand " (:name demand) " Deactivated on day " t
+            " with nothing deployed ") ctx) ;WRONG
+    (let [old-unit (get (:units-assigned demand) unitname)
+          startloc  (:locationname unit)
+          unit (u/update old-unit (- t (sim/last-update unitname ctx))) ;WRONG?
+          demandgroup (:demandgroup demand)]
+      (sim/trigger-event :supply-update :DemandStore unitname ;WRONG
+         (str "Send Home Caused SupplyUpdate for " unitname) ctx) ;WRONG
+      (cond (= demandgroup "UnGrouped") 
+              (-> unit
+                (assoc :followoncode demandgroup)
+                (u/change-state :AbruptWithdraw 0 nil ctx)) ;WRONG
+             (= (:src unit) "Ghost")
+                (u/change-state unit :AbruptWithdraw 0 nil ctx) ;WRONG
+             :else 
+                (if (= (:src unit) "Ghost")
+                  (trigger-event :GhostReturned (:src demand) unitname 
+                     "Ghost for src " (:src demand) " left deployment." ctx) ;WRONG 
+                  (u/change-state unit :Reset 0 nil ctx))) ;WRONG
+            (sim/trigger-event :DisengageUnit :DemandStore unitname 
+                (str "Disengaging unit" unitname 
+                     " from de-activated demand" (:name demand)) ctx)))) ;WRONG 
 
-Dim unit As TimeStep_UnitData
-Dim startloc As String
-Dim msg As String
-
-With demand
-    If .unitsAssigned.count = 0 Then
-        msg = "Demand " & .name & " Deactivated on day " & t & " with nothing deployed "
-        ;Decoupled
-        SimLib.triggerEvent DeActivateDemand, "DemandStore", .name, msg, , ctx
-    ElseIf .status = False And .unitsAssigned.count > 0 Then ;Abs(.unitsDeployed) > 0 Then
-        Set unit = .unitsAssigned(unitname)
-        With unit
-            startloc = .LocationName
-            ;Decoupled....need to pass in last update as a parameter, or find a way for demandmanager to derive it.
-            .update (t - SimLib.lastupdate(unit.name, ctx))
-            SimLib.triggerEvent supplyUpdate, "DemandStore", unit.name, "Send Home Caused SupplyUpdate for " & unit.name, , ctx
-            ;stamp the unit with a followon code
-            If demand.demandgroup <> "UnGrouped" Then
-                .followoncode = demand.demandgroup
-                .ChangeState "AbruptWithdraw", 0, , ctx
-            ;Tom change 24 Jul 2012
-            ElseIf unit.src <> "Ghost" Then
-                .ChangeState "AbruptWithdraw", 0, , ctx
-            Else
-                ;Decoupled
-                If unit.src = "Ghost" Then _
-                SimLib.triggerEvent GhostReturned, demand.src, unit.name, _
-                                        "Ghost for src " & demand.src & " left deployment.", , ctx
-                .ChangeState "Reset", 0, , ctx
-            End If
-            ;.ChangeState "MovingState" ;The unit should figure out, via behavior, what it;s supposed to do next.
-            msg = "Disengaging unit" & unit.name & " from de-activated demand" & demand.name
-            ;Decoupled
-            SimLib.triggerEvent DisengageUnit, name, unit.name, msg, , ctx
-        End With
-    End If
-End With
-
-End Sub
-
+;RE-LOOK...what are the returns?  what's being operated on?  
 ;This is also called independently from Overlapping_State.....
 ;Remove a unit from the demand.  Have the demand update its fill status.
 ;move the unit from the assigned units, to overlappingunits.
-Public Sub disengage(demandstore As TimeStep_ManagerOfDemand, unit As TimeStep_UnitData, demandname As String, _
-                        ctx As TimeStep_SimContext, Optional overlap As Boolean)
+(defn disengage [demandstore unit demandname ctx overlap]
+  (let [demand (get-in demandstore [:demandmap demandname])]
+    (if overlap 
+      (do (sim/trigger-event :overlapping-unit (:name demandstore) (:name unit) ;WRONG
+           (str "Overlapping unit" (:name unit) " in demand" (:name demand)) unit ctx) ;WRONG
+          (send-overlap demand unit))
+      (do (send-home demand unit);WRONG
+          (sim/trigger-event :disengage-unit (:name demandstore) (:name unit) ;WRONG
+           (str "Sending unit" (:name unit) "home from demand" (:name demand) unit ctx))))) ;WRONG
+  (register-change demandstore demand-name)
+  (if (zero? (:required demand)) ;WRONG 
+    (update-fill demand-name (:unfilledq demandstore) demandstore ctx) ;WRONG
+    demandstore));WRONG
 
-Dim demand As TimeStep_DemandData
-Dim needsupdate As Boolean
-Dim disengagetype As String
+(defn register-change [demandstore demandname]
+  (if (contains? (:changed demandstore) demandname)
+    demandstore 
+    (assoc-in demandstore [:changed] demandname 0)))
 
-Set demand = demandstore.demandmap(demandname)
-
-With demand
-    needsupdate = .required = 0
-    If overlap Then
-        ;Decoupled
-        SimLib.triggerEvent OverlappingUnit, demandstore.name, unit.name, "Overlapping unit" & unit.name _
-            & " in demand" & .name, unit, ctx
-        .SendOverlap unit
-    Else
-        ;Decoupled
-        .SendHome unit
-        SimLib.triggerEvent DisengageUnit, demandstore.name, unit.name, "Sending unit" & unit.name _
-                & "home from demand" & .name, unit, ctx
-    End If
-
-
-
-End With
-
-registerChange demandstore, demandname
-If needsupdate Then UpdateFill demandname, demandstore.UnfilledQ, demandstore, ctx
-
-End Sub
-
-Public Sub registerChange(demandstore As TimeStep_ManagerOfDemand, demandname As String)
-
-With demandstore
-    If Not .changed.exists(demandname) Then .changed.add demandname, 0
-End With
-
-End Sub
 ;Tom change 6 Dec 2010
 ;Sub to register or deregister Demands from the UnfilledQ
 ;UnfilledQ partitions the set of demands that are unfilled
@@ -750,5 +657,22 @@ End With
 
 End Sub
 
+
+;>>>>>>>>>>>>>>>>>>Deferred>>>>>>>>>>>>>>>>>>>>>>
+;We'll port this when we  come to it....not sure we need it...
+
+;Public Sub rescheduleDemands(demandstore As TimeStep_ManagerOfDemand, ctx As TimeStep_SimContext)
+;Static demand As TimeStep_DemandData
+;Static itm
+;With demandstore
+;    For Each itm In .demandmap
+;        Set demand = (.demandmap(itm))
+;        scheduleDemand demand, demandstore, ctx
+;        demand.reset
+;    Next itm
+;End With
+;
+;End Sub
+;<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
