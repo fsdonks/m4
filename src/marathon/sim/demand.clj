@@ -13,28 +13,7 @@
 ;The high-level entry point is ManageDemands, which is invoked from the EventStep_Marathon
 ;method in the TimeStep_Engine class.
 
-Public Sub fromExcel(state As TimeStep_SimState)
 
-Dim factory As TimeStep_EntityFactory
-Set factory = state.EntityFactory
-
-factory.DemandsFromTable getTable("DemandRecords"), state.demandstore
-;factory.AddDemandFromExcel strtcell.Worksheet, Me
-
-End Sub
-
-
-Public Sub NewDemand(name As String, tstart As Single, duration As Single, overlap As Single, _
-                            primaryunit As String, quantity As Long, priority As Single, demandstore As TimeStep_ManagerOfDemand, _
-                              policystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext, _
-                                Optional operation As String, Optional vignette As String, Optional sourcefirst As String)
-Dim dem As TimeStep_DemandData
-
-Set dem = createDemand(name, tstart, duration, overlap, primaryunit, quantity, priority, _
-                            demandstore.demandmap.count + 1, operation, vignette, sourcefirst)
-registerDemand dem, demandstore, policystore, ctx
-
-End Sub
 
 ;(defn new-demand [name tstart duration overlap primary-unit quantity priority demandstore 
 ;                  policystore ctx operation vignette source-first]
@@ -302,7 +281,7 @@ End Sub
 ;scoping the set of demands.
 (defn get-followon-demands [demandstore followon-buckets unfilled-demands]
   (->> (map #(get demandstore %) unfilled-demands)
-       (filter #(contains? followon-buckets (:demandgroup %))))
+       (filter #(contains? followon-buckets (:demandgroup %)))
        (reduce (fn [m x] (assoc m [(:name x) (:priority x)] (:name x))) {})))   
 
 ;follow-on supply is a function of fillrule, demandgroup, followonbuckets
@@ -366,7 +345,6 @@ End Sub
     (add-activation startday demand-name demandstore ctx)
     (add-deactviation (+ startday duration) demand-name demandstore ctx)))
 
-;
 ;TOM Change 6 Dec 2010
 ;Introducing this sub, to be inserted into the mainmodel loop.
 ;Its purpose is to maintain a running list of demands (ActiveDemands dictionary), which will help us only fill
@@ -448,12 +426,10 @@ End With
 
 End Sub
 
-Public Sub ManageChangedDemands(day As Single, state As TimeStep_SimState)
-state.demandstore.changed.RemoveAll
-End Sub
-Public Sub clearChanges(demandstore As TimeStep_ManagerOfDemand)
-demandstore.changed.RemoveAll
-End Sub
+(defn manage-changed-demands [day state] ;REDUNDANT
+  (assoc-in state [:demand-store :changed] {}))
+
+(defn clear-changes [demandstore] (assoc demand-store :changed {}))
 
 ;TOM Change 7 Dec 2010 -> removed deactivation code from sourcedemand, placed it in a separate sub.
 ;This sub implements the state changes required to deactivate a demand, namely, to send a unit back to reset.
@@ -543,120 +519,54 @@ End Sub
 ;which we fill. Rather than keeping track of the quantity filled at each demand to determine overall fill,
 ;we only have a binary filled/unfilled in the atomic model. This means we don;t ever check the condition
 ;that a demand might have gained a unit, via deployment, and still remain unfilled. It;s impossible.
-Public Sub UpdateFill(demandname As String, unfilled As Dictionary, _
-                        demandstore As TimeStep_ManagerOfDemand, ctx As TimeStep_SimContext)
-Dim demandq As GenericSortedDictionary
-Dim demand As TimeStep_DemandData
-Static required As Long
 
-Set demand = demandstore.demandmap(demandname)
-;TOM Change 9 DEC 2010
-demand.status = demandstore.activeDemands.exists(demand.name)
-If demand.src = vbNullString Then
-    Err.Raise 101, , "NO SRC for demand" & demandname
-Else
-;what should the demand status be?
-    With demand
-        required = .required
-        ;TOM Chang 9 Dec 2010 -> made dependent on active demands
-        If .status = False Or (.status = True And required = 0) Then ;demand is filled, remove it
-            If unfilled.exists(.src) Then
-                Set demandq = unfilled(.src)
-                demandq.Remove .name
-                If demandq.count = 0 Then
-                    unfilled.Remove (.src)
-                    Set demandq = Nothing
-                    ;If demandtraffic Then
-                    ;Decoupled
-                    SimLib.triggerEvent FillDemand, demandstore.name, .name, _
-                        "Removing demand " & .name & " from the unfilled Q", , ctx
-                    ;End If
-                End If
-            Else ;have a deactivation
-                ;Err.Raise 101, ,  "Demand is filled, but was not registered on unfilled q!"
-                ;If demandtraffic Then
-                    ;Decoupled
-                    SimLib.triggerEvent DeActivateDemand, demandstore.name, .name, _
-                         "Demand " & .name & " was deactivated unfilled", .name, ctx
-                ;End If
-            End If
-        ElseIf .status = True And required > 0 Then ;demand is unfilled, add it
-            If unfilled.exists(.src) Then
-                Set demandq = unfilled(.src)
-            Else
-                Set demandq = New GenericSortedDictionary
-                unfilled.add .src, demandq
-            End If
+;NEED TO RETHINK THIS GUY, WHAT ARE THE RETURN vals?  Mixing notification and such...
+(defn update-fill [demandname unfilled demandstore ctx]
+  (let [demand (get-in demandstore [:demandmap demandname])]
+    (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
+    (assert (not (nil? demandname)) "Empty demand name!")
+    (let [required (:required demand)
+          src      (:src demand)]
+      (if (= required 0) 
+        (if (contains? unfilled src) ;either filled or deactivated
+          (let [demandq (dissoc (get unfilled src) demandname)]
+            (if (= 0 (count demandq)) ;demand is filled, remove it
+              (do (dissoc unfilled src) ;WRONG 
+                (sim/trigger-event :FillDemand (:name demandstore) demandname
+                   (str "Removing demand " demandname " from the unfilled Q" nil ctx)))
+              (assoc-in demandstore [:unfilled src] demandq)))
+          (trigger-event :DeActivateDemand (:name demandstore) demandname 
+             (str "Demand " demandname " was deactivated unfilled") ctx));have a deactivation
+         (let [demandq (get unfilled src (empty-sorted-dictionary))] ;demand is unfilled, add it
+            (if (not (contains? demandq demandname))
+              (do (assoc demandq [demandname (:priority demand)] demand) ;WRONG
+                (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
+                   (str "Adding demand " demandname " to the unfilled Q") nil ctx)))))))) 
+          
 
-            If .name = vbNullString Then Err.Raise 101, , "DemandName is invalid!"
-            If Not demandq.data.exists(.name) Then
-                demandq.add .name, .name, .priority ;store the kvp as String (demandname,demandname)
-                ;If demandtraffic Then
-                    ;Decoupled
-                    SimLib.triggerEvent RequestFill, demandstore.name, .name, _
-                        "Adding demand " & .name & " to the unfilled Q", , ctx
-                ;End If
-            End If
+;inject appropriate tags into the GenericTags
+(defn tag-demand [demand demandstore & {:keys [extras]}]
+  (tags/multi-tag (:tags demandstore) 
+    (concat [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
+             (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
+             :enabled] 
+            extras)))
 
-        End If
-    End With
-End If
-
-Set demandq = Nothing
-End Sub
-
-;;inject appropriate tags into the GenericTags
-;decoupled
-Public Sub tagDemand(demand As TimeStep_DemandData, demandstore As TimeStep_ManagerOfDemand, Optional extras As Dictionary)
-
-With demand
-    demandstore.tags.multiTagDict demand.name, newdict("FILLRULE_" & .primaryunit, 0, _
-                                                       "PRIORITY_" & .priority, 0, _
-                                                       "Enabled", 0)
-End With
-
-If Not (extras Is Nothing) Then demandstore.tags.multiTag demand.name, extras
+(defn tag-demand-sink [demandstore sink]
+  (tag/add-tag (:tags demandstore) :Sinks sink))
+(defn get-demand-sinks [demandstore] 
+  (tag/get-subjects (:tags demandstore) :Sinks))
 
 
-End Sub
-
-Public Sub tagDemandSink(demandstore As TimeStep_ManagerOfDemand, sink As String)
-demandstore.tags.addTag "Sinks", sink
-End Sub
-
-Public Function getDemandSinks(demandstore As TimeStep_ManagerOfDemand) As Dictionary
-Set getDemandSinks = demandstore.tags.getSubjects("Sinks")
-End Function
-
-;;;Demand can request an update at a specified time ....
-;;Public Sub RequestUpdate(t As Single, demand As TimeStep_DemandData)
-;;;Decouple
-;;parent.RequestUpdate t, demand.name, UpdateType.demand
-;;End Sub
-
-Public Sub clearDemands(demandstore As TimeStep_ManagerOfDemand)
-
-With demandstore
-    .demandmap.RemoveAll ; = Nothing ;KVP mapping of demand names to indices in aDEFdata
-    .DemandIndex.RemoveAll
-    .tLastDeactivation = -1
-
-    ;infeasibledemands.RemoveAll
-
-    .UnfilledQ.RemoveAll
-    .activations.RemoveAll  ; = Nothing
-    .deactivations.RemoveAll ; = Nothing
-    .activeDemands.RemoveAll  ;= Nothing
-    .fillables.RemoveAll  ;= Nothing
-    .tags.tags.RemoveAll
-    .tags.subjects.RemoveAll ;= Nothing
-
-    .tLastDeactivation = -1
-    .tags.addTag "Sinks"
-End With
-
-End Sub
-
+(defn clear-demands [demandstore] ;REDUNDANT?
+  (merge demandstore
+         {:demandmap {}
+          :tlastdeactivation nil
+          :unfilledq {}
+          :activations {}
+          :active-demands {}
+          :fillables {}
+          :tags (tag/add-tag (tag/empty-tags) :Sinks)}))
 
 ;>>>>>>>>>>>>>>>>>>Deferred>>>>>>>>>>>>>>>>>>>>>>
 ;We'll port this when we  come to it....not sure we need it...
@@ -671,6 +581,30 @@ End Sub
 ;        demand.reset
 ;    Next itm
 ;End With
+;
+;End Sub
+
+
+;Public Sub fromExcel(state As TimeStep_SimState)
+;
+;Dim factory As TimeStep_EntityFactory
+;Set factory = state.EntityFactory
+;
+;factory.DemandsFromTable getTable("DemandRecords"), state.demandstore
+;;factory.AddDemandFromExcel strtcell.Worksheet, Me
+
+;End Sub
+
+
+;Public Sub NewDemand(name As String, tstart As Single, duration As Single, overlap As Single, _
+;                            primaryunit As String, quantity As Long, priority As Single, demandstore As TimeStep_ManagerOfDemand, _
+;                              policystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext, _
+;                                Optional operation As String, Optional vignette As String, Optional sourcefirst As String)
+;Dim dem As TimeStep_DemandData
+;
+;Set dem = createDemand(name, tstart, duration, overlap, primaryunit, quantity, priority, _
+;                            demandstore.demandmap.count + 1, operation, vignette, sourcefirst)
+;registerDemand dem, demandstore, policystore, ctx
 ;
 ;End Sub
 ;<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

@@ -9,6 +9,7 @@
    unfilledq 
    [activations {}]
    [deactivations {}]
+   [activedemands {}]
    [eligbledemands {}]
    [changed true]
    demandtraffic  
