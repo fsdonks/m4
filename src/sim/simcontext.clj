@@ -55,6 +55,8 @@
          (sim/first-event)
          (sim/event-type)))
 
+;we need to elevate this to a protocol for simulation contexts...
+;things like simstate (in another namespace) need to be seen as valid contexts.
 (defrecord simcontext 
   [scheduler ;supported by agenda.  
    updater ;a weak agenda with some special state, tracks previous updates. 
