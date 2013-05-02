@@ -168,6 +168,10 @@ With demandstore
 End With
 
 End Sub
+
+
+
+  
 ;TOM Note 13 Mar -> we perform some major effeciency improvements.  The most obvious is representing demands as
 ;objects.  Rather than having a demand for 5 srcs result in 5 physical entries, we just have one demand and keep
 ;track of its fill.  Major reduction in overhead (and searching).
@@ -205,6 +209,16 @@ Dim demand As TimeStep_DemandData
 Static startfill As Long
 Static stopfill As Long
 Dim msg As String
+
+;what we're really doing is prioritizing demands...
+;trying to fill said demands....
+(defn fill-demands [t {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}])
+(defn fill-category [t category unfilledq {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}]
+    (loop [demandq (get category unfilledq)
+           demandname (first demandq)
+           
+  
+         
 
 ;For each independent set of prioritized demands (remember, we partition based on substitution/SRC keys)
 ;TOM Change 27 Mar 2011 -> added a mutable filter called fillables, which records demands with known supply.
