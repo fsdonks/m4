@@ -420,7 +420,7 @@
   (sample-node query ctx))
 
 (comment ;testing
-  ;A population of records from which to sample.
+  ;A population of records from which to sample.       
 (def example-population-table
   [{:group "LandPrey" :start 1 :duration 1000 :SRC "Donkey"  :quantity 2}
    {:group "LandPrey" :start 1 :duration 1000 :SRC "Rabbit"  :quantity 5}
@@ -478,6 +478,8 @@
                                                   :duration-max 5000}
                                                  :case1)])})
 (def sample-graph (merge p1 p2 p3 p4))
+
+(sample-from sample-graph :case1)
 
 ;(def ptest 
 ;  {:bill {:name "bill" :start 30 :duration 30}
