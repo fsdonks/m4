@@ -240,11 +240,27 @@
   (add-listener :debugger debug-handler [:all] (make-context)))
 
 ;new helper functions.
-(def update-state [f ctx]   (update-in ctx [:state] f)) 
+(defn update-state [f ctx]   (update-in ctx [:state] f)) 
 (defn assoc-state [k v ctx] (update-state #(assoc % k v) ctx))
-
 ;should probably allow for a parallel version of this guy.
-(defn merge-updates [m ctx] (reduce (fn [c [k v]] (assoc-state k v c))))
+(defn merge-updates [m ctx] 
+  (reduce (fn [c [k v]] (assoc-state k v c))))
+
+;it'd be really nice if we had a simple language for describing updates...
+;not unlike Conrad's "patch" 
+;there are a few idioms that keep popping up....
+;roll the context through some event notifications, 
+;update bits of state in the context, sometimes in a very nested fashion..
+
+;We can take advantage of that...just use events...
+  ;unit-update can pass new units around...
+  ;supply handler would be in charge of integrating update...
+
+;Another idea is to leverage the global-state nature of the simstate..
+;treat it as a nested datastructure (which we currently do), 
+;define a nice API for updating paths in the structure.
+
+;This is going back to the entitystore route...
 
 ;maybe a macro, like a sim monad?
 ;we'll see about this later.
@@ -252,6 +268,24 @@
 ;  (trigger  ....) 
 ;  (update   ....))
 
+;should translate into...
+;(let [*ctx* ...
+;      *time* ...
+;      *blah*
+;      ]
+;)
+
+;need to work some more examples.
+;(with-let [context ctx]
+;  [the-key the-val
+;   [the-key the-other-key] the-val]
+;  (body))
+
+;(patch [{:the-key the-val}
+;        [[the-first-key the-second-key] the-val]
+        
+       
+        
 (comment ;testing
 ;  (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))
   (def echo-name 
