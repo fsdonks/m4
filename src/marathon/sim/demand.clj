@@ -25,6 +25,19 @@
 (defn can-simulate? [demandstore]
   (> (count (tag/get-subjects (:tags demandstore) :enabled)) 0))
 
+;register-demand is a good example...
+;we want it to return a list of updates....
+;like...(merge-updates {:demand-store ... :policy-store ...})
+;Actually, we can have an event handler that does this....
+;or we have an integrating function that weaves stuff across...
+;what happends when there's a set of updates, along with events? 
+;The events provide yet another form of update to the state as a whole.
+;typically the context will provide the focus point for both...
+;maybe have, as part of the API, the ability to merge updates with the context,
+;as well as trigger events...
+;that's it.
+
+
 (defn register-demand [demand demandstore policystore ctx]
   (let [dname  (:name demand)
         ctx    (sim/trigger-event :added-demand "DemandStore" "DemandStore" 

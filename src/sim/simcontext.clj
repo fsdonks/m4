@@ -239,6 +239,19 @@
              (do (println (debug-msg ":debugger saw " [(:type ctx) edata])) ctx))}}]    
   (add-listener :debugger debug-handler [:all] (make-context)))
 
+;new helper functions.
+(def update-state [f ctx]   (update-in ctx [:state] f)) 
+(defn assoc-state [k v ctx] (update-state #(assoc % k v) ctx))
+
+;should probably allow for a parallel version of this guy.
+(defn merge-updates [m ctx] (reduce (fn [c [k v]] (assoc-state k v c))))
+
+;maybe a macro, like a sim monad?
+;we'll see about this later.
+;(with-simcontext [blah ctx] ;wraps everything in an implicit do...
+;  (trigger  ....) 
+;  (update   ....))
+
 (comment ;testing
 ;  (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))
   (def echo-name 
