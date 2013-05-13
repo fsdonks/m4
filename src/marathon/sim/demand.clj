@@ -37,6 +37,7 @@
 ;as well as trigger events...
 ;that's it.
 
+;CONTEXTUAL
 (defn register-demand [demand demandstore policystore ctx]
   (let [dname  (:name demand)
         ctx    (sim/trigger-event :added-demand "DemandStore" "DemandStore" 
@@ -98,6 +99,7 @@
 ;             did before.  This time, we should only be looking at ARFORGEN supply (since our follow-on supply was
 ;             utilized in the Phase 1).
 
+;CONTEXTUAL
 (defn fill-follow-ons 
   [t {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}]
 )
@@ -226,7 +228,11 @@ Dim msg As String
 
 ;what we're really doing is prioritizing demands...
 ;trying to fill said demands....
+
+;CONTEXTUAL
 (defn fill-demands [t {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}])
+
+;CONTEXTUAL
 (defn fill-category [t category unfilledq {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}]
     (loop [demandq (get category unfilledq)
            demandname (first demandq)
@@ -354,6 +360,7 @@ End Sub
 ;discriminating based on a parameter, rather than having two entire methods.
 ;Register demand activation for a given day, given demand.
 ;TOM Change 7 Dec 2010
+;CONTEXTUAL
 (defn add-activation [t demandname demandstore ctx]
   (let [actives (get-in demandstore [:activations t] #{})]
     (->> (request-demand-update t demandname ctx) ;FIXED - fix side effect
@@ -361,6 +368,7 @@ End Sub
                                                  (conj actives demandname))}))))
 
 ;Register demand deactviation for a given day, given demand.
+;CONTEXTUAL
 (defn add-deactivation [t demandname demandstore ctx]
   (let [inactives (get-in demandstore [:deactivations t] #{})
         tlast     (max (:tlastdeactivation demandstore) t)]
@@ -369,11 +377,13 @@ End Sub
         {:demandstore (-> (assoc demandstore :tlastdeactivation tlast)
                           (assoc-in [:deactivations t] (conj actives demandname)))}))))
 
+
 ;Schedule activation and deactivation for demand. -> Looks fixed.
+;CONTEXTUAL
 (defn schedule-demand [demand demandstore ctx]
   (let [{:keys [startday demand-name duration]} demand]
     (->> (add-activation startday demand-name demandstore ctx)
-         (add-deactviation (+ startday duration) demand-name demandstore))))
+         (add-deactivation (+ startday duration) demand-name demandstore))))
 
 ;TOM Change 6 Dec 2010
 ;Introducing this sub, to be inserted into the mainmodel loop.
@@ -385,6 +395,7 @@ End Sub
 ;activations and deactivations, could easily be extended to a general "days of interest" manager, with
 ;subscribed handlers and subroutines to run. In fact, this is exactly what an event step simulation does.
 ;We;re just copping techniques and modifying them for use in a timestep sim to make it more efficient.
+;CONTEXTUAL
 (defn manage-demands [t {:keys [demandstore context] :as state}]
   (let [{:keys [activations 
 )
@@ -505,6 +516,7 @@ End Sub
 (defn empty-demand? [d] (zero? (count (:units-assigned d))))
 ;END TEMPORARY 
 
+;CONTEXTUAL
 ; ::unit->string->context->context 
 (defn withdraw-unit [unit demandgroup ctx]
   (cond 
@@ -527,6 +539,7 @@ End Sub
 ;TODO -> Remove convention of negative cycle time = BOG, transition to stateful information contained in
 ;unit data, or derived from Policy data.
 ;TOM Change 14 Mar 2011 <- provide the ability to send home all units or one unit...default is all units
+;CONTEXTUAL
 ; :: float -> demand -> string -> context -> context
 (defn send-home [t demand unitname ctx] 
   (if (empty-demand? demand) 
@@ -557,6 +570,7 @@ End Sub
 ;TEMPORARY.....until I figure out a better, cleaner solution.
 ;broke out uber function into a smaller pairing of disengagement functions, to 
 ;handle specific pieces of the contextual change.
+;CONTEXTUAL
 (defn- disengage-unit [demand demandstore unit ctx & [overlap]]
   (if overlap 
     (->> (sim/trigger-event :overlapping-unit (:name demandstore) (:name unit) ;WRONG
@@ -570,6 +584,7 @@ End Sub
 ;This is also called independently from Overlapping_State.....
 ;Remove a unit from the demand.  Have the demand update its fill status.
 ;move the unit from the assigned units, to overlappingunits.
+;CONTEXTUAL
 (defn disengage [demandstore unit demandname ctx & [overlap]]
   (let [demand    (get-in demandstore [:demandmap demandname])
         nextstore (register-change demandstore demand-name)
@@ -611,6 +626,7 @@ End Sub
 ;that a demand might have gained a unit, via deployment, and still remain unfilled. It;s impossible.
 
 ;NEED TO RETHINK THIS GUY, WHAT ARE THE RETURN vals?  Mixing notification and such...
+;CONTEXTUAL
 (defn update-fill [demandname unfilled demandstore ctx]
   (let [demand (get-in demandstore [:demandmap demandname])]
     (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
