@@ -456,28 +456,67 @@ End With
 
 End Sub
 
+
 (defn manage-changed-demands [day state] ;REDUNDANT
   (assoc-in state [:demand-store :changed] {}))
 
+;PURE FUNCTIONS :: 'a -> demandstore 
 (defn clear-changes [demandstore] (assoc demand-store :changed {}))
+
+(defn register-change [demandstore demandname]
+  (if (contains? (:changed demandstore) demandname)
+    demandstore 
+    (assoc-in demandstore [:changed] demandname 0)))
+
+;inject appropriate tags into the GenericTags
+(defn tag-demand [demand demandstore & {:keys [extras]}]
+  (update-in demandstore [:tags] tags/multi-tag 
+     (concat [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
+              (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
+              :enabled] 
+             extras)))
+
+(defn tag-demand-sink [demandstore sink]
+  (update-in demandstore [:tags] tag/add-tag  :Sinks sink))
+
+(defn get-demand-sinks [demandstore] 
+  (tag/get-subjects (:tags demandstore) :Sinks))
+
+(defn clear-demands [demandstore] ;REDUNDANT?
+  (merge demandstore
+         {:demandmap {}
+          :tlastdeactivation nil
+          :unfilledq {}
+          :activations {}
+          :active-demands {}
+          :fillables {}
+          :tags (tag/add-tag (tag/empty-tags) :Sinks)}))
+
+;TEMPORARY...
+;move this to supply or unit....
+
 ;This is a temporary HACK! Reaches too deeply into the state? 
 ;returns a context.
 (defn update-unit [u ctx]
   (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
+(defn set-followon [unit code] (assoc unit :followoncode code))
+(defn ghost? [unit] (= (:src unit) "Ghost"))
+(defn ungrouped? [g] (= g "UnGrouped"))
+(defn empty-demand? [d] (zero? (count (:units-assigned d))))
+;END TEMPORARY 
 
-
+; ::unit->string->context->context 
 (defn withdraw-unit [unit demandgroup ctx]
-  (cond (= demandgroup "UnGrouped") 
-    (-> (update-unit (assoc unit :followoncode demandgroup) ctx) ;assuming update-unit returns a context.      
-        (u/change-state :AbruptWithdraw 0 nil ctx)) ;ASSUMES change-state returns a context... 
-    (= (:src unit) "Ghost")
-    (u/change-state unit :AbruptWithdraw 0 nil ctx) ;ASSUMES change-state returns a context...
-    :else 
-    (->> (if (= (:src unit) "Ghost")
-           (trigger-event :GhostReturned (:src demand) unitname 
-                          "Ghost for src " (:src demand) " left deployment." ctx)
-           ctx)  
-      (u/change-state unit :Reset 0 nil)))) ;ASSUMES change-state returns a context...
+  (cond 
+    (ungrouped? demandgroup) 
+      (-> (update-unit (set-followon unit demandgroup) ctx) ;assuming update-unit returns a context.      
+          (u/change-state :AbruptWithdraw 0 nil ctx)) ;ASSUMES change-state returns a context... 
+    (not (ghost? unit)) (u/change-state unit :AbruptWithdraw 0 nil ctx) ;ASSUMES change-state returns a context...
+    :else (->> (if (ghost? unit) ;POSSIBLY WRONG
+                 (trigger-event :GhostReturned (:src demand) unitname 
+                    "Ghost for src " (:src demand) " left deployment." ctx)
+                 ctx)  
+            (u/change-state unit :Reset 0 nil)))) ;ASSUMES change-state returns a context...
 
 ;TOM Change 7 Dec 2010 -> removed deactivation code from sourcedemand, placed it in a separate sub.
 ;This sub implements the state changes required to deactivate a demand, namely, to send a unit back to reset.
@@ -488,12 +527,13 @@ End Sub
 ;TODO -> Remove convention of negative cycle time = BOG, transition to stateful information contained in
 ;unit data, or derived from Policy data.
 ;TOM Change 14 Mar 2011 <- provide the ability to send home all units or one unit...default is all units
+; :: float -> demand -> string -> context -> context
 (defn send-home [t demand unitname ctx] 
-  (if (zero? (count (:units-assigned demand))) 
+  (if (empty-demand? demand) 
     (sim/trigger-event :DeActivateDemand :DemandStore (:name demand)  
        (str "Demand " (:name demand) " Deactivated on day " t
             " with nothing deployed ") ctx) ;RIGHT, just trigger and return ctx.
-    (let [old-unit (get (:units-assigned demand) unitname)
+    (let [old-unit  (get (:units-assigned demand) unitname)
           startloc  (:locationname unit)
           unit (u/update old-unit (- t (sim/last-update unitname ctx))) ;WRONG?
           demandgroup (:demandgroup demand)]
@@ -514,28 +554,30 @@ End Sub
 ;Again, event handling could work....
 
  
+;TEMPORARY.....until I figure out a better, cleaner solution.
+;broke out uber function into a smaller pairing of disengagement functions, to 
+;handle specific pieces of the contextual change.
+(defn- disengage-unit [demand demandstore unit ctx & [overlap]]
+  (if overlap 
+    (->> (sim/trigger-event :overlapping-unit (:name demandstore) (:name unit) ;WRONG
+            (str "Overlapping unit" (:name unit) " in demand" (:name demand)) unit ctx) ;WRONG
+         (d/send-overlap demand unit))
+    (->> (send-home (sim/current-time ctx) demand unit ctx)
+      (sim/trigger-event :disengage-unit (:name demandstore)   (:name unit) ;WRONG
+           (str "Sending unit" (:name unit) "home from demand" (:name demand) unit ctx))))) ;WRONG
+
 ;RE-LOOK...what are the returns?  what's being operated on?  
 ;This is also called independently from Overlapping_State.....
 ;Remove a unit from the demand.  Have the demand update its fill status.
 ;move the unit from the assigned units, to overlappingunits.
 (defn disengage [demandstore unit demandname ctx & [overlap]]
-  (let [demand (get-in demandstore [:demandmap demandname])]
-    (if overlap 
-      (->> (sim/trigger-event :overlapping-unit (:name demandstore) (:name unit) ;WRONG
-           (str "Overlapping unit" (:name unit) " in demand" (:name demand)) unit ctx) ;WRONG
-          (d/send-overlap demand unit))
-      (->> (send-home (sim/current-time ctx) demand unit ctx)
-        (sim/trigger-event :disengage-unit (:name demandstore) (:name unit) ;WRONG
-           (str "Sending unit" (:name unit) "home from demand" (:name demand) unit ctx))))) ;WRONG
-  (register-change demandstore demand-name)
-  (if (zero? (:required demand)) ;WRONG 
-    (update-fill demand-name (:unfilledq demandstore) demandstore ctx) ;WRONG
-    demandstore));WRONG
-
-(defn register-change [demandstore demandname]
-  (if (contains? (:changed demandstore) demandname)
-    demandstore 
-    (assoc-in demandstore [:changed] demandname 0)))
+  (let [demand    (get-in demandstore [:demandmap demandname])
+        nextstore (register-change demandstore demand-name)
+        ctx       (disengage-unit demand demandstore unit ctx overlap)]  
+    (if (zero? (:required demand)) ;WRONG 
+      (update-fill demand-name (:unfilledq demandstore) demandstore ctx) ;WRONG
+;    demandstore)));WRONG
+      ctx)))
 
 ;Tom change 6 Dec 2010
 ;Sub to register or deregister Demands from the UnfilledQ
@@ -591,31 +633,8 @@ End Sub
             (do (assoc demandq [demandname (:priority demand)] demand) ;WRONG
               (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
                  (str "Adding demand " demandname " to the unfilled Q") nil ctx)))))))) 
-          
-
-;inject appropriate tags into the GenericTags
-(defn tag-demand [demand demandstore & {:keys [extras]}]
-  (tags/multi-tag (:tags demandstore) 
-    (concat [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
-             (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
-             :enabled] 
-            extras)))
-
-(defn tag-demand-sink [demandstore sink]
-  (tag/add-tag (:tags demandstore) :Sinks sink))
-(defn get-demand-sinks [demandstore] 
-  (tag/get-subjects (:tags demandstore) :Sinks))
 
 
-(defn clear-demands [demandstore] ;REDUNDANT?
-  (merge demandstore
-         {:demandmap {}
-          :tlastdeactivation nil
-          :unfilledq {}
-          :activations {}
-          :active-demands {}
-          :fillables {}
-          :tags (tag/add-tag (tag/empty-tags) :Sinks)}))
 
 ;>>>>>>>>>>>>>>>>>>Deferred>>>>>>>>>>>>>>>>>>>>>>
 ;We'll port this when we  come to it....not sure we need it...

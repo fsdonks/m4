@@ -241,12 +241,12 @@
 
 ;new helper functions.
 (defn update-state [f ctx]   (update-in ctx [:state] f)) 
-(defn assoc-state [k v ctx] (update-state #(assoc % k v) ctx))
+(defn assoc-state [k v ctx]  (update-state #(assoc % k v) ctx))
 ;should probably allow for a parallel version of this guy.
 (defn merge-updates [m ctx] 
   (reduce (fn [c [k v]]
             (if (= k :trigger) (v c) 
-            (assoc-state k v c))))
+            (assoc-state k v c)))))
 
 ;it'd be really nice if we had a simple language for describing updates...
 ;not unlike Conrad's "patch" 
