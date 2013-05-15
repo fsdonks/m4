@@ -275,9 +275,14 @@ Dim msg As String
 (defn can-fill-demand [demandstore demandname ctx]
   (sim/trigger-event :CanFillDemand (:name demandstore) 
        demandname (str "Filled " demandname) nil ctx))
+
 (defn demand-fill-changed [demandstore demand ctx]
   (sim/trigger-event :DemandFillChanged (:name demandstore) (:name demand) 
      (str "The fill for " (:name demand) " changed.") demand ctx))
+
+(defn sourced-demand [demandstore demand ctx]
+  (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore) 
+     (str "Sourced Demand " (:name demand)) nil ctx)))
 
 ;(defn try-fill-demands [m demandstore supplystore parameters ctx policystore t demand fillmode]
 ;  (loop [ctx ctx
@@ -285,49 +290,39 @@ Dim msg As String
 (defn merge-fill-results [res ctx] 
   (throw (Exception. "merge-fill-results not implemented")))
 
-(defn fill-category [demandstore category  
-         
-
 ;For each independent set of prioritized demands (remember, we partition based on substitution/SRC keys)
 ;TOM Change 27 Mar 2011 -> added a mutable filter called fillables, which records demands with known supply.
 ;This allows the stockwatcher to maintain a list of fillable demands.  We then proceed with the previous
 ;logic of filling each demand.
 ;Note -> as of 27 Mar 2011, the fill routine is only putting out a single path (the shortest path).
 ;This happens in sourcedemand.
-With demandstore
-    For Each Categoryname In .UnfilledQ ;UnfilledQ
-            (loop [pending   (get-unfilled-demands demandstore category)   ;We use our UnfilledQ to quickly find unfilled demands. 
-                   demand    (val (first pending))                    
-                   can-fill? true
-                   ctx       (trying-to-fill demandstore category ctx)]
-              (let [demandname  (:name demand)               ;try to fill the topmost demand
-                    startfill   (unit-count demand)
-                    ctx         (request-fill demandstore category ctx)
-                    fill-result (source-demand supplystore parameters fillstore ctx policystore t demand :useEveryone) ;map of {:demand ... :demandstore? ... :ctx ...}
-                    stopfill    (unit-count (:demand fill-result))
-                    can-fill?   (demand-filled? (:demand fill-result))
-                    ctx         (if (= stopfill startfill)  ;UGLY 
-                                  ctx 
-                                  (->>   (demand-fill-changed demandstore demand ctx)
-                                    (sim/merge-updates {:demandstore (register-change demandstore demandname)})
-                                    (merge-fill-results fill-result)))]
-                (if (not can-fill?) ;stop trying...
-                  ctx ;If we fail to fill a demand, we have no feasible supply, thus we leave it on the queue, stop filling.
-                      ;Note, the demand is still on the queue, we only "tried" to fill it. No state changed .
-                  
-                If canFill Then ;changed sourceDemand to a function returning a boolean, which we use
-                        msg = "Sourced Demand " & demandname
-                        ;Decoupled
-                        SimLib.triggerEvent FillDemand, demandstore.name, demandstore.name, msg, , ctx
-                    ;If we fill a demand, we update the unfilledQ.
-                    UpdateFill demandname, .UnfilledQ, demandstore, ctx
-                    ;Decouple
-                    SimLib.triggerEvent CanFillDemand, demandstore.name, demandname, "Filled " & demandname, , ctx
-            Next i
-            ;Proceed to the next independent set.
-        ;End If
-    Next Categoryname
-End With
+(defn fill-category [demandstore category ctx]           
+  (loop [pending   (get-unfilled-demands demandstore category)   ;We use our UnfilledQ to quickly find unfilled demands. 
+         ctx       (trying-to-fill demandstore category ctx)]
+    (if (empty? pending)
+      ctx ;no demands to fill!
+      (let [demand      (val (first pending))                    
+            demandname  (:name demand)               ;try to fill the topmost demand
+            startfill   (unit-count demand)
+            ctx         (request-fill demandstore category ctx)
+            ;the result of trying to fill a demand should be a map with all the context we need...
+            ;we can be more flexible here, maybe pass info on the success of the fill too...
+            ;map of {:demand ... :demandstore ... :ctx ...}
+            fill-result (source-demand supplystore parameters fillstore ctx policystore t demand :useEveryone) 
+            stopfill    (unit-count (:demand fill-result))
+            can-fill?   (demand-filled? (:demand fill-result))
+            ctx         (if (= stopfill startfill)  ;UGLY 
+                          ctx 
+                          (->>   (demand-fill-changed demandstore demand ctx)
+                            (sim/merge-updates {:demandstore (register-change demandstore demandname)})
+                            (merge-fill-results fill-result)))]
+        (if (not can-fill?) ;stop trying...
+          ctx ;If we fail to fill a demand, we have no feasible supply, thus we leave it on the queue, stop filling.
+          ;Note, the demand is still on the queue, we only "tried" to fill it. No state changed .
+          (recur (dissoc pending (first (keys pending))) ;advance to the next unfilled demand
+                 (->> (sourced-demand  demandstore demand ctx) ;notify interested parties 
+                   (update-fill     demandstore demandname) ;If we fill a demand, we update the unfilledQ.
+                   (can-fill-demand demandstore demandname)))))))) ;notify interested parties                         
 
 ;After all categories processed, we;re done. Remaining code is legacy, has been moved, etc.
 End Sub
@@ -727,9 +722,10 @@ End Sub
 
 ;NEED TO RETHINK THIS GUY, WHAT ARE THE RETURN vals?  Mixing notification and such...
 ;CONTEXTUAL
-(defn update-fill [demandname unfilled demandstore ctx]
+(defn update-fill [demandstore demandname ctx]
   (let [demand (get-in demandstore [:demandmap demandname])
-        fill-key (priority-key demand)]
+        fill-key (priority-key demand)
+        unfilled (:unfilledq demandstore)]
     (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
     (assert (not (nil? demandname)) "Empty demand name!")
     (let [required (:required demand)
@@ -737,19 +733,21 @@ End Sub
       (if (= required 0) ;demand is filled, remove it
         (if (contains? unfilled src) ;either filled or deactivated
           (let [demandq (dissoc (get unfilled src) fill-key)
-                nextfilled (if (= 0 (count demandq)) 
+                nextunfilled (if (= 0 (count demandq)) 
                              (dissoc unfilled src) 
                              (assoc unfilled src demandq))]
             (->> (sim/trigger-event :FillDemand (:name demandstore) demandname
                   (str "Removing demand " demandname " from the unfilled Q" nil ctx))
-              (sim/merge-updates {:demandstore (assoc demandstore :unfilled nextfilled)})))              
+              (sim/merge-updates {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
           (trigger-event :DeActivateDemand (:name demandstore) demandname 
              (str "Demand " demandname " was deactivated unfilled") ctx)) ;have a deactivation
         (let [demandq (get unfilled src (empty-sorted-dictionary))] ;demand is unfilled, add it
           (if (not (contains? demandq fill-key))
-            (do (assoc demandq fill-key demand) ;WRONG
-              (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
-                 (str "Adding demand " demandname " to the unfilled Q") nil ctx)))))))) 
+            (->> (sim/merge-updates 
+                   {:demandstore (assoc-in demandstore [:unfilled src] 
+                       (assoc demandq fill-key demand))} ctx) ;WRONG
+               (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
+                 (str "Adding demand " demandname " to the unfilled Q") nil)))))))) 
 
 
 
