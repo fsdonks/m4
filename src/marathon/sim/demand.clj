@@ -275,9 +275,16 @@ Dim msg As String
 (defn can-fill-demand [demandstore demandname ctx]
   (sim/trigger-event :CanFillDemand (:name demandstore) 
        demandname (str "Filled " demandname) nil ctx))
+(defn demand-fill-changed [demandstore demand ctx]
+  (sim/trigger-event :DemandFillChanged (:name demandstore) (:name demand) 
+     (str "The fill for " (:name demand) " changed.") demand ctx))
 
-(defn try-fill-demands [m demandstore supplystore parameters ctx policystore t demand fillmode]
-  (loop [ctx ctx 
+;(defn try-fill-demands [m demandstore supplystore parameters ctx policystore t demand fillmode]
+;  (loop [ctx ctx
+
+(defn merge-fill-results [res ctx] 
+  (throw (Exception. "merge-fill-results not implemented")))
+
 (defn fill-category [demandstore category  
          
 
@@ -293,40 +300,21 @@ With demandstore
                    demand    (val (first pending))                    
                    can-fill? true
                    ctx       (trying-to-fill demandstore category ctx)]
-              (let [demandname (:name demand)               ;try to fill the topmost demand
-                    ctx (request-fill demandstore category ctx)]
-                
-                 
-              
-            For i = 1 To DemandCategory.count ;reduce over unfilled demands 
-                canFill = False
-                ;try to fill the topmost demand
-                msg = "Highest priority demand in Category " & Categoryname & " is " & demandname & " with priority " _
-                        & DemandCategory.HighestPriority
-                ;Decoupled
-                SimLib.triggerEvent RequestFill, .name, .name, msg, , ctx
-
-                ;We;re going to be passing entire blocks of demand, vs. little atomic components of demand.  This will be
-                ;loads more effecient.  That way, the supply manager just fills as much as it can, and replies if the demand
-                ;was filled.  IF yes, then we can continue filling this category of demands.
-                ;We only fill while we have feasible supply left.
-                ;TOM Note -> Source Demand is actually trying to source the demand, although it looks like
-                ;a simple boolean check, it;s actually mutating stuff.
-                ;If parent.SupplyManager.sourceDemand(day, DemandMap(demandname), "DEF") Then ;changed sourceDemand to a function returning a boolean, which we use
-                ;TOM change 22 Mar 2011 -> demandsourcing is now done through fillmanager.
-                Set demand = .demandmap(demandname)
-                startfill = demand.unitsAssigned.count
-                ;Tom Note 27 Mar 2012 - DEF is vestigial....should be excised.
-                ;Decoupling again....push fillmanager as fill function.
-                canFill = sourceDemand(supplystore, parameters, fillstore, ctx, policystore, t, demand, "DEF", , useEveryone)
-                stopfill = demand.unitsAssigned.count
-                ;Decoupled
-                If stopfill <> startfill Then
-                    SimLib.triggerEvent DemandFillChanged, demandstore.name, demand.name, "The fill for " & demand.name & " changed.", demand, ctx
-                    ;TOM Change 20 Aug 2012...wasn;t recording properly.
-                    registerChange demandstore, demand.name
-                End If
-                
+              (let [demandname  (:name demand)               ;try to fill the topmost demand
+                    startfill   (unit-count demand)
+                    ctx         (request-fill demandstore category ctx)
+                    fill-result (source-demand supplystore parameters fillstore ctx policystore t demand :useEveryone) ;map of {:demand ... :demandstore? ... :ctx ...}
+                    stopfill    (unit-count (:demand fill-result))
+                    can-fill?   (demand-filled? (:demand fill-result))
+                    ctx         (if (= stopfill startfill)  ;UGLY 
+                                  ctx 
+                                  (->>   (demand-fill-changed demandstore demand ctx)
+                                    (sim/merge-updates {:demandstore (register-change demandstore demandname)})
+                                    (merge-fill-results fill-result)))]
+                (if (not can-fill?) ;stop trying...
+                  ctx ;If we fail to fill a demand, we have no feasible supply, thus we leave it on the queue, stop filling.
+                      ;Note, the demand is still on the queue, we only "tried" to fill it. No state changed .
+                  
                 If canFill Then ;changed sourceDemand to a function returning a boolean, which we use
                         msg = "Sourced Demand " & demandname
                         ;Decoupled
@@ -335,10 +323,6 @@ With demandstore
                     UpdateFill demandname, .UnfilledQ, demandstore, ctx
                     ;Decouple
                     SimLib.triggerEvent CanFillDemand, demandstore.name, demandname, "Filled " & demandname, , ctx
-                Else
-                    Exit For ;If we fail to fill a demand, we have no feasible supply, thus we leave it on the queue, stop filling.
-                ;Note, the demand is still on the queue, we only "tried" to fill it. No state changed .
-                End If
             Next i
             ;Proceed to the next independent set.
         ;End If
