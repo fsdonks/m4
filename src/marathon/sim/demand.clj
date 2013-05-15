@@ -251,7 +251,8 @@ Dim msg As String
 ;fetch a sorted-map of demands related to a category.
 ;returns a map of <key, string>, where vals are demand names.
 (defn get-demandstore [ctx]   (get-in ctx [:state :deamdstore]))
-(defn unfilled-categories [demandstore] (keys (demandstore :unfilledq)))
+(defn unfilled-categories [demandstore] 
+  (keys (demandstore :unfilledq)))
 (defn unfilled-demands [category demandstore] 
   (get-in demandstore [:unfilledq category]))
 (defn get-demand [demandstore name] (get-in demandstore [:demandmap name]))
@@ -297,9 +298,9 @@ Dim msg As String
 ;this is a wrapper around marathon.sim.policy/source-demand.
 ;we had two different sourcing criteria before, and two - largely copies - of 
 ;the same function.  Now we distinguish via source-mode, and allow the function 
-;to dispatch based on the source-mode.
+;to dispatch based on the source-mode.  Could turn this into a multimethod...
 (defn source-demand [demand source-mode ctx]
-  (let [simstate (:state ctx)]
+  (let [simstate (:state ctx)] ;handles the unpacking of state for us.
     (fill/source-demand 
       (:supply-store state)
       (:parameters state)
@@ -308,20 +309,129 @@ Dim msg As String
       (:policystore state)
       (sim/current-time ctx) ;maybe change this..
       demand
+      ;NEED TO ACCOUNT FOR RESTRICTED SUPPLY....buckets, so to speak.
       source-mode)))
 
+;Need to account for two types of supply that are already tagged: 
+;followOnBuckets and DeployableBuckets are in the supply store...
+
+;deployable buckets is a set of all deployable supply....
+;{:src {units}} 
+
+
+;followon buckets have an extra branch in the tree, for the demandgroup.
+;{:group {:src {units ...}}}
+
+;we could view deployable buckets as another group.... 
+;{:any {:src {units....}}}
+
+;{}
+
+;Or....we could have a simply query infrastructure based on tags....
+
+;filling followons is a restricted fill
+
+;We scope the unfilled demands down to the intersection of demands with demand groups
+;that intersect with the groups in the followon buckets.
+;For each category in this subset of unfilled demand, we try to fill the category 
+;using ONLY deployable supply that is slotted for followon in the same demand group...
+;{:group {:category #{units...} 
+; :cat2 #{units...}}}
+  ;we scope the deployable supply down to just the supply for the demand.
+  ;we're still hierarchically filling the demands, by priority by category, 
+  ;except if we don't have any supply for the given category, we skip over.
+;of all the unfilled demands, which demands are eligible for follow-on supply? 
+  ;for each follow-on eligible demand,
+
+
+;I think we can alleviate this if we formalize the stuff we're working in...
+;In order to fill demands, we have to have: 
+
+; A set of unfilled demands. 
+; A set of supply.
+; A way to determine the most suitable supply (suitability fn). 
+
+;so a FillContext is just that...
+;  A map of {:deployable    {categories {units....}}
+;            :unfilled      {categories {demands....}}}
+
+;A FillContext for a followon demand would be...
+;           {:deployable (get-followon-supply supplystore)
+;            :unfilled   (get-followon-demands (supplystore demandstore)}
+
+(defn get-fill-context [demand supplystore phase]
+
+;we currently perform a phased fill, namely, fill using the followons, in 
+;an effort to exhaust them before we release them....
+;release the maximum utilizers (legacy stuff).
+;fill the remaining demands in a hierarchical order. 
+
+;filling a demand is a matter of filling all the categories in unfilled 
+
+
+;matches (fills) must come from combinations of members of the two sets. 
+;
+
+;no restrictions on how to fill the demand.
 (defn source-normally [demand ctx] (source-demand demand :useEveryone ctx))
-(defn source-followons [demand ctx] (source-demand demand :onlyUseFollowons ctx)
+(defn source-followons [demand ctx]
+  ;NEED TO ENSURE WE ONLY USE FOLLOWON BUCKETS. 
+  ;NEED TO ENSURE WE FILTER CATEGORIES THAT HAVE NO SUPPLY.
+  (source-demand demand :onlyUseFollowons ctx))
 
 MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore, t, demand, "DEF", followonbuckets(demand.demandgroup), onlyUseFollowons)
+(fill-demands "SRC1" "Group2") ; => find all eligible demands for SRC1 that have 
+;group2 as a demandgroup, if there's any grouped supply, try using that to fill 
+;the demands for SRC1 in order.
+
+;=> find all eligible demands for SRC1 that have group2 as a demandgroup, if 
+;there's any grouped supply, try using that to fill the demands for SRC1 in 
+;order.
+
+;maybe use category as a little query language.
+;then use the query to select demands and supply! 
+
+;just adopt a broader notion of category...
+;in the simple case, when the category is a string, or a key, we act like normal 
+;filling..
+(fill-category "SRC2") ;=> find all eligible demands for SRC2.
+
+;in a complex case, when the category is a sequence, we parse it appropriately.
+;category can be a pair, which is interpreted as a category of SRC and a grouping.
+(fill-category ["SRC2" "Group1"]) ;=> find the eligible demands for SRC2, where 
+;the demand group is group1.
+
+;category can be a map, which is interpreted as a filter....
+(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
+                :supply {:followoncode "Group2"}})
+;categories serve to link supply AND demand.
+;From the supply-side, we determine which supply is eligible to fill 
+;["SRC1" "Group2"]
+; -> all feasible substitutes for "SRC1", where their followon code is "Group2"
+;    we already have a some book-keeping, in the form of a set of units that 
+;    are in follow-status due to disengagement. 
+
+;so we need two new functions...
+
+;find-eligible-demands 
+;find-eligible-supply
+
+(defn category-type [x]
+  (cond (string? x)  :string 
+        (keyword? x) :key 
+        ()
+;suitability comes in later...
+(defmulti find-eligible-demands (fn [demandstore category] (type category)))
+(defmethod find-eligible-demands :map [demandstore category]
+  (
 
 ;For each independent set of prioritized demands (remember, we partition based on substitution/SRC keys)
 ;we can use this for both the original fill-followons and the fill-normal demands.
-;the difference is the stop-early? paramter.  If it's true, the fill will be equivalent to
+;the difference is the stop-early? parameter.  If it's true, the fill will be equivalent to
 ;the original normal hierarchical demand fill.
 ;If stop-early? is falsey, then we scan the entire set of demands, trying to fill from a set of supply.
 (defn fill-category [demandstore category stop-early? supplystore ctx]           
-  (loop [pending   (get-unfilled-demands demandstore category)   ;We use our UnfilledQ to quickly find unfilled demands. 
+  (loop [pending   (find-eligible-demands demandstore category)   ;We use our UnfilledQ to quickly find unfilled demands. 
          ctx       (trying-to-fill demandstore category ctx)]
     (if (empty? pending)
       ctx ;no demands to fill!
@@ -362,14 +472,21 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 ;The returned dictionary is a nested dictionary, nested by Group (FillRule demands)
 ;This is a subset of the original unfilledQ.
 
+(defn demand-query [demandstore category & [followon]]
+  (get 
+
 ;add the demand if its follow-on group is present.
 ;note, we don;t know a-priori if the demand will be filled...we;re merely noting that the demand "may" have
 ;follow-on units, reached through potentially complicated substitution rules, that can be utilized.  we;re just
 ;scoping the set of demands.
-(defn get-followon-demands [demandstore followon-buckets unfilled-demands]
-  (->> (map #(get demandstore %) unfilled-demands)
-       (filter #(contains? followon-buckets (:demandgroup %)))
-       (reduce (fn [m x] (assoc m [(:name x) (:priority x)] (:name x))) {})))   
+(defn get-followon-demands [demandstore followon-keys]  
+  (->> (map (fn [[cat demand-map]  (get-unfilled-demands demandstore)))
+       (filter #(contains? followon-keys (:demandgroup %)))
+       (reduce (fn [m x] (assoc m (priority-key x) x)) (priority-map)))) ;REPLACE WITH VECTOR!   
+(defn follow-on-eligible [followon-keys demandstore category]
+  ;a demand is followon-eligible if it's demand-group exists in the followon-keys...
+  (let [ds (get-followon-demands 
+  
 
 ;follow-on supply is a function of fillrule, demandgroup, followonbuckets
 
