@@ -235,10 +235,119 @@ Dim msg As String
 ;CONTEXTUAL
 (defn fill-category [t category unfilledq {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}]
     (loop [demandq (get category unfilledq)
-           demandname (first demandq)
+           demandname (first demandq)]
            
+;We can break the fill into a couple of simple queries...
+;
+;we've got a category of demand...
+;This is a priorityq of unfilled demands.
+;We traverse the priorityq in sorted order, trying to fill.
+;If we can't fill, or only partially fill the next demand, we stop traversing.
+  ;enforces the hierchical fill constraints. 
+;so...filling a category implies traversing a sorted map of unfilled demands. 
+;note -> we can modify the sorting key to include followon information, to make 
+;things homogenous, just adding a special comparison function. 
+
+;fetch a sorted-map of demands related to a category.
+;returns a map of <key, string>, where vals are demand names.
+(defn unfilled-demands [category demandstore] 
+  (get-in demandstore [:unfilledq category]))
+(defn get-demand [demandstore name] (get-in demandstore [:demandmap name]))
   
+;source-demand is actually a fill function...
+(defn source-demand [supplystore parameters fillstore ctx policystore t demand :useEveryone]
+  :blah!)
+
+;CONTEXUAL
+(defn request-fill [demandstore category m ctx]
+  (let [[p demandname] (first m)]
+    (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
+       (str "Highest priority demand in Category " category " is " demandname 
+            " with priority " p) nil ctx)))
+
+(defn trying-to-fill [demandstore category ctx] 
+  (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore) 
+     (str "Trying to Fill Demand Category " category) nil ctx))
+
+(defn fill-demand [demandstore demandname ctx]
+   (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore)
+      (str "Sourced Demand " demandname) nil ctx ))
+
+(defn can-fill-demand [demandstore demandname ctx]
+  (sim/trigger-event :CanFillDemand (:name demandstore) 
+       demandname (str "Filled " demandname) nil ctx))
+
+(defn try-fill-demands [m demandstore supplystore parameters ctx policystore t demand fillmode]
+  (loop [ctx ctx 
+(defn fill-category [demandstore category  
          
+
+;For each independent set of prioritized demands (remember, we partition based on substitution/SRC keys)
+;TOM Change 27 Mar 2011 -> added a mutable filter called fillables, which records demands with known supply.
+;This allows the stockwatcher to maintain a list of fillable demands.  We then proceed with the previous
+;logic of filling each demand.
+;Note -> as of 27 Mar 2011, the fill routine is only putting out a single path (the shortest path).
+;This happens in sourcedemand.
+With demandstore
+    For Each Categoryname In .UnfilledQ ;UnfilledQ
+
+            (trying-to-fill demandstore category ctx)            
+            ;We use our UnfilledQ to quickly find unfilled demands.
+            Set DemandCategory = .UnfilledQ(Categoryname) ;point to the priorityQ of unfilled, homogeneous demands
+            For i = 1 To DemandCategory.count
+                canFill = False
+                ;try to fill the topmost demand
+                demandname = CStr(DemandCategory.nextval) ;values stored in pq are the names of demands
+                If demandname = vbNullString Then Err.Raise 101, , "Demand has no name"
+
+                msg = "Highest priority demand in Category " & Categoryname & " is " & demandname & " with priority " _
+                        & DemandCategory.HighestPriority
+                ;Decoupled
+                SimLib.triggerEvent RequestFill, .name, .name, msg, , ctx
+
+                ;We;re going to be passing entire blocks of demand, vs. little atomic components of demand.  This will be
+                ;loads more effecient.  That way, the supply manager just fills as much as it can, and replies if the demand
+                ;was filled.  IF yes, then we can continue filling this category of demands.
+                ;We only fill while we have feasible supply left.
+                ;TOM Note -> Source Demand is actually trying to source the demand, although it looks like
+                ;a simple boolean check, it;s actually mutating stuff.
+                ;If parent.SupplyManager.sourceDemand(day, DemandMap(demandname), "DEF") Then ;changed sourceDemand to a function returning a boolean, which we use
+                ;TOM change 22 Mar 2011 -> demandsourcing is now done through fillmanager.
+                Set demand = .demandmap(demandname)
+                startfill = demand.unitsAssigned.count
+                ;Tom Note 27 Mar 2012 - DEF is vestigial....should be excised.
+                ;Decoupling again....push fillmanager as fill function.
+                canFill = sourceDemand(supplystore, parameters, fillstore, ctx, policystore, t, demand, "DEF", , useEveryone)
+                stopfill = demand.unitsAssigned.count
+                ;Decoupled
+                If stopfill <> startfill Then
+                    SimLib.triggerEvent DemandFillChanged, demandstore.name, demand.name, "The fill for " & demand.name & " changed.", demand, ctx
+                    ;TOM Change 20 Aug 2012...wasn;t recording properly.
+                    registerChange demandstore, demand.name
+                End If
+                
+                If canFill Then ;changed sourceDemand to a function returning a boolean, which we use
+                        msg = "Sourced Demand " & demandname
+                        ;Decoupled
+                        SimLib.triggerEvent FillDemand, demandstore.name, demandstore.name, msg, , ctx
+                    ;If we fill a demand, we update the unfilledQ.
+                    UpdateFill demandname, .UnfilledQ, demandstore, ctx
+                    ;Decouple
+                    SimLib.triggerEvent CanFillDemand, demandstore.name, demandname, "Filled " & demandname, , ctx
+                Else
+                    Exit For ;If we fail to fill a demand, we have no feasible supply, thus we leave it on the queue, stop filling.
+                ;Note, the demand is still on the queue, we only "tried" to fill it. No state changed .
+                End If
+            Next i
+            ;Proceed to the next independent set.
+        ;End If
+    Next Categoryname
+End With
+
+;After all categories processed, we;re done. Remaining code is legacy, has been moved, etc.
+End Sub
+         
+;;;COPY;;;;;;
 
 ;For each independent set of prioritized demands (remember, we partition based on substitution/SRC keys)
 ;TOM Change 27 Mar 2011 -> added a mutable filter called fillables, which records demands with known supply.
@@ -513,7 +622,10 @@ End Sub
 (defn set-followon [unit code] (assoc unit :followoncode code))
 (defn ghost? [unit] (= (:src unit) "Ghost"))
 (defn ungrouped? [g] (= g "UnGrouped"))
-(defn empty-demand? [d] (zero? (count (:units-assigned d))))
+(defn unit-count [d] (count (:units-assigned d)))
+(defn demand-filled? [d] (= (count (:units-assigned d)) (:quantity d)))
+(defn empty-demand? [d] (zero? (unit-count d)))
+ 
 ;END TEMPORARY 
 
 ;CONTEXTUAL
