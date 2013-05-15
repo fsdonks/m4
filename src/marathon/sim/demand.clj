@@ -259,11 +259,10 @@ Dim msg As String
   :blah!)
 
 ;CONTEXUAL
-(defn request-fill [demandstore category m ctx]
-  (let [[p demandname] (first m)]
-    (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
-       (str "Highest priority demand in Category " category " is " demandname 
-            " with priority " p) nil ctx)))
+(defn request-fill [demandstore category d ctx]
+  (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
+     (str "Highest priority demand in Category " category " is " (:name d) 
+          " with priority " (:priority d)) nil ctx)))
 
 (defn trying-to-fill [demandstore category ctx] 
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore) 
@@ -290,16 +289,18 @@ Dim msg As String
 ;This happens in sourcedemand.
 With demandstore
     For Each Categoryname In .UnfilledQ ;UnfilledQ
-
-            (trying-to-fill demandstore category ctx)            
-            ;We use our UnfilledQ to quickly find unfilled demands.
-            Set DemandCategory = .UnfilledQ(Categoryname) ;point to the priorityQ of unfilled, homogeneous demands
-            For i = 1 To DemandCategory.count
+            (loop [pending   (get-unfilled-demands demandstore category)   ;We use our UnfilledQ to quickly find unfilled demands. 
+                   demand    (val (first pending))                    
+                   can-fill? true
+                   ctx       (trying-to-fill demandstore category ctx)]
+              (let [demandname (:name demand)               ;try to fill the topmost demand
+                    ctx (request-fill demandstore category ctx)]
+                
+                 
+              
+            For i = 1 To DemandCategory.count ;reduce over unfilled demands 
                 canFill = False
                 ;try to fill the topmost demand
-                demandname = CStr(DemandCategory.nextval) ;values stored in pq are the names of demands
-                If demandname = vbNullString Then Err.Raise 101, , "Demand has no name"
-
                 msg = "Highest priority demand in Category " & Categoryname & " is " & demandname & " with priority " _
                         & DemandCategory.HighestPriority
                 ;Decoupled
@@ -625,7 +626,8 @@ End Sub
 (defn unit-count [d] (count (:units-assigned d)))
 (defn demand-filled? [d] (= (count (:units-assigned d)) (:quantity d)))
 (defn empty-demand? [d] (zero? (unit-count d)))
- 
+(defn priority-key [demand] [(:name demand) (:priority demand)]) 
+
 ;END TEMPORARY 
 
 ;CONTEXTUAL
@@ -737,17 +739,20 @@ End Sub
 ;we only have a binary filled/unfilled in the atomic model. This means we don;t ever check the condition
 ;that a demand might have gained a unit, via deployment, and still remain unfilled. It;s impossible.
 
+
+
 ;NEED TO RETHINK THIS GUY, WHAT ARE THE RETURN vals?  Mixing notification and such...
 ;CONTEXTUAL
 (defn update-fill [demandname unfilled demandstore ctx]
-  (let [demand (get-in demandstore [:demandmap demandname])]
+  (let [demand (get-in demandstore [:demandmap demandname])
+        fill-key (priority-key demand)]
     (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
     (assert (not (nil? demandname)) "Empty demand name!")
     (let [required (:required demand)
           src      (:src demand)]
       (if (= required 0) ;demand is filled, remove it
         (if (contains? unfilled src) ;either filled or deactivated
-          (let [demandq (dissoc (get unfilled src) demandname)
+          (let [demandq (dissoc (get unfilled src) fill-key)
                 nextfilled (if (= 0 (count demandq)) 
                              (dissoc unfilled src) 
                              (assoc unfilled src demandq))]
@@ -757,8 +762,8 @@ End Sub
           (trigger-event :DeActivateDemand (:name demandstore) demandname 
              (str "Demand " demandname " was deactivated unfilled") ctx)) ;have a deactivation
         (let [demandq (get unfilled src (empty-sorted-dictionary))] ;demand is unfilled, add it
-          (if (not (contains? demandq demandname))
-            (do (assoc demandq [demandname (:priority demand)] demand) ;WRONG
+          (if (not (contains? demandq fill-key))
+            (do (assoc demandq fill-key demand) ;WRONG
               (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
                  (str "Adding demand " demandname " to the unfilled Q") nil ctx)))))))) 
 
