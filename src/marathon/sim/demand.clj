@@ -59,17 +59,6 @@
           "Tried to remove non-existent fillrule")
   (update-in demandstore [:fillables] disj fillrule))
 
-;Note -> we're just passing around a big fat map, we'll use destructuring in the 
-;signatures to pull the args out from it...the signature of each func is 
-;state->state
-
-;Perform a prioritized fill of demands, heirarchically filling demands using followon
-;supply, then using the rest of the supply.
-(defn fill-demands [t state]
-  (->> state 
-    (fill-follow-ons t)
-    (supply/release-max-utilizers)
-    (fill-normal-demands t)))
 
 ;TOM Change 21 Sep 2011 -> this is the new first pass we engage in the fill process.
 ;The intent is to ensure that we bifurcate our fill process, forcing the utilization of follow-on
@@ -415,23 +404,60 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 
 ;find-eligible-demands 
 ;find-eligible-supply
-
 (defn category-type [x]
-  (cond (string? x)  :string 
-        (keyword? x) :key 
-        ()
+  (cond (or (keyword? x) (string? x))  :simple            
+        (vector? x) :src-group 
+        (map? x)    :rule-map
+        :else (throw (Exception. "Unknown category type " (type x)))))
+        
 ;suitability comes in later...
-(defmulti find-eligible-demands (fn [demandstore category] (type category)))
-(defmethod find-eligible-demands :map [demandstore category]
-  (
+(defmulti find-eligible-demands (fn [demandstore category] 
+                                  (category-type category))))
+;matches for srcs and keys.
+(defmethod find-eligible-demands :simple [demandstore category] 
+  (get-in demandstore [:unfilledq category])) ;priority queue of demands.
 
-;For each independent set of prioritized demands (remember, we partition based on substitution/SRC keys)
-;we can use this for both the original fill-followons and the fill-normal demands.
-;the difference is the stop-early? parameter.  If it's true, the fill will be equivalent to
-;the original normal hierarchical demand fill.
-;If stop-early? is falsey, then we scan the entire set of demands, trying to fill from a set of supply.
-(defn fill-category [demandstore category stop-early? supplystore ctx]           
-  (loop [pending   (find-eligible-demands demandstore category)   ;We use our UnfilledQ to quickly find unfilled demands. 
+;can probably extend this to allow for arbitrary predicates...
+(defn make-member-pred [g]
+  (if (or (set? g) (map? g)) 
+    #(contains? g %)
+    #(= g %)))
+
+;matches 
+;[src demandgroup|#{group1 group2 groupn}|{:group1 _ :group2 _ ... :groupn _}]  
+(defmethod find-eligible-demands :src-group [demandstore category]
+  (let [[cat g] category
+        eligible? (make-member-pred g)]
+    (->> (seq (find-eligible-demands demandstore (first cat))) ;INEFFICIENT
+      (filter (fn [[pk d]] (eligible? (:demand-group d))))
+      (into (priority-map))))) ;returns priority-queue of demands.
+
+;matches {:keys [src group]}, will likely extend to allow tags...
+(defmethod find-eligible-demands :rule-map [demandstore category]
+  (throw (Exception. "Not implemented!")))
+
+;Since we allowed descriptions of categories to be more robust, we now abstract
+;out the - potentially complex - category entirely.  This should allow us to 
+;fill using 99% of the same logic.
+;What we were doing using fill-followons and fill-demands is now done in 
+;fill-category. In this case, we supply a more robust description of the 
+;category of demand we're trying to fill. To restrict filling of demands that 
+;can take advantage of existing followon supply, we add the followon-keys to the 
+;category.  This ensures that find-eligible-demands will interpret the 
+;[category followon-keys] to mean that only demands a demand-group contained by 
+;followon-keys will work.  Note: we should extend this to arbitrary tags, since 
+;demandgroup is a hardcoded property of the demand data.  Not a big deal now, 
+;and easy to extend later.
+
+;For each independent set of prioritized demands (remember, we partition based 
+;on substitution/SRC keys) we can use this for both the original fill-followons 
+;and the fill-normal demands. The difference is the stop-early? parameter.  If 
+;it's true, the fill will be equivalent to the original normal hierarchical 
+;demand fill. If stop-early? is falsey, then we scan the entire set of demands, 
+;trying to fill from a set of supply.
+(defn fill-category [demandstore category stop-early? ctx]
+  ;We use our UnfilledQ to quickly find unfilled demands. 
+  (loop [pending   (find-eligible-demands demandstore category)   
          ctx       (trying-to-fill demandstore category ctx)]
     (if (empty? pending)
       ctx ;no demands to fill!
@@ -439,15 +465,16 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
             demandname  (:name demand)           ;try to fill the topmost demand
             startfill   (unit-count demand)
             ctx         (request-fill demandstore category ctx)
-            ;the result of trying to fill a demand should be a map with all the context we need...
+            ;the result of trying to fill a demand should be a map with context
             ;we can be more flexible here, maybe pass info on the success of the fill too...
             ;map of {:demand ... :demandstore ... :ctx ...}
-            fill-result (source-demand supplystore parameters fillstore ctx policystore t demand :useEveryone) 
+            ;NOTE -> we pass the category to communicate with supply during fill...
+            fill-result (source-demand demand category ctx) 
             stopfill    (unit-count (:demand fill-result))
             can-fill?   (demand-filled? (:demand fill-result))
             ctx         (if (= stopfill startfill)  ;UGLY 
                           ctx 
-                          (->>   (demand-fill-changed demandstore demand ctx)
+                          (->>   (demand-fill-changed demandstore demand ctx) ;incorporate fill results.
                             (sim/merge-updates {:demandstore (register-change demandstore demandname)})
                             (merge-fill-results fill-result)))]
         (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
@@ -460,36 +487,33 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
                    (can-fill-demand demandstore demandname)))))))) ;notify interested parties
 
 
-;REPLACES Fill-Demands
-;PARALLEL
 ;NOTE...since categories are independent, we could use a parallel reducer here..
 ;filling all unfilled demands can be phrased in terms of fill-category...
-(defn fill-categories [demandstore ctx]
+(defn hierarchically-fill-all [ctx]
   (reduce (fn [acc c] (fill-category (get-demandstore acc) c acc)) ctx
-    (unfilled-categories demandstore)))
+    (unfilled-categories (get-demandstore ctx))))     
 
-;Return a list of demands that are currently eligible for follow-on
-;The returned dictionary is a nested dictionary, nested by Group (FillRule demands)
-;This is a subset of the original unfilledQ.
+(defn try-fill-followons [ctx]
+  (if-let [followon-keys (get-followon-keys ctx)]
+	  (reduce (fn [acc c] (fill-category 
+	                        (get-demandstore acc) [c followon-keys] acc)) 
+	    ctx
+	    (unfilled-categories (get-demandstore ctx)))
+   ctx))     
 
-(defn demand-query [demandstore category & [followon]]
-  (get 
+;Note -> we're just passing around a big fat map, we'll use destructuring in the 
+;signatures to pull the args out from it...the signature of each func is 
+;state->state
 
-;add the demand if its follow-on group is present.
-;note, we don;t know a-priori if the demand will be filled...we;re merely noting that the demand "may" have
-;follow-on units, reached through potentially complicated substitution rules, that can be utilized.  we;re just
-;scoping the set of demands.
-(defn get-followon-demands [demandstore followon-keys]  
-  (->> (map (fn [[cat demand-map]  (get-unfilled-demands demandstore)))
-       (filter #(contains? followon-keys (:demandgroup %)))
-       (reduce (fn [m x] (assoc m (priority-key x) x)) (priority-map)))) ;REPLACE WITH VECTOR!   
-(defn follow-on-eligible [followon-keys demandstore category]
-  ;a demand is followon-eligible if it's demand-group exists in the followon-keys...
-  (let [ds (get-followon-demands 
-  
+;Perform a prioritized fill of demands, heirarchically filling demands using followon
+;supply, then using the rest of the supply.
+(defn fill-demands [t ctx]
+  (->> ctx
+    (try-fill-follow-ons ctx)
+    (supply/release-max-utilizers)
+    (hierarchically-fill-all t)))
 
-;follow-on supply is a function of fillrule, demandgroup, followonbuckets
-
+                    
 ;procedure that allows us to, using the fillgraph, derive a set of tags whose associated demands
 ;should be disabled.  if removal is true, the demands will be removed from memory as well.
 ;in cases where there are a lot of demands, this may be preferable.
