@@ -88,99 +88,8 @@
 ;             did before.  This time, we should only be looking at ARFORGEN supply (since our follow-on supply was
 ;             utilized in the Phase 1).
 
-;CONTEXTUAL
-(defn fill-follow-ons 
-  [t {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}]
-)
-
-Dim i As Long
-;TOM Change 6 Dec 2010 -Added several variables, used for dictionary access
-Dim demandname As String
-;TODO -> change this.  I don;t think we need it.
-Dim DemandCategory As GenericSortedDictionary
-Dim Categoryname
-Dim canFill As Boolean
-Dim demand As TimeStep_DemandData
-Dim followonbuckets As Dictionary
-
-Static startfill As Long
-Static stopfill As Long
-
-;Check
-Set followonbuckets = supplystore.followonbuckets
-
-With demandstore
-    ;For each independent set of prioritized demands (remember, we partition based on substitution/SRC keys)
-    If followonbuckets.count > 0 Then ;we can try to process follow-on supply...
-        For Each Categoryname In .UnfilledQ ;UnfilledQ is a global, want to replace this with a function parameter...
-                ;get eligible demands from the unfilled priorityQ....
-                ;This is a subset of demands that "may" have eligible supply in the followonBuckets.
-                ;Note -> followonBuckets are keyed by {DemandGroup, {FillRule, Supply}}
-                ;So if we have eligible demands, we tap into the followonBuckets by the demand;s demandgroup property.
-                ;point to the priorityQ of unfilled, homogeneous demands
-                Set DemandCategory = _
-                    getFollowOnDemands(demandstore, followonbuckets, .UnfilledQ(Categoryname).data)
-
-                ;going to traverse ALL eligible demands to ensure we exhaust our follow-ons.
-                ;Note, this is different than our typical supply traversal, where we stop pulling supply after the highest priority
-                ;demand goes unfilled.  In here, we ensure that all demands with the potential for
-                While DemandCategory.count > 0
-                    canFill = False
-                    ;try to fill the topmost demand
-                    demandname = DemandCategory.removeNext ;values stored in pq are the names of demands
-                    If demandname = vbNullString Then Err.Raise 101, , "Demand has no name"
-                    Set demand = .demandmap(demandname)
-
-                    ;we CAN short-circuit the follow-on fill if there are no more units for the specified follow-ons in the
-                    ;demand group
-                    If followonbuckets.exists(demand.demandgroup) Then
-                        startfill = demand.unitsAssigned.count
-                        ;We want to change the sourcing to use supply from the follow-on buckets....
-                        ;we pass the scoped-down set of eligible Supply (from followonbuckets) to the sourcing routine...
-                        ;this lets us use the same fillrules, with a different set of supply.
-
-                        ;Decoupling -> need to change this....either passing in Fillmanager as a parameter...or something
-                        ;else...
-                        ;TODO -> remove the DEF b.s.
-                        canFill = MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore, t, demand, "DEF", followonbuckets(demand.demandgroup), onlyUseFollowons)
-                        stopfill = demand.unitsAssigned.count
-
-                        If stopfill <> startfill Then
-                            SimLib.triggerEvent DemandFillChanged, demandstore.name, demand.name, "The fill for " & demand.name & " changed.", demand, ctx
-                           ;If we fill a demand, we update the unfilledQ.
-                            ;UpdateFill demandname, UnfilledQ
-                            
-                            ;TOM Change 20 Aug 2012...wasn;t recording properly.
-                            registerChange demandstore, demand.name
-                        End If
-
-                        If canFill Then ;changed sourceDemand to a function returning a boolean, which we use
-                            ;Decoupled
-                            SimLib.triggerEvent FillDemand, demandstore.name, demandstore.name, _
-                                                    "Sourced Demand " & demandname, , ctx
-                            ;Decoupled
-                            SimLib.triggerEvent CanFillDemand, demandstore.name, demandname, _
-                                                    "Filled " & demandname, , ctx
-                            UpdateFill demandname, .UnfilledQ, demandstore, ctx
-                        Else
-                            ;the demand is still on the unfilled queue, we only "tried" to fill it. No state changed .
-                            ;Debug.Print "could not fill"
-                        End If
-                    End If
-                Wend ;keep popping off all eligible demands
-        Next Categoryname
-    End If
-End With
-
-End Sub
-
-
 
   
-;TOM Note 13 Mar -> we perform some major effeciency improvements.  The most obvious is representing demands as
-;objects.  Rather than having a demand for 5 srcs result in 5 physical entries, we just have one demand and keep
-;track of its fill.  Major reduction in overhead (and searching).
-;TOM Change 6 Dec 2010
 ;Going to redirect this sub to incorporate unfilledQ. The idea is to look for the highest priority demand,
 ;by SRC . Specifically, we will be redirecting the portion of the routine that finds "a demand" to be filled.
 ;In the previous algorithm, we just traversed thousands of demands until we found one with a status of False,
@@ -190,41 +99,14 @@ End Sub
 ;For each independent set of prioritized demands (remember, we partition based on substitutionjSRC keys)
 ;We use our UnfilledQ to quickly find unfilled demands.
 ;UnfilledQ keeps demands in priority order for us, priority is stored in DEFDemand(i) .priority
-;Note - we can change priority dynamically, interesting possibilities later ....
+
 ;We only fill while we have feasible supply left.
-;We check deployables to efficiently find feasible supply.
+;We check deployables to0 efficiently find feasible supply.
 ;Not currently kept in priority order .... could be converted easily enough though.
 ;If we fill a demand, we take it off the queue.
 ;If we fail to fill a demand, we have no feasible supply, thus we leave it on the queue, stop filling,
 ;and proceed to the next independent set.
 ;After all independent sets have been processed, we;re done.
-;TOM Change 3 Mar 2011 renamed from DEFSourcing
-Public Sub FillNormalDemands(t As Single, fillstore As TimeStep_ManagerOfFill, supplystore As TimeStep_ManagerOfSupply, _
-                                parameters As TimeStep_Parameters, demandstore As TimeStep_ManagerOfDemand, _
-                                    policystore As TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext)
-
-;Dim demand As Long
-Dim i As Long
-;TOM Change 6 Dec 2010 -Added several variables, used for dictionary access
-Dim demandname As String
-Dim DemandCategory As GenericSortedDictionary
-Dim Categoryname
-Dim canFill As Boolean
-Dim demand As TimeStep_DemandData
-Static startfill As Long
-Static stopfill As Long
-Dim msg As String
-
-;what we're really doing is prioritizing demands...
-;trying to fill said demands....
-
-;CONTEXTUAL
-(defn fill-demands [t {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}])
-
-;CONTEXTUAL
-(defn fill-category [t category unfilledq {:keys [fillstore supplystore parameters demandstore policystore ctx] :as state}]
-    (loop [demandq (get category unfilledq)
-           demandname (first demandq)]
            
 ;We can break the fill into a couple of simple queries...
 ;
@@ -275,9 +157,6 @@ Dim msg As String
 (defn sourced-demand [demandstore demand ctx]
   (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore) 
      (str "Sourced Demand " (:name demand)) nil ctx)))
-
-;(defn try-fill-demands [m demandstore supplystore parameters ctx policystore t demand fillmode]
-;  (loop [ctx ctx
 
 (defn merge-fill-results [res ctx] 
   (throw (Exception. "merge-fill-results not implemented")))
@@ -333,43 +212,13 @@ Dim msg As String
   ;for each follow-on eligible demand,
 
 
-;I think we can alleviate this if we formalize the stuff we're working in...
-;In order to fill demands, we have to have: 
-
-; A set of unfilled demands. 
-; A set of supply.
-; A way to determine the most suitable supply (suitability fn). 
-
-;so a FillContext is just that...
-;  A map of {:deployable    {categories {units....}}
-;            :unfilled      {categories {demands....}}}
-
-;A FillContext for a followon demand would be...
-;           {:deployable (get-followon-supply supplystore)
-;            :unfilled   (get-followon-demands (supplystore demandstore)}
-
-(defn get-fill-context [demand supplystore phase]
-
 ;we currently perform a phased fill, namely, fill using the followons, in 
 ;an effort to exhaust them before we release them....
 ;release the maximum utilizers (legacy stuff).
 ;fill the remaining demands in a hierarchical order. 
 
-;filling a demand is a matter of filling all the categories in unfilled 
-
-
-;matches (fills) must come from combinations of members of the two sets. 
-;
-
-;no restrictions on how to fill the demand.
-(defn source-normally [demand ctx] (source-demand demand :useEveryone ctx))
-(defn source-followons [demand ctx]
-  ;NEED TO ENSURE WE ONLY USE FOLLOWON BUCKETS. 
-  ;NEED TO ENSURE WE FILTER CATEGORIES THAT HAVE NO SUPPLY.
-  (source-demand demand :onlyUseFollowons ctx))
-
-MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore, t, demand, "DEF", followonbuckets(demand.demandgroup), onlyUseFollowons)
-(fill-demands "SRC1" "Group2") ; => find all eligible demands for SRC1 that have 
+;MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore, t, demand, "DEF", followonbuckets(demand.demandgroup), onlyUseFollowons)
+;(fill-demands "SRC1" "Group2") ; => find all eligible demands for SRC1 that have 
 ;group2 as a demandgroup, if there's any grouped supply, try using that to fill 
 ;the demands for SRC1 in order.
 
@@ -383,16 +232,16 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 ;just adopt a broader notion of category...
 ;in the simple case, when the category is a string, or a key, we act like normal 
 ;filling..
-(fill-category "SRC2") ;=> find all eligible demands for SRC2.
+;(fill-category "SRC2") ;=> find all eligible demands for SRC2.
 
 ;in a complex case, when the category is a sequence, we parse it appropriately.
 ;category can be a pair, which is interpreted as a category of SRC and a grouping.
-(fill-category ["SRC2" "Group1"]) ;=> find the eligible demands for SRC2, where 
+;(fill-category ["SRC2" "Group1"]) ;=> find the eligible demands for SRC2, where 
 ;the demand group is group1.
 
 ;category can be a map, which is interpreted as a filter....
-(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
-                :supply {:followoncode "Group2"}})
+;(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
+;                :supply {:followoncode "Group2"}})
 ;categories serve to link supply AND demand.
 ;From the supply-side, we determine which supply is eligible to fill 
 ;["SRC1" "Group2"]
@@ -596,7 +445,7 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 ;exactly what an event step simulation does. We;re just copping techniques and 
 ;modifying them for use in a timestep sim to make it more efficient.
 ;CONTEXTUAL
-(defn manage-demands [t {:keys [demandstore context] :as state}]
+(defn manage-demands [t {:keys [demandstore context] :as ctx}]
 
 
 Public Sub ManageDemands(t As Single, state As TimeStep_SimState)
