@@ -402,6 +402,9 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 
 ;so we need two new functions...
 
+;Note -> find-eligible demands is...in a general sense, just a select-where 
+;query executed against the demandstore...
+
 ;find-eligible-demands 
 ;find-eligible-supply
 (defn category-type [x]
@@ -419,7 +422,7 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 
 ;can probably extend this to allow for arbitrary predicates...
 (defn make-member-pred [g]
-  (if (or (set? g) (map? g)) 
+  (if (or (set? g) (map? g))
     #(contains? g %)
     #(= g %)))
 
@@ -455,7 +458,8 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 ;it's true, the fill will be equivalent to the original normal hierarchical 
 ;demand fill. If stop-early? is falsey, then we scan the entire set of demands, 
 ;trying to fill from a set of supply.
-(defn fill-category [demandstore category stop-early? ctx]
+(defn fill-category [demandstore category ctx & {:keys [stop-early?] 
+                                                 :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
   (loop [pending   (find-eligible-demands demandstore category)   
          ctx       (trying-to-fill demandstore category ctx)]
@@ -486,37 +490,37 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
                    (update-fill     demandstore demandname) ;If we fill a demand, we update the unfilledQ.
                    (can-fill-demand demandstore demandname)))))))) ;notify interested parties
 
-
 ;NOTE...since categories are independent, we could use a parallel reducer here..
 ;filling all unfilled demands can be phrased in terms of fill-category...
-(defn hierarchically-fill-all [ctx]
-  (reduce (fn [acc c] (fill-category (get-demandstore acc) c acc)) ctx
-    (unfilled-categories (get-demandstore ctx))))     
 
-(defn try-fill-followons [ctx]
+(defn fill-demands-with [ctx f]
+  (reduce (fn [acc c] (f (get-demandstore acc) c acc))
+      ctx (unfilled-categories (get-demandstore ctx))))
+
+(defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
+
+(defn fill-followons [ctx]
   (if-let [followon-keys (get-followon-keys ctx)]
-	  (reduce (fn [acc c] (fill-category 
-	                        (get-demandstore acc) [c followon-keys] acc)) 
-	    ctx
-	    (unfilled-categories (get-demandstore ctx)))
-   ctx))     
+    (->> (fn [store category ctx] 
+           (fill-category store [category followon-keys] ctx :stop-early false))
+      (fill-demands-with ctx))))
 
 ;Note -> we're just passing around a big fat map, we'll use destructuring in the 
 ;signatures to pull the args out from it...the signature of each func is 
 ;state->state
 
-;Perform a prioritized fill of demands, heirarchically filling demands using followon
-;supply, then using the rest of the supply.
+;Perform a prioritized fill of demands, heirarchically filling demands using 
+;followon supply, then using the rest of the supply.
 (defn fill-demands [t ctx]
   (->> ctx
-    (try-fill-follow-ons ctx)
+    (fill-follow-ons ctx)
     (supply/release-max-utilizers)
-    (hierarchically-fill-all t)))
-
+    (fill-hierarchically)))
                     
-;procedure that allows us to, using the fillgraph, derive a set of tags whose associated demands
-;should be disabled.  if removal is true, the demands will be removed from memory as well.
-;in cases where there are a lot of demands, this may be preferable.
+;procedure that allows us to, using the fillgraph, derive a set of tags whose 
+;associated demands should be disabled.  if removal is true, the demands will be 
+;removed from memory as well. in cases where there are a lot of demands, this 
+;may be preferable.
 (defn scope-demand [demandstore disable-tags & {:keys [removal]}]
   (let [tags    (:tags demandstore)
         f       (if removal #(remove-demand %1 %2) (fn [m k] m))]     
@@ -580,18 +584,20 @@ MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, policystore
 
 ;TOM Change 6 Dec 2010
 ;Introducing this sub, to be inserted into the mainmodel loop.
-;Its purpose is to maintain a running list of demands (ActiveDemands dictionary), which will help us only fill
-;active demands. How do demands get added to the list? Upon initialization, we schedule their activation day
-;and deactivation day (start + duration). During the course of the mainmodel loop, we have a listener that
-;checks to see if the current day is a day of interest, specifically if it;s an activation day.
-;Note that this idea, partitioning our days into "days of interest", while localized to handle demand
-;activations and deactivations, could easily be extended to a general "days of interest" manager, with
-;subscribed handlers and subroutines to run. In fact, this is exactly what an event step simulation does.
-;We;re just copping techniques and modifying them for use in a timestep sim to make it more efficient.
+;Its purpose is to maintain a running list of demands (ActiveDemands dictionary)
+;which will help us only fill active demands. How do demands get added to the 
+;list? Upon initialization, we schedule their activation day and deactivation 
+;day (start + duration). During the course of the mainmodel loop, we have a 
+;listener that checks to see if the current day is a day of interest, 
+;specifically if it;s an activation day. Note that this idea, partitioning our 
+;days into "days of interest", while localized to handle demand activations and 
+;deactivations, could easily be extended to a general "days of interest" 
+;manager, with subscribed handlers and subroutines to run. In fact, this is 
+;exactly what an event step simulation does. We;re just copping techniques and 
+;modifying them for use in a timestep sim to make it more efficient.
 ;CONTEXTUAL
 (defn manage-demands [t {:keys [demandstore context] :as state}]
-  (let [{:keys [activations 
-)
+
 
 Public Sub ManageDemands(t As Single, state As TimeStep_SimState)
 Dim DemandKey
