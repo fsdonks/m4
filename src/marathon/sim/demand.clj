@@ -136,7 +136,7 @@
 (defn request-fill [demandstore category d ctx]
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
      (str "Highest priority demand in Category " category " is " (:name d) 
-          " with priority " (:priority d)) nil ctx)))
+          " with priority " (:priority d)) nil ctx))
 
 (defn trying-to-fill [demandstore category ctx] 
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore) 
@@ -156,10 +156,26 @@
 
 (defn sourced-demand [demandstore demand ctx]
   (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore) 
-     (str "Sourced Demand " (:name demand)) nil ctx)))
+     (str "Sourced Demand " (:name demand)) nil ctx))
+
+(defn activating-demand [demandstore demand t ctx]
+  (sim/trigger-event :ActivateDemand (:name demandstore) (:name demand)
+     (str "Activating demand " (:name demand) " on day " t) nil ctx)) 
+
+(defn deactivating-demand [demandstore demand t ctx]
+  (let [dname (:name demand)]
+    (sim/trigger-event :DeActivateDemand (:name demandstore) dname
+       (str "DeActivating demand " dname " on day " t) dname ctx)))
+
+(defn deactivating-empty-demand [demand t ctx]
+  (sim/trigger-event :DeActivateDemand :DemandStore (:name demand)  
+       (str "Demand " (:name demand) " Deactivated on day " t
+            " with nothing deployed ") ctx))    
+
 
 (defn merge-fill-results [res ctx] 
   (throw (Exception. "merge-fill-results not implemented")))
+
 (defn pop-priority-map [m]
   (if (empty? m) m (dissoc m (first (keys m)))))
 
@@ -444,77 +460,63 @@
 ;manager, with subscribed handlers and subroutines to run. In fact, this is 
 ;exactly what an event step simulation does. We;re just copping techniques and 
 ;modifying them for use in a timestep sim to make it more efficient.
+
+(defn activations? [t demandstore] 
+  (contains? (:activations demandstore) t))
+(defn deactivations? [t demandstore] 
+  (contains? (:deactivations demandstore) t))
+
+(defn activate-demand [demandstore t d ctx]
+  (let [store (-> (assoc-in demandstore [:activedemands (:name d)] d)
+                  (register-change (:name d)))]               
+    (->> (activating-demand store d t ctx)
+      (update-fill store (:name d)))))    
+
+(defn  get-activations  [demandstore t] (get (:activations demandstore) t))
+(defn  get-deactivations [demandstore t] (get (:deactivations demandstore) t))
+;This could be refactored....REPETITIVE!
+(defn activate-demands [t ctx]
+  (let [demandstore (get-demandstore ctx)]
+	  (reduce (fn [ctx dname] 
+	            (let [store (get-demandstore ctx)]
+	              (activate-demand store t (get-demand store dname) ctx))) 
+	          ctx 
+	          (get-activations demandstore)))
+
+(defn send-home-units [demand t ctx]
+  (if (empty-demand? demand)
+    (deactivating-empty-demand demand t ctx)
+    (->> (units-assigned demand) ;otherwise send every unit home.
+      (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
+      (sim/merge-updates
+        {:demandstore 
+         (assoc-in (get-demandstore ctx) [:demandmap (:name demand)]
+                   (assoc demand :units-assigned {}))}))))
+  
+(defn deactivate-demand [demandstore t d ctx]
+  (assert (contains? (active-demands demandstore) (:name d)) 
+    (throw (Exception. (str "DeActivating an inactive demand: " (:name d))))) 
+  (let [store (-> (update-in demandstore [:activedemands] dissoc (:name d))
+                  (register-change (:name d)))]
+    (->> (deactivating-demand store d t ctx)
+         (send-home-units demand t)
+         (update-fill store (:name d)))))    
+
+;This could be refactored....REPETITIVE!
+(defn deactivate-demands [t ctx]
+  (let [demandstore (get-demandstore ctx)]
+    (reduce (fn [ctx dname] 
+              (let [store (get-demandstore ctx)]
+                (deactivate-demand store t (get-demand store dname) ctx))) 
+            ctx 
+            (get-deactivations demandstore))))
+
 ;CONTEXTUAL
 (defn manage-demands [t {:keys [demandstore context] :as ctx}]
-
-
-Public Sub ManageDemands(t As Single, state As TimeStep_SimState)
-Dim DemandKey
-Dim demand As TimeStep_DemandData
-Dim ptr As Dictionary
-Dim nm
-Dim msg As String
-Dim demandstore As TimeStep_ManagerOfDemand
-
-Set demandstore = state.demandstore
-
-With demandstore
-    If .activations.exists(t) Then
-        Set ptr = .activations(t)
-        For Each DemandKey In ptr
-            Set demand = .demandmap(DemandKey)
-            With demand
-                If .status = True Then
-                    Err.Raise 101, , "Activating an already Active demand, impossible"
-                End If
-                ;todo -> remove this
-                .status = True ;vestigial
-                ;If demandtraffic Then
-                    msg = "Activating demand " & DemandKey & " on day " & t
-                    ;Decoupled
-                    SimLib.triggerEvent ActivateDemand, demandstore.name, demand.name, msg, , state.context
-                ;End If
-                demandstore.activeDemands.add CStr(DemandKey), demand
-                ;addEligible demand
-                UpdateFill CStr(DemandKey), demandstore.UnfilledQ, demandstore, state.context
-                registerChange demandstore, demand.name
-            End With
-        Next DemandKey
-    End If
-    ;TOM change 7 Dec 2010 -> added a hook in here to send home deployed/overlapping units, want deactivation to force
-    ;them to go to reset.
-    If .deactivations.exists(t) Then
-        Set ptr = .deactivations(t)
-        For Each DemandKey In ptr
-            Set demand = .demandmap(DemandKey)
-            With demand
-                .status = False
-
-                msg = "DeActivating demand " & DemandKey & " on day " & t
-                ;Decouple
-                 SimLib.triggerEvent DeActivateDemand, demandstore.name, .name, msg, .name, state.context
-
-
-                If demandstore.activeDemands.exists(CStr(DemandKey)) = False Then
-                    Err.Raise 101, , "deactivating something that does not exist ... "
-                End If
-
-                demandstore.activeDemands.Remove CStr(DemandKey)
-                ;removeEligible demand
-
-                For Each nm In .unitsAssigned ;send all units home.
-                    SendHome t, demand, CStr(nm), state.context ;<----- This is the hook
-                Next nm
-                UpdateFill CStr(DemandKey), demandstore.UnfilledQ, demandstore, state.context ;remove demand from fill consideration
-                 ;Tom change 20 aug 2012 -> force the system to sample demands.
-                registerChange demandstore, demand.name
-            End With
-        Next DemandKey
-    End If
-End With
-
-End Sub
-
+  (->> ctx
+    (activate-demands t)
+    (deactivate-demands t))) 
+  
 
 (defn manage-changed-demands [day state] ;REDUNDANT
   (assoc-in state [:demand-store :changed] {}))
@@ -593,21 +595,17 @@ End Sub
 ;TOM Change 14 Mar 2011 <- provide the ability to send home all units or one unit...default is all units
 ;CONTEXTUAL
 ; :: float -> demand -> string -> context -> context
-(defn send-home [t demand unitname ctx] 
-  (if (empty-demand? demand) 
-    (sim/trigger-event :DeActivateDemand :DemandStore (:name demand)  
-       (str "Demand " (:name demand) " Deactivated on day " t
-            " with nothing deployed ") ctx) ;RIGHT, just trigger and return ctx.
-    (let [old-unit  (get (:units-assigned demand) unitname)
-          startloc  (:locationname unit)
-          unit (u/update old-unit (- t (sim/last-update unitname ctx))) ;WRONG?
-          demandgroup (:demandgroup demand)]
-      (->> (sim/trigger-event :supply-update :DemandStore unitname ;WRONG
+(defn send-home [t demand unit ctx] 
+  (let [unitname  (:name unit)
+        startloc  (:locationname unit)
+        unit (u/update unit (- t (sim/last-update unitname ctx))) ;WRONG?
+        demandgroup (:demandgroup demand)]
+    (->> (sim/trigger-event :supply-update :DemandStore unitname ;WRONG
               (str "Send Home Caused SupplyUpdate for " unitname) ctx) ;WRONG
-        (withdraw-unit old-unit demandgroup) 
-        (sim/trigger-event :DisengageUnit :DemandStore unitname 
-         (str "Disengaging unit" unitname 
-              " from de-activated demand" (:name demand))))))) 
+         (withdraw-unit unit demandgroup) 
+         (sim/trigger-event :DisengageUnit :DemandStore unitname 
+            (str "Disengaging unit" unitname " from de-activated demand" 
+                 (:name demand)))))) 
 
 
 ;there WILL be things happening to the ctx, possible mutations and such, that 
@@ -677,7 +675,12 @@ End Sub
 ;we only have a binary filled/unfilled in the atomic model. This means we don;t ever check the condition
 ;that a demand might have gained a unit, via deployment, and still remain unfilled. It;s impossible.
 
-
+(defn removing-unfilled [demandstore demandname ctx] 
+  (sim/trigger-event :FillDemand (:name demandstore) demandname
+     (str "Removing demand " demandname " from the unfilled Q" nil ctx)))
+(defn adding-unfilled [demandstore demandname ctx] 
+  (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
+     (str "Adding demand " demandname " to the unfilled Q") nil ctx))
 
 ;NEED TO RETHINK THIS GUY, WHAT ARE THE RETURN vals?  Mixing notification and such...
 ;CONTEXTUAL
@@ -695,18 +698,17 @@ End Sub
                 nextunfilled (if (= 0 (count demandq)) 
                              (dissoc unfilled src) 
                              (assoc unfilled src demandq))]
-            (->> (sim/trigger-event :FillDemand (:name demandstore) demandname
-                  (str "Removing demand " demandname " from the unfilled Q" nil ctx))
-              (sim/merge-updates {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
+            (->> (removing-unfilled demandstore demandname ctx)
+                 (sim/merge-updates 
+                   {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
           (trigger-event :DeActivateDemand (:name demandstore) demandname 
              (str "Demand " demandname " was deactivated unfilled") ctx)) ;have a deactivation
         (let [demandq (get unfilled src (empty-sorted-dictionary))] ;demand is unfilled, add it
           (if (not (contains? demandq fill-key))
             (->> (sim/merge-updates 
                    {:demandstore (assoc-in demandstore [:unfilled src] 
-                       (assoc demandq fill-key demand))} ctx) ;WRONG
-               (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
-                 (str "Adding demand " demandname " to the unfilled Q") nil)))))))) 
+                       (assoc demandq fill-key demand))} ctx) ;WRONG?
+                 (adding-unfilled demandstore demandname)))))))) 
 
 
 
