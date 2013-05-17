@@ -132,6 +132,7 @@
 (defn source-demand [supplystore parameters fillstore ctx policystore t demand :useEveryone]
   :blah!)
 
+;STATUS MESSAGES/ANNOUNCEMENTS -> build a macro or something...too repetitive.
 ;CONTEXUAL
 (defn request-fill [demandstore category d ctx]
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
@@ -171,6 +172,13 @@
   (sim/trigger-event :DeActivateDemand :DemandStore (:name demand)  
        (str "Demand " (:name demand) " Deactivated on day " t
             " with nothing deployed ") ctx))    
+
+(defn removing-unfilled [demandstore demandname ctx] 
+  (sim/trigger-event :FillDemand (:name demandstore) demandname
+     (str "Removing demand " demandname " from the unfilled Q" nil ctx)))
+(defn adding-unfilled [demandstore demandname ctx] 
+  (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
+     (str "Adding demand " demandname " to the unfilled Q") nil ctx))
 
 
 (defn merge-fill-results [res ctx] 
@@ -280,7 +288,7 @@
         
 ;suitability comes in later...
 (defmulti find-eligible-demands (fn [demandstore category] 
-                                  (category-type category))))
+                                  (category-type category)))
 ;matches for srcs and keys.
 (defmethod find-eligible-demands :simple [demandstore category] 
   (get-in demandstore [:unfilledq category])) ;priority queue of demands.
@@ -675,12 +683,7 @@
 ;we only have a binary filled/unfilled in the atomic model. This means we don;t ever check the condition
 ;that a demand might have gained a unit, via deployment, and still remain unfilled. It;s impossible.
 
-(defn removing-unfilled [demandstore demandname ctx] 
-  (sim/trigger-event :FillDemand (:name demandstore) demandname
-     (str "Removing demand " demandname " from the unfilled Q" nil ctx)))
-(defn adding-unfilled [demandstore demandname ctx] 
-  (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
-     (str "Adding demand " demandname " to the unfilled Q") nil ctx))
+
 
 ;NEED TO RETHINK THIS GUY, WHAT ARE THE RETURN vals?  Mixing notification and such...
 ;CONTEXTUAL
