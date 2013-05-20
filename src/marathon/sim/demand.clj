@@ -10,32 +10,24 @@
 ;Functions for creating, initializing, resetting, and updating state related to
 ;the Demand simulation are found here.
 
-;The high-level entry point is ManageDemands, which is invoked from the 
-;EventStep_Marathon method in the TimeStep_Engine class.
 
+;One problem area in the port from VBA->Clojure was the handling of 
+;decentralized state updates.  This primarily happens via event dispatch, or 
+;through side-effects called during management functions.  The solution for our
+;pure simulation is to formalize batch updates to the simulation by using 
+;simcontext/merge-updates   This allows us to pass maps of updates around, and 
+;the updates are merged with the simulation state in a predefined manner.  
+;We may wish to formalize this as a language feature (i.e. macro) to define 
+;different types of update.
 
 ;;Undefined as of yet...
 ;(defn new-demand [name tstart duration overlap primary-unit quantity 
 ;      priority demandstore policystore ctx operation vignette source-first]
 ;
-;>>>>>>>>>>>>>>>>>Missing Functionality>>>>>>>>>>>>>>>>>>>>
 
-
-;<<<<<<<<<<<<<<<<<Missing Functionality<<<<<<<<<<<<<<<<<<<<
 (defn can-simulate? [demandstore]
   (> (count (tag/get-subjects (:tags demandstore) :enabled)) 0))
 
-;register-demand is a good example...
-;we want it to return a list of updates....
-;like...(merge-updates {:demand-store ... :policy-store ...})
-;Actually, we can have an event handler that does this....
-;or we have an integrating function that weaves stuff across...
-;what happends when there's a set of updates, along with events? 
-;The events provide yet another form of update to the state as a whole.
-;typically the context will provide the focus point for both...
-;maybe have, as part of the API, the ability to merge updates with the context,
-;as well as trigger events...
-;that's it.
 
 ;CONTEXTUAL
 (defn register-demand [demand demandstore policystore ctx]
@@ -59,8 +51,11 @@
           "Tried to remove non-existent fillrule")
   (update-in demandstore [:fillables] disj fillrule))
 
+;TOM Note 20 May 2013   -> We can probably generalize the explicit process
+;denoted below.  There are, arbitrarily, 1..n phases of filling, this is one 
+;possible ordering.
 
-;TOM Change 21 Sep 2011 -> this is the new first pass we engage in the fill process.
+;TOM Change 21 Sep 2011 -> this is the first pass we engage in the fill process.
 ;The intent is to ensure that we bifurcate our fill process, forcing the 
 ;utilization of follow-on units.  We split the fill process into 2 phases...
 ;Phase 1:  Find out which demands in the UnfilledQ(FillRule) are eligible for 
@@ -80,8 +75,8 @@
 ;                       *Update -> thre problem is, our fill function, if 
 ;                                  allowed to make ghosts, will KEEP trying to 
 ;                                  fill, and effectively short circuit our other 
-;                                  supply.  we need to prevent the fill function
-;                                  from making ghosts in phase1!
+;                                  supply.  categories prevent the fill function
+;                                  from making ghosts in phase1.
 ;             The biggest difference is that we DO NOT stop, or short-circuit
 ;             the fill process if we don't find follow-on supply.  We give every 
 ;             eligible demand a look. After phase 1 is complete, all demands 
@@ -90,10 +85,11 @@
 ;             been eliminated from further consideration. Demands with 
 ;             requirements remaining are still in the unfilledQ for our normal, 
 ;             ARFORGEN-based fill.
-;   Phase 2:  This is the normal, ARFORGEN-based fill routine.  Anything left in 
-;             the unfilledQ is processed as we did before.  This time, we should
-;             only be looking at ARFORGEN supply (since our follow-on supply was
-;             utilized in the Phase 1).
+;Phase 2:  This is the normal, ARFORGEN-based fill routine.  Anything left in 
+;          the unfilledQ is processed as we did before.  This time, we should
+;          only be looking at ARFORGEN supply (since our follow-on supply was
+;          utilized in the Phase 1)  This phase is also known as hierarchical
+;          fill.
 
 
   
@@ -107,7 +103,7 @@
 ;For each independent set of prioritized demands (remember, we partition based 
 ;on substitutionjSRC keys), we use our UnfilledQ to quickly find unfilled 
 ;demands. UnfilledQ keeps demands in priority order for us, priority is stored 
-;in DEFDemand(i) .priority
+;in demanddata.
 
 ;We only fill while we have feasible supply left.
 ;We check deployables to0 efficiently find feasible supply.
@@ -117,12 +113,13 @@
 ;If we fail to fill a demand, we have no feasible supply, thus we leave it on 
 ;the queue, stop filling, and proceed to the next independent set.
 ;After all independent sets have been processed, we're done.
+;Tom Note 20 May 2013 -> Independent means we can do this in parallel.
            
 ;We can break the fill into a couple of simple queries...
 ;
 ;we've got a category of demand...
 ;This is a priorityq of unfilled demands.
-;We traverse the priorityq in sorted order, trying to fill.
+;We traverse the priorityq in priority order, trying to fill.
 ;If we can't fill, or only partially fill the next demand, we stop traversing.
   ;enforces the hierchical fill constraints. 
 ;so...filling a category implies traversing a sorted map of unfilled demands. 
@@ -144,79 +141,87 @@
 ;  [supplystore parameters fillstore ctx policystore t demand :useEveryone]
 ;  :blah!)
 
+
+;TODO -> implement defmessage macro....
+
+;Tom note 20 May 2013 -> message functions like the following, are suffixed by
+;   the \! character, by convention, to denote the possibility of side effects.
+;   The function signatures are pure, in that they return a context.  The naming
+;   convention will help identify when "messaging" is occuring.
+
 ;STATUS MESSAGES/ANNOUNCEMENTS -> build a macro or something...too repetitive.
 ;CONTEXUAL
-(defn request-fill [demandstore category d ctx]
+(defn request-fill! [demandstore category d ctx]
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
      (str "Highest priority demand in Category " category " is " (:name d) 
           " with priority " (:priority d)) nil ctx))
 
-(defn trying-to-fill [demandstore category ctx] 
+(defn trying-to-fill! [demandstore category ctx] 
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore) 
      (str "Trying to Fill Demand Category " category) nil ctx))
 
-(defn fill-demand [demandstore demandname ctx]
+(defn fill-demand! [demandstore demandname ctx]
    (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore)
       (str "Sourced Demand " demandname) nil ctx ))
 
-(defn can-fill-demand [demandstore demandname ctx]
+(defn can-fill-demand! [demandstore demandname ctx]
   (sim/trigger-event :CanFillDemand (:name demandstore) 
        demandname (str "Filled " demandname) nil ctx))
 
-(defn demand-fill-changed [demandstore demand ctx]
+(defn demand-fill-changed! [demandstore demand ctx]
   (sim/trigger-event :DemandFillChanged (:name demandstore) (:name demand) 
      (str "The fill for " (:name demand) " changed.") demand ctx))
 
-(defn sourced-demand [demandstore demand ctx]
+(defn sourced-demand! [demandstore demand ctx]
   (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore) 
      (str "Sourced Demand " (:name demand)) nil ctx))
 
-(defn activating-demand [demandstore demand t ctx]
+(defn activating-demand! [demandstore demand t ctx]
   (sim/trigger-event :ActivateDemand (:name demandstore) (:name demand)
      (str "Activating demand " (:name demand) " on day " t) nil ctx)) 
 
-(defn deactivating-demand [demandstore demand t ctx]
+(defn deactivating-demand! [demandstore demand t ctx]
   (let [dname (:name demand)]
     (sim/trigger-event :DeActivateDemand (:name demandstore) dname
        (str "DeActivating demand " dname " on day " t) dname ctx)))
 
 ;Look into unifying this with deactivating-unfilled....seems redundant.
-(defn deactivating-empty-demand [demand t ctx]
+(defn deactivating-empty-demand! [demand t ctx]
   (sim/trigger-event :DeActivateDemand :DemandStore (:name demand)  
        (str "Demand " (:name demand) " Deactivated on day " t
             " with nothing deployed ") ctx))    
 
-(defn deactivating-unfilled [demandstore demandname ctx] 
+(defn deactivating-unfilled! [demandstore demandname ctx] 
   (sim/trigger-event :DeActivateDemand (:name demandstore) demandname 
        (str "Demand " demandname " was deactivated unfilled") ctx))
 
-(defn removing-unfilled [demandstore demandname ctx] 
+(defn removing-unfilled! [demandstore demandname ctx] 
   (sim/trigger-event :FillDemand (:name demandstore) demandname
      (str "Removing demand " demandname " from the unfilled Q" nil ctx)))
 
-(defn adding-unfilled [demandstore demandname ctx] 
+(defn adding-unfilled! [demandstore demandname ctx] 
   (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
      (str "Adding demand " demandname " to the unfilled Q") nil ctx))
 
-(defn ghost-returned [demand unitname ctx]
+(defn ghost-returned! [demand unitname ctx]
   (sim/trigger-event :GhostReturned (:src demand) unitname 
      "Ghost for src " (:src demand) " left deployment." ctx))
 
-(defn sending-home [unitname ctx] 
+(defn sending-home! [unitname ctx] 
   (sim/trigger-event :supply-update :DemandStore unitname 
      (str "Send Home Caused SupplyUpdate for " unitname) ctx))
 
-(defn disengaging [demand unitname ctx]
+(defn disengaging! [demand unitname ctx]
   (sim/trigger-event :DisengageUnit :DemandStore unitname 
      (str "Disengaging unit" unitname " from de-activated demand" 
         (:name demand))))
 
-(defn disengaging-home [demandstore demand unit ctx]
+(defn disengaging-home! [demandstore demand unit ctx]
   (sim/trigger-event :DisengageUnit (:name demandstore)  (:name unit) ;WRONG
      (str "Sending unit" (:name unit) 
           "home from demand" (:name demand) unit ctx)))
 
-(defn overlapping [demandstore demand unit ctx]
+(defn overlapping! [demandstore demand unit ctx]
   (sim/trigger-event :overlapping-unit (:name demandstore) (:name unit)
         (str "Overlapping unit" (:name unit) " in demand" 
              (:name demand)) unit ctx))
@@ -246,47 +251,14 @@
       ;NEED TO ACCOUNT FOR RESTRICTED SUPPLY....buckets, so to speak.
       source-mode)))
 
-;Need to account for two types of supply that are already tagged: 
-;followOnBuckets and DeployableBuckets are in the supply store...
+;Tom note 20 May 2013 -> After a lengthy thinking cycle, I resolved to define 
+;a useful little language for describing categories, that is, elements of 
+;demand and the contextual information for how they may be filled. 
+;This should eliminate a slew of duplication and complexity from the VBA 
+;implementation, since we can use the category of fill to select eligible 
+;demands, and to inform suitable supply.  
 
-;deployable buckets is a set of all deployable supply....
-;{:src {units}} 
-
-
-;followon buckets have an extra branch in the tree, for the demandgroup.
-;{:group {:src {units ...}}}
-
-;we could view deployable buckets as another group.... 
-;{:any {:src {units....}}}
-
-;{}
-
-;Or....we could have a simply query infrastructure based on tags....
-
-;filling followons is a restricted fill
-
-;We scope the unfilled demands down to the intersection of demands with demand 
-;groups that intersect with the groups in the followon buckets.
-;For each category in this subset of unfilled demand, we try to fill the 
-;category using ONLY deployable supply that is slotted for followon in the same 
-;demand group...
-;{:group {:category #{units...} 
-; :cat2 #{units...}}}
-  ;we scope the deployable supply down to just the supply for the demand.
-  ;we're still hierarchically filling the demands, by priority by category, 
-  ;except if we don't have any supply for the given category, we skip over.
-;of all the unfilled demands, which demands are eligible for follow-on supply? 
-  ;for each follow-on eligible demand,
-
-
-;we currently perform a phased fill, namely, fill using the followons, in 
-;an effort to exhaust them before we release them....
-;release the maximum utilizers (legacy stuff).
-;fill the remaining demands in a hierarchical order. 
-
-;MarathonOpFill.sourceDemand(supplystore, parameters, fillstore, ctx, 
-;policystore, t, demand, "DEF", followonbuckets(demand.demandgroup), 
-;onlyUseFollowons)
+;Examples of categories follow:
 
 ;(fill-demands "SRC1" "Group2") ; => find all eligible demands for SRC1 that 
 ;have group2 as a demandgroup, if there's any grouped supply, try using that to
@@ -320,26 +292,29 @@
 ;    we already have a some book-keeping, in the form of a set of units that 
 ;    are in follow-status due to disengagement. 
 
-;so we need two new functions...
+;Categories are used by two new functions: find-eligible-demands, defined here,
+;and find-eligible-supply, defined in marathon.sim.supply
 
 ;Note -> find-eligible demands is...in a general sense, just a select-where 
 ;query executed against the demandstore...
 
-;find-eligible-demands 
-;find-eligible-supply
+;find-eligible-demands is implemented as multimethod that dispatches based on 
+;type of the category that's passed in.  category-type provides a simple 
+;dispatch mechanism.  Note-> could use built-in hierarchy functions to do this.
 (defn category-type [x]
   (cond (or (keyword? x) (string? x))  :simple            
         (vector? x) :src-group 
         (map? x)    :rule-map
         :else (throw (Exception. "Unknown category type " (type x)))))
         
-;suitability comes in later...
 (defmulti find-eligible-demands (fn [store category] (category-type category)))
 ;matches for srcs and keys.
 (defmethod find-eligible-demands :simple [store category] 
   (get-in store [:unfilledq category])) ;priority queue of demands.
 
-;can probably extend this to allow for arbitrary predicates...
+;This is a general utility function, that allows us to derive predicates based
+;on atomic values, sets, or maps.  Used for filtering demands.
+;Can probably extend this to allow for arbitrary predicate functions (later).
 (defn make-member-pred [g]
   (if (or (set? g) (map? g))
     #(contains? g %)
@@ -391,8 +366,7 @@
   ;We use our UnfilledQ to quickly find unfilled demands. 
   (loop [pending   (find-eligible-demands demandstore category)   
          ctx       (trying-to-fill demandstore category ctx)]
-    (if (empty? pending)
-      ctx ;no demands to fill!
+    (if (empty? pending) ctx ;no demands to fill!      
       (let [demand      (val (first pending))                    
             demandname  (:name demand)           ;try to fill the topmost demand
             startfill   (unit-count demand)
@@ -418,12 +392,14 @@
 ;NOTE...since categories are independent, we could use a parallel reducer here..
 ;filling all unfilled demands can be phrased in terms of fill-category...
 
+;higher-order function for filling demands.
 (defn fill-demands-with [ctx f]
   (reduce (fn [acc c] (f (get-demandstore acc) c acc))
       ctx (unfilled-categories (get-demandstore ctx))))
 
+;implements the default hierarchal, stop-early fill scheme.
 (defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
-
+;implements the try to fill all demands, using follow-on-supply.
 (defn fill-followons [ctx]
   (if-let [followon-keys (get-followon-keys ctx)]
     (->> (fn [store category ctx] 
@@ -436,6 +412,8 @@
 
 ;Perform a prioritized fill of demands, heirarchically filling demands using 
 ;followon supply, then using the rest of the supply.
+;TOM Note 20 May 2013 -> 't may not be necessary, since we can derive it from 
+;context.  
 (defn fill-demands [t ctx]
   (->> ctx
     (fill-follow-ons ctx)
@@ -455,6 +433,8 @@
                 (f (disable store demand-name) demand-name) store))
       demandstore (mapcat (partial tag/get-subjects tags) disable-tags))))
 
+;1) Tom Note 20 May 2013 -> It would be nice to have a function or macro for 
+;   defining nested updates like this, as it will probably happen quite a bit.
 (defn remove-demand [demandstore demandname]
   (if (contains? (:demand-map demandstore) demandname)
     (let [{:keys [activations deactivations demand-map]} demandstore
@@ -462,10 +442,10 @@
           dname  (:name demand)
           tstart  (:startday demand)
           tfinal (+ tstart (:duration demand))]
-      (-> demandstore 
+      (-> demandstore                                                        ;1)
         (update-in [:demand-map] dissoc demand-map demand-name)
         (update-in [:activations] update-in activations [tstart] dissoc dname)
-        (update-in [:deactivations]  ;UGLY
+        (update-in [:deactivations]  
                    update-in deactivations [tfinal] dissoc dname)))
     demandstore)) 
 
@@ -476,8 +456,8 @@
 (defn disable [demandstore demandname]
   (update-in demandstore [:tags] tag/remove-tag :enabled demandname))
 
-;Simple wrapper for demand update requests.
-(defn request-demand-update [t demandname ctx]
+;Simple wrapper for demand update requests.  
+(defn request-demand-update! [t demandname ctx]
   (sim/request-update t demandname :demand-update ctx))
 
 ;TOM note 27 Mar 2011 ->  I;d like to factor these two methods out into a single 
@@ -488,18 +468,21 @@
 ;CONTEXTUAL
 (defn add-activation [t demandname demandstore ctx]
   (let [actives (get-in demandstore [:activations t] #{})]
-    (->> (request-demand-update t demandname ctx) ;FIXED - fix side effect
+    (->> (request-demand-update! t demandname ctx) ;FIXED - fix side effect
       (sim/merge-updates 
         {:demandstore (assoc-in demandstore [:activations t] ;UNPRETTY 
                                 (conj actives demandname))}))))
 
+
 ;Register demand deactviation for a given day, given demand.
+;1)Tom Note 20 May 2013 -> Our merge-updates function looks alot like entity 
+;  updates in the component-based model.  Might be easy to port...
 ;CONTEXTUAL
 (defn add-deactivation [t demandname demandstore ctx]
   (let [inactives (get-in demandstore [:deactivations t] #{})
         tlast     (max (:tlastdeactivation demandstore) t)]
-    (->> (request-demand-update t demandname ctx) ;FIXED - fix side effect
-      (sim/merge-updates ;UNPRETTY
+    (->> (request-demand-update! t demandname ctx) 
+      (sim/merge-updates                                                     ;1)
         {:demandstore (-> (assoc demandstore :tlastdeactivation tlast)
                           (assoc-in [:deactivations t] 
                             (conj inactives demandname)))}))))
@@ -511,19 +494,19 @@
     (->> (add-activation startday demand-name demandstore ctx)
          (add-deactivation (+ startday duration) demand-name demandstore))))
 
-;TOM Change 6 Dec 2010
-;Introducing this sub, to be inserted into the mainmodel loop.
 ;Its purpose is to maintain a running list of demands (ActiveDemands dictionary)
 ;which will help us only fill active demands. How do demands get added to the 
 ;list? Upon initialization, we schedule their activation day and deactivation 
-;day (start + duration). During the course of the mainmodel loop, we have a 
+;day (start + duration). During the course of the simulation, we have a 
 ;listener that checks to see if the current day is a day of interest, 
-;specifically if it;s an activation day. Note that this idea, partitioning our 
-;days into "days of interest", while localized to handle demand activations and 
-;deactivations, could easily be extended to a general "days of interest" 
-;manager, with subscribed handlers and subroutines to run. In fact, this is 
-;exactly what an event step simulation does. We;re just copping techniques and 
-;modifying them for use in a timestep sim to make it more efficient.
+;specifically if it's an activation day. 
+
+;Note that this idea, partitioning our days into "days of interest", while 
+;localized to handle demand activations and deactivations, could easily be 
+;extended to a general "days of interest" manager, with subscribed handlers and 
+;subroutines to run. In fact, this is exactly what an event step simulation 
+;does. We;re just copping techniques and modifying them for use in a timestep 
+;sim to make it more efficient.
 
 (defn activations? [t demandstore] 
   (contains? (:activations demandstore) t))
@@ -533,7 +516,7 @@
 (defn activate-demand [demandstore t d ctx]
   (let [store (-> (assoc-in demandstore [:activedemands (:name d)] d)
                   (register-change (:name d)))]               
-    (->> (activating-demand store d t ctx)
+    (->> (activating-demand! store d t ctx)
       (update-fill store (:name d)))))    
 
 (defn  get-activations  [demandstore t] (get (:activations demandstore) t))
@@ -545,11 +528,11 @@
 	            (let [store (get-demandstore ctx)]
 	              (activate-demand store t (get-demand store dname) ctx))) 
 	          ctx 
-	          (get-activations demandstore)))
+	          (get-activations demandstore))))
 
 (defn send-home-units [demand t ctx]
   (if (empty-demand? demand)
-    (deactivating-empty-demand demand t ctx)
+    (deactivating-empty-demand! demand t ctx)
     (->> (units-assigned demand) ;otherwise send every unit home.
       (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
       (sim/merge-updates
@@ -562,7 +545,7 @@
     (throw (Exception. (str "DeActivating an inactive demand: " (:name d))))) 
   (let [store (-> (update-in demandstore [:activedemands] dissoc (:name d))
                   (register-change (:name d)))]
-    (->> (deactivating-demand store d t ctx)
+    (->> (deactivating-demand! store d t ctx)
          (send-home-units demand t)
          (update-fill store (:name d)))))    
 
@@ -592,6 +575,9 @@
     demandstore 
     (assoc-in demandstore [:changed] demandname 0)))
 
+
+;TOM Note 20 May 2013 -> need to abstract fillrule, etc. behind a function, 
+;preferably one that uses keywords.
 ;inject appropriate tags into the GenericTags
 (defn tag-demand [demand demandstore & {:keys [extras]}]
   (update-in demandstore [:tags] tags/multi-tag 
@@ -647,16 +633,10 @@
     :else (->> (if (ghost? unit) (ghost-returned demand unitname ctx) ctx)  
             (u/change-state unit :Reset 0 nil)))) ;2)
 
-;TOM Change 7 Dec 2010 -> removed deactivation code from sourcedemand, placed it
-;in a separate sub.
 ;This sub implements the state changes required to deactivate a demand, namely, 
 ;to send a unit back to reset. The cases it covers are times when a demand is 
 ;deactivated, and units are not expecting to overlap. If units are overlapping 
-;at a newly-inactive demand, then they get sent home simultaneously. For this 
-;reason, we take the abs(unit) to get both overlapping and bogging units.
-;Alex's convention for overlapping units was a negative value for unitsdeployed.
-;TODO -> Remove convention of negative cycle time = BOG, transition to stateful 
-;information contained in unit data, or derived from Policy data.
+;at a newly-inactive demand, then they get sent home simultaneously. 
 ;TOM Change 14 Mar 2011 <- provide the ability to send home all units or one 
 ;unit...default is all units
 ;CONTEXTUAL
@@ -669,9 +649,7 @@
     (->> (sim/trigger-event :supply-update :DemandStore unitname ;WRONG
               (str "Send Home Caused SupplyUpdate for " unitname) ctx) ;WRONG
          (withdraw-unit unit demandgroup) 
-         (sim/trigger-event :DisengageUnit :DemandStore unitname 
-            (str "Disengaging unit" unitname " from de-activated demand" 
-                 (:name demand)))))) 
+         (disengaging! demand unitname) 
 
 
 ;there WILL be things happening to the ctx, possible mutations and such, that 
@@ -681,6 +659,8 @@
 ;supply, demand, etc, even context.  so change-state will have big changes...
 ;We need a way to dispatch based on the changes.
 ;Again, event handling could work....
+;change-state is a high-level simulation transition function for either the 
+;unit simulation, or the supply simulation.
 
  
 ;TEMPORARY.....until I figure out a better, cleaner solution.
@@ -689,12 +669,11 @@
 ;CONTEXTUAL
 (defn- disengage-unit [demand demandstore unit ctx & [overlap]]
   (if overlap 
-    (->> (overlapping demandstore demand unit ctx)
+    (->> (overlapping! demandstore demand unit ctx)
          (d/send-overlap demand unit))
     (->> (send-home (sim/current-time ctx) demand unit ctx)
-         (disengaging-home demandstore demand unit))))
+         (disengaging-home! demandstore demand unit))))
 
-;RE-LOOK...what are the returns?  what's being operated on?  
 ;This is also called independently from Overlapping_State.....
 ;Remove a unit from the demand.  Have the demand update its fill status.
 ;move the unit from the assigned units, to overlappingunits.
@@ -703,15 +682,14 @@
   (let [demand    (get-in demandstore [:demandmap demandname])
         nextstore (register-change demandstore demand-name)
         ctx       (disengage-unit demand demandstore unit ctx overlap)]  
-    (if (zero? (:required demand)) ;WRONG 
-      (update-fill demand-name (:unfilledq demandstore) demandstore ctx) ;WRONG
-;    demandstore)));WRONG
+    (if (zero? (:required demand)) 
+      (update-fill demand-name (:unfilledq demandstore) demandstore ctx)
       ctx)))
 
 ;Tom change 6 Dec 2010
 ;Sub to register or deregister Demands from the UnfilledQ
 ;UnfilledQ partitions the set of demands that are unfilled
-;When we go to look for demands that need filling, we traverse the keys linearly.
+;When we go to look for demands that need filling, we traverse keys in order.
 ;Only keys that exist will be filled ...
 ;Currently, we have no implemented way of prioritizing SRC fills over eachother, 
 ;but it also should not matter due to the independence of the SRC populations.
@@ -719,16 +697,10 @@
 ;this is data driven/positional.
 ;The basic idea is this:
 ;Upon initialization of the demand, we tag a field in the demand and associate
-;it with priority. This will, by default, be the positional location of the 
-;demand in the data (i.e. it;s row index). The idea is that the user will put 
-;data in priority order. Note - with the advent of "priority" associated with
+;it with priority. Note - with the advent of "priority" associated with
 ;the demand, we can always just read this in as another parameter in the data. 
-;Then position won;t matter, only data.
 ;Basic demand events are Activation, Deactivation, Fill, Unfill.
-;Marathon3 currently models these events by filling an array, aDEFDemandData, 
-;with a boatload of heterogeneous DemandData containers, which contain info on 
-;status. Basically, if the demand is active, its status should be true. Our goal 
-;is to move this information from a polling environment, where we have to
+;Our goal is to move this information from a polling environment, where we must
 ;traverse the entire array in O(N) worst case time, every day, to a pushing 
 ;environment. In a push environment, we check for the existence of unfilled 
 ;demands very effeciently, 0(1) constant time, and upon discovering the
@@ -739,14 +711,6 @@
 ;A. there are unfilled demands, 
 ;B. what the most important unfilled demand is, 
 ;C. what happens when we fill the demand (take the demand off the q or not?)
-;aDEFDemandData is the indicator we use to capture active demands, it's the only 
-;thing that changes state ..
-;One more note, this assumes an atomic model of filling demands -> we split 
-;demands up into individual units, which we fill. Rather than keeping track of
-;the quantity filled at each demand to determine overall fill, we only have a 
-;binary filled/unfilled in the atomic model. This means we don't ever check the 
-;condition that a demand might have gained a unit, via deployment, and still 
-;remain unfilled. It's impossible.
 
 ;CONTEXTUAL - UGLY!
 (defn update-fill [demandstore demandname ctx]
@@ -763,17 +727,17 @@
                 nextunfilled (if (= 0 (count demandq)) 
                              (dissoc unfilled src) 
                              (assoc unfilled src demandq))]
-            (->> (removing-unfilled demandstore demandname ctx)
+            (->> (removing-unfilled! demandstore demandname ctx)
                  (sim/merge-updates 
                    {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
-          (deactivating-unfilled demandstore demandname ctx))      ;notification
+          (deactivating-unfilled! demandstore demandname ctx))      ;notification
         ;demand is unfilled, make sure it's added
         (let [demandq (get unfilled src (empty-sorted-dictionary))]  
           (if (contains? demandq fill-key) ctx ;pass-through
             (->> (sim/merge-updates ;add to unfilled 
                    {:demandstore (assoc-in demandstore [:unfilled src] 
                        (assoc demandq fill-key demand))} ctx) ;WRONG?
-                 (adding-unfilled demandstore demandname)))))))) 
+                 (adding-unfilled! demandstore demandname)))))))) 
 
 ;>>>>>>>>>>>>>>>>>>Deferred>>>>>>>>>>>>>>>>>>>>>>
 ;We'll port this when we  come to it....not sure we need it...
