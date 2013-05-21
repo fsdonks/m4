@@ -28,6 +28,9 @@
   [m subject] 
   (get-in m [:subjects subject]))
 
+(defn has-tag? [tags tag subject] (contains? (get-tags tags subject) tag))
+;(defn has-subject? [tags tag subject] (has-tag? tags tag subject)) 
+
 (defn get-subjects
   "Fetch any subjects associated with a tag, from database m."
   [m tag] (get-in m [:tags tag]))

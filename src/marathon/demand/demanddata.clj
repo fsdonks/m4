@@ -110,5 +110,5 @@
 (defn fill-with [d fill]
   (assoc d :fills 
      (conj (:fills d) 
-           (name (fill-source fill)))))  
+           (name (:fill-source fill)))))  
   
