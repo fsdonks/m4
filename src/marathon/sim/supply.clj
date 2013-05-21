@@ -99,13 +99,33 @@
 (defn spawning-ghost! [unit ctx]
   (sim/trigger :SpawnGhost (:name unit) (:name unit)
      (str "Spawned a ghost " (:name unit)) nil ctx))             
-(defn source-key [tag] (memoize (keyword (str "SOURCE_" tag))))
-(defn sink-key [tag] (memoize (keyword (str "SINK_" tag))))
+(defn key-tag [base tag] (memoize (keyword (str base tag))))
+;helper function for defining key-building functions.
+(defmacro defkey [name base] `(def ~name (~'partial ~'key-tag ~base))) 
+(defkey source-key "SOURCE_")
+(defkey sink-key   "SINK_")
+(defkey compo-key  "COMPO_") 
+(defkey behavior-key "BEHAVIOR_")
+(defkey title-key   "TITLE_")
+(defkey policy-key  "POLICY_")
+
+(defn tag-source [tags source] (tag/tag-subject tags source :sources))
+(defn add-bucket [supply bucket-name]
+  (let [buckets (:deployable-buckets supply)]
+    (if (contains? buckets bucket-name) supply 
+      (assoc-in supply [:deployable-buckets bucket-name] {}))))
 
 (defn ghost? [tags unit] (tag/has-tag? tags :ghost (:name unit)))
-  (let [sourcename (source-key (:src unit)) 
+(defn default-tags [{:keys [component behavior OITitle ] 
+  (compo-key (:component unit) 
+   behavior-key behavior-key   
 (defn tag-unit [supply unit [extras]]
-  (
+  (let [sourcename (source-key (:src unit))
+        unitname   (:name unit)
+        tags       (-> (:tags supply)
+                       (tag/multi-tag unitname (]
+    
+    
 ;'inject appropriate tags into the GenericTags
 ;Public Sub tagUnit(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, Optional extras As Dictionary)
 ;'Set tmptags = New Dictionary
@@ -704,22 +724,7 @@
 ;Public Function getSources(supply As TimeStep_ManagerOfSupply) As Dictionary
 ;Set getSources = supply.tags.getSubjects("Sources")
 ;End Function
-;Public Sub tagSource(tags As GenericTags, source As String)
-;tags.addTag "Sources", source
-;End Sub
 
-;Public Sub addBucket(supply As TimeStep_ManagerOfSupply, bucket As String)
-;Dim ptr As Dictionary
-;With supply
-;    If Not .DeployableBuckets.exists(bucket) Then
-;        Set ptr = New Dictionary
-;        .DeployableBuckets.add bucket, ptr
-;    Else
-;        Set ptr = .DeployableBuckets(bucket)
-;    End If
-;End With
-;
-;End Sub
 ;'TODO -> update calls to this guy in behaviors.  Should fail, currently.
 ;'sub to register a set of units that need to be utilized, or sent to reset.
 ;Public Sub addFollowOn(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, _
