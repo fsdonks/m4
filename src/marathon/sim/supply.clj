@@ -109,64 +109,56 @@
 (defkey title-key   "TITLE_")
 (defkey policy-key  "POLICY_")
 
-(defn tag-source [tags source] (tag/tag-subject tags source :sources))
+;register source as being a member of sources, so it can be looked at when 
+;filling supply.
+(defn tag-source [source tags] (tag/tag-subject tags source :sources))
 (defn add-bucket [supply bucket-name]
   (let [buckets (:deployable-buckets supply)]
     (if (contains? buckets bucket-name) supply 
       (assoc-in supply [:deployable-buckets bucket-name] {}))))
 
 (defn ghost? [tags unit] (tag/has-tag? tags :ghost (:name unit)))
-(defn default-tags [{:keys [component behavior OITitle ] 
-  (compo-key (:component unit) 
-   behavior-key behavior-key   
-(defn tag-unit [supply unit [extras]]
-  (let [sourcename (source-key (:src unit))
-        unitname   (:name unit)
-        tags       (-> (:tags supply)
-                       (tag/multi-tag unitname (]
-    
-    
-;'inject appropriate tags into the GenericTags
-;Public Sub tagUnit(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, Optional extras As Dictionary)
-;'Set tmptags = New Dictionary
-;Dim sourcename As String
-;
-;With unit
-;    sourcename = "SOURCE_" & .src
-;    supply.tags.multiTag .name, "COMPO_" & .component, "BEHAVIOR_" & .behavior.name, _
-;        "TITLE_" & .OITitle, "POLICY_" & .policy.name, sourcename, "Enabled"
-;End With
-;
-;tagSource supply.tags, sourcename
-;
-;If Not (extras Is Nothing) Then
-;    tagExtras supply, unit, extras
-;End If
-;
-;End Sub
+
+;default unit tags
+(defn default-tags [{:keys [src component behavior oi-title policy]}] 
+  [(compo-key component) (behavior-key behavior) (title-key oi-title) 
+   (policy-key (:name policy)) (source-key src) :enabled])
+
 ;'TOM Change 27 Sep 2012
-;'Special parser to handle unit tags.
-;Public Sub tagExtras(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, extras As Dictionary)
-;Dim tg
-;For Each tg In extras
-;    Select Case tg
-;        Case ":fenced"
-;            tagAsFenced supply.tags, extras(tg), unit.name
-;        Case ":keep-fenced"
-;            If extras(tg) = False Then
-;                supply.tags.addTag "one-time-fence", unit.name
-;            End If
-;        Case Else
-;            supply.tags.addTag CStr(tg), unit.name
-;    End Select
-;Next tg
-;
-;End Sub
-;'this might be suitable to keep in the supplymanager...
+;Adds meta data to the tags, to identify the unit as being a member of a fenced
+;group of supply.  Fenced groups of supply automatically provide a special set 
+;of supply that fill functions can utilize when making demand decisions.
+(defn tag-as-fenced [tags fencegroup unitname]
+  (-> (tag/tag-subject tags fencegroup unitname)
+      (tag/tag-subject unitname :fenced)))        
+
+;Note -> we should generalize this into some special.  Like deftag, or 
+;defsupply tag, which looks at a library of tags to find out if it should do
+;any special processing.  
+(defn tag-extras [unit extras tags]
+  (let [unitname (:name unit)]
+    (reduce (fn [tags tg] 
+              (case tg 
+                :fenced (tag-as-fenced tags tg unitname)
+                :keep-fenced (tag/tag-subject tags unitname :one-time-fence)
+                (tag/tag-subject tags unitname tg))) tags extras)))
+                            
+
+;inject appropriate tags into the supply tags.
+(defn tag-unit [supply unit [extra-tags]]
+  (let [sourcename (source-key (:src unit))]
+    (->> (into (default-tags unit) extra-tags) 
+         (tag/multi-tag (:tags supply) (:name unit))
+         (tag-source sourcename)
+         (tag-extras unit extra-tags)
+         (assoc supply :tags))))
+
+;this might be suitable to keep in the supplymanager...
 (defn add-src [supply src] 
   (let [scoped (:srcs-in-scope supply)]
     (if (contains? scoped src) supply 
-      (assoc-in supply [:srcs-in-scope src] (count scoped))))) 
+      (assoc-in supply [:srcs-in-scope src] (count scoped)))))
+
 (defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
 
 ;Public Function assignBehavior(behaviors As TimeStep_ManagerOfBehavior, unit As TimeStep_UnitData, behaviorname As String) As TimeStep_UnitData
@@ -175,84 +167,9 @@
 (defn assign-behavior [behaviors unit behaviorname]
   (behaviors/assign-behavior unit behaviorname)) ;WRONG  behaviors doesn't exist yet.
 
-;'This is decoupled fairly well.
-;Public Function registerUnit(supply As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, unit As TimeStep_UnitData, Optional ghost As Boolean, Optional context As TimeStep_SimContext, Optional extratags As Dictionary) As TimeStep_ManagerOfSupply
-;
-;With supply
-;    .unitindex.add .unitindex.count + 1, unit.name
-;    .unitmap.add unit.name, unit
-;    If unit.behavior Is Nothing Then Set unit = assignBehavior(behaviors, unit, vbNullString) 'unit's behavior can be set ahead of time,else
-;    'will resort to default behaviors by component. (currently they're identical).
-;    tagUnit supply, unit, extratags 'add default tags for this unit
-;    
-;    If ghost = False Then
-;        spawnUnitEvent unit, context
-;        UpdateDeployStatus supply, unit, , True, context
-;    Else
-;        spawnGhostEvent unit, context
-;        .hasGhosts = True
-;    End If
-;    
-;    addSRC supply, unit.src
-;End With
-;
-;Set registerUnit = supply
-;End Function
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
-(defn register-unit [supply behaviors unit & [ghost ctx extratags]]
-  (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-        supply (-> (assoc-in supply [:unitmap (:name unit)] unit)
-                   
-                   
-  )
-
-;Public Function NewUnit(supply As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, behaviors As TimeStep_ManagerOfBehavior, name As String, src As String, OITitle As String, component As String, _
-;                            cycletime As Single, policy As String, Optional behavior As IUnitBehavior)
-;Dim unit As TimeStep_UnitData
-;Set unit = createUnit(name, src, OITitle, component, cycletime, policy, parameters, policystore, behavior)
-;Set supply = registerUnit(supply, behaviors, unit)
-;
-;End Function
 
 
-
-;
-;'Encapsulate.
-
-;'Encapsulate.
-;'this might be suitable to keep in the supplymanager...
-;Public Sub UpdateDeployStatus(supply As TimeStep_ManagerOfSupply, uic As TimeStep_UnitData, _
-;                                Optional followon As Boolean, Optional spawning As Boolean, _
-;                                    Optional context As TimeStep_SimContext)
-;
-;'If uic.name = "188_SRC3_NG" Then
-;'     Debug.Print "balls"
-;'End If
-;
-;If followon = False Then
-;    UpdateDeployability uic, supply.DeployableBuckets, followon, spawning, context
-;Else
-;    UpdateDeployability uic, getFollowonBucket(supply.followonbuckets, uic.followoncode), followon, spawning, context
-;End If
-;
-;End Sub
-;'Encapsulate? -> nah, it's already independent.
-;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
-;
-;If followoncode = vbNullString Then
-;    Err.Raise 101, , "No followon code! Units elligble for followon should have a code!"
-;Else
-;    With followonbuckets
-;        If .exists(followoncode) Then
-;            Set getFollowonBucket = .item(followoncode)
-;        Else
-;            Set getFollowonBucket = New Dictionary
-;            .add followoncode, getFollowonBucket
-;        End If
-;    End With
-;End If
-;
-;End Function
 ;'TOM Change
 ;'Sub operates on uics to register them as deployable with a dictionary of dictionaries
 ;'Dictionary<Rule, <UICName,Unitdata>>
@@ -340,6 +257,69 @@
 ;
 ;
 ;End Sub
+
+
+
+(defn update-deploy-status [supply unit [followon? spawning? ctx]]
+  (let [bucket (if followon?       
+                 (get-followon-bucket (:followonbuckets supply) 
+                                      (:followoncode unit))
+                 (:deployable-buckets supply))] 
+    (update-deployability unit buckets  followon? spawning? ctx)))
+
+
+
+;Note -> the signature for this originally returned the supply, bet we're not 
+;returning the context.  I think our other functions that use this guy will be
+;easy to adapt, just need to make sure they're not expecting supplystores.
+;Conjoins a unit to the supply, under the context.  Optional parameters for 
+;communicating whether the unit is a ghost, as well as additional tags to be 
+;added on-top-of the default tags derived from the unit data.
+(defn register-unit [supply behaviors unit & [ghost ctx extra-tags]]
+  (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
+        supply (-> (assoc-in supply [:unitmap (:name unit)] unit)
+                   (tag-unit unit extra-tags)
+                   (add-src (:src unit)))
+        ctx    (assoc-in ctx [:state :supplystore] supply)]
+    (if ghost 
+      (->> (spawning-ghost! unit ctx)
+           (assoc-in [:state :supplystore :has-ghosts] true))
+      (->> (spawning-unit! unit ctx)
+           (update-deploy-status supply unit)))))
+
+;Public Function NewUnit(supply As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, behaviors As TimeStep_ManagerOfBehavior, name As String, src As String, OITitle As String, component As String, _
+;                            cycletime As Single, policy As String, Optional behavior As IUnitBehavior)
+;Dim unit As TimeStep_UnitData
+;Set unit = createUnit(name, src, OITitle, component, cycletime, policy, parameters, policystore, behavior)
+;Set supply = registerUnit(supply, behaviors, unit)
+;
+;End Function
+
+
+
+;
+;'Encapsulate.
+
+;'Encapsulate.
+
+;'Encapsulate? -> nah, it's already independent.
+;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
+;
+;If followoncode = vbNullString Then
+;    Err.Raise 101, , "No followon code! Units elligble for followon should have a code!"
+;Else
+;    With followonbuckets
+;        If .exists(followoncode) Then
+;            Set getFollowonBucket = .item(followoncode)
+;        Else
+;            Set getFollowonBucket = New Dictionary
+;            .add followoncode, getFollowonBucket
+;        End If
+;    End With
+;End If
+;
+;End Function
+
 ;
 ;Private Function CanDeploy(unit As TimeStep_UnitData) As Boolean
 ;
@@ -713,14 +693,6 @@
 ;End Function
 
 
-;'TOM Change 27 Sep 2012
-;'Adds meta data to the tags, to identify the unit as being a member of a fenced group of
-;'supply.  Fenced groups of supply automatically provide a special set of supply that fill functions
-;'can utilize when making demand decisions.
-;Public Sub tagAsFenced(tags As GenericTags, fencegroup As String, unitname As String)
-;tags.multiTag fencegroup, unitname
-;tags.addTag "fenced", unitname
-;End Sub
 ;Public Function getSources(supply As TimeStep_ManagerOfSupply) As Dictionary
 ;Set getSources = supply.tags.getSubjects("Sources")
 ;End Function
