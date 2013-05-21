@@ -148,7 +148,7 @@
 ;in demanddata.
 
 ;We only fill while we have feasible supply left.
-;We check deployables to0 efficiently find feasible supply.
+;We check deployables too efficiently find feasible supply.
 ;Not currently kept in priority order .... could be converted easily enough
 ;though.
 ;If we fill a demand, we take it off the queue.
@@ -357,7 +357,7 @@
         {:demand-store (tag-demand demand 
                        (schedule-demand demand 
                         (assoc-in demandstore [:demand-map dname] demand) ctx))
-        :policy-store  (policy/register-location dname policystore)})))) 
+         :policy-store  (policy/register-location dname policystore)})))) 
 
 
 (defn merge-fill-results [res ctx] 
@@ -427,7 +427,7 @@
             (->> (removing-unfilled! demandstore demandname ctx)
                  (sim/merge-updates 
                    {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
-          (deactivating-unfilled! demandstore demandname ctx))      ;notification
+          (deactivating-unfilled! demandstore demandname ctx))     ;notification
         ;demand is unfilled, make sure it's added
         (let [demandq (get unfilled src (sorted-map))]  
           (if (contains? demandq fill-key) ctx ;pass-through
@@ -587,7 +587,7 @@
 (defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
 ;implements the try to fill all demands, using follow-on-supply.
 (defn fill-followons [ctx]
-  (if-let [followon-keys (supply/get-followon-keys ctx)]
+  (if-let [followon-keys (supply/get-followon-keys ctx)] ;DECOUPLE, eliminate supply dependency...
     (->> (fn [store category ctx] 
            (fill-category store [category followon-keys] ctx :stop-early false))
       (fill-demands-with ctx))))
@@ -603,7 +603,7 @@
 (defn fill-demands [t ctx]
   (->> ctx
     (fill-followons ctx)
-    (supply/release-max-utilizers)
+    (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
     (fill-hierarchically)))
 
 ;Its purpose is to maintain a running list of demands (ActiveDemands dictionary)
@@ -742,7 +742,7 @@
 
 ;The big finale...
 ;CONTEXTUAL
-(defn manage-demands [t {:keys [demandstore context] :as ctx}]
+(defn manage-demands [t ctx]
   (->> ctx
     (activate-demands t)
     (deactivate-demands t))) 

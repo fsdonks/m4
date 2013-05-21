@@ -1,75 +1,79 @@
-(ns marathon.sim.supply)
+;We're creating circular dependencies....that's bad.
+;We need to create some shared protocols, and then implement them.
+(ns marathon.sim.supply
+  (:require [marathon.demand [demanddata :as d] [demandstore :as store]]
+            [marathon.supply [unitdata :as udata]]
+            [marathon.sim [demand :as demand]   [policy :as policy]
+                          [unit :as u]          [fill :as fill]]           
+            [sim [simcontext :as sim] [updates :as updates]]
+            [util [tags :as tag]]))
+
+;COUPLING 
+;sim.demand => get-followon-keys release-max-utilizers
+
 ;TEMPORARILY ADDED for marathon.sim.demand
 (declare get-followon-keys release-max-utilizers)
-;'marathonopsupply
-;'11 July 2012 -> recasting of supply management.
-;'We define a supply simulation as a set of operations on supply simulation state.
-;'It's basically a decoupling of the earlier object hierarchy.
-;'Instead of encapsulating everything in the supply manager class, we're pulling out as much of
-;'the methods as possible, and providing a functional interface to modify supply managers.
+
+;marathonopsupply
+;11 July 2012 -> recasting of supply management.
+;We define a supply simulation as a set of operations on supply simulation state.
+;It's basically a decoupling of the earlier object hierarchy.
+;Instead of encapsulating everything in the supply manager class, we're pulling 
+;out as much of the methods as possible, and providing a functional interface to
+;modify supply managers.
 ;
-;'The end result is a lower-order supply manager that handles little to no internal functions, and
-;'manages some state that we need.  All the operations for pushing supply, in the context of a simulation
-;'are maintained here.
-;
-;Option Explicit
-;'TOM Change->
-;'   This is serving as a template for reorganizing the simulation.
-;'   The desire is to separate operations from data.
-;'   We have multiple levels of operations....
-;'   This library groups several levels of operations along the Supply domain.
-;'   The primary function is the ManageSupply function....
-;'   Manage supply eats core data....
-;
-;'TOM Change 24 April 2012 -> decoupled the getUpdates....now we pass in a list of updates from
-;'outside (usually via the engine), rather than having supplymanager need visibility on it.
-;Public Sub ManageSupply(day As Single, state As TimeStep_SimState)
-;Dim update
-;Dim unit As TimeStep_UnitData
-;Dim startloc As String
-;Dim finloc As String
-;Dim packet As TimeStep_UpdatePacket
-;
-;'TOM added 17 Sep 2012
-;Dim supply As TimeStep_ManagerOfSupply, context As TimeStep_SimContext
-;
-;Set supply = state.supplystore
-;Set context = state.context
-;
-;With supply
-;    'find pending supply updates for today
-;    Set .todayupdates = getSupplyUpdates(day, context)
-;    'for each update packet
-;    For Each update In .todayupdates
-;        Set packet = .todayupdates(update)
-;        
-;        'Decoupled
-;        'TODO -> see if we need to pass in tags explicitly.
-;        If isEnabled(.tags, packet.requestedby) Then 'filters out inactive (not being simulated) units.
-;            Set unit = .unitmap(packet.requestedby) 'grab the requested unit
-;            'update the unit relative to the time of request
-;            
-;            startloc = unit.LocationName
-;            'Decouple -> might need some decoupling here....
-;            'TODO replace unit.update with something cleaner from unitsim
-;            'Decoupled for now.
-;            Set unit = unit.update(packet.Elapsed(day, SimLib.lastupdate(unit.name, context)), context)
-;            'msg = "Updated Unit " & unit.name
-;            'TOM CHANGE 1 july 2011 -> looooots of dictionary allocations here, changed!
-;            'parent.trigger SupplyUpdate, name, unit.name, msg, , , supplyPacket(unit.name)
-;            'Decouple
-;            If supply.Verbose Then
-;                requestUnitUpdate day, unit, context
-;            Else
-;    '            triggerEvent supplyUpdate, name, unit.name, msg & " " & unit.getStats, , context 'supplyPacket(unit.name)
-;                supplyUpdateEvent supply, unit, "Updated Unit " & unit.name & " " & unit.getStats, context
-;            End If
-;                    
-;        End If
-;    Next update
-;End With
-;
-;End Sub
+;The end result is a lower-order supply manager that handles little to no 
+;internal functions, and manages some state that we need.  All the operations
+;for pushing supply, in the context of a simulation are maintained here.
+
+;TOM Change->
+;   This is serving as a template for reorganizing the simulation.
+;   The desire is to separate operations from data.
+;   We have multiple levels of operations....
+;   This library groups several levels of operations along the Supply domain.
+;   The primary function is the ManageSupply function....
+;   Manage supply eats core data....
+
+;Notifies the context of a supply update.
+(defn supply-update! [supply unit msg ctx]
+  (sim/trigger :supplyUpdate (:name supply) (:name unit) msg nil ctx))
+
+;get all pending supply updates.
+(defn get-supply-updates [t ctx]  (sim/get-updates t :supply-update ctx))
+
+(defn enabled? [tags unitname] (tag/has-tag? tags :enabled unitname))
+(defn disable  [tags unitname] (tag/untag-subject tags unitname :enabled))
+
+;Unit can request an update at a specified time ....
+(defn request-unit-update! [t unit ctx] 
+  (sim/request-update t (:name unit) :supply-update ctx))
+(defn unit-msg [unit] 
+  (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
+(defn get-supplystore [ctx] (-> ctx :state :supplystore))
+
+(defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
+(defn apply-update [supplystore update-packet ctx]
+  (let [unitname (:requested-by update-packet)]
+    (if (not (enabled? (:tags supplystore) unitname)) ctx 
+      (let [unit (get-unit supplystore unitname)]
+        (->> ctx       
+          (u/update unit (updates/elapsed t  (sim/last-update unitname ctx)))
+          (supply-update! supplystore unit (unit-msg unit)))))))
+;;Note -> there was another branch here originally....
+;;requestUnitUpdate day, unit, context
+
+;NOTE -> ambiguity between state and context here, need to clarify. 
+;TOM Change 24 April 2012 -> decoupled the getUpdates....now we pass in a list 
+;of updates from outside (usually via the engine), rather than having 
+;supplymanager need visibility on it.
+(defn manage-supply [day state]
+  (let [supply (:supply-store state)
+        ctx    (:context state)]
+    (if-let [today-updates (get-supply-updates day ctx)]
+      (reduce (fn [acc pckt] (apply-update (get-supplystore acc) pckt acc))
+              ctx today-updates)
+      ctx)))
+
 ;'A simple wrapper to unify the high level supply management.  We were calling this inline,
 ;'it's more consistent now.
 ;Public Sub ManageFollowOns(day As Single, state As TimeStep_SimState)
@@ -440,10 +444,7 @@
 ;isFirstDeployment = Not supply.tags.hasTag("hasdeployed", uic.name)
 ;End Function
 ;
-;'Notifies the context of a supply update.
-;Public Function supplyUpdateEvent(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, Optional msg As String, Optional context As TimeStep_SimContext)
-;triggerEvent supplyUpdate, supply.name, unit.name, msg, , context
-;End Function
+
 ;
 ;'process the unused follow-on units, changing their policy to complete cycles.
 ;Public Sub ReleaseFollowOns(supply As TimeStep_ManagerOfSupply, Optional context As TimeStep_SimContext)
@@ -540,13 +541,7 @@
 ;''supplyPacket.add "Updated", unitname
 ;''End Function
 ;
-;'''get all pending supply updates.
-;'TOM Change 24 April 2012
-;'get all pending supply updates.
-;Public Function getSupplyUpdates(t As Single, context As TimeStep_SimContext) As Dictionary
-;'Decoupled
-;Set getSupplyUpdates = context.updater.getUpdates(UpdateType.supply, t)
-;End Function
+
 ;
 ;
 ;'Decoupled.
@@ -664,11 +659,7 @@
 ;'getTime = parent.CurrentTime
 ;getTime = SimLib.getTime(context)
 ;End Function
-;'Unit can request an update at a specified time ....
-;Public Sub requestUnitUpdate(t As Single, unit As TimeStep_UnitData, Optional context As TimeStep_SimContext)
-;'Decoupled
-;SimLib.requestUpdate t, unit.name, UpdateType.supply, , context
-;End Sub
+
 ;'inject appropriate tags into the GenericTags
 ;Public Sub tagUnit(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, Optional extras As Dictionary)
 ;'Set tmptags = New Dictionary
@@ -719,15 +710,7 @@
 ;Public Sub tagSource(tags As GenericTags, source As String)
 ;tags.addTag "Sources", source
 ;End Sub
-;Public Function isEnabled(supplytags As GenericTags, unitname As String) As Boolean
-;isEnabled = supplytags.hasTag("Enabled", unitname)
-;End Function
-;Public Sub enable(supplytags As GenericTags, unitname As String)
-;supplytags.addTag "Enabled", unitname
-;End Sub
-;Public Sub disable(supplytags As GenericTags, unitname As String)
-;supplytags.removeTag "Enabled", unitname
-;End Sub
+
 ;Public Sub addBucket(supply As TimeStep_ManagerOfSupply, bucket As String)
 ;Dim ptr As Dictionary
 ;With supply
