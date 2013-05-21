@@ -47,8 +47,15 @@
 ;Unit can request an update at a specified time ....
 (defn request-unit-update! [t unit ctx] 
   (sim/request-update t (:name unit) :supply-update ctx))
+
+;Replaced by request-unit-update!
+;Public Sub requestSupplyUpdate(t As Single, unit As TimeStep_UnitData, context As TimeStep_SimContext)
+;SimLib.requestUpdate t, "SupplyManager", UpdateType.supply, , context
+;End Sub
+
 (defn unit-msg [unit] 
   (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
+
 (defn get-supplystore [ctx] (-> ctx :state :supplystore))
 
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
@@ -74,51 +81,80 @@
               ctx today-updates)
       ctx)))
 
-;'A simple wrapper to unify the high level supply management.  We were calling this inline,
-;'it's more consistent now.
-;Public Sub ManageFollowOns(day As Single, state As TimeStep_SimState)
-;ReleaseFollowOns state.supplystore, state.context
-;End Sub
-;
-;Public Sub requestSupplyUpdate(t As Single, unit As TimeStep_UnitData, context As TimeStep_SimContext)
-;SimLib.requestUpdate t, "SupplyManager", UpdateType.supply, , context
-;End Sub
-;
+;'A simple wrapper to unify the high level supply management.  We were calling 
+;this inline, it's more consistent now.
+(defn manage-followons [day ctx] (release-followons (get-supplystore ctx) ctx))
+
 ;Public Sub spawnUnitEvent(unit As TimeStep_UnitData, context As TimeStep_SimContext)
 ;SimLib.triggerEvent TimeStep_Msg.spawnunit, unit.name, unit.name, "Spawned Unit " & unit.name, , context
 ;End Sub
-;
+
+(defn spawning-unit! [unit ctx]
+  (sim/trigger :spawnnit (:name unit) (:name unit)
+     (str "Spawned Unit " (:name unit)) nil ctx))             
+
 ;Public Sub spawnGhostEvent(unit As TimeStep_UnitData, context As TimeStep_SimContext)
 ;SimLib.triggerEvent TimeStep_Msg.SpawnGhost, unit.name, unit.name, "Spawned a ghost", , context
 ;End Sub
-;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                                    ctx As TimeStep_SimContext, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
-;Dim tbl As GenericTable
-;Dim gunit As TimeStep_UnitData
+(defn spawning-ghost! [unit ctx]
+  (sim/trigger :SpawnGhost (:name unit) (:name unit)
+     (str "Spawned a ghost " (:name unit)) nil ctx))             
+(defn source-key [tag] (memoize (keyword (str "SOURCE_" tag))))
+(defn sink-key [tag] (memoize (keyword (str "SINK_" tag))))
+
+(defn ghost? [tags unit] (tag/has-tag? tags :ghost (:name unit)))
+  (let [sourcename (source-key (:src unit)) 
+(defn tag-unit [supply unit [extras]]
+  (
+;'inject appropriate tags into the GenericTags
+;Public Sub tagUnit(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, Optional extras As Dictionary)
+;'Set tmptags = New Dictionary
+;Dim sourcename As String
 ;
-;Set SupplyfromExcel = New TimeStep_ManagerOfSupply
-;'TODO -> turn this into a function.
-;UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, policystore, ctx
+;With unit
+;    sourcename = "SOURCE_" & .src
+;    supply.tags.multiTag .name, "COMPO_" & .component, "BEHAVIOR_" & .behavior.name, _
+;        "TITLE_" & .OITitle, "POLICY_" & .policy.name, sourcename, "Enabled"
+;End With
 ;
-;If ensureghost Then
-;    If Not SupplyfromExcel.hasGhosts Then
-;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
-;        Set gunit = associateUnit(gunit, SupplyfromExcel, ctx)
-;        registerUnit SupplyfromExcel, behaviors, gunit, True, ctx
-;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
-;            "added Default ghost unit to unitmap in supplymanager."
-;    End If
+;tagSource supply.tags, sourcename
+;
+;If Not (extras Is Nothing) Then
+;    tagExtras supply, unit, extras
 ;End If
 ;
-;End Function
-;Public Function NewUnit(supply As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, behaviors As TimeStep_ManagerOfBehavior, name As String, src As String, OITitle As String, component As String, _
-;                            cycletime As Single, policy As String, Optional behavior As IUnitBehavior)
-;Dim unit As TimeStep_UnitData
-;Set unit = createUnit(name, src, OITitle, component, cycletime, policy, parameters, policystore, behavior)
-;Set supply = registerUnit(supply, behaviors, unit)
+;End Sub
+;'TOM Change 27 Sep 2012
+;'Special parser to handle unit tags.
+;Public Sub tagExtras(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, extras As Dictionary)
+;Dim tg
+;For Each tg In extras
+;    Select Case tg
+;        Case ":fenced"
+;            tagAsFenced supply.tags, extras(tg), unit.name
+;        Case ":keep-fenced"
+;            If extras(tg) = False Then
+;                supply.tags.addTag "one-time-fence", unit.name
+;            End If
+;        Case Else
+;            supply.tags.addTag CStr(tg), unit.name
+;    End Select
+;Next tg
 ;
+;End Sub
+;'this might be suitable to keep in the supplymanager...
+(defn add-src [supply src] 
+  (let [scoped (:srcs-in-scope supply)]
+    (if (contains? scoped src) supply 
+      (assoc-in supply [:srcs-in-scope src] (count scoped))))) 
+(defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
+
+;Public Function assignBehavior(behaviors As TimeStep_ManagerOfBehavior, unit As TimeStep_UnitData, behaviorname As String) As TimeStep_UnitData
+;Set assignBehavior = behaviors.assignBehavior(unit, behaviorname)
 ;End Function
-;
+(defn assign-behavior [behaviors unit behaviorname]
+  (behaviors/assign-behavior unit behaviorname)) ;WRONG  behaviors doesn't exist yet.
+
 ;'This is decoupled fairly well.
 ;Public Function registerUnit(supply As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, unit As TimeStep_UnitData, Optional ghost As Boolean, Optional context As TimeStep_SimContext, Optional extratags As Dictionary) As TimeStep_ManagerOfSupply
 ;
@@ -130,13 +166,9 @@
 ;    tagUnit supply, unit, extratags 'add default tags for this unit
 ;    
 ;    If ghost = False Then
-;        'Decouple
-;        'triggerEvent TimeStep_Msg.SpawnUnit, unit.name, name, "Spawned Unit " & unit.name, , context
 ;        spawnUnitEvent unit, context
 ;        UpdateDeployStatus supply, unit, , True, context
 ;    Else
-;        'Decouple
-;        'triggerEvent SpawnGhost, name, name, "Spawned a ghost", , context
 ;        spawnGhostEvent unit, context
 ;        .hasGhosts = True
 ;    End If
@@ -146,22 +178,27 @@
 ;
 ;Set registerUnit = supply
 ;End Function
+(defn has-behavior? [unit] (not (nil? (:behavior unit))))
+(defn register-unit [supply behaviors unit & [ghost ctx extratags]]
+  (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
+        supply (-> (assoc-in supply [:unitmap (:name unit)] unit)
+                   
+                   
+  )
+
+;Public Function NewUnit(supply As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, behaviors As TimeStep_ManagerOfBehavior, name As String, src As String, OITitle As String, component As String, _
+;                            cycletime As Single, policy As String, Optional behavior As IUnitBehavior)
+;Dim unit As TimeStep_UnitData
+;Set unit = createUnit(name, src, OITitle, component, cycletime, policy, parameters, policystore, behavior)
+;Set supply = registerUnit(supply, behaviors, unit)
+;
+;End Function
+
+
+
 ;
 ;'Encapsulate.
-;'this might be suitable to keep in the supplymanager...
-;Public Sub addSRC(supply As TimeStep_ManagerOfSupply, src As String)
-;With supply
-;    If Not .SRCsInScope.exists(src) Then .SRCsInScope.add src, .SRCsInScope.count
-;End With
-;End Sub
-;'Encapsulate.
-;'this might be suitable to keep in the supplymanager...
-;Public Sub removeSRC(supply As TimeStep_ManagerOfSupply, src As String)
-;With supply
-;    If .SRCsInScope.exists(src) Then .SRCsInScope.Remove (src)
-;End With
-;
-;End Sub
+
 ;'Encapsulate.
 ;'this might be suitable to keep in the supplymanager...
 ;Public Sub UpdateDeployStatus(supply As TimeStep_ManagerOfSupply, uic As TimeStep_UnitData, _
@@ -646,12 +683,7 @@
 ;                     "Period", period, "t", t, "DeployDate", deploydate), context
 ;
 ;End Sub
-;Public Function isGhost(tags As GenericTags, unit As TimeStep_UnitData) As Boolean
-;isGhost = tags.hasTag("Ghost", unit.name)
-;End Function
-;Public Function assignBehavior(behaviors As TimeStep_ManagerOfBehavior, unit As TimeStep_UnitData, behaviorname As String) As TimeStep_UnitData
-;Set assignBehavior = behaviors.assignBehavior(unit, behaviorname)
-;End Function
+
 ;
 ;'TODO -> replace this call to a direct call for getTime, from the simlib module.
 ;Public Function getTime(context As TimeStep_SimContext) As Single
@@ -660,42 +692,7 @@
 ;getTime = SimLib.getTime(context)
 ;End Function
 
-;'inject appropriate tags into the GenericTags
-;Public Sub tagUnit(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, Optional extras As Dictionary)
-;'Set tmptags = New Dictionary
-;Dim sourcename As String
-;
-;With unit
-;    sourcename = "SOURCE_" & .src
-;    supply.tags.multiTag .name, "COMPO_" & .component, "BEHAVIOR_" & .behavior.name, _
-;        "TITLE_" & .OITitle, "POLICY_" & .policy.name, sourcename, "Enabled"
-;End With
-;
-;tagSource supply.tags, sourcename
-;
-;If Not (extras Is Nothing) Then
-;    tagExtras supply, unit, extras
-;End If
-;
-;End Sub
-;'TOM Change 27 Sep 2012
-;'Special parser to handle unit tags.
-;Public Sub tagExtras(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, extras As Dictionary)
-;Dim tg
-;For Each tg In extras
-;    Select Case tg
-;        Case ":fenced"
-;            tagAsFenced supply.tags, extras(tg), unit.name
-;        Case ":keep-fenced"
-;            If extras(tg) = False Then
-;                supply.tags.addTag "one-time-fence", unit.name
-;            End If
-;        Case Else
-;            supply.tags.addTag CStr(tg), unit.name
-;    End Select
-;Next tg
-;
-;End Sub
+
 ;'TOM Change 27 Sep 2012
 ;'Adds meta data to the tags, to identify the unit as being a member of a fenced group of
 ;'supply.  Fenced groups of supply automatically provide a special set of supply that fill functions
@@ -961,4 +958,26 @@
 ;'Next nm
 ;'
 ;'End Sub
+
+
+;------------Deferred------------
+;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;                                    ctx As TimeStep_SimContext, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
+;Dim tbl As GenericTable
+;Dim gunit As TimeStep_UnitData
+;
+;Set SupplyfromExcel = New TimeStep_ManagerOfSupply
+;'TODO -> turn this into a function.
+;UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, policystore, ctx
+;
+;If ensureghost Then
+;    If Not SupplyfromExcel.hasGhosts Then
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;        Set gunit = associateUnit(gunit, SupplyfromExcel, ctx)
+;        registerUnit SupplyfromExcel, behaviors, gunit, True, ctx
+;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;            "added Default ghost unit to unitmap in supplymanager."
+;    End If
+;End If
+;
 
