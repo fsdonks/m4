@@ -98,7 +98,7 @@
 ;End Sub
 (defn spawning-ghost! [unit ctx]
   (sim/trigger :SpawnGhost (:name unit) (:name unit)
-     (str "Spawned a ghost " (:name unit)) nil ctx))             
+     (str "Spawned a ghost " (:name unit)) nil ctx))        
 (defn key-tag [base tag] (memoize (keyword (str base tag))))
 ;helper function for defining key-building functions.
 (defmacro defkey [name base] `(def ~name (~'partial ~'key-tag ~base))) 
@@ -109,6 +109,30 @@
 (defkey title-key   "TITLE_")
 (defkey policy-key  "POLICY_")
 
+(defn new-deployable! [unit ctx]
+  (sim/triggger :NewDeployable "SupplyManager" (:name unit) 
+      (str "Unit " (:name unit) " at position " (:position-policy unit) 
+           " is deployable") nil ctx))
+(defn new-followon! [unit ctx] 
+  (sim/trigger :NewFollowOn "SupplyManager" (:name unit)
+      (str "Unit " (:name unit) " able to followon for demandgroup " 
+           (:followoncode unit)) nil ctx))
+(defn more-src-available! [unit ctx]
+  (let [src (:src unit)]
+    (sim/trigger :MoreSRCAvailable "SupplyManager" src 
+       (str "Unit " (:name unit) " at position " (:position-policy unit) 
+            "has just been added to deployables for SRC " src) nil ctx))) 
+(defn new-src-available! [src ctx]
+  (let [src (:src unit)]
+    (sim/trigger :NewSRCAvailable "SupplyManager" src 
+       (str "A new category of SRC now has deployable supply " src) nil ctx)))
+(defn not-deployable! [unit ctx] 
+  (sim/trigger :NotDeployable "SupplyManager" (:name unit) 
+     (str "Unit " (:name unit) " at posiotion " (:position-policy unit) 
+          " is no longer deployable") nil ctx))
+(defn out-of-stock! [src ctx]
+  (sim/trigger :outofstock "SupplyManager" src 
+     (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
 ;register source as being a member of sources, so it can be looked at when 
 ;filling supply.
 (defn tag-source [source tags] (tag/tag-subject tags source :sources))
@@ -161,7 +185,8 @@
 
 (defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
 
-;Public Function assignBehavior(behaviors As TimeStep_ManagerOfBehavior, unit As TimeStep_UnitData, behaviorname As String) As TimeStep_UnitData
+;Public Function assignBehavior(behaviors As TimeStep_ManagerOfBehavior,
+;       unit As TimeStep_UnitData, behaviorname As String) As TimeStep_UnitData
 ;Set assignBehavior = behaviors.assignBehavior(unit, behaviorname)
 ;End Function
 (defn assign-behavior [behaviors unit behaviorname]
@@ -211,11 +236,90 @@
 ;                    Err.Raise 101, , "Recovery is not deployable"
 ;                End If
 ;                'Decoupled
+            (new-deployable! unit ctx)
+
+;            Else
+;                'Decoupled
+            (new-followon! unit ctx)
+;            End If
+;
+;            If buckets.exists(.src) Then
+;                'Decoupled
+                 (more-src-available! unit ctx)
+
+;                Set stock = buckets.item(.src)
+;                'TOM change 21 july 2011
+;                If Not stock.exists(.name) Then stock.add .name, uic
+;            Else
+;                'Decoupled
+                 (new-src-available! (:src unit) ctx)
+
+;                'TOM note this may be allocating alot.
+;                Set stock = New Dictionary
+;                stock.add .name, uic
+;                buckets.add .src, stock
+;                'Tom Change 24 May
+;                'Decoupled
+                 (new-deployable! unit ctx)
+;            End If
+;        Else 'unit is not deployable
+;            'Decoupled
+             (not-deployable! unit ctx)
+;            If buckets.exists(.src) = True Then
+;                Set stock = buckets.item(.src)
+;                If stock.exists(.name) Then stock.Remove (.name)
+;                If stock.count = 0 Then
+;                    'Decoupled
+                     (out-of-stock! (:src unit) ctx)
+;                    Set stock = Nothing
+;                    buckets.Remove (.src) 'mutation!
+;                End If
+;            End If
+;        End If
+;End With
+;
+;
+;End Sub
+
+
+;;------------------COPY---------------
+;Private Sub UpdateDeployability(uic As TimeStep_UnitData, buckets As Dictionary, Optional followon As Boolean, _
+;                                    Optional spawning As Boolean, Optional context As TimeStep_SimContext)
+;
+;Dim stock As Dictionary
+;Dim packet As Dictionary
+;
+;'TODO -> rip out all the stuff from unitdata, particularly CanDeploy and 
+; friends...it's a step above a rat's nest.
+
+;With uic
+;        If .PositionPolicy = vbNullString Then 'Tom Change 24 May
+;            Err.Raise 101, , "invalid position!"  'Tom Change 24 May
+;        'TOM Change 24 April 2012 -> using a single notion of deployable now, 
+;        'derived from the unit.
+
+;        'Note how the old check just used the position in the policy to 
+;        'determine deployability.
+;        'Well, we want to incorporate a stricter notion of deployable, in that 
+;        'we also account for bogbudget and whatnot....The problem is that 
+;        'during spawning, we don't initialize cycles off the bat, so one of the 
+;        'new criteria fails (bogbudget is 0).
+;        
+;        'CHECK -> maybe yank .canDeploy out of the uic's methods, make it more 
+;        'functional
+;        ElseIf .CanDeploy(spawning) Or followon Then
+;            If Not followon Then
+;                If .PositionPolicy = "Recovery" Then
+;                    Err.Raise 101, , "Recovery is not deployable"
+;                End If
+;                'Decoupled
+
 ;                 SimLib.triggerEvent NewDeployable, "SupplyManager", .name, _
 ;                    "Unit " & .name & " at position " & .PositionPolicy 
 ;                       & " is deployable", , context
 ;            Else
 ;                'Decoupled
+
 ;                 SimLib.triggerEvent NewFollowOn, "SupplyManager", .name, _
 ;                    "Unit " & .name & " able to followon for demandgroup " 
 ;                       & .followoncode, , context
@@ -227,7 +331,9 @@
 ;                    "Unit " & .name & " at position " & .PositionPolicy & _
 ;                        " has just been added to deployables for SRC " 
 ;                             & .src, , context
-;
+
+
+
 ;                Set stock = buckets.item(.src)
 ;                'TOM change 21 july 2011
 ;                If Not stock.exists(.name) Then stock.add .name, uic
@@ -236,6 +342,7 @@
 ;                 SimLib.triggerEvent NewSRCAvailable, "SupplyManager", .src, _
 ;                    "A new category of SRC now has deployable supply " 
 ;                       & .src, , context
+
 ;
 ;                'TOM note this may be allocating alot.
 ;                Set stock = New Dictionary
@@ -247,12 +354,16 @@
 ;                    "Unit " & .name & " at position " & .PositionPolicy & _
 ;                        " has just been added to deployables for SRC " 
 ;                            & .src, , context
+
+   ;;new-deployable! 
+
 ;            End If
 ;        Else 'unit is not deployable
 ;            'Decoupled
 ;            SimLib.triggerEvent NotDeployable, "SupplyManager", .name, _
 ;                "Unit " & .name & " at position " & .PositionPolicy & " is no 
 ;                        longer deployable", , context;;
+
 ;            If buckets.exists(.src) = True Then
 ;                Set stock = buckets.item(.src)
 ;                If stock.exists(.name) Then stock.Remove (.name)
@@ -261,6 +372,7 @@
 ;                     SimLib.triggerEvent outofstock, "SupplyManager", .src, _
 ;                        "SRC " & .src & " has 0 deployable supply", "SOURCE_" 
 ;                            & .src, context
+
 ;                    Set stock = Nothing
 ;                    buckets.Remove (.src) 'mutation!
 ;                End If
@@ -270,7 +382,7 @@
 ;
 ;
 ;End Sub
-
+;;------------------END COPY---------------
 
 
 (defn update-deploy-status [supply unit [followon? spawning? ctx]]
