@@ -250,6 +250,7 @@
 ;                Set stock = buckets.item(.src)
 ;                'TOM change 21 july 2011
 ;                If Not stock.exists(.name) Then stock.add .name, uic
+                 (assoc-in buckets [src unitname] unit)
 ;            Else
 ;                'Decoupled
                  (new-src-available! (:src unit) ctx)
@@ -258,6 +259,7 @@
 ;                Set stock = New Dictionary
 ;                stock.add .name, uic
 ;                buckets.add .src, stock
+                 (assoc-in buckets [src unitname] unit)
 ;                'Tom Change 24 May
 ;                'Decoupled
                  (new-deployable! unit ctx)
