@@ -1,7 +1,7 @@
 (ns marathon.sim.unit)
 
 ;TEMPORARILY ADDED for marathon.sim.demand
-(declare change-state update) 
+(declare change-state update can-deploy?) 
 
 ;'marathonopunit
 ;'A module for unit behaviors...

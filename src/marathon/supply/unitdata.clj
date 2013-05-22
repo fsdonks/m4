@@ -196,9 +196,9 @@
 ;End With
 
 ;End Function
-
-(defn candeploy [u]
-  (let [policy (:policy u)
+;Note -> this is obsolete.....need to use the version in sim.unit instead.
+(defn can-deploy? [u & [spawning policy]]
+  (let [policy (or policy (:policy u))
         ct (:cycletime u)
         [start stop] [(:StartDeployable policy) (:StopDeployable policy)]] 
   (or (not= (:followoncode u) nil) 

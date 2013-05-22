@@ -110,6 +110,7 @@
 (defkey policy-key  "POLICY_")
 
 (defn new-deployable! [unit ctx]
+  (assert (not= (:policy-position unit) :Recovery) "Recovery is not deployable")
   (sim/triggger :NewDeployable "SupplyManager" (:name unit) 
       (str "Unit " (:name unit) " at position " (:position-policy unit) 
            " is deployable") nil ctx))
@@ -193,6 +194,29 @@
   (behaviors/assign-behavior unit behaviorname)) ;WRONG  behaviors doesn't exist yet.
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
+(defn empty-position? [unit] (nil? (:position-policy unit)))
+(defn get-buckets [supply] (:buckets supply))
+
+;Consolidated this from update-deployability, formalized into a function.
+(defn add-deployable-supply [supply src unit ctx]
+  (if (contains? (get-buckets supply) src)
+    (->> (sim/merge-updates 
+           {:supplystore 
+            (update-in supply [:buckets src] assoc unitname unit)} ctx)
+         (more-src-available! unit)
+    (->> (sim/merge-updates 
+           {:supplystore (assoc-in supply [:buckets src] {unitname unit})} ctx) 
+         (new-src-available! (:src unit))
+         (new-deployable! unit)))))
+;Consolidated this from update-deployability, formalized into a function.
+(defn remove-deployable-supply [supply src unit ctx]
+  (if-let [newstock (-> (get-in supply [:buckets src (:name unit)])
+                        (dissoc (:name unit)))]
+    (sim/merge-updates 
+      {:supplystore (assoc-in supply [:buckets src] newstock)} ctx)
+    (->> (sim/merge-updates 
+           {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
+         (out-of-stock! (:src unit)))))
 
 ;'TOM Change
 ;'Sub operates on uics to register them as deployable with a dictionary of 
@@ -215,12 +239,11 @@
 ;'TODO -> rip out all the stuff from unitdata, particularly CanDeploy and 
 ; friends...it's a step above a rat's nest.
 
-;With uic
-;        If .PositionPolicy = vbNullString Then 'Tom Change 24 May
-;            Err.Raise 101, , "invalid position!"  'Tom Change 24 May
-;        'TOM Change 24 April 2012 -> using a single notion of deployable now, 
-;        'derived from the unit.
-
+(assert (not (empty-position? unit)) "invalid position!")
+  (let [position (:position-policy unit)
+        src      (:src unit)
+        supply   (get-supplystore ctx)]
+;With uic         
 ;        'Note how the old check just used the position in the policy to 
 ;        'determine deployability.
 ;        'Well, we want to incorporate a stricter notion of deployable, in that 
@@ -231,58 +254,20 @@
 ;        'CHECK -> maybe yank .canDeploy out of the uic's methods, make it more 
 ;        'functional
 ;        ElseIf .CanDeploy(spawning) Or followon Then
-;            If Not followon Then
-;                If .PositionPolicy = "Recovery" Then
-;                    Err.Raise 101, , "Recovery is not deployable"
-;                End If
-;                'Decoupled
-            (new-deployable! unit ctx)
-
-;            Else
-;                'Decoupled
-            (new-followon! unit ctx)
-;            End If
-;
-;            If buckets.exists(.src) Then
-;                'Decoupled
-                 (more-src-available! unit ctx)
-
-;                Set stock = buckets.item(.src)
-;                'TOM change 21 july 2011
-;                If Not stock.exists(.name) Then stock.add .name, uic
-                 (assoc-in buckets [src unitname] unit)
-;            Else
-;                'Decoupled
-                 (new-src-available! (:src unit) ctx)
-
-;                'TOM note this may be allocating alot.
-;                Set stock = New Dictionary
-;                stock.add .name, uic
-;                buckets.add .src, stock
-                 (assoc-in buckets [src unitname] unit)
-;                'Tom Change 24 May
-;                'Decoupled
-                 (new-deployable! unit ctx)
-;            End If
-;        Else 'unit is not deployable
-;            'Decoupled
+         (if (or followon (u/can-deploy? udata spawning)) ;NOTE -> reconcile the differences between u, udata
+	             (->> (if followon  ;notifiying of followon data...
+                       (new-followon! unit ctx) 
+                       (new-deployable! unit ctx))
+                    (add-deployable-supply supply src unit)) ;add stuff to buckets...   
+             ;unit is not deployable
              (not-deployable! unit ctx)
-;            If buckets.exists(.src) = True Then
-;                Set stock = buckets.item(.src)
-;                If stock.exists(.name) Then stock.Remove (.name)
-;                If stock.count = 0 Then
-;                    'Decoupled
-                     (out-of-stock! (:src unit) ctx)
-;                    Set stock = Nothing
-;                    buckets.Remove (.src) 'mutation!
-;                End If
-;            End If
 ;        End If
 ;End With
 ;
 ;
 ;End Sub
 
+(defn followon-or-deployable 
 
 ;;------------------COPY---------------
 ;Private Sub UpdateDeployability(uic As TimeStep_UnitData, buckets As Dictionary, Optional followon As Boolean, _
