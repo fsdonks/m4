@@ -246,7 +246,7 @@
                   (:deployable-buckets supply))] 
     (update-deployability unit buckets  followon? spawning? ctx)))
 
-;Note -> the signature for this originally returned the supply, bet we're not 
+;Note -> the signature for this originally returned the supply, but we're not 
 ;returning the context.  I think our other functions that use this guy will be
 ;easy to adapt, just need to make sure they're not expecting supplystores.
 ;Conjoins a unit to the supply, under the context.  Optional parameters for 
@@ -271,6 +271,16 @@
 ;Set supply = registerUnit(supply, behaviors, unit)
 ;
 ;End Function
+
+;----------FOREIGN----------
+;came from OpFactory..
+(defn create-unit [name src title component cycletime policy-id 
+                    parameters policystore & [behavior]]
+  (let [p (policy/choose-policy policy-id component parameters policystore src)]
+    (-> {:name name :src src  :oi-title title :component component 
+         :cycletime cycletime :policy p}
+        (u/map->unitdata))))
+;----------END FOREIGN------
 
 ;'Encapsulate? -> nah, it's already independent.
 ;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
