@@ -3,7 +3,7 @@
 (ns marathon.sim.supply
   (:require [marathon.demand [demanddata :as d] [demandstore :as store]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim [demand :as demand]   [policy :as policy]
+            [marathon.sim [demand :as demand]   [policy :as pol]
                           [unit :as u]          [fill :as fill]]           
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]))
@@ -149,14 +149,6 @@
   [(compo-key component) (behavior-key behavior) (title-key oi-title) 
    (policy-key (:name policy)) (source-key src) :enabled])
 
-;'TOM Change 27 Sep 2012
-;Adds meta data to the tags, to identify the unit as being a member of a fenced
-;group of supply.  Fenced groups of supply automatically provide a special set 
-;of supply that fill functions can utilize when making demand decisions.
-(defn tag-as-fenced [tags fencegroup unitname]
-  (-> (tag/tag-subject tags fencegroup unitname)
-      (tag/tag-subject unitname :fenced)))        
-
 ;Note -> we should generalize this into some special.  Like deftag, or 
 ;defsupply tag, which looks at a library of tags to find out if it should do
 ;any special processing.  
@@ -177,6 +169,23 @@
          (tag-source sourcename)
          (tag-extras unit extra-tags)
          (assoc supply :tags))))
+
+;'TOM Change 27 Sep 2012
+;Adds meta data to the tags, to identify the unit as being a member of a fenced
+;group of supply.  Fenced groups of supply automatically provide a special set 
+;of supply that fill functions can utilize when making demand decisions.
+(defn tag-as-fenced [tags fencegroup unitname]
+  (-> (tag/tag-subject tags fencegroup unitname)
+      (tag/tag-subject unitname :fenced)))        
+
+;'TOM Change 27 Sep 2012 -> using tags to delineate fence states, including 
+;one-time fences, specifically for future force gen stuff.
+(defn drop-fence [tags unitname]
+  (if (and (tag/has-tag? tags :one-time-fence unitname) 
+           (tag/has-tag? tags :fenced unitname))
+    (-> (tag/untag-subject tags unitname :fenced)
+        (tag/tag-subject unitname :dropped-fence))
+    tags))   
 
 ;this might be suitable to keep in the supplymanager...
 (defn add-src [supply src] 
@@ -277,37 +286,12 @@
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
 (defn new-unit [supplystore parameters policystore behaviors name stc title 
-                component cycletime policy-id & [behavior]]
-  (->> (create-unit name src title component cycletime policy-id parameters 
-               policytore behavior)
+                component cycletime policy & [behavior]]
+  (->> (create-unit name src title component cycletime policy parameters 
+               policystore behavior)
        (register-unit supplystore behaviors)))
 
-;'Encapsulate? -> nah, it's already independent.
-;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
-;
-;If followoncode = vbNullString Then
-;    Err.Raise 101, , "No followon code! Units elligble for followon should have a code!"
-;Else
-;    With followonbuckets
-;        If .exists(followoncode) Then
-;            Set getFollowonBucket = .item(followoncode)
-;        Else
-;            Set getFollowonBucket = New Dictionary
-;            .add followoncode, getFollowonBucket
-;        End If
-;    End With
-;End If
-;
-;End Function
 
-;
-
-;;use the version associated with the unit....
-;Private Function CanDeploy(unit As TimeStep_UnitData) As Boolean
-;
-;CanDeploy = unit.policy.isDeployable(unit.cycletime)
-;
-;End Function
 ;Sub deployUnit(supply As TimeStep_ManagerOfSupply, context As TimeStep_SimContext, parameters As TimeStep_Parameters, _
 ;                policystore As TimeStep_ManagerOfPolicy, unit As TimeStep_UnitData, t As Single, sourcetype As String, _
 ;                    demand As TimeStep_DemandData, bog As Long, fillcount As Long, fill As TimeStep_Fill, _
@@ -418,17 +402,9 @@
 ;End With
 ;
 ;End Sub
-;'TOM Change 27 Sep 2012 -> using tags to delineate fence states, including one-time fences, specifically
-;'for future force gen stuff.
-;Public Sub dropFence(tags As GenericTags, unitname As String)
-;If tags.hasTag("one-time-fence", unitname) Then
-;    If tags.hasTag("fenced", unitname) Then
-;        tags.removeTag "fenced", unitname
-;        tags.addTag "dropped-fence", unitname
-;    End If
-;End If
-;    
-;End Sub
+
+    
+    
 ;'TOM Hack 13 August 2012
 ;Public Function getNearMaxPolicy(policy As IRotationPolicy, _
 ;                                    policystore As TimeStep_ManagerOfPolicy) As IRotationPolicy
@@ -439,50 +415,57 @@
 ;Else
 ;    Err.Raise 101, , "Can't find policy."
 ;End If
-;
-;End Function
-;Private Function shouldChangePolicy(uic As TimeStep_UnitData) As Boolean
-;shouldChangePolicy = uic.component <> "AC" And uic.component <> "Ghost"
-;End Function
-;Public Function checkMaxUtilization(parameters As TimeStep_Parameters) As Boolean
-;checkMaxUtilization = parameters.getKey("TAA1519MaxUtilizationHack")
-;End Function
-;Public Sub tagAsDeployed(uic As TimeStep_UnitData, supply As TimeStep_ManagerOfSupply)
-;supply.tags.addTag "hasdeployed", uic.name
-;End Sub
-;
-;Public Function getNextDeploymentID(supply As TimeStep_ManagerOfSupply) As Long
-;With supply
-;    .uniqueDeployments = .uniqueDeployments + 1
-;    getNextDeploymentID = .uniqueDeployments
-;End With
-;End Function
-;'TOM Hack 13 Aug 2012
-;'Jeff had me put in some special case for handling initial deployment logic.
-;Public Function isFirstDeployment(uic As TimeStep_UnitData, supply As TimeStep_ManagerOfSupply) As Boolean
-;isFirstDeployment = Not supply.tags.hasTag("hasdeployed", uic.name)
-;End Function
-;
 
-;
-;'process the unused follow-on units, changing their policy to complete cycles.
+;NOTE -> replace this with a simple map lookup...
+(defn get-near-max-policy [policy policystore]
+  (let [id (case (pol/atomic-name policy) 
+             :MaxUtilization         :NearMaxUtilization
+             :MaxUtilization_Enabler :NearMaxUtilization_Enabler)]
+    (get-in policystore [:policies id])))
+
+(defn should-change-policy? [{:keys [component] :as unit}]
+  (not= component :AC :Ghost))
+
+(defn check-max-utilization [params] (get params :TAA1519MaxUtilizationHack))
+
+(defn tag-as-deployed [unit supplystore] 
+  (update-in supplystore [:tags] tag/tag-subject (:name unit) :hasdeployed))
+
+(defn get-next-deploymentid [supplystore] (inc (:uniqedeployments supplystore)))
+                                         
+;NOTE -> this should be OBSOLETE after the port, since we can handle policies 
+;much more gracefully.
+;Jeff had me put in some special case for handling initial deployment logic.
+(defn first-deployment? [unit supplystore]
+  (not (tag/has-tag? (:tags supplystore) (:name unit) :hasdeployed))) 
+
+
+;UTILITY FUNCTION
+;If function results in an empty map, contained within another map, 
+;removes the entry associated with the empty map.
+(defn prune-in [m ks f & args]
+  (let [updated (apply update-in ks f args)]
+    (if (empty? (get-in updated ks))
+      (let [path   (butlast ks)
+            parent (get-in m path)]            
+        (assoc-in m path (dissoc parent (last ks))))
+      updated)))
+;END UTILITY 
+
+(defn remove-followon [store unit]
+  (let [unitname (:name unit)
+        fcode    (:followoncode unit)
+        src      (:src unit)]
+    (-> store 
+        (update-in [:followons] dissoc unitname)
+        (prune-in  [:followonbuckets fcode src] dissoc unitname)
+        (assoc-in  [:unit-map (:name unit)] 
+          (assoc unit :followoncode nil)))))
+
+;process the unused follow-on units, changing their policy to complete cycles.
 ;Public Sub ReleaseFollowOns(supply As TimeStep_ManagerOfSupply, Optional context As TimeStep_SimContext)
 ;Dim nm
 ;Dim unitptr As TimeStep_UnitData
-;'
-;'For Each nm In supply.followons
-;'    Set unitptr = supply.followons(nm)
-;'    removeFollowOn supply, unitptr
-;'    'Tom change 18 July 2012
-;'    'We allow the units to pass through a reentry state, to see if they can recover and re-enter
-;'    'the available pool, rather than pushing them straight to a Reset state.
-;'    'unitptr.ChangeState "Reset", 0
-;'    'change the unit's position in its policy to enable possible reentry
-;'    '  even if the policy does not have an explicit reentry state.
-;'    unitptr.PositionPolicy = "ReEntry"
-;'    unitptr.ChangeState "ReEntry", 0, , context
-;'    UpdateDeployStatus supply, unitptr, False, False, context
-;'Next nm
 ;
 ;For Each nm In supply.followons
 ;    Set unitptr = supply.followons(nm)
@@ -493,11 +476,25 @@
 ;Next nm
 ;
 ;End Sub
+(defn get-unit [supplystore unitname] (get-in supplystore [:unitmap unitname]))
+(defn followon-unit? [store unit] (contains? (:followons store) (:name unit)))
+(defn release-followon-unit [ctx unitname]
+  (let [store (get-in ctx [:state :supplystore])
+        ctx   (->> (sim/merge-updates 
+                     {:supplystore (remove-followon store unit)} ctx)
+                (u/change-state (get-unit store unitname) 
+                                :AbruptWithdraw 0 nil))
+        unit  (get-in store [:unit-map unitname])]   
+    (update-deploy-status 
+      (-> ctx :state :supplystore) unit nil nil ctx)))
+;CONTEXTUAL
+(defn release-followons [supplystore & [ctx]]
+  (reduce release-followon-unit ctx (keys (:followons supplystore))))                                           
+
 ;'Tom Change 17 Aug 2012.
 ;Public Sub ReleaseMaxUtilizers(supply As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
 ;Dim nm
 ;Dim unitptr As TimeStep_UnitData
-;
 ;With supply
 ;    For Each nm In .tags.getSubjects("MaxUtilizer")
 ;    'Tom Change 20 Aug 2012
@@ -512,29 +509,19 @@
 ;        UpdateDeployStatus supply, unitptr, False, , ctx
 ;    Next nm
 ;End With
-;
 ;End Sub
-;Private Sub removeFollowOn(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData)
-;Dim ptr As Dictionary
-;Dim removal As Boolean
-;Dim fcode As String
-;
-;fcode = unit.followoncode
-;
-;supply.followons.Remove unit.name
-;With getFollowonBucket(supply.followonbuckets, fcode)
-;    Set ptr = .item(unit.src)
-;    ptr.Remove unit.name
-;    If ptr.count = 0 Then .Remove (unit.src)
-;    If .count = 0 Then removal = True
-;End With
-;
-;'mutating the follow on buckets, this is okay...
-;If removal Then supply.followonbuckets.Remove fcode
-;
-;unit.followoncode = vbNullString
-;'resetFollowOn unit
-;End Sub
+
+(defn release-maxutilizers [supplystore & [ctx]]
+  (let [{:keys [followons normal]} 
+           (group-by #(if (followon-unit? store %) :followon :normal)
+                      (tag/get-subjects (:tags supplystore) :MaxUtilizer))]
+    (->> (reduce (fn [ctx unitname] 
+                   (update-in ctx [:state :supplystore :unitmap unitname]
+                              
+         (reduce release-followon-unit ctx followons)
+         ())))
+
+
 ;'announce that the unit is in fact following on, remove it from the followons list.
 ;Private Sub recordFollowon(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, demand As TimeStep_DemandData, Optional context As TimeStep_SimContext)
 ;removeFollowOn supply, unit
@@ -940,3 +927,32 @@
 ;End If
 ;
 
+
+
+;-----------Obsolete, we don't need to have this....
+;'Encapsulate? -> nah, it's already independent.
+;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
+;
+;If followoncode = vbNullString Then
+;    Err.Raise 101, , "No followon code! Units elligble for followon should have a code!"
+;Else
+;    With followonbuckets
+;        If .exists(followoncode) Then
+;            Set getFollowonBucket = .item(followoncode)
+;        Else
+;            Set getFollowonBucket = New Dictionary
+;            .add followoncode, getFollowonBucket
+;        End If
+;    End With
+;End If
+;
+;End Function
+
+;-----------Obsolete, using version in unit data.
+
+;;use the version associated with the unit....
+;Private Function CanDeploy(unit As TimeStep_UnitData) As Boolean
+;
+;CanDeploy = unit.policy.isDeployable(unit.cycletime)
+;
+;End Function
