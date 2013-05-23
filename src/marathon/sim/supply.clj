@@ -246,6 +246,16 @@
                   (:deployable-buckets supply))] 
     (update-deployability unit buckets  followon? spawning? ctx)))
 
+;----------FOREIGN----------
+;came from OpFactory..
+(defn create-unit [name src title component cycletime policy-id 
+                    parameters policystore & [behavior]]
+  (let [p (policy/choose-policy policy-id component parameters policystore src)]
+    (-> {:name name :src src  :oi-title title :component component 
+         :behavior behavior   :cycletime cycletime :policy p}
+        (u/map->unitdata))))
+;----------END FOREIGN------
+
 ;Note -> the signature for this originally returned the supply, but we're not 
 ;returning the context.  I think our other functions that use this guy will be
 ;easy to adapt, just need to make sure they're not expecting supplystores.
@@ -264,23 +274,13 @@
       (->> (spawning-unit! unit ctx)
            (update-deploy-status supply unit)))))
 
-;Public Function NewUnit(supply As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, behaviors As TimeStep_ManagerOfBehavior, name As String, src As String, OITitle As String, component As String, _
-;                            cycletime As Single, policy As String, Optional behavior As IUnitBehavior)
-;Dim unit As TimeStep_UnitData
-;Set unit = createUnit(name, src, OITitle, component, cycletime, policy, parameters, policystore, behavior)
-;Set supply = registerUnit(supply, behaviors, unit)
-;
-;End Function
-
-;----------FOREIGN----------
-;came from OpFactory..
-(defn create-unit [name src title component cycletime policy-id 
-                    parameters policystore & [behavior]]
-  (let [p (policy/choose-policy policy-id component parameters policystore src)]
-    (-> {:name name :src src  :oi-title title :component component 
-         :cycletime cycletime :policy p}
-        (u/map->unitdata))))
-;----------END FOREIGN------
+;creates a new unit and stores it in the supply store...returns the supply 
+;store.
+(defn new-unit [supplystore parameters policystore behaviors name stc title 
+                component cycletime policy-id & [behavior]]
+  (->> (create-unit name src title component cycletime policy-id parameters 
+               policytore behavior)
+       (register-unit supplystore behaviors)))
 
 ;'Encapsulate? -> nah, it's already independent.
 ;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
@@ -301,6 +301,8 @@
 ;End Function
 
 ;
+
+;;use the version associated with the unit....
 ;Private Function CanDeploy(unit As TimeStep_UnitData) As Boolean
 ;
 ;CanDeploy = unit.policy.isDeployable(unit.cycletime)
