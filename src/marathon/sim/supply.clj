@@ -218,168 +218,33 @@
            {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
          (out-of-stock! (:src unit)))))
 
-;'TOM Change
-;'Sub operates on uics to register them as deployable with a dictionary of 
-; dictionaries Dictionary<Rule, <UICName,Unitdata>>
-;'UICs are tracked by a unique string name now, changed the unitdata structure 
-; to reflect this.
-;'This sub is only called when necessary, updates the available set, and limits
-; the search effort required to find an available uic.
-;'UpdateDeployability also enables/disables nodes in the ruleset of the 
-; policymanager.
-;'Basically, if the deployable bucket is emptied (i.e. we update a unit's 
-; deployability, removing it from any number of buckets,
+;Sub operates on uics to register them as deployable with a dictionary of 
+;dictionaries Dictionary<Rule, <UICName,Unitdata>>
+;UICs are tracked by a unique string name now, changed the unitdata structure 
+;to reflect this. This sub is only called when necessary, updates the available 
+;set, and limits the search effort required to find an available uic.
 
-;Private Sub UpdateDeployability(uic As TimeStep_UnitData, buckets As Dictionary, Optional followon As Boolean, _
-;                                    Optional spawning As Boolean, Optional context As TimeStep_SimContext)
-;
-;Dim stock As Dictionary
-;Dim packet As Dictionary
-;
-;'TODO -> rip out all the stuff from unitdata, particularly CanDeploy and 
-; friends...it's a step above a rat's nest.
-
-(assert (not (empty-position? unit)) "invalid position!")
+;1)NOTE -> reconcile the differences between u, udata
+(defn update-deployability [unit buckets & [followon spawning ctx]]
+  (assert (not (empty-position? unit)) "invalid position!")
   (let [position (:position-policy unit)
         src      (:src unit)
         supply   (get-supplystore ctx)]
-;With uic         
-;        'Note how the old check just used the position in the policy to 
-;        'determine deployability.
-;        'Well, we want to incorporate a stricter notion of deployable, in that 
-;        'we also account for bogbudget and whatnot....The problem is that 
-;        'during spawning, we don't initialize cycles off the bat, so one of the 
-;        'new criteria fails (bogbudget is 0).
-;        
-;        'CHECK -> maybe yank .canDeploy out of the uic's methods, make it more 
-;        'functional
-;        ElseIf .CanDeploy(spawning) Or followon Then
-         (if (or followon (u/can-deploy? udata spawning)) ;NOTE -> reconcile the differences between u, udata
-	             (->> (if followon  ;notifiying of followon data...
-                       (new-followon! unit ctx) 
-                       (new-deployable! unit ctx))
-                    (add-deployable-supply supply src unit)) ;add stuff to buckets...   
-             ;unit is not deployable
-             (not-deployable! unit ctx)
-;        End If
-;End With
-;
-;
-;End Sub
-
-(defn followon-or-deployable 
-
-;;------------------COPY---------------
-;Private Sub UpdateDeployability(uic As TimeStep_UnitData, buckets As Dictionary, Optional followon As Boolean, _
-;                                    Optional spawning As Boolean, Optional context As TimeStep_SimContext)
-;
-;Dim stock As Dictionary
-;Dim packet As Dictionary
-;
-;'TODO -> rip out all the stuff from unitdata, particularly CanDeploy and 
-; friends...it's a step above a rat's nest.
-
-;With uic
-;        If .PositionPolicy = vbNullString Then 'Tom Change 24 May
-;            Err.Raise 101, , "invalid position!"  'Tom Change 24 May
-;        'TOM Change 24 April 2012 -> using a single notion of deployable now, 
-;        'derived from the unit.
-
-;        'Note how the old check just used the position in the policy to 
-;        'determine deployability.
-;        'Well, we want to incorporate a stricter notion of deployable, in that 
-;        'we also account for bogbudget and whatnot....The problem is that 
-;        'during spawning, we don't initialize cycles off the bat, so one of the 
-;        'new criteria fails (bogbudget is 0).
-;        
-;        'CHECK -> maybe yank .canDeploy out of the uic's methods, make it more 
-;        'functional
-;        ElseIf .CanDeploy(spawning) Or followon Then
-;            If Not followon Then
-;                If .PositionPolicy = "Recovery" Then
-;                    Err.Raise 101, , "Recovery is not deployable"
-;                End If
-;                'Decoupled
-
-;                 SimLib.triggerEvent NewDeployable, "SupplyManager", .name, _
-;                    "Unit " & .name & " at position " & .PositionPolicy 
-;                       & " is deployable", , context
-;            Else
-;                'Decoupled
-
-;                 SimLib.triggerEvent NewFollowOn, "SupplyManager", .name, _
-;                    "Unit " & .name & " able to followon for demandgroup " 
-;                       & .followoncode, , context
-;            End If
-;
-;            If buckets.exists(.src) Then
-;                'Decoupled
-;                 SimLib.triggerEvent MoreSRCAvailable, "SupplyManager", .src, _
-;                    "Unit " & .name & " at position " & .PositionPolicy & _
-;                        " has just been added to deployables for SRC " 
-;                             & .src, , context
-
-
-
-;                Set stock = buckets.item(.src)
-;                'TOM change 21 july 2011
-;                If Not stock.exists(.name) Then stock.add .name, uic
-;            Else
-;                'Decoupled
-;                 SimLib.triggerEvent NewSRCAvailable, "SupplyManager", .src, _
-;                    "A new category of SRC now has deployable supply " 
-;                       & .src, , context
-
-;
-;                'TOM note this may be allocating alot.
-;                Set stock = New Dictionary
-;                stock.add .name, uic
-;                buckets.add .src, stock
-;                'Tom Change 24 May
-;                'Decoupled
-;                 SimLib.triggerEvent NewDeployable, "SupplyManager", .name, _
-;                    "Unit " & .name & " at position " & .PositionPolicy & _
-;                        " has just been added to deployables for SRC " 
-;                            & .src, , context
-
-   ;;new-deployable! 
-
-;            End If
-;        Else 'unit is not deployable
-;            'Decoupled
-;            SimLib.triggerEvent NotDeployable, "SupplyManager", .name, _
-;                "Unit " & .name & " at position " & .PositionPolicy & " is no 
-;                        longer deployable", , context;;
-
-;            If buckets.exists(.src) = True Then
-;                Set stock = buckets.item(.src)
-;                If stock.exists(.name) Then stock.Remove (.name)
-;                If stock.count = 0 Then
-;                    'Decoupled
-;                     SimLib.triggerEvent outofstock, "SupplyManager", .src, _
-;                        "SRC " & .src & " has 0 deployable supply", "SOURCE_" 
-;                            & .src, context
-
-;                    Set stock = Nothing
-;                    buckets.Remove (.src) 'mutation!
-;                End If
-;            End If
-;        End If
-;End With
-;
-;
-;End Sub
-;;------------------END COPY---------------
-
+    (if (or followon (u/can-deploy? udata spawning))                         ;1)
+      (->> (if followon  ;notifiying of followon data...
+             (new-followon! unit ctx) 
+             (new-deployable! unit ctx))
+        (add-deployable-supply supply src unit)) ;add stuff to buckets...   
+      ;unit is not deployable
+      (->> (not-deployable! unit ctx)
+           (remove-deployable-supply supply src unit)))))
 
 (defn update-deploy-status [supply unit [followon? spawning? ctx]]
-  (let [bucket (if followon?       
-                 (get-followon-bucket (:followonbuckets supply) 
-                                      (:followoncode unit))
-                 (:deployable-buckets supply))] 
+  (let [buckets (if followon?       
+                  (get-followon-bucket (:followonbuckets supply) 
+                                       (:followoncode unit))
+                  (:deployable-buckets supply))] 
     (update-deployability unit buckets  followon? spawning? ctx)))
-
-
 
 ;Note -> the signature for this originally returned the supply, bet we're not 
 ;returning the context.  I think our other functions that use this guy will be
@@ -406,13 +271,6 @@
 ;Set supply = registerUnit(supply, behaviors, unit)
 ;
 ;End Function
-
-
-
-;
-;'Encapsulate.
-
-;'Encapsulate.
 
 ;'Encapsulate? -> nah, it's already independent.
 ;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
