@@ -158,6 +158,22 @@
 (defkey behavior-key "BEHAVIOR_")
 (defkey title-key   "TITLE_")
 (defkey policy-key  "POLICY_")
+(def ghost-source-tag (source-key "Ghost"))
+
+;REFACTOR
+;maybe ignore this? Extra level of indirection.
+(defn get-time [ctx] (sim/get-time ctx))
+(defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
+;Register a set of units that need to be utilized, or sent to reset.
+
+;REFACTOR
+;maybe ignore this? Extra level of indirection.
+(defn last-update [unitname ctx] (sim/last-update unitname ctx))
+
+
+(defn multiple-ghosts? [supplytags]
+  (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
+
 
 (defn new-deployable! [unit ctx]
   (assert (not= (:policy-position unit) :Recovery) "Recovery is not deployable")
@@ -184,6 +200,36 @@
 (defn out-of-stock! [src ctx]
   (sim/trigger :outofstock "SupplyManager" src 
      (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
+;'TOM Change 3 Jan 2011
+;'aux function for logging/recording the fact that a unit changed locations
+;'TODO -> it'd be nice to figure out how to unify this reporting, right now 
+;LogMove gets to reach directly into the tables of outputmanager and manipulate.
+;This is fast and simple, but it's not pure ....
+;One current problem is -> we have to transform fromloc/toloc into something 
+;palatable for trending ...
+(defn log-move! [t fromloc toloc unit & [duration ctx]]
+  (sim/trigger :unitMoved (:name unit) toloc "" unit ctx))
+
+;TODO -> This should be renamed like positionEvent or something.
+;Main dependencies are in the unit Behaviors.
+;Unit behaviors currently use parent to refer to a supply manager.
+;We can probably do better than this.
+;Actually, unit behaviors aren't maintaining any state....
+;So we can probably just plug them in as modules....they're all pure functions.
+;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
+(defn log-position! [t frompos topos unit & [duration ctx]]
+  (sim/trigger :PositionUnit "SupplyManager" (:name unit) 
+     (str "UIC " (:name unit) " has repositioned from " frompos " to " topos)
+     nil ctx))
+;aux function for logging/recording the fact that a unit deployed
+;CHECK -> might be missing something in the port.  
+;1)not using toname in the original code, also no msg.
+(defn log-deployment! 
+  [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
+  ;(let [toname (:name demand)]                                              ;1)
+  (sim/trigger :deploy "SupplyManager" (:name unit)
+     "" {:fromloc   fromname  :unit unit :demand demand :fill filldata 
+         :fillcount fillcount :period period :t t :deploydate deploydate} ctx))
 ;'When a unit engages in a followon deployment, we notify the event context.
 ;'Simple declarative event description for wrapping low level followon event notification.
 (defn unit-followon-event! [unit demand ctx]
@@ -465,11 +511,10 @@
              :MaxUtilization_Enabler :NearMaxUtilization_Enabler)]
     (get-in policystore [:policies id])))
 
+;WEAK...hard coded, should be data driven.
 (defn should-change-policy? [{:keys [component] :as unit}]
   (not= component :AC :Ghost))
-
 (defn check-max-utilization [params] (get params :TAA1519MaxUtilizationHack))
-
 (defn tag-as-deployed [unit supplystore] 
   (update-in supplystore [:tags] tag/tag-subject (:name unit) :hasdeployed))
 
@@ -492,6 +537,11 @@
         (assoc-in m path (dissoc parent (last ks))))
       updated)))
 ;END UTILITY 
+
+;The call for update-deploy-status is UGLY.  Might be nice to use keyword args..
+(defn add-followon [supply unit ctx] 
+  (-> (assoc-in supply [:followons (:name unit)] unit)
+      (update-deploy-status unit true nil ctx)))
 
 (defn remove-followon [store unit]
   (let [unitname (:name unit)
@@ -552,57 +602,9 @@
     (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
           (reduce (fn [s u] (-> (update-in s [:tags] disable u) f u)) supply))))
 
-;'TOM Change 3 Jan 2011
-;'aux function for logging/recording the fact that a unit changed locations
-;'TODO -> it'd be nice to figure out how to unify this reporting, right now 
-;LogMove gets to reach directly into the tables of outputmanager and manipulate.
-;This is fast and simple, but it's not pure ....
-;One current problem is -> we have to transform fromloc/toloc into something 
-;palatable for trending ...
-(defn log-move! [t fromloc toloc unit & [duration ctx]]
-  (sim/trigger :unitMoved (:name unit) toloc "" unit ctx))
-
-;TODO -> This should be renamed like positionEvent or something.
-;Main dependencies are in the unit Behaviors.
-;Unit behaviors currently use parent to refer to a supply manager.
-;We can probably do better than this.
-;Actually, unit behaviors aren't maintaining any state....
-;So we can probably just plug them in as modules....they're all pure functions.
-;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
-(defn log-position! [t frompos topos unit & [duration ctx]]
-  (sim/trigger :PositionUnit "SupplyManager" (:name unit) 
-     (str "UIC " (:name unit) " has repositioned from " frompos " to " topos)
-     nil ctx))
 
 
-;aux function for logging/recording the fact that a unit deployed
-;CHECK -> might be missing something in the port.  
-;1)not using toname in the original code, also no msg.
-(defn log-deployment! 
-  [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
-  ;(let [toname (:name demand)]                                              ;1)
-  (sim/trigger :deploy "SupplyManager" (:name unit)
-     "" {:fromloc   fromname  :unit unit :demand demand :fill filldata 
-         :fillcount fillcount :period period :t t :deploydate deploydate} ctx))
 
-;REFACTOR
-;maybe ignore this? Extra level of indirection.
-(defn get-time [ctx] (sim/get-time ctx))
-(defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
-
-;Register a set of units that need to be utilized, or sent to reset.
-;The call for update-deploy-status is UGLY.  Might be nice to use keyword args..
-(defn add-followon [supply unit ctx] 
-  (-> (assoc-in supply [:followons (:name unit)] unit)
-      (update-deploy-status unit true nil ctx)))
-
-;REFACTOR
-;maybe ignore this? Extra level of indirection.
-(defn last-update [unitname ctx] (sim/last-update unitname ctx))
-
-(def ghost-source-tag (source-key "Ghost"))
-(defn multiple-ghosts? [supplytags]
-  (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
 
 ;------------Deferred------------
 ;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
