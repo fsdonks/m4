@@ -8,6 +8,39 @@
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]))
 
+;Note--> I'm noticing some patterns emerging that might make for nice 
+;abstractions...
+;We seem to be doing a lot of nested updates for particular bits of a system.
+;A lot of updates also appear to be existential in nature, i.e. if the 
+;update is a dissoc, and the resulting collection is empty, we want to 
+;remove the empty entry from the parent container.
+
+;Also, we define operations that just trigger notifications, basically a 
+;messaging system.  Might look into a nice higher-level defmessage abstraction.
+
+;Also, we have a class of functions that specifically shovels context around.
+;By context, I mean the environment in which the simulation is happening, as 
+;in a simcontext from sim.simcontext.  We can clean up some of the function 
+;signatures by allowing macros to operate in this context, possibly even a 
+;special evaluator.
+
+;On the topic of special evaluators, in each namespace, we end up defining 
+;pure functions that act to update specific bits of a context, sometimes 
+;acting on isolated structures within the context.  There's typically a 
+;nested structure in the context's :state, which destructure and update in 
+;pieces.  It might be nice to have something like #'doto. 
+
+;It might be nice to have a macro that lets us define ways to address or query
+;the context's state.  This leads directly to the entity-store stuff I already 
+;built, and facilitates a component-based architecture.
+
+;Finally, we probably want some kind of language for specifying different 
+;types of updates to the context.  For instance, we end up -inside the local 
+;namespaces - defining functions that operate on a specific aread of the context
+;often with deep nesting paths.  I already introduced the notion of updates and
+;merge-updates in the simcontext.  It might be as simple as defining
+;multimethods, or a protocol, that implements the merge protocol.
+
 ;COUPLING 
 ;sim.demand => get-followon-keys release-max-utilizers
 
@@ -48,6 +81,10 @@
 (defn request-unit-update! [t unit ctx] 
   (sim/request-update t (:name unit) :supply-update ctx))
 
+;'TODO -> formalize dependencies and pre-compilation checks....
+(defn can-simulate? [supply] 
+  (not (empty? (tag/get-subjects (:tags supply) :enabled))))
+
 ;Replaced by request-unit-update!
 ;Public Sub requestSupplyUpdate(t As Single, unit As TimeStep_UnitData, context As TimeStep_SimContext)
 ;SimLib.requestUpdate t, "SupplyManager", UpdateType.supply, , context
@@ -59,13 +96,15 @@
 (defn get-supplystore [ctx] (-> ctx :state :supplystore))
 
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
-(defn apply-update [supplystore update-packet ctx]
-  (let [unitname (:requested-by update-packet)]
-    (if (not (enabled? (:tags supplystore) unitname)) ctx 
-      (let [unit (get-unit supplystore unitname)]
-        (->> ctx       
-          (u/update unit (updates/elapsed t  (sim/last-update unitname ctx)))
-          (supply-update! supplystore unit (unit-msg unit)))))))
+;helper function for dropping a tag from multiple units at once.
+(defn untag-units [supplystore tag units]
+  (reduce #(tag/untag-subject (:tags %1) %2 tag)) supplystore units)                              
+(defn apply-update [supplystore unitname ctx]
+  (if (not (enabled? (:tags supplystore) unitname)) ctx 
+    (let [unit (get-unit supplystore unitname)]
+      (->> ctx       
+        (u/update unit (updates/elapsed t  (sim/last-update unitname ctx)))
+        (supply-update! supplystore unit (unit-msg unit))))))
 ;;Note -> there was another branch here originally....
 ;;requestUnitUpdate day, unit, context
 
@@ -77,7 +116,8 @@
   (let [supply (:supply-store state)
         ctx    (:context state)]
     (if-let [today-updates (get-supply-updates day ctx)]
-      (reduce (fn [acc pckt] (apply-update (get-supplystore acc) pckt acc))
+      (reduce (fn [acc pckt] 
+                (apply-update (get-supplystore acc) (:requested-by pckt) acc))
               ctx today-updates)
       ctx)))
 
@@ -134,6 +174,12 @@
 (defn out-of-stock! [src ctx]
   (sim/trigger :outofstock "SupplyManager" src 
      (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
+;'When a unit engages in a followon deployment, we notify the event context.
+;'Simple declarative event description for wrapping low level followon event notification.
+(defn unit-followon-event! [unit demand ctx]
+  (sim/trigger :FollowingOn  (:name unit) (:name demand) 
+     (str "Unit " (:name unit) " is following on to demand " (:name demand))
+        nil ctx))
 ;register source as being a member of sources, so it can be looked at when 
 ;filling supply.
 (defn tag-source [source tags] (tag/tag-subject tags source :sources))
@@ -291,7 +337,6 @@
                policystore behavior)
        (register-unit supplystore behaviors)))
 
-
 ;Sub deployUnit(supply As TimeStep_ManagerOfSupply, context As TimeStep_SimContext, parameters As TimeStep_Parameters, _
 ;                policystore As TimeStep_ManagerOfPolicy, unit As TimeStep_UnitData, t As Single, sourcetype As String, _
 ;                    demand As TimeStep_DemandData, bog As Long, fillcount As Long, fill As TimeStep_Fill, _
@@ -439,7 +484,6 @@
 (defn first-deployment? [unit supplystore]
   (not (tag/has-tag? (:tags supplystore) (:name unit) :hasdeployed))) 
 
-
 ;UTILITY FUNCTION
 ;If function results in an empty map, contained within another map, 
 ;removes the entry associated with the empty map.
@@ -487,147 +531,67 @@
         unit  (get-in store [:unit-map unitname])]   
     (update-deploy-status 
       (-> ctx :state :supplystore) unit nil nil ctx)))
+
 ;CONTEXTUAL
 (defn release-followons [supplystore & [ctx]]
   (reduce release-followon-unit ctx (keys (:followons supplystore))))                                           
 
-;'Tom Change 17 Aug 2012.
-;Public Sub ReleaseMaxUtilizers(supply As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
-;Dim nm
-;Dim unitptr As TimeStep_UnitData
-;With supply
-;    For Each nm In .tags.getSubjects("MaxUtilizer")
-;    'Tom Change 20 Aug 2012
-;        Set unitptr = .unitmap(nm)
-;        If .followons.exists(CStr(nm)) Then
-;            removeFollowOn supply, unitptr 'this eliminates the followon code
-;            'TOM Change 24 July 2012 -> With no followon code, this will allow units to try to recover.
-;            unitptr.ChangeState "AbruptWithdraw", 0, , ctx
-;        End If
-;        .tags.removeTag "MaxUtilizer", CStr(nm)
-;        'TOM change 9 Sep 2012, injected a false value.
-;        UpdateDeployStatus supply, unitptr, False, , ctx
-;    Next nm
-;End With
-;End Sub
-
+;UGLY....this could be prettier....although it refactored nicely.  
 (defn release-maxutilizers [supplystore & [ctx]]
   (let [{:keys [followons normal]} 
            (group-by #(if (followon-unit? store %) :followon :normal)
-                      (tag/get-subjects (:tags supplystore) :MaxUtilizer))]
-    (->> (reduce (fn [ctx unitname] 
-                   (update-in ctx [:state :supplystore :unitmap unitname]
-                              
-         (reduce release-followon-unit ctx followons)
-         ())))
+                      (tag/get-subjects (:tags supplystore) :MaxUtilizer))
+         store (untag-units supplystore :MaxUtilizer (concat followons normal))]   
+    (reduce release-followon-unit (sim/merge-updates {:supplystore store} ctx)
+            followons)))         
 
+;announce that the unit is in fact following on, remove it from followons.
+(defn record-followon [supply unit demand ctx]
+  (->> (sim/merge-updates {:supplystore (remove-followon supply unit)} ctx)
+       (unit-followon-event! unit demand?)))
 
-;'announce that the unit is in fact following on, remove it from the followons list.
-;Private Sub recordFollowon(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, demand As TimeStep_DemandData, Optional context As TimeStep_SimContext)
-;removeFollowOn supply, unit
-;'Decoupled
-;'triggerEvent FollowingOn, unit.name, demand.name, "Unit " & unit.name & " is following on to demand " & demand.name, , context
-;unitFollowOnEvent unit, demand, context
-;End Sub
-;'When a unit engages in a followon deployment, we notify the event context.
-;'Simple declarative event description for wrapping low level followon event notification.
-;Public Sub unitFollowOnEvent(unit As TimeStep_UnitData, demand As TimeStep_DemandData, Optional context As TimeStep_SimContext)
-;triggerEvent FollowingOn, unit.name, demand.name, "Unit " & unit.name & " is following on to demand " & demand.name, , context
-;End Sub
-;'TODO -> formalize dependencies and pre-compilation checks....
-;'already decoupled.
-;Public Function CanSimulate(supply As TimeStep_ManagerOfSupply) As Boolean
-;CanSimulate = supply.tags.getSubjects("Enabled").count > 0
-;End Function
-;
-;
-;'TOM Change -> removed due to slowdown
-;''Public Function supplyPacket(unitname As String) As Dictionary
-;''Set supplyPacket = New Dictionary
-;''supplyPacket.add "Updated", unitname
-;''End Function
-;
+(defn drop-unit [supply unitname] 
+  (update-in supply [:unit-map] dissoc unit-name))
 
-;
-;
-;'Decoupled.
-;
-;'procedure that allows us to, using the fillgraph, derive a set of tags whose associated units
-;'should be deactivated.  if removal is true, the units will be removed from memory as well.
-;'in cases where there are a lot of units, this may be preferable
-;Public Sub scopeSupply(supply As TimeStep_ManagerOfSupply, disableTags As Dictionary, Optional removal As Boolean)
-;Dim subjects As Dictionary
-;Dim subject As String
-;Dim subj
-;Dim tg
-;
-;With supply
-;    For Each tg In disableTags
-;        Set subjects = .tags.getSubjects(CStr(tg))
-;        For Each subj In subjects
-;            subject = CStr(subj)
-;            If .unitmap.exists(subject) Then
-;                disable .tags, subject
-;                If removal Then removeUnit supply, subject
-;            End If
-;        Next subj
-;    Next tg
-;End With
-;
-;End Sub
-;'TOM Note 27 Mar 2011 -> we might have to clean up other tables too...
-;'Decoupled.
-;Public Sub removeUnit(supply As TimeStep_ManagerOfSupply, unitname As String)
-;
-;Static unitptr As IVolatile
-;
-;With supply.unitmap
-;    If .exists(unitname) Then
-;        Set unitptr = .item(unitname)
-;        removeSRC supply, .item(unitname).src
-;        .Remove (unitname)
-;        unitptr.Terminate
-;    End If
-;End With
-;
-;End Sub
+;DOUBLE CHECK....do we really mean to drop the entire src? 
+(defn remove-unit [supply unitname]
+  (-> (drop-unit supply unitname)
+      (remove-src (:src (get-unit supply unitname))))) 
+
+;procedure that allows us to, using the fillgraph, derive a set of tags whose 
+;associated units should be deactivated.  if removal is true, the units will be
+;removed from memory as well. in cases where there are a lot of units, this may 
+;be preferable.
+(defn scope-supply [supply disable-tags & [removal]]
+  (let [f (if removal remove-unit (fn [s u] s))]
+    (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
+          (reduce (fn [s u] (-> (update-in s [:tags] disable u) f u)) supply))))
+
 ;'TOM Change 3 Jan 2011
 ;'aux function for logging/recording the fact that a unit changed locations
-;'TODO -> it'd be nice to figure out how to unify this reporting, right now LogMove gets to
-;'reach directly into the tables of outputmanager and manipulate. This is fast and simple, but it's not
-;'pure ....
-;'One current problem is -> we have to transform fromloc/toloc into something palatable for trending ...
-;Public Sub LogMove(t As Single, fromloc As String, toloc As String, unit As TimeStep_UnitData, _
-;                        Optional duration As Single, Optional context As TimeStep_SimContext)
-;
-;SimLib.triggerEvent UnitMoved, unit.name, toloc, "", unit, context
-;'TODO -> check to see if this is equivalent.  I think it is.  If so, prefer.
-;'MarathonOpUnit.unitMovedEvent unit, toloc, context
-;
-;End Sub
-;
-;'TODO -> This should be renamed like positionEvent or something.
-;'Main dependencies are in the unit Behaviors.
-;'Unit behaviors currently use parent to refer to a supply manager.
-;'We can probably do better than this.
-;'Actually, unit behaviors aren't maintaining any state....
-;'So we can probably just plug them in as modules....they're all pure functions.
-;
+;'TODO -> it'd be nice to figure out how to unify this reporting, right now 
+;LogMove gets to reach directly into the tables of outputmanager and manipulate.
+;This is fast and simple, but it's not pure ....
+;One current problem is -> we have to transform fromloc/toloc into something 
+;palatable for trending ...
+(defn log-move! [t fromloc toloc unit & [duration ctx]]
+  (sim/trigger :unitMoved (:name unit) toloc "" unit ctx))
+
+;TODO -> This should be renamed like positionEvent or something.
+;Main dependencies are in the unit Behaviors.
+;Unit behaviors currently use parent to refer to a supply manager.
+;We can probably do better than this.
+;Actually, unit behaviors aren't maintaining any state....
+;So we can probably just plug them in as modules....they're all pure functions.
 ;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
-;Public Sub LogPosition(t As Single, frompos As String, topos As String, unit As TimeStep_UnitData, Optional duration As Single, Optional context As TimeStep_SimContext)
-;
-;
-;'If SupplyTraffic Then
-;    'Decouple
-;    triggerEvent PositionUnit, "SupplyManager", unit.name, _
-;        "UIC " & unit.name & " has repositioned from " & frompos & " to " & topos, , context  'record the move
-;'End If
-;
-;End Sub
-;
-;'TOM change 3 Jan 2011
-;'aux function for logging/recording the fact that a unit deployed
-;'transfer 1 item
+(defn log-position! [t frompos topos unit & [duration ctx]]
+  (sim/trigger :PositionUnit "SupplyManager" (:name unit) 
+     (str "UIC " (:name unit) " has repositioned from " frompos " to " topos)
+     nil ctx))
+
+;TOM change 3 Jan 2011
+;aux function for logging/recording the fact that a unit deployed
+;transfer 1 item
 ;Public Sub LogDeployment(t As Single, fromname As String, demand As TimeStep_DemandData, unit As TimeStep_UnitData, _
 ;                            fillcount As Long, fill As TimeStep_Fill, deploydate As Date, period As String, Optional context As TimeStep_SimContext, Optional msg As String)
 ;
@@ -653,77 +617,34 @@
 ;
 ;End Sub
 
-;
-;'TODO -> replace this call to a direct call for getTime, from the simlib module.
-;Public Function getTime(context As TimeStep_SimContext) As Single
-;'Decouple
-;'getTime = parent.CurrentTime
-;getTime = SimLib.getTime(context)
-;End Function
+;CHECK -> might be missing something in the port.  
+;1)not using toname in the original code, also no msg.
+(defn log-deployment! 
+  [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
+  ;(let [toname (:name demand)]                                              ;1)
+  (sim/trigger :deploy "SupplyManager" (:name unit)
+     "" {:fromloc   fromname  :unit unit :demand demand :fill filldata 
+         :fillcount fillcount :period period :t t :deploydate deploydate} ctx))
 
+;REFACTOR
+;maybe ignore this? Extra level of indirection.
+(defn get-time [ctx] (sim/get-time ctx))
+(defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
 
-;Public Function getSources(supply As TimeStep_ManagerOfSupply) As Dictionary
-;Set getSources = supply.tags.getSubjects("Sources")
-;End Function
+;Register a set of units that need to be utilized, or sent to reset.
+;The call for update-deploy-status is UGLY.  Might be nice to use keyword args..
+(defn add-followon [supply unit ctx] 
+  (-> (assoc-in supply [:followons (:name unit)] unit)
+      (update-deploy-status unit true nil ctx)))
 
-;'TODO -> update calls to this guy in behaviors.  Should fail, currently.
-;'sub to register a set of units that need to be utilized, or sent to reset.
-;Public Sub addFollowOn(supply As TimeStep_ManagerOfSupply, unit As TimeStep_UnitData, _
-;                        context As TimeStep_SimContext)
-;
-;supply.followons.add unit.name, unit
-;UpdateDeployStatus supply, unit, True, , context
-;
-;End Sub
-;Public Function lastupdate(unitname As String, ctx As TimeStep_SimContext) As Single
-;'Decoupled
-;lastupdate = SimLib.lastupdate(unitname, ctx)
-;End Function
-;
-;Public Function multipleGhosts(supplytags As GenericTags) As Boolean
-;multipleGhosts = supplytags.getSubjects("SOURCE_Ghost").count > 1
-;End Function
-;
-;Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As TimeStep_ManagerOfPolicy, _
-;                        parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                            ctx As TimeStep_SimContext, Optional ensureghost As Boolean)
-;
-;Dim gunit As TimeStep_UnitData
-;
-;UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, policystore, ctx
-;
-;If ensureghost Then
-;    If Not supplystore.hasGhosts Then
-;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
-;        'Decoupled
-;        Set gunit = associateUnit(gunit, supplystore, ctx)
-;        'decoupled
-;        Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
-;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
-;            "added Default ghost unit to unitmap in supplymanager."
-;    End If
-;End If
-;
-;End Sub
-;Public Sub UnitsFromSheet(sheetname As String, supplystore As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, _
-;                            parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, _
-;                                ctx As TimeStep_SimContext)
-;Dim tbl As GenericTable
-;
-;Set tbl = New GenericTable
-;tbl.FromSheet Worksheets(sheetname)
-;
-;MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, policystore, ctx
-;
-;
-;End Sub
-;Public Sub UnitsFromDictionary(unitrecords As Dictionary, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                                policystore As TimeStep_ManagerOfPolicy, supplystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
-;'Decouple
-;UnitsFromRecords unitrecords, parameters, behaviors, policystore, supplystore, ctx
-;
-;End Sub
-;
+;REFACTOR
+;maybe ignore this? Extra level of indirection.
+(defn last-update [unitname ctx] (sim/last-update unitname ctx))
+
+(def ghost-source-tag (source-key "Ghost"))
+(defn multiple-ghosts? [supplytags]
+  (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
+
 ;'TOM Change 13 Aug 2012
 ;'Update every unit in the supply, synchronizes numerical stats.
 ;Public Sub updateALL(day As Single, supplystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext, Optional unitsToUpdate As Dictionary)  ' supplystore as TimeStep_ManagerOfSupply )
@@ -764,7 +685,11 @@
 ;End With
 ;
 ;End Sub
-;
+;(defn update-unit [
+(defn update-all [day supply ctx & [unitnames]]
+  (let [unitnames (or unitnames (keys (get supply :unitmap)))]
+    (apply-update 
+    
 ;
 ;
 ;''Port again
@@ -925,6 +850,47 @@
 ;            "added Default ghost unit to unitmap in supplymanager."
 ;    End If
 ;End If
+;
+
+;Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As TimeStep_ManagerOfPolicy, _
+;                        parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;                            ctx As TimeStep_SimContext, Optional ensureghost As Boolean)
+;
+;Dim gunit As TimeStep_UnitData
+;
+;UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, policystore, ctx
+;
+;If ensureghost Then
+;    If Not supplystore.hasGhosts Then
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;        'Decoupled
+;        Set gunit = associateUnit(gunit, supplystore, ctx)
+;        'decoupled
+;        Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
+;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;            "added Default ghost unit to unitmap in supplymanager."
+;    End If
+;End If
+;
+;End Sub
+;Public Sub UnitsFromSheet(sheetname As String, supplystore As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, _
+;                            parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, _
+;                                ctx As TimeStep_SimContext)
+;Dim tbl As GenericTable
+;
+;Set tbl = New GenericTable
+;tbl.FromSheet Worksheets(sheetname)
+;
+;MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, policystore, ctx
+;
+;
+;End Sub
+;Public Sub UnitsFromDictionary(unitrecords As Dictionary, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;                                policystore As TimeStep_ManagerOfPolicy, supplystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
+;'Decouple
+;UnitsFromRecords unitrecords, parameters, behaviors, policystore, supplystore, ctx
+;
+;End Sub
 ;
 
 

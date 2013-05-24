@@ -34,9 +34,21 @@
 (defn get-subjects
   "Fetch any subjects associated with a tag, from database m."
   [m tag] (get-in m [:tags tag]))
+
 (defn add-tag
   "Add a tag to the database.  Should require a subject to exist."
   [m tag] (assoc-in m [:tags tag] #{}))
+
+(defn and-tags
+  "Select subjects that have every tag in xs."
+  [m xs]
+  (reduce #(clojure.set/intersection %1 (get-subjects m %2))) #{} xs)
+
+(defn or-tags
+  "Select subjects that have any tag in xs."
+  [m xs]
+  (reduce #(clojure.set/union %1 (get-subjects m %2))) #{} xs)
+
 (defn add-subject [m subject] (assoc-in m [:subjects subject] #{}))
 
 (defn tag-subject
