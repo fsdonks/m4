@@ -98,13 +98,25 @@
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
 ;helper function for dropping a tag from multiple units at once.
 (defn untag-units [supplystore tag units]
-  (reduce #(tag/untag-subject (:tags %1) %2 tag)) supplystore units)                              
+  (reduce #(tag/untag-subject (:tags %1) %2 tag)) supplystore units)
+
+(defn up-to-date? [day ctx unitname] (= (sim/last-update unitname ctx) day))
+
 (defn apply-update [supplystore unitname ctx]
   (if (not (enabled? (:tags supplystore) unitname)) ctx 
     (let [unit (get-unit supplystore unitname)]
       (->> ctx       
         (u/update unit (updates/elapsed t  (sim/last-update unitname ctx)))
         (supply-update! supplystore unit (unit-msg unit))))))
+
+(defn update-units [supply ctx units]       
+  (reduce (fn [acc x] (apply-update (get-supplystore acc) x acc))  ctx units))
+;Update every unit in the supply, synchronizes numerical stats.
+(defn update-all [day supply ctx & [unitnames]]
+  (->> (or unitnames (keys (get supply :unitmap)))
+       (filter (partial up-to-date? day ctx))
+       (update-units supply ctx)))
+
 ;;Note -> there was another branch here originally....
 ;;requestUnitUpdate day, unit, context
 
@@ -115,10 +127,8 @@
 (defn manage-supply [day state]
   (let [supply (:supply-store state)
         ctx    (:context state)]
-    (if-let [today-updates (get-supply-updates day ctx)]
-      (reduce (fn [acc pckt] 
-                (apply-update (get-supplystore acc) (:requested-by pckt) acc))
-              ctx today-updates)
+    (if-let [today-updates (map :requested-by (get-supply-updates day ctx))]
+      (update-units supply ctx today-updates)
       ctx)))
 
 ;'A simple wrapper to unify the high level supply management.  We were calling 
@@ -448,19 +458,6 @@
 ;
 ;End Sub
 
-    
-    
-;'TOM Hack 13 August 2012
-;Public Function getNearMaxPolicy(policy As IRotationPolicy, _
-;                                    policystore As TimeStep_ManagerOfPolicy) As IRotationPolicy
-;If policy.AtomicName = "MaxUtilization" Then
-;    Set getNearMaxPolicy = policystore.policies("NearMaxUtilization")
-;ElseIf policy.AtomicName = "MaxUtilization_Enabler" Then
-;    Set getNearMaxPolicy = policystore.policies("NearMaxUtilization_Enabler")
-;Else
-;    Err.Raise 101, , "Can't find policy."
-;End If
-
 ;NOTE -> replace this with a simple map lookup...
 (defn get-near-max-policy [policy policystore]
   (let [id (case (pol/atomic-name policy) 
@@ -506,20 +503,6 @@
         (assoc-in  [:unit-map (:name unit)] 
           (assoc unit :followoncode nil)))))
 
-;process the unused follow-on units, changing their policy to complete cycles.
-;Public Sub ReleaseFollowOns(supply As TimeStep_ManagerOfSupply, Optional context As TimeStep_SimContext)
-;Dim nm
-;Dim unitptr As TimeStep_UnitData
-;
-;For Each nm In supply.followons
-;    Set unitptr = supply.followons(nm)
-;    removeFollowOn supply, unitptr  'this eliminates the followon code
-;    'TOM Change 24 July 2012 -> With no followon code, this will allow units to try to recover.
-;    unitptr.ChangeState "AbruptWithdraw", 0, , context
-;    UpdateDeployStatus supply, unitptr, , , context
-;Next nm
-;
-;End Sub
 (defn get-unit [supplystore unitname] (get-in supplystore [:unitmap unitname]))
 (defn followon-unit? [store unit] (contains? (:followons store) (:name unit)))
 (defn release-followon-unit [ctx unitname]
@@ -532,9 +515,11 @@
     (update-deploy-status 
       (-> ctx :state :supplystore) unit nil nil ctx)))
 
+
+;process the unused follow-on units, changing their policy to complete cycles.
 ;CONTEXTUAL
 (defn release-followons [supplystore & [ctx]]
-  (reduce release-followon-unit ctx (keys (:followons supplystore))))                                           
+  (reduce release-followon-unit ctx (keys (:followons supplystore))))         
 
 ;UGLY....this could be prettier....although it refactored nicely.  
 (defn release-maxutilizers [supplystore & [ctx]]
@@ -589,34 +574,8 @@
      (str "UIC " (:name unit) " has repositioned from " frompos " to " topos)
      nil ctx))
 
-;TOM change 3 Jan 2011
-;aux function for logging/recording the fact that a unit deployed
-;transfer 1 item
-;Public Sub LogDeployment(t As Single, fromname As String, demand As TimeStep_DemandData, unit As TimeStep_UnitData, _
-;                            fillcount As Long, fill As TimeStep_Fill, deploydate As Date, period As String, Optional context As TimeStep_SimContext, Optional msg As String)
-;
-;Dim newrec As GenericRecord
-;Dim trendtarget As String
-;'TOM Change 4 Jan 2011
-;
-;Dim toname As String
-;'TOM Change 4 Jan 2011
-;toname = demand.name  'TOM note -> this points to individual instances of the demand. We could produce an aggregated
-;
-;'TOM Change
-;'msg =
-;
-;'TOM fix 10 Sep 2012 -> wasn't passing in FromName, causing empty fields in deploy
-;'records.
-;'Decoupled
-;SimLib.triggerEvent _
-;    deploy, "SupplyManager", unit.name, msg, _
-;             newdict("FromLoc", fromname, "Unit", unit, "Demand", demand, _
-;                     "Fill", fill, "FillCount", fillcount, _
-;                     "Period", period, "t", t, "DeployDate", deploydate), context
-;
-;End Sub
 
+;aux function for logging/recording the fact that a unit deployed
 ;CHECK -> might be missing something in the port.  
 ;1)not using toname in the original code, also no msg.
 (defn log-deployment! 
@@ -645,53 +604,100 @@
 (defn multiple-ghosts? [supplytags]
   (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
 
-;'TOM Change 13 Aug 2012
-;'Update every unit in the supply, synchronizes numerical stats.
-;Public Sub updateALL(day As Single, supplystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext, Optional unitsToUpdate As Dictionary)  ' supplystore as TimeStep_ManagerOfSupply )
-;Dim update
-;Dim unit As TimeStep_UnitData
-;Dim nm
-;Dim startloc As String
-;Dim finloc As String
-;Dim lupdate As Single
-;Dim msg As String 'tom added 10 Sep 2012
+;------------Deferred------------
+;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;                                    ctx As TimeStep_SimContext, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
+;Dim tbl As GenericTable
+;Dim gunit As TimeStep_UnitData
 ;
-;If unitsToUpdate Is Nothing Then Set unitsToUpdate = supplystore.unitmap
+;Set SupplyfromExcel = New TimeStep_ManagerOfSupply
+;'TODO -> turn this into a function.
+;UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, policystore, ctx
 ;
-;'find pending supply updates for today
-;With supplystore.unitmap
-;    For Each nm In unitsToUpdate
-;        Set unit = .item(nm)
-;        If isEnabled(supplystore.tags, unit.name) Then   'filters out inactive (not being simulated) units.
-;            'update the unit relative to the time of request
-;    '        startloc = unit.LocationName
-;            lupdate = lastupdate(unit.name, ctx)
-;            If lupdate < day Then
-;                Set unit = unit.update(day - lupdate)
-;                'TOM fix 10 Sep 2012, was using the same msg (old)
-;                msg = "Updated Unit " & unit.name
-;                If supplystore.Verbose Then
-;                    'requestUpdate day, unit.name, UpdateType.supply, , ctx
-;                    'TOM chang 10 Sep 2012
-;                    requestSupplyUpdate day, unit, ctx
-;                Else
-;                    SimLib.triggerEvent supplyUpdate, "SupplyManager", unit.name, msg & " " & unit.getStats, , ctx 'supplyPacket(unit.name)
-;                End If
-;            ElseIf lupdate > day Then
-;                Err.Raise 101, , "Should not be updating in the future! "
-;            End If
-;        End If
-;    Next nm
-;End With
+;If ensureghost Then
+;    If Not SupplyfromExcel.hasGhosts Then
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;        Set gunit = associateUnit(gunit, SupplyfromExcel, ctx)
+;        registerUnit SupplyfromExcel, behaviors, gunit, True, ctx
+;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;            "added Default ghost unit to unitmap in supplymanager."
+;    End If
+;End If
+;
+
+;Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As TimeStep_ManagerOfPolicy, _
+;                        parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;                            ctx As TimeStep_SimContext, Optional ensureghost As Boolean)
+;
+;Dim gunit As TimeStep_UnitData
+;
+;UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, policystore, ctx
+;
+;If ensureghost Then
+;    If Not supplystore.hasGhosts Then
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;        'Decoupled
+;        Set gunit = associateUnit(gunit, supplystore, ctx)
+;        'decoupled
+;        Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
+;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;            "added Default ghost unit to unitmap in supplymanager."
+;    End If
+;End If
 ;
 ;End Sub
-;(defn update-unit [
-(defn update-all [day supply ctx & [unitnames]]
-  (let [unitnames (or unitnames (keys (get supply :unitmap)))]
-    (apply-update 
-    
+;Public Sub UnitsFromSheet(sheetname As String, supplystore As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, _
+;                            parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, _
+;                                ctx As TimeStep_SimContext)
+;Dim tbl As GenericTable
+;
+;Set tbl = New GenericTable
+;tbl.FromSheet Worksheets(sheetname)
+;
+;MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, policystore, ctx
 ;
 ;
+;End Sub
+;Public Sub UnitsFromDictionary(unitrecords As Dictionary, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;                                policystore As TimeStep_ManagerOfPolicy, supplystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
+;'Decouple
+;UnitsFromRecords unitrecords, parameters, behaviors, policystore, supplystore, ctx
+;
+;End Sub
+;
+
+
+
+;-----------Obsolete, we don't need to have this....
+;'Encapsulate? -> nah, it's already independent.
+;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
+;
+;If followoncode = vbNullString Then
+;    Err.Raise 101, , "No followon code! Units elligble for followon should have a code!"
+;Else
+;    With followonbuckets
+;        If .exists(followoncode) Then
+;            Set getFollowonBucket = .item(followoncode)
+;        Else
+;            Set getFollowonBucket = New Dictionary
+;            .add followoncode, getFollowonBucket
+;        End If
+;    End With
+;End If
+;
+;End Function
+
+;-----------Obsolete, using version in unit data.
+
+;;use the version associated with the unit....
+;Private Function CanDeploy(unit As TimeStep_UnitData) As Boolean
+;
+;CanDeploy = unit.policy.isDeployable(unit.cycletime)
+;
+;End Function
+
+
+;-----------Obsolete, looks like I ditched - double comments.
 ;''Port again
 ;''Private Function shouldChangePolicy(uic As TimeStep_UnitData) As Boolean
 ;''shouldChangePolicy = uic.component <> "AC" And uic.component <> "Ghost"
@@ -829,96 +835,3 @@
 ;'Next nm
 ;'
 ;'End Sub
-
-
-;------------Deferred------------
-;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                                    ctx As TimeStep_SimContext, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
-;Dim tbl As GenericTable
-;Dim gunit As TimeStep_UnitData
-;
-;Set SupplyfromExcel = New TimeStep_ManagerOfSupply
-;'TODO -> turn this into a function.
-;UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, policystore, ctx
-;
-;If ensureghost Then
-;    If Not SupplyfromExcel.hasGhosts Then
-;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
-;        Set gunit = associateUnit(gunit, SupplyfromExcel, ctx)
-;        registerUnit SupplyfromExcel, behaviors, gunit, True, ctx
-;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
-;            "added Default ghost unit to unitmap in supplymanager."
-;    End If
-;End If
-;
-
-;Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As TimeStep_ManagerOfPolicy, _
-;                        parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                            ctx As TimeStep_SimContext, Optional ensureghost As Boolean)
-;
-;Dim gunit As TimeStep_UnitData
-;
-;UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, policystore, ctx
-;
-;If ensureghost Then
-;    If Not supplystore.hasGhosts Then
-;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
-;        'Decoupled
-;        Set gunit = associateUnit(gunit, supplystore, ctx)
-;        'decoupled
-;        Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
-;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
-;            "added Default ghost unit to unitmap in supplymanager."
-;    End If
-;End If
-;
-;End Sub
-;Public Sub UnitsFromSheet(sheetname As String, supplystore As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, _
-;                            parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, _
-;                                ctx As TimeStep_SimContext)
-;Dim tbl As GenericTable
-;
-;Set tbl = New GenericTable
-;tbl.FromSheet Worksheets(sheetname)
-;
-;MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, policystore, ctx
-;
-;
-;End Sub
-;Public Sub UnitsFromDictionary(unitrecords As Dictionary, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                                policystore As TimeStep_ManagerOfPolicy, supplystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
-;'Decouple
-;UnitsFromRecords unitrecords, parameters, behaviors, policystore, supplystore, ctx
-;
-;End Sub
-;
-
-
-
-;-----------Obsolete, we don't need to have this....
-;'Encapsulate? -> nah, it's already independent.
-;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
-;
-;If followoncode = vbNullString Then
-;    Err.Raise 101, , "No followon code! Units elligble for followon should have a code!"
-;Else
-;    With followonbuckets
-;        If .exists(followoncode) Then
-;            Set getFollowonBucket = .item(followoncode)
-;        Else
-;            Set getFollowonBucket = New Dictionary
-;            .add followoncode, getFollowonBucket
-;        End If
-;    End With
-;End If
-;
-;End Function
-
-;-----------Obsolete, using version in unit data.
-
-;;use the version associated with the unit....
-;Private Function CanDeploy(unit As TimeStep_UnitData) As Boolean
-;
-;CanDeploy = unit.policy.isDeployable(unit.cycletime)
-;
-;End Function
