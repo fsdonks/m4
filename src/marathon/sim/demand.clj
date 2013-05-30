@@ -40,6 +40,10 @@
           "Tried to remove non-existent fillrule")
   (update-in demandstore [:fillables] disj fillrule))
 
+;TOM ADDED 30 MAy 2013 
+(defn add-demand [demandstore demand]
+  (assoc-in demandstore [:demand-map (:name demand)] demand))
+
 (defn manage-changed-demands [day state] ;REDUNDANT
   (assoc-in state [:demand-store :changed] {}))
 

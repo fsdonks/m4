@@ -3,7 +3,7 @@
 (ns marathon.sim.supply
   (:require [marathon.demand [demanddata :as d] [demandstore :as store]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim [demand :as demand]   [policy :as pol]
+            [marathon.sim [demand :as dem]   [policy :as pol]
                           [unit :as u]          [fill :as fill]]           
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]))
@@ -85,11 +85,6 @@
 (defn can-simulate? [supply] 
   (not (empty? (tag/get-subjects (:tags supply) :enabled))))
 
-;Replaced by request-unit-update!
-;Public Sub requestSupplyUpdate(t As Single, unit As TimeStep_UnitData, context As TimeStep_SimContext)
-;SimLib.requestUpdate t, "SupplyManager", UpdateType.supply, , context
-;End Sub
-
 (defn unit-msg [unit] 
   (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
 
@@ -135,17 +130,10 @@
 ;this inline, it's more consistent now.
 (defn manage-followons [day ctx] (release-followons (get-supplystore ctx) ctx))
 
-;Public Sub spawnUnitEvent(unit As TimeStep_UnitData, context As TimeStep_SimContext)
-;SimLib.triggerEvent TimeStep_Msg.spawnunit, unit.name, unit.name, "Spawned Unit " & unit.name, , context
-;End Sub
-
 (defn spawning-unit! [unit ctx]
   (sim/trigger :spawnnit (:name unit) (:name unit)
      (str "Spawned Unit " (:name unit)) nil ctx))             
 
-;Public Sub spawnGhostEvent(unit As TimeStep_UnitData, context As TimeStep_SimContext)
-;SimLib.triggerEvent TimeStep_Msg.SpawnGhost, unit.name, unit.name, "Spawned a ghost", , context
-;End Sub
 (defn spawning-ghost! [unit ctx]
   (sim/trigger :SpawnGhost (:name unit) (:name unit)
      (str "Spawned a ghost " (:name unit)) nil ctx))        
@@ -222,20 +210,23 @@
      (str "UIC " (:name unit) " has repositioned from " frompos " to " topos)
      nil ctx))
 ;aux function for logging/recording the fact that a unit deployed
-;CHECK -> might be missing something in the port.  
-;1)not using toname in the original code, also no msg.
 (defn log-deployment! 
   [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
-  ;(let [toname (:name demand)]                                              ;1)
-  (sim/trigger :deploy "SupplyManager" (:name unit)
-     "" {:fromloc   fromname  :unit unit :demand demand :fill filldata 
-         :fillcount fillcount :period period :t t :deploydate deploydate} ctx))
-;'When a unit engages in a followon deployment, we notify the event context.
-;'Simple declarative event description for wrapping low level followon event notification.
+  (sim/trigger :deploy "SupplyManager" (:name unit)               
+     (str "Deployed unit " (:name unit) 
+          " from " fromname " to demand " (:name demand))
+     {:fromloc   fromname  :unit unit :demand demand :fill filldata 
+      :fillcount fillcount :period period :t t :deploydate deploydate}  ctx))
+;When a unit engages in a followon deployment, we notify the event context.
 (defn unit-followon-event! [unit demand ctx]
   (sim/trigger :FollowingOn  (:name unit) (:name demand) 
      (str "Unit " (:name unit) " is following on to demand " (:name demand))
         nil ctx))
+
+(defn first-deployment! [supply unit ctx]
+  (sim/trigger :firstDeployment (:name supply) (:name supply) 
+       (str "Unit " (:name unit) " Deployed for the First Time") nil ctx))  
+
 ;register source as being a member of sources, so it can be looked at when 
 ;filling supply.
 (defn tag-source [source tags] (tag/tag-subject tags source :sources))
@@ -297,12 +288,8 @@
 
 (defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
 
-;Public Function assignBehavior(behaviors As TimeStep_ManagerOfBehavior,
-;       unit As TimeStep_UnitData, behaviorname As String) As TimeStep_UnitData
-;Set assignBehavior = behaviors.assignBehavior(unit, behaviorname)
-;End Function
 (defn assign-behavior [behaviors unit behaviorname]
-  (behaviors/assign-behavior unit behaviorname)) ;WRONG  behaviors doesn't exist yet.
+  (behaviors/assign-behavior unit behaviorname))
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
 (defn empty-position? [unit] (nil? (:position-policy unit)))
@@ -393,117 +380,62 @@
                policystore behavior)
        (register-unit supplystore behaviors)))
 
-;Sub deployUnit(supply As TimeStep_ManagerOfSupply, context As TimeStep_SimContext, parameters As TimeStep_Parameters, _
-;                policystore As TimeStep_ManagerOfPolicy, unit As TimeStep_UnitData, t As Single, sourcetype As String, _
-;                    demand As TimeStep_DemandData, bog As Long, fillcount As Long, fill As TimeStep_Fill, _
-;                        deploydate As Date, Optional isFollowon As Boolean, Optional location As Long)
-;''TOM Note 23 Mar 2011 -> we'll have to revisit this, big time.
-;''if a unit is found, this sub deploys the unit
-;Dim FromLocation As String
-;Dim ToLocation As String
-;Dim FromPosition As String
-;Dim ToPosition As String
-;
-;Dim msg As String 'TOM added 9 Sep 2012
-;
-;With unit
-;    'TODO -> .validdeployer and friends are an abomination.  Need to rip that stuff out of unitdata....
-;    'TOM Change 3 Jan 2011 -> ported this to a string name convention, we need this for plotting values.
-;    If .validDeployer Then
-;        FromLocation = .LocationName 'Tom Note <- this is wrong, not being updated.
-;        FromPosition = .PositionPolicy 'Tom Change 24 May
-;
-;        ToLocation = demand.name
-;        'TOM Change June 6 2011 -> Temporary bypass....
-;        ToPosition = "Deployed" '.policy.deployed 'Tom Change 24 May
-;
-;        'demand.qualityDeployed = sourceType 'not certain about this......can we calculate this?
-;        'demand.unitsDeployed = unit.Index
-;        'mutation!
-;        demand.Assign unit 'Tom Change 14 Mar 2011, new method in demand class.
-;
-;        'TOM Change 7 Jun 2011 -> modified this to reflect movement in location space.
-;        'TOM note 24 May -> Need to bifurcate the move logs into 2 as well, Position Change, Spatial Change.
-;        'LogMove t, FromLocation, tolocation, unit, unit.policy.MaxBOG
-;    
-;        'set location array to the demand Key value
-;        'Decoupled
-;        '.changeLocation demand.name, context 'Mutation!
-;        MarathonOpUnit.changeLocation unit, demand.name, context
-;        
-;        '.LocationName = demand.name
-;        'Decoupled
-;        'TODO consider pushing this into unitsim.changelocation...does it need to be here?
-;        .location = location 'parent.policymanager.locationID(.LocationName)
-;        
-;        'Potential BUG from conversion, check.  30 Aug 2012
-;        'parent.policymanager.locationID(.LocationName)
-;
-;        'TOM change 6 June 2011 -> this was causing a problem with deployability....one of the casualties of
-;        'the split between location and policy position.
-;        'TODO consider pushing this into unitsim.changelocation...does it need to be here?
-;        .PositionPolicy = ToPosition
-;
-;        If isFollowon Then
-;            'Decoupled
-;            recordFollowon supply, unit, demand, context
-;            MarathonOpUnit.reDeployUnit unit, t, unit.deploymentindex, context
-;        Else
-;            MarathonOpUnit.deployUnit unit, t, getNextDeploymentID(supply), context
-;        End If
-;        
-;        
-;        'tom change 7 Sep -> updated for decoupling
-;        'TOM Hack 13 August 2012
-;        If isFirstDeployment(unit, supply) Then
-;            tagAsDeployed unit, supply
-;            SimLib.triggerEvent TimeStep_Msg.firstDeployment, supply.name, supply.name, "Unit " & unit.name & " Deployed for the First Time", , context
-;            'parent.trigger TimeStep_Msg.firstDeployment, name, name, "Unit " & unit.name & " Deployed for the First Time"
-;            If checkMaxUtilization(parameters) Then
-;                If shouldChangePolicy(unit) Then unit.policyQueue.add getNearMaxPolicy(unit.policy, policystore)
-;            End If
-;        End If
-;                    
-;                    
-;        'Bug fix 7 Sep 2012 -> I think followon is an enumerated type, which caused a subtle bug
-;        'UpdateDeployability unit, supply.DeployableBuckets, isFollowon, False, context
-;        'Further update 9 Sep 2012 ->  followon was never specified in the older code, so it defaulted to
-;        'false.  The intent is to communicate the status of the unit, not the context of the deployment.
-;        UpdateDeployability unit, supply.DeployableBuckets, False, False, context
-;        
-;        dropFence supply.tags, unit.name
-;
-;        'TOM change 7 Sep 2012 -> decoupled.
-;        'TOM note 24 May -> Determine where we want to record the deployment happening from....
-;        'Decoupled
-;         msg = "Deployed unit " & unit.name & " from " & FromLocation & " to demand " & demand.name
-;        LogDeployment t, FromLocation, demand, unit, fillcount, fill, deploydate, _
-;                    MarathonOpPolicy.FindPeriod(t, policystore), context, msg
-;
-;
-;        'TOM Note -this may be an error...switch cycletime to dwell.  I think i did this already.
-;        .dwellTimeWhenDeployed = .cycletime
-;        'TOM Change 24 April 2012 -> included extra criteria that bogbudget > 0
-;
-;        'TOM Change 14 July 2011
-;
-;''        triggerEvent supplyUpdate, supply.name, unit.name, msg, , context
-;        'Decoupled
-;        'Higher order
-;        supplyUpdateEvent supply, unit, , context
-;        'TOM Change 6 DEC 2010
-;        'TOM Change 25 Mar 2011 -> we no longer need to do this for each deployed unit.  Fill is
-;        'done in batches now.
-;        'parent.demandmanager.UpdateFill day, demand.name, parent.demandmanager.UnfilledQ
-;    'TOM Change 24 april -> Ensures that units are valid, according the criteria established 24 april
-;    Else
-;        Err.Raise 101, , "Unit is not a valid deployer! Must have bogbudget > 0, cycletime in " & _
-;                            "deployable window, or be eligible or a followon deployment"
-;    End If
-;End With
-;
-;End Sub
+;this is an aux function that serves as a weak patch...probably unnecessary.
+(defn adjust-max-utilization! [supply unit ctx] 
+  (if (and (check-max-utilization (get-in ctx [:state :parameters]))
+           (should-change-policy? unit))
+    (let [unit (update-in unit [:policy-queue] conj 
+                  (get-near-max-policy (:policy unit) 
+                                       (get-in ctx [:state :policystore])))
+          supply (assoc-in supply [:unitmap (:name unit)] unit)]      
+      (sim/merge-updates {:supplystore supply} ctx))                                                  
+    ctx))
 
+(defn check-followon-deployer! [followon? unitname demand t ctx]
+  (let [supply (get-supplystore ctx)
+        unit   (get-unit ctx unitname)]
+        (if followon? 
+          (record-followon supply unit demand ctx)
+          (u/re-deploy-unit unit t (:deployment-index unit) ctx))))
+
+(defn check-first-deployer!   [supply unitname ctx]
+  (let [unit (get-unit supply unitname)]  
+    (if (first-deployment? unit supply)
+      (->> (assoc-in ctx [:state :supplystore] (tag-as-deployed unit supply))
+           (first-deployment! supply unit)
+           (adjust-max-utilization! supply unit)))))
+
+;Enacts context changes and updates necessary to constitute deploying a unit.
+;Critical function.
+;---------CHECK PARAMETERS -> lots of unused stuff here (might be legacy fluff, 
+;most of which is in context.
+(defn deploy-unit [supply ctx parameters policystore unit t sourcetype demand 
+                     bog fillcount filldata deploydate  & [followon?]]
+  (assert  (u/valid-deployer? unit) 
+    "Unit is not a valid deployer! Must have bogbudget > 0, 
+     cycletime in deployable window, or be eligible or a followon  deployment")
+  (let [demandname    (:name demand)
+        demand        (d/assign demand unit) ;need to update this in ctx..
+        demandstore   (get-in ctx [:state :demandstore]) ;Lift to a protocol.
+        from-location (:locationname unit) ;may be extraneous
+        from-position (:position-policy unit);
+        to-location   demandname
+        to-position   :deployed
+        unitname      (:name unit)
+        unit          (-> unit ;MOVE THIS TO A SEPARATE FUNCTION? 
+                       (assoc :position-policy to-position) 
+                       (assoc :dwell-time-when-deployed (udata/get-dwell unit)))
+        supply        (drop-fence (:tags supply) (:name unit))] ;RE-ORDERED 
+     (->> (sim/merge-updates {:demandstore (dem/add-demand demand)
+                              :supplystore supply} ctx)
+          (u/change-location! unit (:name demand)) ;unit -> str ->ctx -> ctx....
+          (check-followon-deployer! followon? supply unitname demand t)
+          (u/deploy-unit unit t (get-next-deploymentid supply))
+          (check-first-deployer! supply unitname) ;THIS MAY BE OBVIATED.
+          (update-deployability unit (:deployable-buckets supply) false false) 
+          (log-deployment! t from-location demand unit fillcount filldata 
+             deploydate (policy/find-period t policystore))
+          (supply-update! supply unit nil))))         
 ;NOTE -> replace this with a simple map lookup...
 (defn get-near-max-policy [policy policystore]
   (let [id (case (pol/atomic-name policy) 
@@ -602,23 +534,23 @@
     (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
           (reduce (fn [s u] (-> (update-in s [:tags] disable u) f u)) supply))))
 
-
-
-
-
 ;------------Deferred------------
-;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                                    ctx As TimeStep_SimContext, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
+;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, 
+;   parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior,
+;      ctx As TimeStep_SimContext, Optional ensureghost As Boolean) 
+;        As TimeStep_ManagerOfSupply
 ;Dim tbl As GenericTable
 ;Dim gunit As TimeStep_UnitData
 ;
 ;Set SupplyfromExcel = New TimeStep_ManagerOfSupply
 ;'TODO -> turn this into a function.
-;UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, policystore, ctx
+;UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, 
+;   policystore, ctx
 ;
 ;If ensureghost Then
 ;    If Not SupplyfromExcel.hasGhosts Then
-;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto",
+;          parameters, policystore)
 ;        Set gunit = associateUnit(gunit, SupplyfromExcel, ctx)
 ;        registerUnit SupplyfromExcel, behaviors, gunit, True, ctx
 ;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
@@ -627,55 +559,69 @@
 ;End If
 ;
 
-;Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As TimeStep_ManagerOfPolicy, _
-;                        parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                            ctx As TimeStep_SimContext, Optional ensureghost As Boolean)
+;Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As 
+;        TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, 
+;           behaviors As TimeStep_ManagerOfBehavior, ctx As TimeStep_SimContext
+;              Optional ensureghost As Boolean)
 ;
 ;Dim gunit As TimeStep_UnitData
 ;
-;UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, policystore, ctx
+;UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, 
+;   policystore, ctx
 ;
 ;If ensureghost Then
 ;    If Not supplystore.hasGhosts Then
-;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto",
+;                                    parameters, policystore)
 ;        'Decoupled
 ;        Set gunit = associateUnit(gunit, supplystore, ctx)
 ;        'decoupled
-;        Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
+;       Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
 ;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
 ;            "added Default ghost unit to unitmap in supplymanager."
 ;    End If
 ;End If
 ;
 ;End Sub
-;Public Sub UnitsFromSheet(sheetname As String, supplystore As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, _
-;                            parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, _
-;                                ctx As TimeStep_SimContext)
+;Public Sub UnitsFromSheet(sheetname As String, supplystore As 
+;      TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior,
+;          parameters As TimeStep_Parameters, policystore As 
+;                TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext)
 ;Dim tbl As GenericTable
 ;
 ;Set tbl = New GenericTable
 ;tbl.FromSheet Worksheets(sheetname)
 ;
-;MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, policystore, ctx
+;MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, 
+;   policystore, ctx
 ;
 ;
 ;End Sub
-;Public Sub UnitsFromDictionary(unitrecords As Dictionary, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
-;                                policystore As TimeStep_ManagerOfPolicy, supplystore As TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
+;Public Sub UnitsFromDictionary(unitrecords As Dictionary, 
+;    parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior,
+;       policystore As TimeStep_ManagerOfPolicy, supplystore As 
+;           TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
 ;'Decouple
-;UnitsFromRecords unitrecords, parameters, behaviors, policystore, supplystore, ctx
+;UnitsFromRecords unitrecords, parameters, behaviors, policystore,
+;     supplystore, ctx
 ;
 ;End Sub
 ;
-
-
 
 ;-----------Obsolete, we don't need to have this....
+;Replaced by request-unit-update!
+;Public Sub requestSupplyUpdate(t As Single, unit As TimeStep_UnitData, 
+;                                    context As TimeStep_SimContext)
+;SimLib.requestUpdate t, "SupplyManager", UpdateType.supply, , context
+;End Sub
+
 ;'Encapsulate? -> nah, it's already independent.
-;Private Function getFollowonBucket(followonbuckets As Dictionary, followoncode As String) As Dictionary
+;Private Function getFollowonBucket(followonbuckets As Dictionary, 
+;       followoncode As String) As Dictionary
 ;
 ;If followoncode = vbNullString Then
-;    Err.Raise 101, , "No followon code! Units elligble for followon should have a code!"
+;    Err.Raise 101, , "No followon code! Units elligble for followon 
+;                      should have a code!"
 ;Else
 ;    With followonbuckets
 ;        If .exists(followoncode) Then
@@ -698,110 +644,6 @@
 ;
 ;End Function
 
-
-;-----------Obsolete, looks like I ditched - double comments.
-;''Port again
-;''Private Function shouldChangePolicy(uic As TimeStep_UnitData) As Boolean
-;''shouldChangePolicy = uic.component <> "AC" And uic.component <> "Ghost"
-;''End Function
-;'''TOM Hack 13 August 2012
-;''Public Function getNearMaxPolicy(policy As IRotationPolicy) As IRotationPolicy
-;''If policy.AtomicName = "MaxUtilization" Then
-;''    Set getNearMaxPolicy = parent.policymanager.policies("NearMaxUtilization")
-;''ElseIf policy.AtomicName = "MaxUtilization_Enabler" Then
-;''    Set getNearMaxPolicy = parent.policymanager.policies("NearMaxUtilization_Enabler")
-;''Else
-;''    Err.Raise 101, , "Can't find policy."
-;''End If
-;''
-;''End Function
-;''Public Function checkMaxUtilization() As Boolean
-;''checkMaxUtilization = parent.parameters.getKey("TAA1519MaxUtilizationHack")
-;''End Function
-;'''TOM Hack 13 August 2012
-;''Public Function followsMaxUtilization(uic As TimeStep_UnitData) As Boolean
-;''Select Case uic.policy.AtomicName
-;''    Case "MaxUtilization", "MaxUtilization_Enabler"
-;''        followsMaxUtilization = True
-;''    Case Else
-;''        followsMaxUtilization = False
-;''End Select
-;''
-;''End Function
-;''
-;'''TOM Hack 13 Aug 2012
-;'''Jeff had me put in some special case for handling initial deployment logic.
-;''Public Function isFirstDeployment(uic As TimeStep_UnitData) As Boolean
-;''isFirstDeployment = Not tags.hasTag("hasdeployed", uic.name)
-;''End Function
-;''Public Sub tagAsDeployed(uic As TimeStep_UnitData)
-;''tags.addTag "hasdeployed", uic.name
-;''End Sub
-;'''TOM Change 24 April 2012
-;'''Ensure that deployable units meet the following criteria:
-;'''1.  bogbudget > 0, or , AccruedBOG < bogbudget (have bog left to spend)
-;'''2.  deploystart <= cycletime < deploystop (are in a position to spend bog)
-;'''3.  cycletime < duration (are in a position to spend bog, that will not bust their cycle.
-;'''    This allows late deployments, but not repeated).
-;'''process the unused follow-on units, changing their policy to complete cycles.
-;''Public Sub ReleaseFollowOns()
-;''Dim nm
-;''Dim unitptr As TimeStep_UnitData
-;''
-;''For Each nm In followons
-;''    Set unitptr = followons(nm)
-;''    removeFollowOn unitptr 'this eliminates the followon code
-;''    'TOM Change 24 July 2012 -> With no followon code, this will allow units to try to recover.
-;''    unitptr.ChangeState "AbruptWithdraw", 0
-;''    UpdateDeployStatus unitptr
-;''Next nm
-;''
-;''End Sub
-;''
-;'''Tom Change 17 Aug 2012.
-;''Public Sub ReleaseMaxUtilizers()
-;''Dim nm
-;''Dim unitptr As TimeStep_UnitData
-;''
-;''For Each nm In tags.getSubjects("MaxUtilizer")
-;'''Tom Change 20 Aug 2012
-;''    Set unitptr = unitmap(nm)
-;''    If followons.exists(CStr(nm)) Then
-;''        removeFollowOn unitptr 'this eliminates the followon code
-;''        'TOM Change 24 July 2012 -> With no followon code, this will allow units to try to recover.
-;''        unitptr.ChangeState "AbruptWithdraw", 0
-;''    End If
-;''    tags.removeTag "MaxUtilizer", CStr(nm)
-;''    UpdateDeployStatus unitptr
-;''Next nm
-;''
-;''End Sub
-;''Private Sub removeFollowOn(unit As TimeStep_UnitData)
-;''Dim ptr As Dictionary
-;''Dim removal As Boolean
-;''Dim fcode As String
-;''
-;''fcode = unit.followoncode
-;''
-;''followons.Remove unit.name
-;''With getFollowonBucket(fcode)
-;''    Set ptr = .item(unit.src)
-;''    ptr.Remove unit.name
-;''    If ptr.count = 0 Then .Remove (unit.src)
-;''    If .count = 0 Then removal = True
-;''End With
-;''
-;''If removal Then followonbuckets.Remove fcode
-;''
-;''unit.followoncode = vbNullString
-;''End Sub
-;'''announce that the unit is in fact following on, remove it from the followons list.
-;''Private Sub recordFollowon(unit As TimeStep_UnitData, demand As TimeStep_DemandData)
-;''removeFollowOn unit
-;'''Decouple
-;''parent.trigger FollowingOn, unit.name, demand.name, "Unit " & unit.name & " is following on to demand " & demand.name
-;''End Sub
-;
 ;'TOM Change 13 Aug 2012
 ;'Update every unit in the supply, synchronizes numerical stats.
 ;
@@ -818,7 +660,7 @@
 ;''find pending supply updates for today
 ;'For Each nm In unitsToUpdate
 ;'    Set unit = unitmap(nm)
-;'    If isEnabled(unit.name) Then  'filters out inactive (not being simulated) units.
+;'    If isEnabled(unit.name) Then  'filters out inactive  units.
 ;'        'update the unit relative to the time of request
 ;''        startloc = unit.LocationName
 ;'        lupdate = lastupdate(unit.name)
@@ -828,7 +670,8 @@
 ;'            If Verbose Then
 ;'                requestUpdate day, unit
 ;'            Else
-;'                parent.trigger supplyUpdate, name, unit.name, msg & " " & unit.getStats 'supplyPacket(unit.name)
+;'                parent.trigger supplyUpdate, name, unit.name, msg & " " 
+;'                   & unit.getStats 'supplyPacket(unit.name)
 ;'            End If
 ;'        ElseIf lupdate > day Then
 ;'            Err.Raise 101, , "Should not be updating in the future! "

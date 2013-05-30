@@ -1,6 +1,6 @@
 (ns marathon.sim.policy)
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
-(declare register-location atomic-name)
+(declare register-location atomic-name find-period)
 
 ;'This is the companion module to the TimeStep_ManagerOfPolicy class.  The primary functions contained
 ;'herein surround the management of an abstract policy context in the simulation, which is embodied in

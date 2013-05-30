@@ -20,7 +20,8 @@
    cycles ;an ordered collection of the cycles that the unit has completed.
    spawntime ;the time in which the unit spawned.
    oi-title ;the description of the unit.
-   locationhistory])
+   locationhistory ;list of all the locations visited.
+   dwell-time-when-deployed ;dwell time ])
 
 (def empty-unit
   (-> (make-unitdata)
