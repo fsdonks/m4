@@ -392,6 +392,31 @@
       (sim/merge-updates {:supplystore supply} ctx))                                                  
     ctx))
 
+;REFACTORING...
+;trying to refactor....what would a nice abstraction look like? 
+;adjust-max-utilization is a great candidate..
+;there are a couple of bread-n-butter items of interest...
+;1) we're updating a unit functionally, storing the result of the update, 
+;   a new unit
+;2) we're updating the supplystore, to reflect the updated unit from 1).
+;3) we're merging the new supplystore into the updated context, by 
+;   passing it to a generic "update" handler that knows how to interpret 
+;   the key :supplystore, the new supply, and a context, to transition to 
+;   a new context.
+;One improvement is to wrap the operation behind a function to provide a clean
+;API....namely, update-unit 
+;This would fetch the appropriate unit, apply a function to it (like update-in),
+;and return a new supplystore with the unit updated.
+;  In this sense, we're lifting a specific function, updating the policyq of 
+;  a unit, into the context of a container for units. 
+;  In haskell speak, the supplystore is a functor, we're applying an update to 
+;  an element of the container.  It's the container's job to understand how 
+;  to lift the updating function into the proper context, and return the new 
+;  container.  monads/monoids anyone? 
+
+
+
+
 (defn check-followon-deployer! [followon? unitname demand t ctx]
   (let [supply (get-supplystore ctx)
         unit   (get-unit ctx unitname)]
@@ -492,8 +517,8 @@
   (let [store (get-in ctx [:state :supplystore])
         ctx   (->> (sim/merge-updates 
                      {:supplystore (remove-followon store unit)} ctx)
-                (u/change-state (get-unit store unitname) 
-                                :AbruptWithdraw 0 nil))
+                   (u/change-state (get-unit store unitname) 
+                                   :AbruptWithdraw 0 nil))
         unit  (get-in store [:unit-map unitname])]   
     (update-deploy-status 
       (-> ctx :state :supplystore) unit nil nil ctx)))
