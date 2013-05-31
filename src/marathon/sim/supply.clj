@@ -136,7 +136,8 @@
 
 (defn spawning-ghost! [unit ctx]
   (sim/trigger :SpawnGhost (:name unit) (:name unit)
-     (str "Spawned a ghost " (:name unit)) nil ctx))        
+     (str "Spawned a ghost " (:name unit)) nil ctx))  
+
 (defn key-tag [base tag] (memoize (keyword (str base tag))))
 ;helper function for defining key-building functions.
 (defmacro defkey [name base] `(def ~name (~'partial ~'key-tag ~base))) 
@@ -328,11 +329,11 @@
   (let [position (:position-policy unit)
         src      (:src unit)
         supply   (get-supplystore ctx)]
-    (if (or followon (u/can-deploy? udata spawning))                         ;1)
+    (if (or followon (u/can-deploy? unit spawning))                         ;1)
       (->> (if followon  ;notifiying of followon data...
              (new-followon! unit ctx) 
              (new-deployable! unit ctx))
-        (add-deployable-supply supply src unit)) ;add stuff to buckets...   
+           (add-deployable-supply supply src unit)) ;add stuff to buckets...   
       ;unit is not deployable
       (->> (not-deployable! unit ctx)
            (remove-deployable-supply supply src unit)))))
