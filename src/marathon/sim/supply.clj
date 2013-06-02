@@ -381,15 +381,19 @@
                policystore behavior)
        (register-unit supplystore behaviors)))
 
+;----FOREIGN -> THESE SHOULD BE MOVED, THEY'RE MORE GENERAL.....
+(defn add-unit [supply unit]    (assoc-in supply [:unitmap (:name unit)] unit))
+(defn conj-policy [unit policy] (update-in unit [:policy-queue] conj policy))
+(defn get-policystore [ctx]     (get-in ctx [:state :policystore]))
+;----END FOREIGN
+                                           
 ;this is an aux function that serves as a weak patch...probably unnecessary.
 (defn adjust-max-utilization! [supply unit ctx] 
   (if (and (check-max-utilization (get-in ctx [:state :parameters]))
            (should-change-policy? unit))
-    (let [unit (update-in unit [:policy-queue] conj 
-                  (get-near-max-policy (:policy unit) 
-                                       (get-in ctx [:state :policystore])))
-          supply (assoc-in supply [:unitmap (:name unit)] unit)]      
-      (sim/merge-updates {:supplystore supply} ctx))                                                  
+    (let [new-policy (get-near-max-policy (:policy unit) (get-policystore ctx))]
+      (sim/merge-updates 
+        {:supplystore (add-unit supply (conj-policy unit new-policy))} ctx))                                                  
     ctx))
 
 ;REFACTORING...
@@ -413,8 +417,6 @@
 ;  an element of the container.  It's the container's job to understand how 
 ;  to lift the updating function into the proper context, and return the new 
 ;  container.  monads/monoids anyone? 
-
-
 
 
 (defn check-followon-deployer! [followon? unitname demand t ctx]
