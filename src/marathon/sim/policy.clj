@@ -132,6 +132,9 @@
 
 ;Utility function.  
 (defn flip [f] (fn [x y] (f y x)))
+;maybe a utility function.
+;(defn exists? [x] (not (nil? x)))
+
 
 ;'Helper sub to partially fill in fields for the more generic RequestUpdate sub.
 (defn policy-update! [t ctx] 
@@ -148,6 +151,7 @@
 ;TODO -> assert non-duplicate entries...
 (defn add-period [policystore per] 
   (assoc-in policystore [:periods (:name per)] per))
+
 
 ;Import a list of periods into the policystore, where each period is a 
 ;GenericPeriod object.
@@ -166,6 +170,8 @@
     (policy-update! (:today per))))
 
 (defn get-periods [policystore] (:periods policystore))
+(defn get-period [policystore periodname] 
+  (get (get-periods policystore) periodname))
 (defn schedule-periods [policystore ctx]
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
 
@@ -194,7 +200,8 @@
 ;Conjoins a location to the set of known locations...
 (defn register-location [locname policystore]
   (update-in policystore [:locationmap]  conj  locname)) 
-;'Register multiple locations in the locs collection with the policystore.
+
+;Register multiple locations in the locs collection with the policystore.
 (defn register-locations [locs policystore] 
   (reduce (flip register-location) policystore locs))
 
@@ -204,99 +211,44 @@
   (register-locations default-locations policystore))  
 ;Derives locations from the policy.
 ;each location in a policy should be registered in the locations dictionary.
+;---TODO - Abstract out the call to graph, maybe have policy handle it...
 (defn get-policy-locations [p] (gr/nodes (:position-graph p)))
 
+;TODO -> formalize this...it's really general right now...
+(defn composite-policy? [p] (contains? p :policies))
 
-;'method for adding atomic policies to the policystore.
-;Public Sub addPolicy(ByRef policy As TimeStep_Policy, policystore As TimeStep_ManagerOfPolicy)
-;
-;With policystore
-;    assert policy.name <> vbNullString, True
-;    If Not .policies.exists(policy.name) Then
-;        .policies.add policy.name, policy
-;        registerLocations getPolicyLocations(policy), policystore
-;    Else
-;        Err.Raise 101, , "Policy already exists"
-;    End If
-;End With
-;
-;End Sub
-;'Adds a composite policy to the policystore.  Special, because we keep track of composite policies for
-;'special consideration during management of the policy context.
-;Public Sub addPolicyComposite(ByRef policy As TimeStep_PolicyComposite, policystore As TimeStep_ManagerOfPolicy)
-;
-;With policystore
-;    If Not .policies.exists(policy.name) Then
-;        .policies.add policy.name, policy
-;        .composites.add policy.name, policy
-;        registerLocations getPolicyLocations(policy), policystore
-;    Else
-;        Err.Raise 101, , "Policy already exists"
-;    End If
-;End With
-;
-;End Sub
-;'Adds a sequential policy to the policystore.  Special, because we keep track of composite policies for
-;'special consideration during management of the policy context.
-;Public Sub addPolicySequential(ByRef policy As TimeStep_PolicySequential, policystore As TimeStep_ManagerOfPolicy)
-;
-;With policystore
-;    If Not .policies.exists(policy.name) Then
-;        .policies.add policy.name, policy
-;    Else
-;        Err.Raise 101, , "Policy already exists"
-;    End If
-;End With
-;
-;End Sub
-;'adds a list of either atomic or composite policies to a policystore.
-;Public Sub addPolicies(policies As Collection, policystore As TimeStep_ManagerOfPolicy)
-;Dim p As TimeStep_Policy
-;Dim c As TimeStep_PolicyComposite
-;Dim s As TimeStep_PolicySequential
-;
-;Dim r As IRotationPolicy
-;
-;For Each r In policies
-;    Select Case r.getPolicyType
-;        Case atomic
-;            Set p = r
-;            addPolicy p, policystore
-;        Case composite
-;            Set c = r
-;            addPolicyComposite c, policystore
-;        Case sequential
-;            Set s = r
-;            addPolicySequential s, policystore
-;        Case Else
-;            Err.Raise 101, , "Unknown policy type!"
-;    End Select
-;Next r
-;
-;Set r = Nothing
-;Set s = Nothing
-;Set c = Nothing
-;Set p = Nothing
-;
-;End Sub
-;
-;''TOM NOTE 7 Jun 2011 -> These are both vestigial functions.  We're not even using locationID
-;'anymore.  Recommend scrapping them to cut down on the code bloat.
-;'Wrapper for getting our locationID
-;Public Function locationID(locname As String, policystore As TimeStep_ManagerOfPolicy) As Long
-;locationID = CLng(policystore.LocatiOnMap(locname))
-;End Function
-;
-;'Wrapper for getting our LocationName assocated with a locationID from a policystore.
-;Public Function LocationName(locationID As Long, policystore As TimeStep_ManagerOfPolicy) As String
-;LocationName = CStr(policystore.LocationIndex(locationID))
-;End Function
-;
-;'Shorthand for triggering a period change on the event stream of a simulation context.
-;Public Sub periodChangeEvent(fromname As String, toname As String, ctx As TimeStep_SimContext)
-;SimLib.triggerEvent periodChange, "PolicyManager", toname, "Period changed from " & fromname & " to " & toname, , ctx
-;End Sub
-;
+;Adds a composite policy to the policystore.  Special, because we keep track of 
+;composite policies for special consideration during management of the policy 
+;context.
+;WEAK, but gets the job done...need a cleaner way to annotate composites.
+(defn register-composite [p policystore]
+  (if (composite-policy? p) 
+    (assoc-in policystore [:composites (:name p)] p)
+    policystore))
+
+;method for adding atomic and composite policies to the policystore.
+(defn add-policy [p policystore]
+  (assert (not (nil? (:name p))) (str "Policy has no name " p))
+  (->> (assoc-in policystore [:policies (:name p)] p)
+       (register-composite p)
+       (register-locations (get-policy-locations p))))
+
+;adds a list of either atomic or composite policies to a policystore.
+(defn add-policies [policies policystore]
+  (reduce (flip add-policy) policystore policies)) 
+
+;Shorthand for triggering a period change on the event stream of a simulation context.
+(defn period-change! [fromname toname ctx]
+  (sim/trigger :periodChange :PolicyManager toname 
+      (str "Period changed from " fromname " to " toname) nil ctx))
+;Event notifying the need to update all units due to a change in the the period, 
+;or epoch, of the simulation.
+(defn period-driven-update! [fromname toname ctx]
+  (sim/trigger :updateAllUnits :PolicyManager :PolicyManager 
+     (str "Period change from " fromname 
+          " to "  toname " caused all units to update.") toname ctx))
+
+
 ;'This is the primary routine to manage policies for a policy store.
 ;'TOM Change 7 Jun 2011 -> use manage policies to prosecute period changes.
 ;'TOM Change 04 Jan 2011 -> This is going to be obsolete. All of our default policies will be coded, but most
@@ -332,6 +284,33 @@
 ;End With
 ;
 ;End Sub
+
+;TODO -> make sure this constructor doesn't exist somewhere else...
+;Constructor for building periods.  Original implementation was in
+;GenericPeriod.
+(defn ->period [name fromday today] {:name name :fromday fromday :today today})
+;Swaps out the active period.  If the new period is the final period, then caps
+;the final period to the current day.
+(defn update-period [day toname policystore]
+  (->> (if (= toname :final) (->period :final day day) 
+                             (get-period policystore toname))
+       (assoc policystore :activeperiod)))
+;wrapper for any tasks we need to perform in the final period.
+(defn final-period [fromname toname ctx] 
+  (period-driven-update! fromname toname ctx))
+
+(defn manage-policies [day state & [toname]]
+  (let [ctx (:context state)
+        policystore (get-policystore state)
+        period   (:activeperiod policystore)
+        fromname (:name period)
+        toname   (or toname (find-period day policystore))]
+    (if (= fromname toname) 
+        ctx
+        (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
+             (sim/merge-updates {:policystore (update-period day toname)})
+             (period-change! fromname toname)
+             (change-policies fromname toname)))))           
 ;
 ;'This routine informs subscribers of the need to try to change their policies at the next available
 ;'opportunity.  Only happens for composite policies, when a new, valid period has been engaged.
@@ -371,6 +350,7 @@
 ;End If
 ;
 ;End Sub
+
 ;'Tom added 12 July 2012
 ;'Predicate to determine if a Rotation Policy is defined over a period.
 ;Public Function policyDefined(period As String, policy As IRotationPolicy) As Boolean
@@ -870,5 +850,34 @@
 ;Public Function nextlocationID(locationcount As Long) As Long
 ;nextlocationID = locationcount + 101
 ;End Function
+
+
+;Adds a sequential policy to the policystore.  Special, because we keep track 
+;of composite policies for special consideration during management of the policy
+;ontext.
+;Public Sub addPolicySequential(ByRef policy As TimeStep_PolicySequential, policystore As TimeStep_ManagerOfPolicy)
+;
+;With policystore
+;    If Not .policies.exists(policy.name) Then
+;        .policies.add policy.name, policy
+;    Else
+;        Err.Raise 101, , "Policy already exists"
+;    End If
+;End With
+;
+;End Sub
+
+;''TOM NOTE 7 Jun 2011 -> These are both vestigial functions.  We're not even using locationID
+;'anymore.  Recommend scrapping them to cut down on the code bloat.
+;'Wrapper for getting our locationID
+;Public Function locationID(locname As String, policystore As TimeStep_ManagerOfPolicy) As Long
+;locationID = CLng(policystore.LocatiOnMap(locname))
+;End Function
+;
+;'Wrapper for getting our LocationName assocated with a locationID from a policystore.
+;Public Function LocationName(locationID As Long, policystore As TimeStep_ManagerOfPolicy) As String
+;LocationName = CStr(policystore.LocationIndex(locationID))
+;End Function
+;
 
 

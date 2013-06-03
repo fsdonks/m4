@@ -37,7 +37,6 @@
 (keyvals->constants {:Equivalence :Equivalence :Substitution :Substitution})
 
 
-
 ;a structure for unit entity policies. 
 (defrecord+ policy [[name "BlankPolicy"]
                     [cyclelength :inf] 
@@ -63,11 +62,12 @@
                              activeperiod
                              policies])
 
-(defrecord+ policyatomic [name 
-                          subscribers ;probably drop this field....
-                          activepolicy 
-                          activeperiod
-                          policies])
+;;we don't need this...already have an atomic policy above...
+;(defrecord+ policyatomic [name 
+;                          subscribers ;probably drop this field....
+;                          activepolicy 
+;                          activeperiod
+;                          policies])
 
 
 
@@ -123,18 +123,6 @@
 ;Public subscribers As Dictionary
 ;
 ;
-
-;(defrecord policy [name cyclelength mindwell 
-;                   maxdwell maxbog maxMOB
-;                   recovery startdeployable stopdeployable
-;                   positiongraph startstate endstate
-;                   overlap subscribers]) 
-;
-;(def empty-policy (policy. "BlankPolicy" :inf 0
-;                           :inf :inf :inf 
-;                           90   0    :inf 
-;                           nil  :spawn :spawn 
-;                           45   {}))
 
 ;Private ptr As Dictionary
 ;Private memoize As Dictionary
