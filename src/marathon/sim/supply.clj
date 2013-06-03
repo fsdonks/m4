@@ -541,7 +541,7 @@
   (reduce release-followon-unit ctx (keys (:followons supplystore))))         
 
 ;UGLY....this could be prettier....although it refactored nicely.  
-(defn release-maxutilizers [supplystore & [ctx]]
+(defn release-max-utilizers [supplystore & [ctx]]
   (let [{:keys [followons normal]} 
            (group-by #(if (followon-unit? store %) :followon :normal)
                       (tag/get-subjects (:tags supplystore) :MaxUtilizer))

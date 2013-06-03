@@ -7,9 +7,11 @@
 ;    Also manage all feasible locations through this object.
 (defrecord+ policystore   
   [[name :PolicyStore] 
-   [locationmap {} ];kvp mapping of location names to indices ... 
-   [positions {}] ;set of all known positions. <couldn't find any refernece to this.
-   [locations {}] ;set of all known locations, superset of positions.
+   [locationmap #{} ];kvp mapping of location names to indices ...
+   ;VESTIGIAL
+   [positions #{}] ;set of all known positions. <couldn't find any refernece to this.
+   ;VESTIGIAL
+   [locations #{}] ;set of all known locations, superset of positions.
    [policies {}] ;Kvp mapping of policy names to policy data
    [periods {}] ;Set of simulation periods...probably need to re-think this guy.
 ;   [highest {}] ;deprecated 

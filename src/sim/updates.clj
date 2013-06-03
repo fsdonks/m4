@@ -88,7 +88,8 @@
   (let [{:keys [update-time requested-by update-type trequest]}  edata]
     (update-in ctx [:updater] 
                request-update update-time requested-by update-type trequest)))
-  
+
+;TODO -> may need to add a route for :policy-update
 (def routes {:supply-update record-update-handler 
              :demand-update record-update-handler
              :update-request update-request-handler})

@@ -1,268 +1,212 @@
-(ns marathon.sim.policy)
+(ns marathon.sim.policy
+  (:require [sim [simcontext :as sim]]
+            [util [tags :as tag]
+                  [graph :as gr]]))
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
 (declare register-location atomic-name find-period)
 
-;'This is the companion module to the TimeStep_ManagerOfPolicy class.  The primary functions contained
-;'herein surround the management of an abstract policy context in the simulation, which is embodied in
-;'the TimeStep_ManagerOfPolicy data - or the policystore.  Most of the functions here deal with creating
-;'policies, composing policies, registering policies with the policystore, registering simulation periods
-;'with the policystore, and managing policies and periods during the simulation.
+;This is the companion module to the TimeStep_ManagerOfPolicy class.  The 
+;primary functions contained herein surround the management of an abstract 
+;policy context in the simulation, which is embodied in the policystore.  Most 
+;of the functions here deal with creating policies, composing policies, 
+;registering policies with the policystore, registering simulation periods with 
+;the policystore, and managing policies and periods during the simulation.
 ;
 ;                                '***What is a policy context?
-;'Policy is vital because it determines the criteria for both the eligibility and suitability of supply
-;'to fill demand.  A conservative policy may provide few opportunities for units to fill demand, limiting
-;'the deployable supply (presumably for some benefit like reduced costs), while a liberal policy may
-;'allow units to deploy almost any time, eliminating the previous limitations on supply (likely at
-;'some cost).  Marathon generally examines policies across the spectrum, from liberal to conservative.
-;'Policy contexts may not be homogenous (applicable to every unit); there may be individual, custom
-;'policies for each unique unit entity.  Additionally, policy contexts may change in response to
-;'conditions in the simulation;  It may be appropriate to have a liberal policy when demand is low,
-;'presumably minimizing the cost to maintain a large available supply, while shifting to a liberal
-;'policy during periods of higher demand.  In some cases, there are known strategic events that
-;'prompt the change of rotational policy, typically due to increased demand for units, which prompts
-;'a shift to a different, less constrained policy.  Conversely, after demand has receded, the
-;'simulation typically tries to return to the pre-existing policy context, or an intermediate policy
-;'that re-establishes stability in the rotational supply.  All of this behavior is scriptable, and can
-;'be modified by changing input data rather than rewiring logic.
+;Policy is vital because it determines the criteria for both the eligibility and 
+;suitability of supply to fill demand.  A conservative policy may provide few 
+;opportunities for units to fill demand, limiting the deployable supply 
+;(presumably for some benefit like reduced costs), while a liberal policy may
+;allow units to deploy almost any time, eliminating the previous limitations on 
+;supply (likely at some cost).  Marathon generally examines policies across the 
+;spectrum, from liberal to conservative. Policy contexts may not be homogenous 
+;(applicable to every unit); there may be individual, custom policies for each
+;unique unit entity.  Additionally, policy contexts may change in response to
+;conditions in the simulation;  It may be appropriate to have a liberal policy
+;when demand is low, presumably minimizing the cost to maintain a large 
+;available supply, while shifting to a liberal policy during periods of higher
+;demand.  In some cases, there are known strategic events that prompt the change
+;of rotational policy, typically due to increased demand for units, which
+;prompts a shift to a different, less constrained policy.  Conversely, after 
+;demand has receded, the simulation typically tries to return to the 
+;pre-existing policy context, or an intermediate policy that re-establishes 
+;stability in the rotational supply.  All of this behavior is scriptable, and
+;can be modified by changing input data rather than rewiring logic.
 ;
-;'Marathon has historically maintained a notion of an overarching policy context throughout the
-;'simulation.  In fact, the simulation timeline is typically viewed as a mapping of policy periods to
-;'segments of time.  Periods typically serve to segment the timeline into epochs that are easily
-;'categorized, and may trigger changes in the policy context.  For instance, the most common period
-;'set is a sequential #{Pre-Surge, Surge, Post-Surge} set, where Pre-Surge covers the simulation time
-;'in which demand is "low", Surge is a particularly high demand that occurs over a short time, and
-;'Post-Surge is the remainder of the time, categorized as a lower demand but more intense than the
-;'Pre-Surge period.  Technically, a timeline in Marathon can have any different number of periods,
-;'not just the common Pre/Surge/Post periods.  The ability to specify periods, and then dictate
-;'policy changes in reponse to active periods, is a powerful mechanism for parameterizing the
-;'simulation and managing varied policy contexts.  Marathon is currently structured with one default
-;'timeline, which is composed of N contiguous periods.  As the periods change, any policies that
-;'depend upon a period being active are engaged, and units subscribing to these policies alter their
-;'behavior accordingly.  This is how Marathon manages a policy context that can either be simple
-;'and uniform (i.e. one policy, one period), or very unique (N different policies, K periods).
+;Marathon has historically maintained a notion of an overarching policy context
+;throughout the simulation.  In fact, the simulation timeline is typically 
+;viewed as a mapping of policy periods to segments of time.  Periods typically 
+;serve to segment the timeline into epochs that are easily categorized, and may
+;trigger changes in the policy context.  For instance, the most common period
+;set is a sequential #{Pre-Surge, Surge, Post-Surge} set, where Pre-Surge covers
+;the simulation time in which demand is "low", Surge is a particularly high 
+;demand that occurs over a short time, and Post-Surge is the remainder of the 
+;time, categorized as a lower demand but more intense than the Pre-Surge period.
+;Technically, a timeline in Marathon can have any different number of periods,
+;not just the common Pre/Surge/Post periods.  The ability to specify periods, 
+;and then dictate policy changes in reponse to active periods, is a powerful 
+;mechanism for parameterizing the simulation and managing varied policy 
+;contexts.  Marathon is currently structured with one default timeline, which is
+;composed of N contiguous periods.  As the periods change, any policies that 
+;depend upon a period being active are engaged, and units subscribing to these
+;policies alter their behavior accordingly.  This is how Marathon manages a 
+;policy context that can either be simple and uniform (i.e. one policy, one 
+;period), or very unique (N different policies, K periods).
 ;
 ;                            '***What are policies?
-;'Policies describe a set of states and durations that -usually- conform to a rotational policy.
-;'Policies are very important, as they serve as the instruction set for unit entity behavior.
+;Policies describe a set of states and durations that -usually- conform to a
+;rotational policy. Policies are very important, as they serve as the 
+;instruction set for unit entity behavior.
 ;
-;'Unit entities interpret policies with their unit behavior, in which the meaning of the states
-;'in the policy is interpreted and acted upon.  Additionally, unit behaviors consult a policy to
-;'figure out what the next state should be, how long the unit will stay in said state, etc.
-;'In the language of Finite State Machines, policies describe the states that a machine
-;'can be in, as well as the state transitions that occur. Typical states include Bogging, Dwelling,
-;'Waiting, Moving, StartCycle, EndCycle, Spawning, etc.  All the policy has to do is specify which
-;'state a unit is in at a particular policy position, specify a starting and stopping position, and
-;'indicate the transition time between state changes.  Policies can have at most one cycle, and are
-;'typically represented as a Directed Graph.
+;Unit entities interpret policies with their unit behavior, in which the meaning
+;of the states in the policy is interpreted and acted upon.  Additionally, unit
+;behaviors consult a policy to figure out what the next state should be, how 
+;long the unit will stay in said state, etc.
+;In the language of Finite State Machines, policies describe the states that a
+;machine can be in, as well as the state transitions that occur. Typical states
+;include Bogging, Dwelling, Waiting, Moving, StartCycle, EndCycle, Spawning, 
+;etc.  All the policy has to do is specify which state a unit is in at a 
+;particular policy position, specify a starting and stopping position, and 
+;indicate the transition time between state changes.  Policies can have at most
+;one cycle, and are typically represented as a Directed Graph.
 ;
-;'Note -> unit behaviors are typically implemented statically, as actual classes in VBA, where
-;'policies are much more flexible and can be specified as data.  More information on unit behaviors
-;'can be found in the MarathonOpUnit module, and the TimeStep_UnitBehavior[x] classes.
+;Note -> unit behaviors are typically implemented statically, as actual classes
+;in VBA, where policies are much more flexible and can be specified as data.  
+;More information on unit behaviors can be found in the MarathonOpUnit module,
+;and the TimeStep_UnitBehavior[x] classes.
 ;
-;'Next to supply and demand, policy is the most variable higher-order data.  As such, we
-;'need a robust, flexible way to specify different policies easily, so that rather than
-;'changing code, an end-user can simply modify the data that describes the policy (not unlike a script)
-;'and effect a change in unit entity behavior easily and transparently.
+;Next to supply and demand, policy is the most variable higher-order data.  As 
+;such, we need a robust, flexible way to specify different policies easily, so
+;that rather than changing code, an end-user can simply modify the data that
+;describes the policy (not unlike a script) and effect a change in unit entity 
+;behavior easily and transparently.
 ;
-;'One way to provide flexibility is to use a template system, where users can derive a policy from
-;'an existing template, and then apply a set of parameters to transform or "mold" the policy into
-;'a desired form.  Marathon currently has several built-in templates, and a language for specifying
-;'policy templates is very near on the horizon.  Existing policy templates are located in the
-;'MarathonPolicyCreation and MarathonPolicy modules.  The PolicyCreation module serves as a central
-;'dispatch for invoking policy templates, applying modifications, and deriving new policies.  The
-;'MarathonPolicy module contains the actual structure for each policy template, as well as routines
-;'that provide default policies for multiple contexts (rather than reading data).
+;One way to provide flexibility is to use a template system, where users can
+;derive a policy from an existing template, and then apply a set of parameters
+;to transform or "mold" the policy into a desired form.  Marathon currently has
+;several built-in templates, and a language for specifying policy templates is 
+;very near on the horizon.  Existing policy templates are located in the
+;MarathonPolicyCreation and MarathonPolicy modules.  The PolicyCreation module
+;serves as a central dispatch for invoking policy templates, applying
+;modifications, and deriving new policies.  The MarathonPolicy module contains 
+;the actual structure for each policy template, as well as routines that provide
+;default policies for multiple contexts (rather than reading data).
 ;
-;'Technically, anything that implements the IRotationPolicy interface can serve as a policy, so
-;'developers can extend policy responsibilities to many different implementations.
-;'Marathon provides two implementations of IRotationPolicy, which work in tandem to fulfill a composite
-;'design pattern.  The current implementation, TimeStep_Policy, and TimeStep_PolicyComposite, provide a
-;'flexible mechanism for defining policies and composing multiple policies together.  They both
-;'implement the IRotationPolicy interface, albeit differently.  The key to their flexibility is that
-;'composite policies are defined in terms of Atomic policies.  So users can, without changing any
-;'logic, add new policy definitions by supplying data that describes how to combine pre-existing
-;'policies.
+;Technically, anything that implements the IRotationPolicy interface can serve
+;as a policy, so developers can extend policy responsibilities to many different
+;implementations. Marathon provides two implementations of IRotationPolicy, 
+;which work in tandem to fulfill a composite design pattern.  The current 
+;implementation, TimeStep_Policy, and TimeStep_PolicyComposite, provide a 
+;flexible mechanism for defining policies and composing multiple policies 
+;together.  They both implement the IRotationPolicy interface, albeit 
+;differently.  The key to their flexibility is that composite policies are 
+;defined in terms of Atomic policies.  So users can, without changing any logic,
+;add new policy definitions by supplying data that describes how to combine
+;pre-existing policies.
 ;
 ;                            '***Atomic Policies
-;'Normal TimeStep_Policy objects are effectively Atomic policies, in that they represent a single set
-;'of instructions that describe a rotational policy.  They do not change.  Therefore, if a unit entity
-;'subscribes to such an atomic policy, it will always follow the same set of instructions.
+;Normal TimeStep_Policy objects are effectively Atomic policies, in that they
+;represent a single set of instructions that describe a rotational policy.  They
+;do not change.  Therefore, if a unit entity subscribes to such an atomic 
+;policy, it will always follow the same set of instructions.
 ;
 ;                            '***Composite Policies
-;'Composite policies represent an association of one or more Atomic policies.  This allows us to
-;'capitalize on the atomic policies, and express new policies as simple compositions of
-;'N atomic policies.
+;Composite policies represent an association of one or more Atomic policies.  
+;This allows us to capitalize on the atomic policies, and express new policies
+;as simple compositions of N atomic policies.
 ;
-;'The current implementation of composite policies was built under the notion of a simple labeling
-;'or association of a set of sub policies, where a period label serves as an index to an associated
-;'atomic policy.  Technically, periods are just strings or text and can be any valid value.  By
-;'convention, periods refer to a particular epoch in the simulation, and serve as a way of labeling
-;'the simulation timeline.  As a consequence, we can define composite policies as a composition of
-;'atomic policies, labelled by period, which will then automatically change the governing policy
-;'as the simulation period changes.  Note, if the periods that the composite policy are labelled by
-;'never occur in the simulation, then only the periods that intersect the simulation will ever be used.
-;'This is useful for describing possible behaviors, where the periods correspond to corner-cases that
-;'may be triggered by external events.
+;The current implementation of composite policies was built under the notion of
+;a simple labeling or association of a set of sub policies, where a period label
+;serves as an index to an associated atomic policy.  Technically, periods are 
+;just strings or text and can be any valid value.  By convention, periods refer 
+;to a particular epoch in the simulation, and serve as a way of labeling the 
+;simulation timeline.  As a consequence, we can define composite policies as a
+;composition of atomic policies, labelled by period, which will then 
+;automatically change the governing policy as the simulation period changes.  
+;Note, if the periods that the composite policy are labelled by never occur in 
+;the simulation, then only the periods that intersect the simulation will ever 
+;be used. This is useful for describing possible behaviors, where the periods
+;correspond to corner-cases that may be triggered by external events.
 ;
-;Option Explicit
+
+
+;Utility function.  
+(defn flip [f] (fn [x y] (f y x)))
+
 ;'Helper sub to partially fill in fields for the more generic RequestUpdate sub.
-;Public Sub requestPolicyUpdate(t As Single, context As TimeStep_SimContext)
-;SimLib.requestUpdate t, "PolicyManager", UpdateType.policy, , context
-;End Sub
-;
-;'TODO -> We need to build in some glue code in the CoreSimulation...
-;''The previously coupled code has addPeriod adding the period to the policy store AND
-;''sending out event notifications (scheduling).  We now schedule in a separate function.
-;''As a consequence, addPeriod doesn't require a simulation context (doesn't need to
-;''send events)
-;
-;'Allows the addition of known periods of time....
-;Public Sub addPeriod(policystore As TimeStep_ManagerOfPolicy, per As GenericPeriod)
-;With policystore
-;    If Not .periods.exists(per.name) Then
-;        .periods.add per.name, per
-;    Else
-;        Err.Raise 101, , "Period already exists, check for duplicates"
-;    End If
-;End With
-;
-;End Sub
-;
-;'Import a list of periods into the policystore, where each period is a GenericPeriod
-;'object.
-;Public Sub addPeriods(periods As Collection, policystore As TimeStep_ManagerOfPolicy)
-;Dim p As GenericPeriod
-;For Each p In periods
-;    addPeriod policystore, p
-;Next p
-;End Sub
-;
-;'Notifies interested parties of the beginning and ending of a period.
-;'Schedules a policy update to coincide with the beginning and ending of the period,
-;'so that policy management runs when a period changes.
-;Public Sub schedulePeriod(per As GenericPeriod, ctx As TimeStep_SimContext)
-;
-;With per
-;    SimLib.triggerEvent TimeStep_Msg.AddedPeriod, .name, .name, "Added period " & .toString, , ctx
-;    requestPolicyUpdate .fromday, ctx
-;    requestPolicyUpdate .today, ctx
-;End With
-;End Sub
-;    
-;'Added 14 Jul 2012 -> further decoupling of event notifications.  Adding a period has nothing to do with scheduling a
-;'set of known periods.  We now schedule the periods in a separate step.
-;Public Sub schedulePeriods(policystore As TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext)
-;Dim per
-;
-;With policystore
-;    For Each per In .periods
-;        schedulePeriod .periods(per), ctx
-;    Next
-;End With
-;
-;End Sub
-;'Fetch the period(s) that intersect time t.
-;''TOM Change 4 Jan 2011 -> note the memoization, this saves us calls if we already calculated the period.
-;Public Function FindPeriod(t As Single, policystore As TimeStep_ManagerOfPolicy) As String
-;'function that returns the period name within the interval that is set in the
-;'ARFORGEN Parameters worksheet
-;Dim name As String
-;Dim i As Long
-;Dim per
-;Dim pd As GenericPeriod
-;Static fixed As Single
-;fixed = Fix(t)
-;
-;If policystore.memoized.exists("FindPeriod_" & t) Then
-;    FindPeriod = policystore.memoized("FindPeriod_" & t)
-;Else
-;    For Each per In policystore.periods
-;        Set pd = policystore.periods(per)
-;        With pd
-;            If fixed >= Fix(.fromday) And fixed <= Fix(.today) Then
-;                FindPeriod = .name
-;                Exit For
-;            End If
-;        End With
-;    Next per
-;    If FindPeriod = vbNullString Then
-;        FindPeriod = "None"
-;    End If
-;    policystore.memoized.add "FindPeriod_" & t, FindPeriod
-;End If
-;
-;End Function
-;
-;'Returns the the period currently active in the policy store.  This may change when I introduce
-;'multiple timelines....
-;Public Function getActivePeriod(policystore As TimeStep_ManagerOfPolicy) As GenericPeriod
-;Set getActivePeriod = policystore.activePeriod
-;End Function
-;
-;'simple indexing function.  We index starting from 101....although we really don't
-;'have to out of necessity.  I might revisit this.  Vestigial and inherited from old, poor designs.
-;Public Function nextlocationID(locationcount As Long) As Long
-;nextlocationID = locationcount + 101
-;End Function
-;
-;'This sub helps us to keep track of demand and policy locations.
-;'The need for indexing is debatable, and is likely vestigial.
-;Public Sub registerLocation(locname As String, policystore As TimeStep_ManagerOfPolicy)
-;Dim nxtid As Long
-;With policystore
-;    If .LocatiOnMap.exists(locname) Then
-;        'Err.Raise 101, ,  "Location already exists"
-;    Else
-;        nxtid = nextlocationID(.LocatiOnMap.count)
-;        .LocatiOnMap.add locname, nxtid
-;        .LocationIndex.add nxtid, locname
-;        'TOM Change 7 June 2011
-;        SetLib.addSet .locations, locname
-;    End If
-;End With
-;
-;End Sub
+(defn policy-update! [t ctx] 
+  (sim/request-update t :PolicyManager :policy-update nil ctx))  
+
+;OBE
+  ;TODO -> We need to build in some glue code in the CoreSimulation...
+  ;The previously coupled code has addPeriod adding the period to the policy 
+  ;store AND sending out event notifications (scheduling).  We now schedule in a 
+  ;separate function. As a consequence, addPeriod doesn't require a simulation 
+  ;context (doesn't need to send events).
+
+;Allows the addition of known periods of time....
+;TODO -> assert non-duplicate entries...
+(defn add-period [policystore per] 
+  (assoc-in policystore [:periods (:name per)] per))
+
+;Import a list of periods into the policystore, where each period is a 
+;GenericPeriod object.
+(defn add-periods [periods policystore] (reduce add-period policystore periods))
+
+;Notifies interested parties of the beginning and ending of a period.
+;Schedules a policy update to coincide with the beginning and ending of the period,
+;so that policy management runs when a period changes.
+(defn added-period! [per ctx]
+  (sim/trigger :added-period (:name per) (:name per) 
+               (str "Added period " per) nil ctx))
+(defn schedule-period [per ctx]
+  (->> ctx 
+    (added-period! per)
+    (policy-update! (:fromday per))
+    (policy-update! (:today per))))
+
+(defn get-periods [policystore] (:periods policystore))
+(defn schedule-periods [policystore ctx]
+  (reduce (flip schedule-period) ctx (get-periods policystore))) 
+
+;Fetch the period(s) that intersect time t.
+;TOM Change 4 Jan 2011 -> note the memoization, this saves us calls if we 
+;already calculated the period.
+(defn between [x l r] (and (>= x l) (<= x r)))
+
+;MEMOIZE this guy...
+;note -> this is a naive search, if we stored periods in a sorted map or set, 
+;we could find them faster.  As it stands, period searches are typically 
+;infrequent, and amenable to caching.  We'll stick with memoization for now...
+;Returns the period name(s) that exist at time t, as defined by the period 
+;records stored in the policystore.
+(defn find-period [t policystore]
+  (->> (get-periods policystore)
+       (take-while #(<= t (:today %)))
+       (some #(between t  (:fromday %) (:today %)))))
+
+;Returns the the period currently active in the policy store.  This may change 
+;when I introduce multiple timelines....
+(defn get-active-period [policystore] (:activeperiod policystore))
+(defn get-locations [policystore] (:locationmap policystore))
+
+;This sub helps us to keep track of demand and policy locations.
+;Conjoins a location to the set of known locations...
+(defn register-location [locname policystore]
+  (update-in policystore [:locationmap]  conj  locname)) 
 ;'Register multiple locations in the locs collection with the policystore.
-;Public Sub registerLocations(locs As Collection, policystore As TimeStep_ManagerOfPolicy)
-;Dim loc
-;For Each loc In locs
-;    registerLocation CStr(loc), policystore
-;Next loc
-;End Sub
-;'Register canonical ARFORGEN locations with the policystore.
-;Private Sub DefaultArforgenLocations(policystore As TimeStep_ManagerOfPolicy)
-;registerLocations list(available, ready, train, reset, deployed, Overlapping), policystore
-;End Sub
-;'Derives locations from the policy.
-;'each location in a policy should be registered in the locations dictionary.
-;Private Function getPolicyLocations(policy As IRotationPolicy) As Collection
-;Dim node
-;
-;Set getPolicyLocations = New Collection
-;
-;With policy.PositionGraph
-;    For Each node In .nodes
-;        getPolicyLocations.add (CStr(node))
-;    Next node
-;End With
-;
-;End Function
-;
-;'Policy Store operations.....
-;'Perform a reduction over a list of default policies....adding each one to the policystore.
-;Public Sub addDefaults(policystore As TimeStep_ManagerOfPolicy)
-;Dim pol As TimeStep_Policy
-;
-;addPolicies MarathonPolicy.DefaultArforgenPolicies, policystore  'register our default set of policies.
-;addPolicies MarathonPolicy.TFPolicies, policystore 'Additional policies added by Trudy F.
-;addPolicies MarathonPolicy.FFGPolicies, policystore 'Future Force Gen policies.
-;
-;'RegisterLocations 'Ensure all locations are registered with policy manager.
-;For Each pol In policystore.policies
-;    policystore.permanents.add CStr(pol.name), 0
-;Next pol
-;
-;End Sub
+(defn register-locations [locs policystore] 
+  (reduce (flip register-location) policystore locs))
+
+;Register canonical ARFORGEN locations with the policystore.
+(def default-locations [:available :ready :train :reset :deployed :overlapping])
+(defn register-default-locations [policystore] 
+  (register-locations default-locations policystore))  
+;Derives locations from the policy.
+;each location in a policy should be registered in the locations dictionary.
+(defn get-policy-locations [p] (gr/nodes (:position-graph p)))
+
+
 ;'method for adding atomic policies to the policystore.
 ;Public Sub addPolicy(ByRef policy As TimeStep_Policy, policystore As TimeStep_ManagerOfPolicy)
 ;
@@ -813,6 +757,29 @@
 ;addPolicies compositionsToComposites(compositions, atomics), policystore 'composite policeis added second.
 ;End Sub
 ;
+
+;----------DEFERRED-------
+;Policy Store operations.....
+;Perform a reduction over a list of default policies....adding each one to the
+;policystore.
+
+;Public Sub addDefaults(policystore As TimeStep_ManagerOfPolicy)
+;Dim pol As TimeStep_Policy
+;
+;addPolicies MarathonPolicy.DefaultArforgenPolicies, policystore  'register our default set of policies.
+;addPolicies MarathonPolicy.TFPolicies, policystore 'Additional policies added by Trudy F.
+;addPolicies MarathonPolicy.FFGPolicies, policystore 'Future Force Gen policies.
+;
+;For Each pol In policystore.policies
+;    policystore.permanents.add CStr(pol.name), 0
+;Next pol
+;
+;End Sub
+;---------END DEFERRED-----
+
+
+
+
 ;''TODO -> revisit this...separate the interface with the table from the creation of composites from the
 ;''addition of composites to the policystore...
 ;'
@@ -895,5 +862,13 @@
 ;''Public Function recordToComposition(inrec As GenericRecord) As Collection
 ;''Set recordToComposition = fieldVals(inrec, "Type", "CompositeName", "Period", "Policy")
 ;''End Function
+
+
+;------------------OBSOLETE
+;'simple indexing function.  We index starting from 101....although we really don't
+;'have to out of necessity.  I might revisit this.  Vestigial and inherited from old, poor designs.
+;Public Function nextlocationID(locationcount As Long) As Long
+;nextlocationID = locationcount + 101
+;End Function
 
 
