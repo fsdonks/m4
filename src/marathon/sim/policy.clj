@@ -4,6 +4,8 @@
                   [graph :as gr]]))
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
 (declare register-location atomic-name find-period)
+;Missing, likely from marathon.policydata
+(declare get-policy) 
 
 ;This is the companion module to the TimeStep_ManagerOfPolicy class.  The 
 ;primary functions contained herein surround the management of an abstract 
@@ -216,6 +218,11 @@
 
 ;TODO -> formalize this...it's really general right now...
 (defn composite-policy? [p] (contains? p :policies))
+(defn atomic-policy?  [p]  (not (composite-policy? p)))
+
+;Predicate to determine if a Rotation Policy is defined over a period.
+(defn policy-defined? [period policy] 
+  (or (atomic-policy? policy) (not (nil? (get-policy policy period))))) 
 
 ;Adds a composite policy to the policystore.  Special, because we keep track of 
 ;composite policies for special consideration during management of the policy 
@@ -247,8 +254,6 @@
   (sim/trigger :updateAllUnits :PolicyManager :PolicyManager 
      (str "Period change from " fromname 
           " to "  toname " caused all units to update.") toname ctx))
-
-
 
 ;TODO -> make sure this constructor doesn't exist somewhere else...
 ;Constructor for building periods.  Original implementation was in
@@ -296,6 +301,20 @@
              (sim/merge-updates 
                {:policystore (update-policy policystore new-policy)}))))
 
+;Returns a filtered list of all the composite policies that have changed.
+;We define change in a composite policy by the existence of both the new period 
+;and the old period in the composite policy.  Atomic policies are defined across 
+;all periods.  So the only ones that should show up here are policies that 
+;contained both the old and new, or current and new periods. 
+;This function is a predicate that effectively filters out composite policies 
+;that are undefined over both periods.
+;Public Function getChangedPolicies(currentperiod As String, newperiod As String, candidates As Dictionary) As Collection
+(defn get-changed-policies [current-period new-period candidates]
+  (if (= current-period :Initialization) nil
+      (filter (fn [p] (and (has-subscribers? p) 
+                           (policy-defined? current-period p)
+                           (policy-defined? new-period p))) candidates)))
+
 ;Transcription Note -> in the original design, we delegated a lot of control 
 ;to each of the policies associated with the unit.  Now, we're going to treat
 ;the policies more like pure data, and record the policy associated with each
@@ -310,13 +329,15 @@
 ;tell each policy to have its subscriber change to a new policy.
 ;Simple algorithm -> fetch the new policy associated with the period.
 ;Tell each policy to change to the new policy.
-
 (defn change-policies [current-period new-period policystore ctx]
   (if (= current-period :Initialization) ctx ;short-circuit 
       (->> (get-changed-policies current-period new-period
                                  (:composites policystore))
            (reduce #(change-policy current-period new-period %2 
                                    (get-policystore %1) %1) ctx))))
+
+(defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
+
 
 ;This is the primary routine to manage policies for a policy store, which are 
 ;driven by period changes.  Many policies are defined over abstract periods, 
@@ -337,51 +358,6 @@
              (sim/merge-updates {:policystore (update-period day toname)})
              (period-change! fromname toname)
              (change-policies fromname toname)))))
-
-;'Tom added 12 July 2012
-;'Predicate to determine if a Rotation Policy is defined over a period.
-;Public Function policyDefined(period As String, policy As IRotationPolicy) As Boolean
-;
-;If policy.getPolicyType = atomic Then
-;    policyDefined = True 'atomic policies are a-temporal, and exist regardless of period.
-;Else
-;    policyDefined = exists(policy.getPolicy(period))
-;End If
-;
-;End Function
-;
-;'Returns a filtered list of all the composite policies that have changed.
-;'We define change in a composite policy by the existence of both the new period and the old period in the
-;'composite policy.  Atomic policies are defined across all periods.  So the only ones that should show up here
-;'are policies that contained both the old and new, or current and new periods.
-;'This function is a predicate that effectively filters out composite policies that are undefined over both
-;'periods.
-;Public Function getChangedPolicies(currentperiod As String, newperiod As String, candidates As Dictionary) As Collection
-;
-;Dim pname
-;Dim p As IRotationPolicy
-;Dim changed As Collection
-;
-;'tom change 30 aug 2012
-;If currentperiod <> "Initialization" Then
-;    Set changed = New Collection
-;    'this pattern is tired.  I wish I had a collect/reduce in VBA...alas...
-;    For Each pname In candidates
-;        Set p = candidates(pname)
-;        If p.subscribers.count > 0 Then
-;            If policyDefined(currentperiod, p) And policyDefined(newperiod, p) Then
-;                changed.add p
-;                pprint p.AtomicName
-;            End If
-;        End If
-;    Next pname
-;End If
-;
-;Set getChangedPolicies = changed
-;Set changed = Nothing
-;End Function
-
-
 
 
 ;
