@@ -174,7 +174,9 @@
 
 ;fetch a sorted-map of demands related to a category.
 ;returns a map of <key, string>, where vals are demand names.
+;DUPLICATE in sim.core 
 (defn get-demandstore [ctx]   (get-in ctx [:state :demandstore]))
+
 (defn unfilled-categories [demandstore] 
   (keys (demandstore :unfilledq)))
 (defn unfilled-demands [category demandstore] 
@@ -210,24 +212,24 @@
                    update-in deactivations [tfinal] dissoc dname)))
     demandstore)) 
 
+;THESE COULD BE CORE FUNCTIONS .....
 (defn is-enabled [demandstore demandname] 
   (tag/has-tag? (:tags demandstore) :enabled demandname))
 (defn enable [demandstore demandname]
   (update-in demandstore [:tags] tag/tag-subject :enabled demandname))
 (defn disable [demandstore demandname]
   (update-in demandstore [:tags] tag/untag-subject :enabled demandname))
+;THESE COULD BE CORE FUNCTIONS ^^^^
 
 ;Simple wrapper for demand update requests.  
 (defn request-demand-update! [t demandname ctx]
   (sim/request-update t demandname :demand-update ctx))
-
 
 ;TODO - look at this guy.  There's some linkage here with the fill logic.
 ;;source-demand is actually a fill function...
 ;(defn source-demand 
 ;  [supplystore parameters fillstore ctx policystore t demand :useEveryone]
 ;  :blah!)
-
 
 ;TODO -> implement defmessage macro....
 
@@ -319,32 +321,37 @@
 
 ;;END MESSAGING
 
-;TOM note 27 Mar 2011 ->  I;d like to factor these two methods out into a single 
+
+;generic accessors - could probably make this implicit with a macro?
+(defn get-activations [dstore t] (get-in dstore [:activations t] #{}))
+(defn set-activations [dstore t m] (assoc-in dstore [:activations t] m))
+(defn get-deactivations [dstore t] (get-in dstore [:deactivations t] #{}))
+(defn set-deactivations [dstore t m] (assoc-in dstore [:deactivations t] m))
+
+;TOM note 27 Mar 2011 ->  I'd like to factor these two methods out into a single 
 ;function, discriminating based on a parameter, rather than having two entire 
 ;methods.
 ;Register demand activation for a given day, given demand.
 ;TOM Change 7 Dec 2010
 ;CONTEXTUAL
-(defn add-activation [t demandname demandstore ctx]
-  (let [actives (get-in demandstore [:activations t] #{})]
+(defn add-activation [t demandname dstore ctx]
+  (let [actives (get-activations dstore t)]
     (->> (request-demand-update! t demandname ctx) ;FIXED - fix side effect
       (sim/merge-updates 
-        {:demandstore (assoc-in demandstore [:activations t] ;UNPRETTY 
-                                (conj actives demandname))}))))
-
+        {:demandstore (set-activations dstore t (conj actives demandname))}))))
 
 ;Register demand deactviation for a given day, given demand.
 ;1)Tom Note 20 May 2013 -> Our merge-updates function looks alot like entity 
 ;  updates in the component-based model.  Might be easy to port...
 ;CONTEXTUAL
 (defn add-deactivation [t demandname demandstore ctx]
-  (let [inactives (get-in demandstore [:deactivations t] #{})
+  (let [inactives (get-deactivations demandstore t)
         tlast     (max (:tlastdeactivation demandstore) t)]
     (->> (request-demand-update! t demandname ctx) 
-      (sim/merge-updates                                                     ;1)
-        {:demandstore (-> (assoc demandstore :tlastdeactivation tlast)
-                          (assoc-in [:deactivations t] 
-                            (conj inactives demandname)))}))))
+         (sim/merge-updates                                                  ;1)
+           {:demandstore 
+            (-> (assoc demandstore :tlastdeactivation tlast)
+                (set-deactivations t (conj inactives demandname)))}))))
 
 ;Schedule activation and deactivation for demand. -> Looks fixed.
 ;CONTEXTUAL
@@ -355,18 +362,18 @@
 
 ;CONTEXTUAL
 (defn register-demand [demand demandstore policystore ctx]
-  (let [dname  (:name demand)]
+  (let [dname    (:name demand)
+        newstore (tag-demand demand (add-demand demandstore demand))]
     (->> (registering-demand! demand ctx)
       (sim/merge-updates 
-        {:demand-store (tag-demand demand 
-                       (schedule-demand demand 
-                        (assoc-in demandstore [:demand-map dname] demand) ctx))
-         :policy-store  (policy/register-location dname policystore)})))) 
-
+        {:demand-store  newstore 
+         :policy-store  (policy/register-location dname policystore)})
+      (schedule-demand demand newstore)))) 
 
 (defn merge-fill-results [res ctx] 
   (throw (Exception. "merge-fill-results not implemented")))
 
+;utility function....
 (defn pop-priority-map [m]
   (if (empty? m) m (dissoc m (first (keys m)))))
 
@@ -426,8 +433,8 @@
         (if (contains? unfilled src) ;either filled or deactivated
           (let [demandq (dissoc (get unfilled src) fill-key)
                 nextunfilled (if (= 0 (count demandq)) 
-                             (dissoc unfilled src) 
-                             (assoc unfilled src demandq))]
+                               (dissoc unfilled src) 
+                               (assoc unfilled src demandq))]
             (->> (removing-unfilled! demandstore demandname ctx)
                  (sim/merge-updates 
                    {:demandstore (assoc demandstore :unfilled nextunfilled)})))              

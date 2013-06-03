@@ -74,6 +74,16 @@
 ;get all pending supply updates.
 (defn get-supply-updates [t ctx]  (sim/get-updates t :supply-update ctx))
 
+;----FOREIGN -> THESE SHOULD BE MOVED, THEY'RE MORE GENERAL.....
+(defn add-unit [supply unit]    (assoc-in supply [:unitmap (:name unit)] unit))
+(defn conj-policy [unit policy] (update-in unit [:policy-queue] conj policy))
+(defn get-policystore [ctx]     (get-in ctx [:state :policystore]))
+(defn set-supplystore [ctx supply] (assoc-in ctx [:state :supplystore] supply))
+(defn get-demandstore [ctx] (get-in ctx [:state :demandstore]))
+(defn get-parameters [ctx] (get-in ctx [:state :parameters]))
+;----END FOREIGN
+
+
 (defn enabled? [tags unitname] (tag/has-tag? tags :enabled unitname))
 (defn disable  [tags unitname] (tag/untag-subject tags unitname :enabled))
 
@@ -89,8 +99,8 @@
   (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
 
 (defn get-supplystore [ctx] (-> ctx :state :supplystore))
-
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
+
 ;helper function for dropping a tag from multiple units at once.
 (defn untag-units [supplystore tag units]
   (reduce #(tag/untag-subject (:tags %1) %2 tag)) supplystore units)
@@ -288,7 +298,6 @@
       (assoc-in supply [:srcs-in-scope src] (count scoped)))))
 
 (defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
-
 (defn assign-behavior [behaviors unit behaviorname]
   (behaviors/assign-behavior unit behaviorname))
 
@@ -296,17 +305,18 @@
 (defn empty-position? [unit] (nil? (:position-policy unit)))
 (defn get-buckets [supply] (:buckets supply))
 
+(defn update-availability [unit supply ctx]
+  (if (contains? (get-buckets supply) (:src unit))
+    (more-src-available! unit ctx)
+    (->> (new-src-available! (:src unit) ctx)
+      (new-deployable! unit))))
+
 ;Consolidated this from update-deployability, formalized into a function.
 (defn add-deployable-supply [supply src unit ctx]
-  (if (contains? (get-buckets supply) src)
-    (->> (sim/merge-updates 
-           {:supplystore 
-            (update-in supply [:buckets src] assoc unitname unit)} ctx)
-         (more-src-available! unit)
-    (->> (sim/merge-updates 
-           {:supplystore (assoc-in supply [:buckets src] {unitname unit})} ctx) 
-         (new-src-available! (:src unit))
-         (new-deployable! unit)))))
+  (->> (sim/merge-updates 
+         {:supplystore (assoc-in supply [:buckets src unitname] unit)} ctx)
+       (update-availability unit supply)))
+
 ;Consolidated this from update-deployability, formalized into a function.
 (defn remove-deployable-supply [supply src unit ctx]
   (if-let [newstock (-> (get-in supply [:buckets src (:name unit)])
@@ -355,6 +365,8 @@
         (u/map->unitdata))))
 ;----------END FOREIGN------
 
+(defn set-ghosts [x ctx] (assoc-in ctx [:state :supplystore :has-ghosts] x))
+
 ;Note -> the signature for this originally returned the supply, but we're not 
 ;returning the context.  I think our other functions that use this guy will be
 ;easy to adapt, just need to make sure they're not expecting supplystores.
@@ -363,33 +375,28 @@
 ;added on-top-of the default tags derived from the unit data.
 (defn register-unit [supply behaviors unit & [ghost ctx extra-tags]]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-        supply (-> (assoc-in supply [:unitmap (:name unit)] unit)
+        supply (-> (add-unit supply unit)
                    (tag-unit unit extra-tags)
                    (add-src (:src unit)))
-        ctx    (assoc-in ctx [:state :supplystore] supply)]
+        ctx    (set-supplystore ctx supply)]
     (if ghost 
       (->> (spawning-ghost! unit ctx)
-           (assoc-in [:state :supplystore :has-ghosts] true))
+           (set-ghosts true))
       (->> (spawning-unit! unit ctx)
            (update-deploy-status supply unit)))))
 
+
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
-(defn new-unit [supplystore parameters policystore behaviors name stc title 
-                component cycletime policy & [behavior]]
-  (->> (create-unit name src title component cycletime policy parameters 
-               policystore behavior)
-       (register-unit supplystore behaviors)))
-
-;----FOREIGN -> THESE SHOULD BE MOVED, THEY'RE MORE GENERAL.....
-(defn add-unit [supply unit]    (assoc-in supply [:unitmap (:name unit)] unit))
-(defn conj-policy [unit policy] (update-in unit [:policy-queue] conj policy))
-(defn get-policystore [ctx]     (get-in ctx [:state :policystore]))
-;----END FOREIGN
+(defn new-unit [supplystore parameters policystore behaviors name src title 
+                component cycletime policy & [behavior ctx]]
+  (let [new-unit (create-unit name src title component cycletime policy 
+                              parameters policystore behavior)]
+    (register-unit supplystore behaviors (ghost? new-unit) ctx)))
                                            
 ;this is an aux function that serves as a weak patch...probably unnecessary.
 (defn adjust-max-utilization! [supply unit ctx] 
-  (if (and (check-max-utilization (get-in ctx [:state :parameters]))
+  (if (and (check-max-utilization (get-parameters ctx))
            (should-change-policy? unit))
     (let [new-policy (get-near-max-policy (:policy unit) (get-policystore ctx))]
       (sim/merge-updates 
@@ -418,7 +425,6 @@
 ;  to lift the updating function into the proper context, and return the new 
 ;  container.  monads/monoids anyone? 
 
-
 (defn check-followon-deployer! [followon? unitname demand t ctx]
   (let [supply (get-supplystore ctx)
         unit   (get-unit ctx unitname)]
@@ -429,41 +435,11 @@
 (defn check-first-deployer!   [supply unitname ctx]
   (let [unit (get-unit supply unitname)]  
     (if (first-deployment? unit supply)
-      (->> (assoc-in ctx [:state :supplystore] (tag-as-deployed unit supply))
+      (->> (set-supplystore ctx (tag-as-deployed unit supply))
            (first-deployment! supply unit)
            (adjust-max-utilization! supply unit)))))
 
-;Enacts context changes and updates necessary to constitute deploying a unit.
-;Critical function.
-;---------CHECK PARAMETERS -> lots of unused stuff here (might be legacy fluff, 
-;most of which is in context.
-(defn deploy-unit [supply ctx parameters policystore unit t sourcetype demand 
-                     bog fillcount filldata deploydate  & [followon?]]
-  (assert  (u/valid-deployer? unit) 
-    "Unit is not a valid deployer! Must have bogbudget > 0, 
-     cycletime in deployable window, or be eligible or a followon  deployment")
-  (let [demandname    (:name demand)
-        demand        (d/assign demand unit) ;need to update this in ctx..
-        demandstore   (get-in ctx [:state :demandstore]) ;Lift to a protocol.
-        from-location (:locationname unit) ;may be extraneous
-        from-position (:position-policy unit);
-        to-location   demandname
-        to-position   :deployed
-        unitname      (:name unit)
-        unit          (-> unit ;MOVE THIS TO A SEPARATE FUNCTION? 
-                       (assoc :position-policy to-position) 
-                       (assoc :dwell-time-when-deployed (udata/get-dwell unit)))
-        supply        (drop-fence (:tags supply) (:name unit))] ;RE-ORDERED 
-     (->> (sim/merge-updates {:demandstore (dem/add-demand demand)
-                              :supplystore supply} ctx)
-          (u/change-location! unit (:name demand)) ;unit -> str ->ctx -> ctx....
-          (check-followon-deployer! followon? supply unitname demand t)
-          (u/deploy-unit unit t (get-next-deploymentid supply))
-          (check-first-deployer! supply unitname) ;THIS MAY BE OBVIATED.
-          (update-deployability unit (:deployable-buckets supply) false false) 
-          (log-deployment! t from-location demand unit fillcount filldata 
-             deploydate (policy/find-period t policystore))
-          (supply-update! supply unit nil))))         
+
 ;NOTE -> replace this with a simple map lookup...
 (defn get-near-max-policy [policy policystore]
   (let [id (case (pol/atomic-name policy) 
@@ -485,6 +461,39 @@
 ;Jeff had me put in some special case for handling initial deployment logic.
 (defn first-deployment? [unit supplystore]
   (not (tag/has-tag? (:tags supplystore) (:name unit) :hasdeployed))) 
+
+;Enacts context changes and updates necessary to constitute deploying a unit.
+;Critical function.
+;---------CHECK PARAMETERS -> lots of unused stuff here (might be legacy fluff, 
+;most of which is in context.
+(defn deploy-unit [supply ctx parameters policystore unit t sourcetype demand 
+                     bog fillcount filldata deploydate  & [followon?]]
+  (assert  (u/valid-deployer? unit) 
+    "Unit is not a valid deployer! Must have bogbudget > 0, 
+     cycletime in deployable window, or be eligible or a followon  deployment")
+  (let [demandname    (:name demand)
+        demand        (d/assign demand unit) ;need to update this in ctx..
+        demandstore   (get-demandstore ctx) ;Lift to a protocol.
+        from-location (:locationname unit) ;may be extraneous
+        from-position (:position-policy unit);
+        to-location   demandname
+        to-position   :deployed
+        unitname      (:name unit)
+        unit          (-> unit ;MOVE THIS TO A SEPARATE FUNCTION? 
+                       (assoc :position-policy to-position) 
+                       (assoc :dwell-time-when-deployed (udata/get-dwell unit)))
+        supply        (drop-fence (:tags supply) (:name unit))] ;RE-ORDERED 
+     (->> (sim/merge-updates {:demandstore (dem/add-demand demand)
+                              :supplystore supply} ctx)
+          (u/change-location! unit (:name demand)) ;unit -> str ->ctx -> ctx....
+          (check-followon-deployer! followon? supply unitname demand t)
+          (u/deploy-unit unit t (get-next-deploymentid supply))
+          (check-first-deployer! supply unitname) ;THIS MAY BE OBVIATED.
+          (update-deployability unit (:deployable-buckets supply) false false) 
+          (log-deployment! t from-location demand unit fillcount filldata 
+             deploydate (policy/find-period t policystore))
+          (supply-update! supply unit nil)))) 
+
 
 ;UTILITY FUNCTION
 ;If function results in an empty map, contained within another map, 
@@ -634,77 +643,3 @@
 ;     supplystore, ctx
 ;
 ;End Sub
-;
-
-;-----------Obsolete, we don't need to have this....
-;Replaced by request-unit-update!
-;Public Sub requestSupplyUpdate(t As Single, unit As TimeStep_UnitData, 
-;                                    context As TimeStep_SimContext)
-;SimLib.requestUpdate t, "SupplyManager", UpdateType.supply, , context
-;End Sub
-
-;'Encapsulate? -> nah, it's already independent.
-;Private Function getFollowonBucket(followonbuckets As Dictionary, 
-;       followoncode As String) As Dictionary
-;
-;If followoncode = vbNullString Then
-;    Err.Raise 101, , "No followon code! Units elligble for followon 
-;                      should have a code!"
-;Else
-;    With followonbuckets
-;        If .exists(followoncode) Then
-;            Set getFollowonBucket = .item(followoncode)
-;        Else
-;            Set getFollowonBucket = New Dictionary
-;            .add followoncode, getFollowonBucket
-;        End If
-;    End With
-;End If
-;
-;End Function
-
-;-----------Obsolete, using version in unit data.
-
-;;use the version associated with the unit....
-;Private Function CanDeploy(unit As TimeStep_UnitData) As Boolean
-;
-;CanDeploy = unit.policy.isDeployable(unit.cycletime)
-;
-;End Function
-
-;'TOM Change 13 Aug 2012
-;'Update every unit in the supply, synchronizes numerical stats.
-;
-;'Public Sub updateALL(day As Single, Optional unitsToUpdate As Dictionary)
-;'Dim update
-;'Dim unit As TimeStep_UnitData
-;'Dim nm
-;'Dim startloc As String
-;'Dim finloc As String
-;'Dim lupdate As Single
-;'
-;'If unitsToUpdate Is Nothing Then Set unitsToUpdate = unitmap
-;'
-;''find pending supply updates for today
-;'For Each nm In unitsToUpdate
-;'    Set unit = unitmap(nm)
-;'    If isEnabled(unit.name) Then  'filters out inactive  units.
-;'        'update the unit relative to the time of request
-;''        startloc = unit.LocationName
-;'        lupdate = lastupdate(unit.name)
-;'        If lupdate < day Then
-;'            Set unit = unit.update(day - lupdate)
-;''            msg = "Updated Unit " & unit.name
-;'            If Verbose Then
-;'                requestUpdate day, unit
-;'            Else
-;'                parent.trigger supplyUpdate, name, unit.name, msg & " " 
-;'                   & unit.getStats 'supplyPacket(unit.name)
-;'            End If
-;'        ElseIf lupdate > day Then
-;'            Err.Raise 101, , "Should not be updating in the future! "
-;'        End If
-;'    End If
-;'Next nm
-;'
-;'End Sub
