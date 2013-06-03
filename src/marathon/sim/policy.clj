@@ -249,41 +249,6 @@
           " to "  toname " caused all units to update.") toname ctx))
 
 
-;'This is the primary routine to manage policies for a policy store.
-;'TOM Change 7 Jun 2011 -> use manage policies to prosecute period changes.
-;'TOM Change 04 Jan 2011 -> This is going to be obsolete. All of our default policies will be coded, but most
-;'of them will be derived from data.
-;'TOM Change 03 Jan 2011
-;'TOM TODO -> Alter the underyling subs here to manifest as actual "policy changes"
-;'TOM Change 9 Sep 2012, added var for toname
-;Public Sub ManagePolicies(day As Single, state As TimeStep_SimState, Optional toname As String)
-;Dim fromname As String
-;Dim policystore As TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext
-;
-;Set policystore = state.policystore
-;Set ctx = state.context
-;
-;With policystore
-;    fromname = .activePeriod.name
-;    If toname = vbNullString Then toname = FindPeriod(day, policystore)
-;    If .activePeriod.name <> toname Then
-;        SimLib.triggerEvent TimeStep_Msg.updateAllUnits, .name, .name, _
-;            "Period change from " & fromname & " to " & toname & " caused all units to update.", toname, ctx
-;        If toname = "Final" Then
-;            Set .activePeriod = New GenericPeriod
-;            .activePeriod.name = "Final"
-;            .activePeriod.fromday = day
-;            .activePeriod.today = day
-;        Else
-;            Set .activePeriod = .periods(toname)
-;        End If
-;        periodChangeEvent fromname, toname, ctx
-;        'TOM Change disabled temporarily.
-;        changePolicies fromname, toname, policystore, ctx
-;    End If
-;End With
-;
-;End Sub
 
 ;TODO -> make sure this constructor doesn't exist somewhere else...
 ;Constructor for building periods.  Original implementation was in
@@ -299,19 +264,26 @@
 (defn final-period [fromname toname ctx] 
   (period-driven-update! fromname toname ctx))
 
+;This is the primary routine to manage policies for a policy store, which are 
+;driven by period changes.  Many policies are defined over abstract periods, 
+;so if periods are scheduled to change, they will propogate a change in entity
+;policies.  One flaw with the existing design is that there is, assumably, a 
+;single overarching period in effect.  A nice extension would be to allow 
+;any number of concurrent periods, or time-lines, which would facilitate 
+;sophisticated behaviors, or policy-states, for unique elements of the supply.
+;TODO -> extend from a single-active period to multiple active periods.
 (defn manage-policies [day state & [toname]]
   (let [ctx (:context state)
         policystore (get-policystore state)
         period   (:activeperiod policystore)
         fromname (:name period)
         toname   (or toname (find-period day policystore))]
-    (if (= fromname toname) 
-        ctx
+    (if (= fromname toname) ctx
         (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
              (sim/merge-updates {:policystore (update-period day toname)})
              (period-change! fromname toname)
-             (change-policies fromname toname)))))           
-;
+             (change-policies fromname toname))))) 
+
 ;'This routine informs subscribers of the need to try to change their policies at the next available
 ;'opportunity.  Only happens for composite policies, when a new, valid period has been engaged.
 ;
