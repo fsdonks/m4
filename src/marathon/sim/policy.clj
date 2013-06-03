@@ -284,37 +284,19 @@
              (period-change! fromname toname)
              (change-policies fromname toname))))) 
 
-;'Queues a unit's status as having a pending policy change.  Right now, this is maintained in unit data.  When the
-;'unit has an opportunity to change policies, if it can't change immediately, it retains the policy change until the
-;'opportuntity arises.
-;'This could probably be in the unit level simulation.
-;Public Sub queuePolicyChange(unit As TimeStep_UnitData, newpolicy As IRotationPolicy, period As String, context As TimeStep_SimContext)
-;Dim atomicPolicy As IRotationPolicy
-;Dim currentpolicy As IRotationPolicy
-;
-;Set currentpolicy = unit.policy.getActivePolicy
-;
-;Set atomicPolicy = newpolicy.getPolicy(period)
-;unit.changePolicy atomicPolicy, context
-;
-;'TOM Change 12 July 2012 -> I think the reference to the policy is unnecessary...TODO Test.
-;If unit.policy.name = atomicPolicy.name Then 'unit is now pointing at the right atomic policy.
-;    Set unit.policy = newpolicy 'ensures that the unit is back to following overarching the composite policy.
-;Else
-;    unit.policyQueue.Remove 1 'remove the new policy...
-;    Set unit.policy = currentpolicy 'makes sure the unit continues following its current policy (until reset or next available policy change opportunity)
-;    unit.policyQueue.add newpolicy 'queues the new policy for next available update.  If it's a composite policy, the unit will update with the active policy of the composite.
-;End If
-;
-;End Sub
+;Queues a unit's status as having a pending policy change.  Right now, this is 
+;maintained in unit data.  When the unit has an opportunity to change policies, 
+;if it can't change immediately, it retains the policy change until the 
+;opportuntity arises.
+;This could probably be in the unit level simulation.
 (defn queue-policy-change [unit newpolicy period ctx]
   (let [current-policy (get-active-policy (:policy unit))
         atomic-policy  (get-policy newpolicy period)
         unit           (u/change-policy atomic-policy ctx)]
     (if (= (:name (:policy unit)) (:name atomic-policy)
            {:unit-update (assoc unit :policy newpolicy)}
-           {:unit-update (-> (update-in unit [:policystack] [newpolicy])
-                             (assoc :policy current-policy))}))))        
+           {:unit-update (-> (assoc unit :policy current-policy)
+                             (update-in  [:policystack] [newpolicy]))}))))        
 
 ;'Affects a change in policy.  This is currently only caused when periods change in a composite policy.  I'd really like to get more
 ;'reactive behavior involved....
