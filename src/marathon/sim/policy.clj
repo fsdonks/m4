@@ -260,9 +260,63 @@
   (->> (if (= toname :final) (->period :final day day) 
                              (get-period policystore toname))
        (assoc policystore :activeperiod)))
+
 ;wrapper for any tasks we need to perform in the final period.
 (defn final-period [fromname toname ctx] 
   (period-driven-update! fromname toname ctx))
+
+;Queues a unit's status as having a pending policy change.  Right now, this is 
+;maintained in unit data.  When the unit has an opportunity to change policies, 
+;if it can't change immediately, it retains the policy change until the 
+;opportuntity arises.
+;This could probably be in the unit level simulation.
+;Note -> returns unit-updates....CONSUME WITH sim/merge-updates
+(defn queue-policy-change [unit newpolicy period ctx]
+  (let [current-policy (get-active-policy (:policy unit))
+        atomic-policy  (get-policy newpolicy period)
+        unit           (u/change-policy atomic-policy ctx)]
+    (if (= (:name (:policy unit)) (:name atomic-policy)
+           {:unit-update (assoc unit :policy newpolicy)}
+           {:unit-update (-> (assoc unit :policy current-policy)
+                             (update-in  [:policystack] [newpolicy]))}))))        
+
+(defn update-policy [policystore p] 
+  (assoc-in policystore [:policies (:name p)] p))
+
+;Affects a change in policy.  This is currently only caused when periods change
+;in a composite policy.  I'd really like to get more reactive behavior involved.
+(defn alter-unit-policies [subscribers period newpolicy ctx]
+  (->> (map #(queue-policy-change %1 newpolicy period) subscribers) 
+       (reduce #(sim/merge-updates %1 %2) ctx)))
+
+(defn change-policy [current-period new-period policy policystore ctx]
+  (let [subscribers (get-subscribers policy policystore)
+        new-policy  (pol/on-period-change policy new-period)]
+        (->> (alter-unit-policies subscribers new-period policy ctx)
+             (sim/merge-updates 
+               {:policystore (update-policy policystore new-policy)}))))
+
+;Transcription Note -> in the original design, we delegated a lot of control 
+;to each of the policies associated with the unit.  Now, we're going to treat
+;the policies more like pure data, and record the policy associated with each
+;entity.  When we change policies, we do it from the policystore in a \
+;controlled fashion. 
+
+;This routine informs subscribers of the need to try to change their policies
+;at the next available opportunity.  Only happens for composite policies, when 
+;a new, valid period has been engaged.
+
+;Tom Change 12 July 2011
+;tell each policy to have its subscriber change to a new policy.
+;Simple algorithm -> fetch the new policy associated with the period.
+;Tell each policy to change to the new policy.
+
+(defn change-policies [current-period new-period policystore ctx]
+  (if (= current-period :Initialization) ctx ;short-circuit 
+      (->> (get-changed-policies current-period new-period
+                                 (:composites policystore))
+           (reduce #(change-policy current-period new-period %2 
+                                   (get-policystore %1) %1) ctx))))
 
 ;This is the primary routine to manage policies for a policy store, which are 
 ;driven by period changes.  Many policies are defined over abstract periods, 
@@ -282,105 +336,7 @@
         (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
              (sim/merge-updates {:policystore (update-period day toname)})
              (period-change! fromname toname)
-             (change-policies fromname toname))))) 
-
-;Queues a unit's status as having a pending policy change.  Right now, this is 
-;maintained in unit data.  When the unit has an opportunity to change policies, 
-;if it can't change immediately, it retains the policy change until the 
-;opportuntity arises.
-;This could probably be in the unit level simulation.
-(defn queue-policy-change [unit newpolicy period ctx]
-  (let [current-policy (get-active-policy (:policy unit))
-        atomic-policy  (get-policy newpolicy period)
-        unit           (u/change-policy atomic-policy ctx)]
-    (if (= (:name (:policy unit)) (:name atomic-policy)
-           {:unit-update (assoc unit :policy newpolicy)}
-           {:unit-update (-> (assoc unit :policy current-policy)
-                             (update-in  [:policystack] [newpolicy]))}))))        
-
-;'Affects a change in policy.  This is currently only caused when periods change in a composite policy.  I'd really like to get more
-;'reactive behavior involved....
-;Public Sub alterUnitPolicies(subscribers As Dictionary, period As String, newpolicy As IRotationPolicy, context As TimeStep_SimContext)
-;Dim unitname
-;Dim unit As TimeStep_UnitData
-;'Dim currentPolicy As IRotationPolicy
-;                      
-;For Each unitname In subscribers
-;    Set unit = subscribers(unitname)
-;    queuePolicyChange unit, newpolicy, period, context
-;Next unitname
-;
-;End Sub
-(defn alter-unit-policies [subscribers period newpolicy ctx]
-  ())
-
-;Transcription Note -> in the original design, we delegated a lot of control 
-;to each of the policies associated with the unit.  Now, we're going to treat
-;the policies more like pure data, and record the policy associated with each
-;entity.  When we change policies, we do it from the policystore in a \
-;controlled fashion. 
-
-;This routine informs subscribers of the need to try to change their policies
-;at the next available opportunity.  Only happens for composite policies, when 
-;a new, valid period has been engaged.
-
-;Tom Change 12 July 2011
-;tell each policy to have its subscriber change to a new policy.
-;Simple algorithm -> fetch the new policy associated with the period.
-;Tell each policy to change to the new policy.
-
-;Private Sub changePolicies(currentperiod As String, newperiod As String, policystore As TimeStep_ManagerOfPolicy, _
-;                              ctx As TimeStep_SimContext)
-;
-;Dim oldpolicy As IRotationPolicy
-;'Dim subscribers As Dictionary
-;
-;Dim newname As String
-;Dim policy
-;
-(defn change-policy [current-period new-period policy policystore ctx]
-  (let [subscribers (get-subscribers policy policystore)]
-        
-;            'replace with change subscribers...
-;            alterUnitPolicies oldpolicy.subscribers, newperiod, oldpolicy, ctx
-;            'reversed the order here....we don't change the active policy in the oldpolicy until after all units have
-;            'had a chance to change, or queue to a new change.
-;            oldpolicy.onPeriodChange newperiod 'update the policy. 'TOM Note -> this should advance the active policy of the
-;                                   'oldpolicy.
-;
-;            'there's basically a context here...
-;            'oldpolicy(currentperiod) -> oldpolicy(newperiod)
-;            'should be current atomic -> should be next atomic
-  
-(defn change-policies [current-period new-period policystore ctx]
-  (if (= current-period :Initialization) ctx 
-    (let [changed (get-changed-policies current-period new-period 
-                      (:composites policystore))]
-      
-;If currentperiod <> "Initialization" Then
-;    'only composite policies can change.
-;    For Each oldpolicy In getChangedPolicies(currentperiod, newperiod, policystore.composites)
-;            'replace with change subscribers...
-;'            Set subscribers = oldpolicy.subscribers
-;'            alterUnitPolicies oldpolicy.subscribers, currentperiod, oldpolicy.getPolicy(currentperiod), ctx
-;            'TOM Change 27 Sep 2012 -> also changed to reflect period indexing.
-;            'alterUnitPolicies oldpolicy.subscribers, currentperiod, oldpolicy, ctx
-;            alterUnitPolicies oldpolicy.subscribers, newperiod, oldpolicy, ctx
-;            'reversed the order here....we don't change the active policy in the oldpolicy until after all units have
-;            'had a chance to change, or queue to a new change.
-;            oldpolicy.onPeriodChange newperiod 'update the policy. 'TOM Note -> this should advance the active policy of the
-;                                   'oldpolicy.
-;
-;            'there's basically a context here...
-;            'oldpolicy(currentperiod) -> oldpolicy(newperiod)
-;            'should be current atomic -> should be next atomic
-;
-;    Next oldpolicy
-;End If
-;
-;End Sub
-
-
+             (change-policies fromname toname)))))
 
 ;'Tom added 12 July 2012
 ;'Predicate to determine if a Rotation Policy is defined over a period.
