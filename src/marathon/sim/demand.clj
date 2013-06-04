@@ -433,8 +433,8 @@
         (if (contains? unfilled src) ;either filled or deactivated
           (let [demandq (dissoc (get unfilled src) fill-key)
                 nextunfilled (if (= 0 (count demandq)) 
-                               (dissoc unfilled src) 
-                               (assoc unfilled src demandq))]
+                                 (dissoc unfilled src) 
+                                 (assoc unfilled src demandq))]
             (->> (removing-unfilled! demandstore demandname ctx)
                  (sim/merge-updates 
                    {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
@@ -446,7 +446,6 @@
                    {:demandstore (assoc-in demandstore [:unfilled src] 
                        (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
-
 
 ;Tom note 20 May 2013 -> After a lengthy thinking cycle, I resolved to define 
 ;a useful little language for describing categories, that is, elements of 
