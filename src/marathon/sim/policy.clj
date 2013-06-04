@@ -531,10 +531,12 @@
 
 ;Public Sub addDefaults(policystore As TimeStep_ManagerOfPolicy)
 ;Dim pol As TimeStep_Policy
-;
-;addPolicies MarathonPolicy.DefaultArforgenPolicies, policystore  'register our default set of policies.
-;addPolicies MarathonPolicy.TFPolicies, policystore 'Additional policies added by Trudy F.
-;addPolicies MarathonPolicy.FFGPolicies, policystore 'Future Force Gen policies.
+;'register our default set of policies.
+;addPolicies MarathonPolicy.DefaultArforgenPolicies, policystore
+;'Additional policies added by Trudy F.
+;addPolicies MarathonPolicy.TFPolicies, policystore 
+;'Future Force Gen policies.
+;addPolicies MarathonPolicy.FFGPolicies, policystore 
 ;
 ;For Each pol In policystore.policies
 ;    policystore.permanents.add CStr(pol.name), 0
@@ -545,7 +547,8 @@
 
 
 ;'TODO
-;'clears subscribers from non-permanent policies. WTF? check what non-permanent policies means.
+;'clears subscribers from non-permanent policies. WTF? check what non-permanent 
+;'policies means.
 ; POSSIBLY OBSOLETE 
 ;Public Sub resetPolicies(policystore As TimeStep_ManagerOfPolicy)
 ;Dim policy As IRotationPolicy
@@ -565,7 +568,8 @@
 
 ;'reschedules the activation and deactivation events for known periods.
 ; POSSIBLY OBSOLETE 
-;Public Sub resetPeriods(policystore As TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext)
+;Public Sub resetPeriods(policystore As TimeStep_ManagerOfPolicy,
+; ctx As TimeStep_SimContext)
 ;Dim per
 ;With policystore
 ;    For Each per In .periods
@@ -577,8 +581,11 @@
 
 ;TODO -> relook this operation.  I think we might want it at some point...as it 
 ;stands, composite policies are built from atomics. This is an extension to the 
-;append operation, which allows us to compose compositions....possibly of compositions!  We define the composition operator
-;Public Function appendCompositeComposite(composite As TimeStep_PolicyComposite, period As String, subPolicy As TimeStep_PolicyComposite) As TimeStep_PolicyComposite
+;append operation, which allows us to compose compositions....possibly of 
+;compositions!  We define the composition operator 
+;Public Function appendCompositeComposite(composite As TimeStep_PolicyComposite,
+;  period As String, subPolicy As TimeStep_PolicyComposite) 
+;     As TimeStep_PolicyComposite
 ;'
 ;'createComposite.addPolicy subPolicy, period
 ;'
@@ -592,8 +599,9 @@
 
 
 ;------------------OBSOLETE
-;'simple indexing function.  We index starting from 101....although we really don't
-;'have to out of necessity.  I might revisit this.  Vestigial and inherited from old, poor designs.
+;'simple indexing function.  We index starting from 101....although we really 
+;'don't have to out of necessity.  I might revisit this.  Vestigial and 
+;inherited from old, poor designs.
 ;Public Function nextlocationID(locationcount As Long) As Long
 ;nextlocationID = locationcount + 101
 ;End Function
@@ -602,7 +610,8 @@
 ;Adds a sequential policy to the policystore.  Special, because we keep track 
 ;of composite policies for special consideration during management of the policy
 ;ontext.
-;Public Sub addPolicySequential(ByRef policy As TimeStep_PolicySequential, policystore As TimeStep_ManagerOfPolicy)
+;Public Sub addPolicySequential(ByRef policy As TimeStep_PolicySequential, 
+;   policystore As TimeStep_ManagerOfPolicy)
 ;
 ;With policystore
 ;    If Not .policies.exists(policy.name) Then
@@ -614,17 +623,18 @@
 ;
 ;End Sub
 
-;''TOM NOTE 7 Jun 2011 -> These are both vestigial functions.  We're not even using locationID
-;'anymore.  Recommend scrapping them to cut down on the code bloat.
+;''TOM NOTE 7 Jun 2011 -> These are both vestigial functions.  We're not even 
+;using locationID anymore.  Recommend scrapping them to cut down on the code 
+;bloat.
 ;'Wrapper for getting our locationID
-;Public Function locationID(locname As String, policystore As TimeStep_ManagerOfPolicy) As Long
+;Public Function locationID(locname As String, policystore As 
+;          TimeStep_ManagerOfPolicy) As Long
 ;locationID = CLng(policystore.LocatiOnMap(locname))
 ;End Function
 ;
-;'Wrapper for getting our LocationName assocated with a locationID from a policystore.
-;Public Function LocationName(locationID As Long, policystore As TimeStep_ManagerOfPolicy) As String
+;'Wrapper for getting our LocationName assocated with a locationID from a 
+;'policystore.
+;Public Function LocationName(locationID As Long, policystore As 
+;                                TimeStep_ManagerOfPolicy) As String
 ;LocationName = CStr(policystore.LocationIndex(locationID))
 ;End Function
-;
-
-

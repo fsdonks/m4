@@ -1,8 +1,15 @@
 (ns marathon.sim.policyio
-  (:require [marathon.sim [policyops :as pol]]
-            [marathon.data [protocols :as core]]
+  (:require [marathon.sim [policyops :as policyops]
+                          [policy :as pol]]
+            [marathon.data [protocols :as core]
+                           [period :as per]]
             [marathon.policy [policystore :as pstore]]
             [util [table :as tbl]]))
+
+;-------------TODO------------ 
+;Port periodlib into marathon.data.period,  specifically for table->periods
+;-------------TODO------------ 
+
 ;Data related to the policystore, is actually quite disparate.  There are
 ;multiple data sources that must be read to compose and initialize a policystore 
 ;that has information on simulation periods, rotational policies, and 
@@ -42,8 +49,8 @@
            StartDeployable StopDeployable Deltas]}]
   (let [deltas (or (read-string Deltas) {})]
     (-> (if (= Template "Ghost") 
-          (pol/register-ghost-template PolicyName MaxBOG Overlap)
-          (pol/register-template Template MaxDwell MinDwell MaxBOG 
+          (policyops/register-ghost-template PolicyName MaxBOG Overlap)
+          (policyops/register-template Template MaxDwell MinDwell MaxBOG 
                                  StartDeployable StopDeployable Overlap deltas 
                                  (deployable-set? Template)))
         (assoc :name PolicyName))))           
@@ -90,61 +97,60 @@
 (defn table->compositions [t]
   (reduce add-composition {} (tbl/table->records t)))
 
-'much more robust, uses the generictable interface to simplify loading.
-Public Function tablesToPolicyStore(relationtable As GenericTable, periodtable As GenericTable, atomictable As GenericTable, compositeTable As GenericTable) As TimeStep_ManagerOfPolicy
-Dim ps As TimeStep_ManagerOfPolicy
-
-Set ps = New TimeStep_ManagerOfPolicy
-
-addRelations tableToRelations(relationtable), ps
-addPeriods PeriodLib.tableToPeriods(periodtable), ps
-addDependentPolicies tableToPolicyDict(atomictable), tableToCompositions(compositeTable), ps
-
-Set tablesToPolicyStore = ps
-Set ps = Nothing
-
-End Function
-
+;Create a policystore from a set of tables.
+;much more robust, uses the generictable interface to simplify loading.
 (defn tables->policystore 
   [relation-table period-table atomic-table composite-table]
   (->> pstore/empty-policystore
-       (add-relations 
+       (pol/add-relations (table->relations relation-table))
+       (pol/add-periods (per/table->periods period-table))
+       (pol/add-dependent-policies (table->policymap atomic-table) 
+                                   (table->compositions composite-table))))       
 
-'Returns a policystore object initialized from default tables in Excel.  Mostly for compatibility.
-Public Function policyStoreFromExcel() As TimeStep_ManagerOfPolicy
-Set policyStoreFromExcel = tablesToPolicyStore(getTable("RelationRecords"), _
-                             getTable("PeriodRecords"), _
-                             getTable("PolicyRecords"), _
-                             getTable("CompositePolicyRecords"))
-End Function
-Public Function policyStoreFromFiles() As TimeStep_ManagerOfPolicy
-Dim tbl
-Dim tblist As Collection
-Dim p As String
-p = ActiveWorkbook.path & "\"
+;-----------DEFERRED--------------------
 
-Set tblist = list("RelationRecords", "PeriodRecords", "PolicyRecords", "CompositePolicyRecords")
-For Each tbl In tblist
-    TableLib.saveTable getTable(CStr(tbl)), p & "\" & CStr(tbl) & ".json"
-Next tbl
-                             
-Set policyStoreFromFiles = tablesToPolicyStore(getTable(p & "RelationRecords" & ".json"), _
-                             getTable(p & "PeriodRecords" & ".json"), _
-                             getTable(p & "PolicyRecords" & ".json"), _
-                             getTable(p & "CompositePolicyRecords" & ".json"))
+;Returns a policystore object initialized from default tables in Excel.  
+;Mostly for compatibility.
 
-End Function
-Public Function folderToPolicyStore(folderpath As String) As TimeStep_ManagerOfPolicy
-Dim tbl
-Dim tblist As Collection
-Dim p As String
-p = folderpath
+;Public Function policyStoreFromExcel() As TimeStep_ManagerOfPolicy
+;Set policyStoreFromExcel = tablesToPolicyStore(getTable("RelationRecords"), _
+;                             getTable("PeriodRecords"), _
+;                             getTable("PolicyRecords"), _
+;                             getTable("CompositePolicyRecords"))
+;End Function
+;Public Function policyStoreFromFiles() As TimeStep_ManagerOfPolicy
+;Dim tbl
+;Dim tblist As Collection
+;Dim p As String
+;p = ActiveWorkbook.path & "\"
+;
+;Set tblist = list("RelationRecords", "PeriodRecords", "PolicyRecords", 
+;                  "CompositePolicyRecords")
+;For Each tbl In tblist
+;    TableLib.saveTable getTable(CStr(tbl)), p & "\" & CStr(tbl) & ".json"
+;Next tbl
+;                             
+;Set policyStoreFromFiles = 
+;       tablesToPolicyStore(getTable(p & "RelationRecords" & ".json"), _
+;                           getTable(p & "PeriodRecords" & ".json"), _
+;                           getTable(p & "PolicyRecords" & ".json"), _
+;                           getTable(p & "CompositePolicyRecords" & ".json"))
+;
+;End Function
 
-Set tblist = list("RelationRecords", "PeriodRecords", "PolicyRecords", "CompositePolicyRecords")
-Set folderToPolicyStore = tablesToPolicyStore(getTable(p & "RelationRecords" & ".json"), _
-                             getTable(p & "PeriodRecords" & ".json"), _
-                             getTable(p & "PolicyRecords" & ".json"), _
-                             getTable(p & "CompositePolicyRecords" & ".json"))
-                             
-End Function
-
+;Public Function folderToPolicyStore(folderpath As String) 
+;   As TimeStep_ManagerOfPolicy
+;Dim tbl
+;Dim tblist As Collection
+;Dim p As String
+;p = folderpath
+;
+;Set tblist = list("RelationRecords", "PeriodRecords", "PolicyRecords", 
+;                                     "CompositePolicyRecords")
+;Set folderToPolicyStore = 
+;    tablesToPolicyStore(getTable(p & "RelationRecords" & ".json"),
+;                        getTable(p & "PeriodRecords" & ".json"), _
+;                        getTable(p & "PolicyRecords" & ".json"), _
+;                        getTable(p & "CompositePolicyRecords" & ".json"))
+;                             
+;End Function
