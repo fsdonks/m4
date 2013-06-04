@@ -1,6 +1,7 @@
 (ns marathon.sim.policyio
   (:require [marathon.sim [policyops :as pol]]
             [marathon.data [protocols :as core]]
+            [marathon.policy [policystore :as pstore]]
             [util [table :as tbl]]))
 ;Data related to the policystore, is actually quite disparate.  There are
 ;multiple data sources that must be read to compose and initialize a policystore 
@@ -70,61 +71,24 @@
 ;Returns a pair of [rulename, {policy dict}], or [rulename [policy sequence]]
 (defn record->composition [r] 
   [(:CompositeName r) (read-string (:Composition r))])
-                                
-;Generates a dictionary of composition rules from the table.
+
+;Evaluates a record as into a key-val pair that describes a rule.
 ;Keys in the dictionary correspond to the name of the rule, and vals correspond 
 ;to a map of period names to policy names/ policies.
+(defn add-composition [m r]
+  (if (contains? r :Composition)
+    (conj acc (record->composition r))
+    (let [{:keys [CompositeName CompositionType] r}]
+      (case CompositionType 
+        "Periodic" (update-in acc [CompositeName] assoc (:Period r) (:Policy r))
+        "Sequential" (do (assert (not (contains? acc rulename)))
+                       (assoc-in acc [CompositeName] (read-string (:Policy r))))
+        (throw (Exception. "Error parsing composition policy!" 
+                           CompositeName))))))
+
+;Generates a map of composition rules from a table.
 (defn table->compositions [t]
-  (->> (tbl/table->records t)
-       (reduce (fn [acc r] 
-                 (if (contains? r :Composition)
-                     (conj acc (record->composition r))
-                     (let [{:keys [CompositeName CompositionType] r}]
-                       (case CompositionType 
-                         "Periodic" (get acc CompositeName)
-                               
-                                   
-                                   
-  
-Set tableToCompositions = New Dictionary
-
-While Not tbl.EOF
-    Set rec = tbl.getGenericRecord
-    Else
-        rulename = rec.fields("CompositeName")
-        Select Case rec.fields("CompositionType")
-            Case "Periodic"
-                If tableToCompositions.exists(rulename) Then
-                    Set composition = tableToCompositions.item(rulename)
-                Else
-                    Set composition = New Dictionary
-                    tableToCompositions.add rulename, composition
-                End If
-                composition.add rec.fields("Period"), rec.fields("Policy")
-            Case "Sequential"
-                If tableToCompositions.exists(rulename) Then
-                    Err.Raise 101, , "Composition " & rulename & " already exists!"
-                Else
-                    subpolicies = Split(CStr(rec.fields("Policy")), ",")
-                    Set policysequence = New Collection
-                    For Each itm In subpolicies
-                        policysequence.add Trim(CStr(itm))
-                    Next itm
-                    tableToCompositions.add rulename, policysequence
-                End If
-            Case Else
-                Err.Raise 101, , "Error parsing composition policy!" & rulename
-            End Select
-    End If
-    tbl.moveNext
-Wend
-
-End Function
-
-
-'Public Function compositionType(incomp As Dictionary) As PolicyType
-'Select Case TypeName(incomp(2))
-'End Function
+  (reduce add-composition {} (tbl/table->records t)))
 
 'much more robust, uses the generictable interface to simplify loading.
 Public Function tablesToPolicyStore(relationtable As GenericTable, periodtable As GenericTable, atomictable As GenericTable, compositeTable As GenericTable) As TimeStep_ManagerOfPolicy
@@ -141,6 +105,10 @@ Set ps = Nothing
 
 End Function
 
+(defn tables->policystore 
+  [relation-table period-table atomic-table composite-table]
+  (->> pstore/empty-policystore
+       (add-relations 
 
 'Returns a policystore object initialized from default tables in Excel.  Mostly for compatibility.
 Public Function policyStoreFromExcel() As TimeStep_ManagerOfPolicy

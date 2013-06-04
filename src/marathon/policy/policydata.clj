@@ -3,6 +3,7 @@
   (:require [marathon.data [protocols :as core]]))
 
 ;TODO -> extend core/IRotationPolicy protocol to policy and policycomposite..
+
 ;a structure for unit entity policies. 
 (defrecord+ policy [[name "BlankPolicy"]
                     [cyclelength :inf] 
