@@ -1,5 +1,6 @@
 (ns marathon.sim.policy
   (:require [sim [simcontext :as sim]]
+            [marathon.policy [policydata :as p] [policystore :as pstore]]
             [util [tags :as tag]
                   [graph :as gr]]))
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
@@ -308,7 +309,6 @@
 ;contained both the old and new, or current and new periods. 
 ;This function is a predicate that effectively filters out composite policies 
 ;that are undefined over both periods.
-;Public Function getChangedPolicies(currentperiod As String, newperiod As String, candidates As Dictionary) As Collection
 (defn get-changed-policies [current-period new-period candidates]
   (if (= current-period :Initialization) nil
       (filter (fn [p] (and (has-subscribers? p) 
@@ -338,7 +338,6 @@
 
 (defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
 
-
 ;This is the primary routine to manage policies for a policy store, which are 
 ;driven by period changes.  Many policies are defined over abstract periods, 
 ;so if periods are scheduled to change, they will propogate a change in entity
@@ -359,315 +358,169 @@
              (period-change! fromname toname)
              (change-policies fromname toname)))))
 
+;Tom notes->
+;Policy changes were encapsulated in the IRotationPolicy implementations.
+;This assumed that units would change policies, regardless of event-context.
+;That's actually a decent assumption.
+;However, when we tell unitdata to change policy, it evokes a change state 
+;evaluation.
+;Under the decoupled architecture, this requires simulation context.
 
-;
-;'Tom notes->
-;'Policy changes were encapsulated in the IRotationPolicy implementations.
-;'This assumed that units would change policies, regardless of event-context.
-;'That's actually a decent assumption.
-;'However, when we tell unitdata to change policy, it evokes a change state evaluation.
-;'Under the decoupled architecture, this requires simulation context.
-;'
-;'I'm going to have the policy ops define a function (really just adapted from policymanager),
-;'the passes the context needed.  This is in-line with other decoupled, functional representations.
-;'I have to rewire the IRotationPolicy implementation.....specifically taking out the onperiodchange
-;'event handling.
-;'Rather, we'll let policy ops take care of changing units' composite policies.  The good news is,
-;'all the bits are here.  We just need to re-organize the code.
-;
-;'Pulled from TimeStep_CompositePolicy
-;'TOM Change 12 July 2012 ->
-;
-;
-;'TODO
-;'clears subscribers from non-permanent policies. WTF? check what non-permanent policies means.
-;Public Sub resetPolicies(policystore As TimeStep_ManagerOfPolicy)
-;Dim policy As IRotationPolicy
-;Dim pol
-;
-;With policystore
-;    For Each pol In .policies
-;        If Not .permanents.exists(CStr(pol)) Then
-;            Set policy = .policies(pol)
-;            policy.subscribers.RemoveAll
-;            .policies.Remove pol
-;        End If
-;    Next pol
-;End With
-;
-;End Sub
-;'reschedules the activation and deactivation events for known periods.
-;Public Sub resetPeriods(policystore As TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext)
-;Dim per
-;With policystore
-;    For Each per In .periods
-;        schedulePeriod .periods(per), ctx
-;    Next per
-;End With
-;
-;End Sub
-;'Fetches a policy, by name, from the policystore.
-;Public Function getPolicy(policyname As String, policystore As TimeStep_ManagerOfPolicy) As TimeStep_Policy
-;
-;If Not policystore.policies.exists(policyname) Then Err.Raise 101, , "Policy does not exist"
-;
-;Set getPolicy = policystore.policies(policyname)
-;
-;End Function
-;
-;'get all pending policy updates for time t.
-;Public Function getPolicyUpdates(t As Single, ctx As TimeStep_SimContext) As Dictionary
-;'Decoupled
-;Set getPolicyUpdates = SimLib.getUpdates(UpdateType.policy, t, ctx)
-;End Function
-;
-;'clear all the locations from the policystore.
-;Public Sub clearLocations(policystore As TimeStep_ManagerOfPolicy)
-;Dim loc
-;Dim lname As String
-;With policystore
-;    For Each loc In .LocatiOnMap
-;        lname = CStr(loc)
-;        If isDemandLocation(lname) Then
-;            .LocationIndex.Remove .LocatiOnMap(loc)
-;            .locations.Remove loc
-;            .LocatiOnMap.Remove loc
-;        End If
-;    Next loc
-;End With
-;
-;End Sub
-;'Simple predicate to determine if a location is actually a demand.
-;'Demands, upon creation, have their start and duration encoded as
-;'a textual range: [1..blah], so a predicate only needs to check for
-;'a left bracket.  This is somewhat brittle, and dependent upon the
-;'demand representation never changing, but it works for now and
-;'is relatively easy to patch.
-;Private Function isDemandLocation(locname As String) As Boolean
-;isDemandLocation = InStr(1, locname, "[") > 0
-;End Function
-;
-;'Primitive wrapper for appending atomic policies to composite policies.
-;'TODO -> extend this to incorporate the semantics for generalized rotation policies....specifically, allow composite policies to be defined over composite policies
-;'as the intersection of periods across the policies.
-;Public Function appendComposite(composite As TimeStep_PolicyComposite, period As String, atomicPolicy As TimeStep_Policy) As TimeStep_PolicyComposite
-;Set appendComposite = composite
-;composite.addPolicy atomicPolicy, period
-;End Function
-;'This is the typical append operation.  When we compose an atomic policy with a composite, we simply register the atomic as a sub policy under the key period.
-;Private Function appendCompositeAtomic(composite As TimeStep_PolicyComposite, period As String, subPolicy As TimeStep_Policy) As TimeStep_PolicyComposite
-;Set appendCompositeAtomic = composite
-;composite.addPolicy subPolicy, period
-;End Function
-;
-;'Currently, composite policies are built purely from atomic policies.  In theory, one could compose a new
-;'policy from atomic OR composite policies.  This is currently not implemented or tested.
-;
-;'TODO -> relook this operation.  I think we might want it at some point...as it stands, composite policies are built from atomics.
-;'This is an extension to the append operation, which allows us to compose compositions....possibly of compositions!  We define the composition operator
-;Public Function appendCompositeComposite(composite As TimeStep_PolicyComposite, period As String, subPolicy As TimeStep_PolicyComposite) As TimeStep_PolicyComposite
-;'
-;'createComposite.addPolicy subPolicy, period
-;'
-;'
-;'
-;'Set appendCompositeComposite = composite
-;End Function
-;'Primitive constructore for composite policy.  To define a composite, we need at least one period and one atomic policy.
-;Public Function createComposite(policyname As String, period As String, atomicPolicy As TimeStep_Policy) As TimeStep_PolicyComposite
-;Set createComposite = New TimeStep_PolicyComposite
-;createComposite.name = policyname
-;Set createComposite = appendComposite(createComposite, period, atomicPolicy)
-;End Function
-;'creates a composite policy from n policies defined in periodpolicymap (a dictionary).
-;'periodpolicymap is assumed to be a map, where the keys are the names of periods over which
-;'the associated policy values are defined.  Using a dictionary/hashmap ensures that only unique
-;'values for period names are entered..We only need a dictionary<string,string>, or ::string->string
-;Public Function composePolicies(policyname As String, periodpolicymap As Dictionary, childpolicies As Dictionary) As TimeStep_PolicyComposite
-;Dim p
-;Dim childname As String
-;Dim pol As TimeStep_Policy
-;
-;Set composePolicies = New TimeStep_PolicyComposite
-;For Each p In periodpolicymap
-;    childname = periodpolicymap(p)
-;    If Not childpolicies.exists(childname) Then Err.Raise 101, , "Policy does not exist, cannot compose a new policy"
-;    Set pol = childpolicies(childname)
-;    Set composePolicies = appendCompositeAtomic(composePolicies, CStr(p), pol)
-;    composePolicies.name = policyname
-;Next p
-;
-;End Function
-;'A constructor for building a sequential policy from a collection of policies.  The sequential policy will
-;'represent an ordered list of policies, drawn from child policies.  At this point, only atomic policies may
-;'be members of a sequence.
-;Public Function sequencePolicies(policyname As String, policysequence As Collection, childpolicies As Dictionary) As TimeStep_PolicySequential
-;Dim p
-;Dim childname As String
-;Dim pol As TimeStep_Policy
-;
-;Set sequencePolicies = New TimeStep_PolicySequential
-;sequencePolicies.name = policyname
-;For Each p In policysequence
-;    childname = CStr(p)
-;    If Not childpolicies.exists(childname) Then Err.Raise 101, , "Policy does not exist, cannot compose a new policy"
-;    Set pol = childpolicies(childname)
-;    sequencePolicies.addPolicy pol
-;Next p
-;
-;End Function
-;
-;'Given a set of composite policy descriptions, and a set of child TimeStep Policies, produces a list
-;'of TimeStep_PolicyComposite derived from the compositions.
-;Public Function compositionsToComposites(compositions As Dictionary, childpolicies As Dictionary) As Collection
-;
-;Dim cs As Collection
-;Dim c
-;Set cs = New Collection
-;
-;For Each c In compositions
-;    If isSequential(compositions(c)) Then
-;        cs.add sequencePolicies(CStr(c), compositions(c), childpolicies)
-;    Else
-;        cs.add composePolicies(CStr(c), compositions(c), childpolicies)
-;    End If
-;Next c
-;    
-;Set compositionsToComposites = cs
-;Set cs = Nothing
-;
-;End Function
-;Private Function isSequential(inval As Variant) As Boolean
-;isSequential = TypeName(inval) = "Collection"
-;End Function
-;Private Function permanentRecord(rec As GenericRecord) As Boolean
-;permanentRecord = rec.fields("Period") = "Permanent"
-;End Function
-;
-;'accesor for equivalency relations in a policystore
-;Public Function getEquivalencies(policystore As TimeStep_ManagerOfPolicy) As Dictionary
-;Set getEquivalencies = policystore.rules("Equivalencies")
-;End Function
-;
-;'accessor for substitution relations in a policystore
-;Public Function getSubs(policystore As TimeStep_ManagerOfPolicy) As Dictionary
-;Set getSubs = policystore.rules("Substitutions")
-;End Function
-;'Adds an equivalence relationship to the policystore
-;Public Sub addEquivalence(recepient As String, donor As String, policystore As TimeStep_ManagerOfPolicy)
-;Dim eq As String
-;With getEquivalencies(policystore)
-;    eq = recepient & policystore.ruleDelim & donor
-;    If Not .exists(eq) Then .add eq, eq
-;End With
-;
-;End Sub
-;'Adds a substitution relationship to the policystore
-;Public Sub addSubstitution(recepient As String, donor As String, cost As Single, _
-;                                policystore As TimeStep_ManagerOfPolicy)
-;Dim subst As String
-;With getSubs(policystore)
-;    subst = recepient & policystore.ruleDelim & donor
-;    'assoc
-;    If Not .exists(subst) Then .add subst, cost
-;End With
-;
-;End Sub
-;'determine if the policystore has a registered rule
-;Public Function hasRule(rule As String, policystore As TimeStep_ManagerOfPolicy) As Boolean
-;hasRule = getSubs(policystore).exists(rule) Or getEquivalencies(policystore).exists(rule)
-;End Function
-;'Function to add relations to a policystore.  dispatches based on relation type.
-;Public Sub addRelation(policystore As TimeStep_ManagerOfPolicy, ByRef Relation As String, ByRef recepient As String, ByRef donor As String, Optional cost As Single)
-;
-;Select Case Relation
-;    Case Is = "equivalence"
-;        addEquivalence recepient, donor, policystore
-;    Case Is = "sub"
-;        addSubstitution recepient, donor, cost, policystore
-;End Select
-;
-;End Sub
-;'Assuming a list of (relation, recepient, donor, cost) entries, maps addRelation to each entry
-;Public Sub addRelations(relations As Collection, policystore As TimeStep_ManagerOfPolicy)
-;Dim entry As Collection
-;Dim cost As Single
-;For Each entry In relations
-;    addRelation policystore, entry(1), entry(2), entry(3), entry(4)
-;Next entry
-;End Sub
-;'Accessor function for the policies in the policystore
-;Public Function getPolicies(policystore As TimeStep_ManagerOfPolicy) As Dictionary
-;Set getPolicies = policystore.policies
-;End Function
-;'Get a list of the names of policies in the policy store.
-;Public Function policynames(policystore As TimeStep_ManagerOfPolicy) As Collection
-;Set policynames = DictionaryLib.listKeys(policystore.policies)
-;End Function
-;'Get a policy associated with Pname, relative to the policystore.
-;Public Function findPolicy(pname As String, policystore As TimeStep_ManagerOfPolicy) As IRotationPolicy
-;Set findPolicy = policystore.policies(pname)
-;End Function
-;'Return the set of policy graphs
-;Public Function getPolicyGraphs(policystore As TimeStep_ManagerOfPolicy) As Dictionary
-;Dim pol As TimeStep_Policy
-;Dim pols As Dictionary
-;Dim grph
-;Set getPolicyGraphs = New Dictionary
-;
-;For Each pol In listVals(policystore.policies)
-;    getPolicyGraphs.add pol.name, pol.PositionGraph
-;Next pol
-;
-;End Function
-;
+;I'm going to have the policy ops define a function (really just adapted from 
+;policymanager), that passes the context needed.  This is in-line with other 
+;decoupled, functional representations.
+;I have to rewire the IRotationPolicy implementation.....specifically taking 
+;out the onperiodchange event handling.
+;Rather, we'll let policy ops take care of changing units' composite policies.  
+;The good news is, all the bits are here.  Just need to re-organize the code.
+
+;Fetches a policy, by name, from the policystore.
+;TODO -> add in a policy does not exist exception...
+(defn get-policy [policy-name policystore] 
+  (get-in policystore [:policies policy-name]))
+
+;get all pending policy updates for time t.
+(defn get-policy-updates [t ctx] (sim/get-updates :policy t ctx))
+
+;MIGHT BE OBSOLETE
+;clear all the locations from the policystore.
+(defn clear-locations [policystore] (assoc policystore :locationmap #{}))
+
+;TODO -> THIS IS WEAK, SHOULD CONSULT TAGS, REFACTOR.
+;Simple predicate to determine if a location is actually a demand.
+;Demands, upon creation, have their start and duration encoded as
+;a textual range: [1..blah], so a predicate only needs to check for
+;a left bracket.  This is somewhat brittle, and dependent upon the
+;demand representation never changing, but it works for now and
+;is relatively easy to patch.
+(defn demand-location? [location-name] (= (first location-name) \[))
+
+;Primitive wrapper for appending atomic policies to composite policies.
+;TODO -> extend this to incorporate the semantics for generalized rotation 
+;policies....specifically, allow composite policies to be defined over composite
+;policies as the intersection of periods across the policies.
+(defn append-composite [composite period atomic-policy] 
+  (add-policy composite atomic-policy period))
+
+;REDUNDANT
+;This is the typical append operation.  When we compose an atomic policy with a 
+;composite, we simply register the atomic as a sub policy under the key period.
+(defn append-composite-atomic [composite period sub-policy]
+  (add-policy composite sub-policy period)) 
+
+;Currently, composite policies are built purely from atomic policies.  In 
+;theory, one could compose a new policy from atomic OR composite policies.  
+;This is currently not implemented or tested.
+
+;REVISIT 
+;Primitive constructore for composite policy.  To define a composite, we need at
+;least one period and one atomic policy.
+(defn create-composite [policyname period atomic-policy]
+  (-> (assoc p/empty-composite-policy :name policyname) 
+      (append-composite  period atomic-policy))) 
+
+;TODO -> Add an existence check for the child policies...
+;creates a composite policy from n policies defined in periodpolicymap 
+;(a dictionary). periodpolicymap is assumed to be a map, where the keys are the 
+;names of periods over which the associated policy values are defined.  Using a 
+;dictionary/hashmap ensures that only unique values for period names are entered
+;We only need a dictionary<string,string>, or ::string->string
+(defn compose-policies [policyname period-policy-map child-policies]
+  (reduce (fn [acc [period childname]] 
+            (append-composite-atomic acc period (get child-policies childname)))
+          (-> p/empty-composite-policy (assoc :name policyname)) 
+          (seq period-policy-map)))
+
+;TODO -> add existence checks for child policies.
+;A constructor for building a sequential policy from a collection of policies. 
+;The sequential policy will represent an ordered list of policies, drawn from 
+;child policies.  At this point, only atomic policies may be members of a 
+;sequence.
+(defn sequence-policies [policyname names child-policies]
+  (reduce (fn [acc child-name] (add-policy acc (get child-policies child-name)))
+          (-> p/empty-composite-policy (assoc :name policyname)) names))
+
+
+(defn sequential-policy? [p] (coll? p))
+
+;Given a set of composite policy descriptions, and a set of child policies, 
+;produces a list of composite policies derived from the compositions.
+(defn compositions->composites [compositions child-policies]
+  (let [policy-func #(if (sequential-policy? %) 
+                         sequence-policies 
+                         compose-policies)] 
+    (reduce (fn [acc [policy-name p]]
+              (conj acc ((policy-func p) policy-name p)))  [] compositions)))
+
+(defn permanent-record? [r] (= (get r :Period) "Permanent"))
+(defn equivalence-key [delim recepient donor] (keyword recepient delim donor))
+;accesor for equivalency relations in a policystore
+(defn get-equivalencies [policystore] 
+  (get-in policystore [:rules :equivalencies]))
+;accessor for substitution relations in a policystore
+(defn get-subs [policystore] (get-in polcystore [:rules :substitutions]))
+;Adds an equivalence relationship to the policystore
+(defn add-equivalence [recepient donor policystore]
+  (let [delim (:ruledelim policystore)] 
+    (assoc-in policystore 
+        [:rules :equivalencies (equivalence-key delim recepient donor)] 0))) 
+;Adds a substitution relationship to the policystore
+(defn add-substitution [recepient donor cost policystore]
+  (let [delim (:ruledelim policystore)]
+    (assoc-in policystore 
+        [:rules :substitutions (equivalence-key delim recepient donor)] cost)))
+;determine if the policystore has a registered rule
+(defn has-rule? [rule policystore] 
+  (or (contains? (get-subs policystore) rule)
+      (contains? (get-equivalencies policystore) rule)))
+;Function to add relations to a policystore.  dispatches based on relation type.
+(defn add-relation [policystore relation recepient donor & [cost]]
+  (case relation 
+    :equivalence (add-equivalence recepient donor policystore)   
+    :sub      (add-equivalence recepient donor cost policystore)
+    (throw (Exception. (str "unknown relation " relation)))))
+;Assuming a list of (relation, recepient, donor, cost) entries, maps 
+;add-relation to each entry.
+(defn add-relations [relations policystore] 
+  (reduce (fn [acc [x y z w]] (add-relation acc x y z w)) 
+          policystore relations))
+;Accessor function for the policies in the policystore
+(defn get-policies [policystore] (:policies policystore))
+;Get a list of the names of policies in the policy store.
+(defn policy-names [policystore] (keys (get-policies policystore)))
+;Get a policy associated with Pname, relative to the policystore.
+(defn find-policy [pname policystore] 
+  (-> (get-policies policystore) (get pname)))
+;Return the set of policy graphs
+(defn get-policy-graphs [policystore]
+  (into {} (for [p (vals (get-policies policystore))]
+             [(policy-name p) (position-graph p)])))
 ;'TODO -> get this constructor back online.
 ;'Rewire this....
 ;'What we're really doing is building a policymanager from several sources...
 ;'relations::     list<(relation, recepient, donor, cost)>
 ;'periods::       list<genericperiod>
 ;'atomicpolicies::list<TimeStep_Policy>
-;Public Function makePolicyStore(relations As Collection, periods As Collection, atomicpolicies As Collection, _
-;                                        Optional compositePolicies As Collection, Optional store As TimeStep_ManagerOfPolicy) As TimeStep_ManagerOfPolicy
-;
-;If store Is Nothing Then Set store = New TimeStep_ManagerOfPolicy
-;With store
-;    addRelations relations, store
-;    addPeriods periods, store
-;    addPolicies atomicpolicies, store
-;    addPolicies compositePolicies, store
-;End With
-;
-;Set makePolicyStore = store
-;
-;End Function
-;
+(defn make-policystore 
+  [relations periods atomic-policies & [composite-policies store]]
+  (->> (or store pstore/empty-policystore)
+       (add-relations relations)
+       (add-periods periods)
+       (add-policies atomic-policies)
+       (add-policies composite-policies)))      
+
 ;'TOM Change 10 SEP 2012
-;Public Sub initializePolicyStore(policystore As TimeStep_ManagerOfPolicy, context As TimeStep_SimContext)
-;'schedule periods
-;schedulePeriods policystore, context
-;End Sub
-;
-;'tom Change 10 Sep 2012
-;Public Function getDictionary(instring As String) As Dictionary
-;
-;If Mid(instring, 1, 5) = "#JSON" Then
-;    Set getDictionary = JSONtoDictionary(Mid(instring, 6))
-;Else
-;    Set getDictionary = reval(instring)
-;End If
-;
-;End Function
-;
-;'Since composite policy loading is dependent on atomic policy loading, we provide an auxillary function
-;'to ensure the order is correct, and specify inputs.
-;'atomics is a map of policyname->Timestep_Policy,
-;'compositions is a map of policyname->(map of periodname->(either policyname or Timestep_Policy)
-;Public Sub addDependentPolicies(atomics As Dictionary, compositions As Dictionary, policystore As TimeStep_ManagerOfPolicy)
-;addPolicies listVals(atomics), policystore 'atomic policies must be added first.
-;addPolicies compositionsToComposites(compositions, atomics), policystore 'composite policeis added second.
-;End Sub
-;
+(defn initialize-policystore [policystore ctx]
+  (schedule-periods policystore ctx))
+
+;Since composite policy loading is dependent on atomic policy loading, we 
+;provide an auxillary function to ensure the order is correct, and specify 
+;inputs. atomics is a map of policyname->Timestep_Policy, compositions is a map
+;of policyname->(map of periodname->(either policyname or Timestep_Policy)
+(defn add-dependent-policies [atomics compositions policystore]
+  (->> policystore 
+       (add-policies (vals atomics))
+       (add-policies (compositions->composites compositions atomics))))
 
 ;----------DEFERRED-------
 ;Policy Store operations.....
@@ -686,93 +539,54 @@
 ;Next pol
 ;
 ;End Sub
+
+
+
+;'TODO
+;'clears subscribers from non-permanent policies. WTF? check what non-permanent policies means.
+; POSSIBLY OBSOLETE 
+;Public Sub resetPolicies(policystore As TimeStep_ManagerOfPolicy)
+;Dim policy As IRotationPolicy
+;Dim pol
+;
+;With policystore
+;    For Each pol In .policies
+;        If Not .permanents.exists(CStr(pol)) Then
+;            Set policy = .policies(pol)
+;            policy.subscribers.RemoveAll
+;            .policies.Remove pol
+;        End If
+;    Next pol
+;End With
+;
+;End Sub
+
+;'reschedules the activation and deactivation events for known periods.
+; POSSIBLY OBSOLETE 
+;Public Sub resetPeriods(policystore As TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext)
+;Dim per
+;With policystore
+;    For Each per In .periods
+;        schedulePeriod .periods(per), ctx
+;    Next per
+;End With
+;
+;End Sub
+
+;TODO -> relook this operation.  I think we might want it at some point...as it 
+;stands, composite policies are built from atomics. This is an extension to the 
+;append operation, which allows us to compose compositions....possibly of compositions!  We define the composition operator
+;Public Function appendCompositeComposite(composite As TimeStep_PolicyComposite, period As String, subPolicy As TimeStep_PolicyComposite) As TimeStep_PolicyComposite
+;'
+;'createComposite.addPolicy subPolicy, period
+;'
+;'
+;'
+;'Set appendCompositeComposite = composite
+;End Function
+
+
 ;---------END DEFERRED-----
-
-
-
-
-;''TODO -> revisit this...separate the interface with the table from the creation of composites from the
-;''addition of composites to the policystore...
-;'
-;''We basically just build a nested dictionary defining the schedule.  Assumes we know the periods apriori
-;''Pull in the PolicySchedule from a generic table.  Default is a worksheet called PolicyScheduleRecords.
-;'Public Function getCompositePolicies(tbl As GenericTable) As Dictionary
-;'Dim myrecord As GenericRecord
-;'Dim policy
-;'
-;'Set getCompositePolicies = New Dictionary
-;'
-;'tbl.moveFirst
-;'While Not tbl.EOF
-;'    Set myrecord = tbl.getGenericRecord 'should contain three fields of interest: PolicySchedule, Policy, Period
-;'    CompositeFromRecord myrecord, composites
-;'    tbl.moveNext
-;'Wend
-;'
-;''record the composite policies as official policies, available for use by unit entities.
-;'For Each policy In composites
-;'    policies.add CStr(policy), composites(policy)
-;'Next policy
-;'
-;'End Function
-;
-;''Read policy data from excel.  Currently, this is chugging all the substitution and equivalence data
-;''from excel.  Basically, we expect there to be a worksheet called Relations.
-;''fields -> Relation, Recepient, Donor, Cost
-;'Public Sub GetRelations(relations As Worksheet)
-;'Dim rng As Range
-;'Dim rw As Range
-;'Dim fld As Range
-;'Dim j As Long
-;'Dim fields As Dictionary
-;'Set fields = New Dictionary
-;'
-;'Set rng = relations.Cells(1, 1)
-;'Set rng = rng.CurrentRegion
-;'Set rw = rng.rows(1)
-;'For j = 1 To rw.Columns.count
-;'    fields.add rw.Cells(1, j).value, j
-;'Next j
-;'
-;'Set rng = rng.offset(1, 0)
-;'If rng.rows.count > 1 Then
-;'    Set rng = rng.resize(rng.rows.count - 1, rng.Columns.count)
-;'
-;'    For Each rw In rng.rows
-;'        relationFromRow rw, fields
-;'    Next rw
-;'End If
-;'
-;'Set fields = Nothing
-;'
-;'End Sub
-;''TOM Note 22 MAr 2011 -> this is sloppy.  We should assign fields dynamically.  currently
-;''hardcoded.  Bad form.
-;'Private Sub relationFromRow(row As Range, fields As Dictionary)
-;'Dim tmp()
-;'tmp = row.value
-;'If tmp(1, fields("Enabled")) Then
-;'    Select Case Trim(tmp(1, fields("Relation")))
-;'        Case Is = "equivalence"
-;'            addEquivalence CStr(tmp(1, fields("Recepient"))), CStr(tmp(1, fields("Donor")))
-;'        Case Is = "sub"
-;'            addSubstitution CStr(tmp(1, fields("Recepient"))), CStr(tmp(1, fields("Donor"))), CSng(tmp(1, fields("Cost")))
-;'        Case Else
-;'            Err.Raise 101, , "UnKnown Relation"
-;'    End Select
-;'End If
-;'
-;'End Sub
-;
-;
-;
-;
-;'''intermediate function that reads a record of
-;'''(Type    CompositeName   Period  Policy), and produces a list that defines one relation between a
-;'''composite policy, a period, and an atomic policy.
-;''Public Function recordToComposition(inrec As GenericRecord) As Collection
-;''Set recordToComposition = fieldVals(inrec, "Type", "CompositeName", "Period", "Policy")
-;''End Function
 
 
 ;------------------OBSOLETE

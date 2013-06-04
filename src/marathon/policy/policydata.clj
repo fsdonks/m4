@@ -3,6 +3,44 @@
         [util.metaprogramming :only [keyvals->constants]]))
 
 ;need a protocol for policies...
+(defprotocol IRotationPolicy 
+  (atomic-name       [p])
+  (bog-budget        [p])
+  (get-active-policy [p])
+  (get-policy        [p period])
+  (policy-name       [p])
+  (next-position     [p position])
+  (on-period-change  [p period])
+  (overlap           [p])
+  (position-graph    [p]) ;if we have this, we can build the rest... 
+  (previous-position [p position])
+  (set-deployable    [p tstart tfinal])
+  (set-deployable-start [p cycletime])
+  (set-deployable-stop  [p cycletime])
+  (start-deployable [p])
+  (stop-deployable  [p])
+  (start-state      [p])
+  (subscribe        [p unit]) ;EXCTRICATE 
+  (get-subscribers  [p]) ;EXCTRICATE
+  (set-subscribers  [p xs]) ;EXCTRICATE
+  (transfer-time    [p start-position end-position])
+  (add-position     [p name state & more-nodes])
+  (add-route        [p start destination transfer-time])
+  (cycle-length     [p])
+  (deployable?      [p position])
+  (end-state        [p])
+  (get-cycle-time   [p position])
+  (get-policy-type  [p])
+  (get-position     [p cycletime])
+  (get-state        [p position])
+  (deployable?      [p cycletime])
+  (dwell?           [p position])
+  (max-bog          [p])
+  (max-dwell        [p])
+  (max-mob          [p])
+  (min-dwell        [p])
+  (add-policy       [p policy & args]))
+
 
 ;Constants used for policy definition, among other things.  Imported from the 
 ;original VBA implementation for the policystore. 
@@ -36,7 +74,7 @@
 ;inherited from substitution rules, may be vestigial.
 (keyvals->constants {:Equivalence :Equivalence :Substitution :Substitution})
 
-
+;TODO -> extend protocols to policy and policycomposite..
 ;a structure for unit entity policies. 
 (defrecord+ policy [[name "BlankPolicy"]
                     [cyclelength :inf] 
@@ -60,18 +98,9 @@
                              subscribers ;probably drop this field....
                              activepolicy 
                              activeperiod
-                             policies])
+                             [policies {}]])
 
-;;we don't need this...already have an atomic policy above...
-;(defrecord+ policyatomic [name 
-;                          subscribers ;probably drop this field....
-;                          activepolicy 
-;                          activeperiod
-;                          policies])
-
-
-
-;(ns marathon.port.data.policy)
+(def empty-composite-policy (make-policycomposite))
 ;
 ;'TOM Change 20 May 2011 -> Policy nodes are NOW POSITIONS, no longer Locations.
 ;    'Change in nomenclature.
@@ -585,6 +614,7 @@
 ;
 ;'**********************IRotationPolicy Implementations*******************************************
 ;'************************************************************************************************
+
 ;Private Function IRotationPolicy_AtomicName() As String
 ;IRotationPolicy_AtomicName = name
 ;End Function
@@ -619,6 +649,8 @@
 ;IRotationPolicy_nextposition = nextposition(position)
 ;End Function
 ;
+
+  
 ;''TOM Remove July 12 2012
 ;Private Sub IRotationPolicy_OnPeriodChange(period As String)
 ;'do nothing.
@@ -655,7 +687,7 @@
 ;Private Function IRotationPolicy_setDeployableStop(cycletime As Single, Optional policy As IRotationPolicy) As IRotationPolicy
 ;Set IRotationPolicy_setDeployableStop = setDeployableStop(cycletime, policy)
 ;End Function
-;
+  
 ;Private Property Let IRotationPolicy_StartDeployable(ByVal RHS As Single)
 ;startdeployable = RHS
 ;End Property
@@ -675,7 +707,7 @@
 ;Private Property Let IRotationPolicy_StartState(ByVal RHS As String)
 ;startstate = RHS
 ;End Property
-;
+
 ;Private Property Get IRotationPolicy_StartState() As String
 ;IRotationPolicy_StartState = startstate
 ;End Property
@@ -712,104 +744,6 @@
 ;AddRoute Start, destination, TransferTime
 ;End Sub
 ;
-;'Tom Removed 12 July 2012
-;''Private Sub IRotationPolicy_ChangePolicy(newpolicy As IRotationPolicy, Optional SpecificUnit As String)
-;''changePolicy newpolicy, SpecificUnit
-;''End Sub
-;
-;Private Function IRotationPolicy_clone() As IRotationPolicy
-;Set IRotationPolicy_clone = clone
-;End Function
-;
-;Private Property Let IRotationPolicy_cyclelength(ByVal RHS As Long)
-;cyclelength = RHS
-;End Property
-;
-;Private Property Get IRotationPolicy_cyclelength() As Long
-;IRotationPolicy_cyclelength = cyclelength
-;End Property
-;
-;Private Function IRotationPolicy_Deployable(position As String) As Boolean
-;IRotationPolicy_Deployable = Deployable(position)
-;End Function
-;
-;Private Property Let IRotationPolicy_EndIndex(ByVal RHS As Long)
-;EndIndex = RHS
-;End Property
-;
-;Private Property Get IRotationPolicy_EndIndex() As Long
-;IRotationPolicy_EndIndex = EndIndex
-;End Property
-;
-;Private Property Let IRotationPolicy_EndState(ByVal RHS As String)
-;endstate = RHS
-;End Property
-;
-;Private Property Get IRotationPolicy_EndState() As String
-;IRotationPolicy_EndState = endstate
-;End Property
-;
-;Private Function IRotationPolicy_GetCycleTime(position As String) As Long
-;IRotationPolicy_GetCycleTime = GetCycleTime(position)
-;End Function
-;
-;Private Function IRotationPolicy_getPolicyType() As PolicyType
-;IRotationPolicy_getPolicyType = atomic
-;End Function
-;
-;Private Function IRotationPolicy_getPosition(cycletime As Single) As String
-;IRotationPolicy_getPosition = getPosition(cycletime)
-;End Function
-;
-;Private Function IRotationPolicy_getState(ByVal position As String) As Variant
-;IRotationPolicy_getState = getState(position)
-;End Function
-;
-;Private Function IRotationPolicy_insertModifier(cycletime As Single, policy As IRotationPolicy, modifier As String) As IRotationPolicy
-;Set IRotationPolicy_insertModifier = insertModifier(cycletime, policy, modifier)
-;End Function
-;
-;Private Function IRotationPolicy_isDeployable(cycletime As Single) As Boolean
-;IRotationPolicy_isDeployable = isDeployable(cycletime)
-;End Function
-;
-;Private Function IRotationPolicy_isDwell(position As String) As Boolean
-;IRotationPolicy_isDwell = isDwell(position)
-;End Function
-;
-;Private Property Let IRotationPolicy_MaxBOG(ByVal RHS As Long)
-;maxbog = RHS
-;End Property
-;
-;Private Property Get IRotationPolicy_MaxBOG() As Long
-;IRotationPolicy_MaxBOG = maxbog
-;End Property
-;
-;Private Property Let IRotationPolicy_MaxDwell(ByVal RHS As Long)
-;maxdwell = RHS
-;End Property
-;
-;Private Property Get IRotationPolicy_MaxDwell() As Long
-;IRotationPolicy_MaxDwell = maxdwell
-;End Property
-;
-;Private Property Let IRotationPolicy_MaxMOB(ByVal RHS As Long)
-;MaxMOB = RHS
-;End Property
-;
-;Private Property Get IRotationPolicy_MaxMOB() As Long
-;IRotationPolicy_MaxMOB = MaxMOB
-;End Property
-;
-;Private Property Let IRotationPolicy_MinDwell(ByVal RHS As Long)
-;mindwell = RHS
-;End Property
-;
-;Private Property Get IRotationPolicy_MinDwell() As Long
-;IRotationPolicy_MinDwell = mindwell
-;End Property
-;
 
-;    
-;End Sub
+
 

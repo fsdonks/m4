@@ -127,7 +127,7 @@
        "Sample all UIC Cycles.  This is a hack." {:t t :uics units})))
            
 
-;'The main engine of the Marathon simulation.  This function comprises a 
+;The main engine of the Marathon simulation.  This function comprises a 
 ;single-threaded, discrete event simulation.
 
 ;Decided to decouple the initialization of output from the input simstate.
