@@ -3,7 +3,8 @@
 ;since much of the functionality can be replaced with simpler functions on the 
 ;core data structures....especially if the core data structures are just 
 ;maps or records (which support a map API).
-(ns marathon.data.protocols)
+(ns marathon.data.protocols
+  [util.metaprogramming :only [keyvals->constants]])
 
 ;This is the policy interface.  We have both constant and composite 
 ;(or time/event variant) policies. This interface is used to implement a common 
@@ -48,9 +49,43 @@
 ;    'Lower Deployment Window
 ;    'Upper Deployment Window
 ;    'Overlap
+;Constants used for policy definition, among other things.  Imported from the 
+;original VBA implementation for the policystore. 
+;Might re-think this, for now it's a way of porting the existing implementation
+(def policyconstants 
+  {:Bogging "Bogging"
+   :Dwelling "Dwelling"
+   :BogDeployable "BoggingDeployable"
+   :DwellDeployable "DwellingDeployable"
+   :Deployable "Deployable"
+   :AC12 "AC12" 
+   :AC13 "AC13" 
+   :RC14 "RC14" 
+   :RC15 "RC15" 
+   :AC11 "AC11"
+   :RC11 "RC11"
+   :RC12 "RC12"
+   :GhostPermanent12 "GhostPermanent12"
+   :GhostPermanent13 "GhostPermanent13"
+   :GhostTransient12 "GhostTransient12"
+   :GhostTransient13 "GhostTransient13"   
+   :reset "Reset"
+   :train "Train"
+   :ready "Ready"
+   :available "Available"
+   :deployed "Deployed"
+   :Overlapping "Overlapping"
+   :SubSymbol  "{>"
+   :EquivSymbol "="})
+(keyvals->constants policyconstants) ;make the constants first class symbols.
+;inherited from substitution rules, may be vestigial.
+(keyvals->constants {:Equivalence :Equivalence :Substitution :Substitution})
+
+
 ;This is a pretty huge protocol to use....we can probably dispense with 
 ;most of it if we promise to use maps....
 ;Assume properties are just map calls....
+(comment 
 (defprotocol IRotationPolicy 
   (policy-name [p] "Name of policy p.")
   (policy-cyclelength [p] "Prescribed cycle length of policy p.")
@@ -145,6 +180,48 @@
    be PositionName, State(bog/dwell/bogeployable/dwelldeployable/etc.)"  
   [p xs]
   (reduce (fn [acc [k v]] (add-position acc k v)) p (seq xs))) 
+)
+
+;RECONCILE BETWEEN THIS ONE AND ABOVE
+;need a protocol for policies...
+(defprotocol IRotationPolicy 
+  (atomic-name       [p])
+  (bog-budget        [p])
+  (get-active-policy [p])
+  (get-policy        [p period])
+  (policy-name       [p])
+  (next-position     [p position])
+  (on-period-change  [p period])
+  (overlap           [p])
+  (position-graph    [p]) ;if we have this, we can build the rest... 
+  (previous-position    [p position])
+  (set-deployable       [p tstart tfinal])
+  (set-deployable-start [p cycletime])
+  (set-deployable-stop  [p cycletime])
+  (start-deployable [p])
+  (stop-deployable  [p])
+  (start-state      [p])
+  (subscribe        [p unit]) ;EXCTRICATE 
+  (get-subscribers  [p]) ;EXCTRICATE
+  (set-subscribers  [p xs]) ;EXCTRICATE
+  (transfer-time    [p start-position end-position])
+  (add-position     [p name state & more-nodes])
+  (add-route        [p start destination transfer-time])
+  (cycle-length     [p])
+  (deployable?      [p position])
+  (end-state        [p])
+  (get-cycle-time   [p position])
+  (get-policy-type  [p])
+  (get-position     [p cycletime])
+  (get-state        [p position])
+  (deployable?      [p cycletime])
+  (dwell?           [p position])
+  (max-bog          [p])
+  (max-dwell        [p])
+  (max-mob          [p])
+  (min-dwell        [p])
+  (add-policy       [p policy & args]))
+
 
 
 ;Note ---->

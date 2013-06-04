@@ -1,11 +1,14 @@
 (ns marathon.sim.policy
   (:require [sim [simcontext :as sim]]
-            [marathon.policy [policydata :as p] [policystore :as pstore]]
+            [marathon.data [protocols :as core]]
+            [marathon.policy [policydata :as p] [policystore :as pstore]]            
             [util [tags :as tag]
                   [graph :as gr]]))
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
 (declare register-location atomic-name find-period)
+
 ;Missing, likely from marathon.policydata
+;NOTE -> THERE IS A DUPLICATE FUNCTION IN sim.policy.policydata
 (declare get-policy) 
 
 ;This is the companion module to the TimeStep_ManagerOfPolicy class.  The 
@@ -166,6 +169,7 @@
 (defn added-period! [per ctx]
   (sim/trigger :added-period (:name per) (:name per) 
                (str "Added period " per) nil ctx))
+
 (defn schedule-period [per ctx]
   (->> ctx 
     (added-period! per)
@@ -178,9 +182,7 @@
 (defn schedule-periods [policystore ctx]
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
 
-;Fetch the period(s) that intersect time t.
-;TOM Change 4 Jan 2011 -> note the memoization, this saves us calls if we 
-;already calculated the period.
+;aux function.
 (defn between [x l r] (and (>= x l) (<= x r)))
 
 ;MEMOIZE this guy...
@@ -223,7 +225,7 @@
 
 ;Predicate to determine if a Rotation Policy is defined over a period.
 (defn policy-defined? [period policy] 
-  (or (atomic-policy? policy) (not (nil? (get-policy policy period))))) 
+  (or (atomic-policy? policy) (not (nil? (core/get-policy policy period))))) 
 
 ;Adds a composite policy to the policystore.  Special, because we keep track of 
 ;composite policies for special consideration during management of the policy 
@@ -279,7 +281,7 @@
 ;Note -> returns unit-updates....CONSUME WITH sim/merge-updates
 (defn queue-policy-change [unit newpolicy period ctx]
   (let [current-policy (get-active-policy (:policy unit))
-        atomic-policy  (get-policy newpolicy period)
+        atomic-policy  (core/get-policy newpolicy period)
         unit           (u/change-policy atomic-policy ctx)]
     (if (= (:name (:policy unit)) (:name atomic-policy)
            {:unit-update (assoc unit :policy newpolicy)}
