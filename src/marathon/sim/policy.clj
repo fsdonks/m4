@@ -493,10 +493,12 @@
 ;Get a policy associated with Pname, relative to the policystore.
 (defn find-policy [pname policystore] 
   (-> (get-policies policystore) (get pname)))
+
 ;Return the set of policy graphs
 (defn get-policy-graphs [policystore]
   (into {} (for [p (vals (get-policies policystore))]
              [(policy-name p) (position-graph p)])))
+
 ;'TODO -> get this constructor back online.
 ;'Rewire this....
 ;'What we're really doing is building a policymanager from several sources...
