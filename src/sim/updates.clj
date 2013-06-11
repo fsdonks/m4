@@ -2,14 +2,15 @@
   (:require [sim [data :as sim]]
             [sim.pure [network :as simnet]]))
 
-;'All the update manager does is listen for update request traffic.
-;'It records the time of the update request, who made the request, and the future update.
-;'It's really just a nice way to decouple and centralize the updating information in the sim.
-;'This represents a shift from just requesting a time to update the entire system, to a more
-;'localized method of updating individual pieces of the system as needed.
-;'It also provides a big hook for our observers....and for debugging purposes.
-;'The simulation cannot progress without updates, else every bit of state remains static.
-;'When we go to sample the state, we see no changes without updates.
+;All the update manager does is listen for update request traffic.
+;It records the time of the update request, who made the request, and the future
+;update. It's really just a nice way to decouple and centralize the updating 
+;information in the sim. This represents a shift from just requesting a time to 
+;update the entire system, to a more localized method of updating individual 
+;pieces of the system as needed. It also provides a big hook for our observers..
+;..and for debugging purposes. The simulation cannot progress without updates, 
+;else every bit of state remains static. When we go to sample the state, we see
+;no changes without updates.
 
 (defrecord updatestore [name         ;the name of the manager  
                         updates      ;a map of all scheduled updates, by time.
