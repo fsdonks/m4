@@ -248,6 +248,7 @@
             (if (= k :trigger) (v c) 
             (assoc-state k v c)))))
 
+
 ;it'd be really nice if we had a simple language for describing updates...
 ;not unlike Conrad's "patch" 
 ;there are a few idioms that keep popping up....
@@ -285,8 +286,15 @@
 
 ;(patch [{:the-key the-val}
 ;        [[the-first-key the-second-key] the-val]
-        
        
+;;There are probably 2 really nice macros that can help us out here...
+;(deftransfer [name args & body]) 
+;used to define functions that transfer a simulation context...
+(comment
+(deftransfer 
+  
+)
+
         
 (comment ;testing
 ;  (defn pass-through [msg] (fn [ctx e name] (do (println msg) ctx)))
