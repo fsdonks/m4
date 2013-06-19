@@ -290,10 +290,14 @@
 ;;There are probably 2 really nice macros that can help us out here...
 ;(deftransfer [name args & body]) 
 ;used to define functions that transfer a simulation context...
-(comment
-(deftransfer 
-  
-)
+;or defsystem (ala systems from component based architectures)
+
+;the functions I currently have as transfer functions typically 
+;have a type signature like...
+;a->...->b->simcontext->simcontext
+;so, the simcontext is always the last argument.  
+;we "probably" want to create a series of functions that have this template:
+;(defn the-func [args & {:keys [ctx] :or {ctx *ctx*}}] body)
 
         
 (comment ;testing
