@@ -36,7 +36,7 @@
 ;specific type (usually encoded as an SRC).  Demand populates sink nodes of 
 ;Demand on the graph, which consume units of a specific type.  Relations add 
 ;nodes to the interior region between source and sink nodes, creating new paths 
-;(via substitution and equivlancies), which further relate supply and demand.  
+;(via substitution and equivilancies), which further relate supply and demand.  
 ;Together, each dataset is parsed to derive a set of rules, which form the
 ;topology (or connections) of the graph.  We can then bash the graph with some
 ;useful algorithms that make it easy to search, scope out useless rules, and
@@ -50,8 +50,8 @@
 ;of SRC1, and a sink node, say a Demand for SRC1.  In this case, we know that 
 ;both Supply and Demand contain SRC1, there will be a zero-cost path from 
 ;SINK_SRC1 -> SRC1 -> SOURCE_SRC1.  Since we allow the possibility of 
-;substitutions in our ruleset, there may be more than path from SINK_SRC1, maybe
-;to another source of substitutible supply like SRC2 
+;substitutions in our ruleset, there may be more than 1 path from SINK_SRC1, 
+;maybe to another source of substitutible supply like SRC2 
 ;(SINK_SRC1->SRC1_SRC2->SOURCE_SRC2).
 ;In this scenario, supply for both SRC1 and SRC2 are related, in that there's a 
 ;dependency introduced by the fill rules.  At a minumum, any simulation for SRC1
@@ -82,9 +82,9 @@
 ;variation of the K-shortest paths algorithm, where the shortest path is found, 
 ;then the next, ... as needed.  These paths describe a context, or a 
 ;justification for selecting a sub set of supply, and serve to classify the 
-;entire sub set of supply as a certain class, with a uniform priority.  This is
+;entire subset of supply as a certain class, with a uniform priority.  This is
 ;desirable, as it effectively partitions the search space and provides an 
-;effecient means of selecting sets of units for possible deployment.
+;efficient means of selecting sets of units for possible deployment.
 ;
 ;                    ***Generating Deployable Supply
 ;A SupplyGenerator takes the possible paths defined by the query, and 
@@ -116,7 +116,7 @@
 ;drawn evenly according to relative readiness, starting with units that directly
 ;match the capability demanded, and that have had the most time to increase 
 ;readiness (most capable, most ready), ending with units that least match the 
-;capability demand, with the least amount of time to increase readiness (least 
+;capability demanded, with the least amount of time to increase readiness (least 
 ;capable, least ready). When units deploy, the context of the fill path is 
 ;annotated on their deployment record, in addition to other stats such as path 
 ;length.
@@ -134,19 +134,19 @@
 ;Option Explicit
 ;
 ;'TOM Change 21 Sep 2011 -> Ran into the unique circumstance of not using 
-;     follow-ons unexpectedly...Arises when we have a higher-priority (either by
-;     priority value or by position in the q) demand to fill, but we don't have
-;     any eligible supply to fill it.  By default, we short-circuit the fills,
-;     because we obey the law that lower-priority fills cannot be filled before 
-;     higher, thus higher priority fills will always get the supply.
-;     This law no longer holds in the context of follow-on supply.
-;        Immediately, we see that iff supply.followons.count = 0, this law 
-;        holds.  We process as normal.
-;        Iff supply.followns.count >0 then
-;            We need to find out which demands have eligible follow-on supply 
-;            (if ANY) and fill them first.
-;     Demands with eligible follow-on supply will have the same SRC and 
-;     demandgroup as the follow-ons.
+;   follow-ons unexpectedly...Arises when we have a higher-priority (either by
+;   priority value or by position in the q) demand to fill, but we don't have
+;   any eligible supply to fill it.  By default, we short-circuit the fills,
+;   because we obey the law that lower-priority fills cannot be filled before 
+;   higher, thus higher priority fills will always get the supply.
+;   This law no longer holds in the context of follow-on supply.
+;      Immediately, we see that iff supply.followons.count = 0, this law 
+;      holds.  We process as normal.
+;      Iff supply.followns.count >0 then
+;          We need to find out which demands have eligible follow-on supply 
+;          (if ANY) and fill them first.
+;   Demands with eligible follow-on supply will have the same SRC and 
+;   demandgroup as the follow-ons.
 ;
 
 
@@ -156,9 +156,38 @@
 (defn sink-label   [x] [x :sink])   ;memoize!
 (defn source-label [x] [x :source]) ;memoize!
 
-(defn derive-rule [demand fillstore]
-  (let [label (sink-label (:primaryunit demand))]
-    
+;(defn derive-rule [demand fillstore]
+;  (let [label (sink-label (:primaryunit demand))]
+;;Refactor -> we don't need a separate rule here really, just wrapping 
+;sink-label
+
+(defn derive-rule [demand fillstore] (sink-label (:src demand)))
+
+;'Simple function to record fills (deployment records)
+;Public Sub recordFill(fill As TimeStep_Fill, fillstore As TimeStep_ManagerOfFill)
+;fillstore.Fills.add fillstore.Fills.count + 1, fill
+;End Sub
+(defn record-fill [fillstore fill] 
+  (let [fillcount (count (:fills fillstore))]
+    (assoc-in fillstore [:fills] (inc fillcount) fill)))
+
+;notify everyone that we've filled a demand...
+(defn filled-demand! [demand-name unit-name ctx] 
+  (sim/trigger :FillDemand demand-name unit-name
+    "Filled Demand" nil ctx))  
+;ghosts raise special attention when they deploy.
+(defn ghost-deployed! [demand-src ctx]
+  (sim/trigger :GhostDeployed demand-src demand-src "Filled demand with  ghost" 
+               :normal ctx))
+;ghosts raise special attention if they followon.
+(defn ghost-followed! [demand-src ctx]
+  (sim/trigger :GhostDeployed demand-src demand-src 
+     "Ghost followed on to another demand" :followon ctx))
+
+
+(defn followon? [u] (:followoncode u))
+(defn ghost-followon? [u] (and (ghost? u) (followon? u)))
+
 ;TOM Change 14 Mar 2011 -> Re-writing this from scratch.  We no longer use 
 ;baked-in rules. Assuming we have a fillfunction, given a demand, we try to fill
 ;the demand.  Should be a simple call to the fillfunction object, mostly.
@@ -172,7 +201,15 @@
 (defn source-demand 
   [supplystore parameters fillstore ctx policystore t demand sourcetype 
    & [supplybucket phase]]
-  (let [rule (derive-rule 
+  (let [rule     (derive-rule demand fillstore) ;refactor!
+        fillfunc (:fillfunction fillstore)] ;rename from fillfunction?
+    (if (has-rule? fillfunc rule)
+      (let [generator (query fillfunc rule (:demandgroup demand) (:name demand) 
+                             supplybucket phase)]
+        (if-let [fill-list (generate generator (:required demand) phase)]
+          (->> fill-list 
+            (reduce record-fill fillstore) 
+            
 ;Function sourceDemand(supplystore As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, _
 ;                        fillstore As TimeStep_ManagerOfFill, ctx As TimeStep_SimContext, _
 ;                            policystore As TimeStep_ManagerOfPolicy, t As Single, _
@@ -188,6 +225,7 @@
 ;rule = deriveRule(demand, fillstore)
 ;
 ;
+
 ;With fillstore.fillfunction '<---this is new, we now dispatch on the type of fill....
 ;    If .exists(rule) Then 'we can try to fill this demand.
 ;        .Query rule, demand.demandgroup, demand.name, supplybucket, phase, supplystore
@@ -196,12 +234,19 @@
 ;        If fillList.count > 0 Then
 ;            If fillList.count = demand.required Then sourceDemand = True 'found units to fill required...
 ;            For Each deployer In fillList
+                 (for [[deployer fill] fills]
+                     
 ;                Set fill = fillList(deployer)
 ;                recordFill fill, fillstore 'this may get to be too big at some point, maybe not.....
 ;                Set unit = fill.source
 ;                'Decoupled
 ;                SimLib.triggerEvent FillDemand, demand.name, unit.name, "Filled Demand ", , ctx
+                 (filled-demand! (:name demand) (:name unit))
 ;                'Tom Change 18 Aug 2011
+                 (if (not (ghost? unit)) ctx
+                     (if (followon? unit) 
+                       (ghost-followed! unit) 
+                       (ghost-deployed! unit)))                        
 ;                If unit.src = "Ghost" Then
 ;                    If unit.followoncode = vbNullString Then
 ;                        'Decoupled
@@ -210,9 +255,11 @@
 ;                        'Decoupled
 ;                        SimLib.triggerEvent GhostDeployed, demand.src, demand.src, "Ghost followed on to another demand", "followon", ctx
 ;                    End If
-;                End If
-;                
+;                End If               
 ;                'TOM Change 30 Aug 2012
+                 (supply/deploy-unit supplystore ctx parameters policystore unit t
+                         (:quality fill) demand (policy/get-maxbog unit) (count (:fills fillstore))
+                         fill (params/interval->date t) (followon? unit))                           
 ;                MarathonOpSupply.deployUnit supplystore, ctx, parameters, policystore, _
 ;                            unit, t, fill.quality, demand, unit.policy.maxbog, fillstore.Fills.count, _
 ;                                    fill, parameters.IntervalToDate(t), unit.followoncode <> vbNullString
@@ -251,10 +298,7 @@
 ;End Function
 
 
-;'Simple function to record fills (deployment records)
-;Public Sub recordFill(fill As TimeStep_Fill, fillstore As TimeStep_ManagerOfFill)
-;fillstore.Fills.add fillstore.Fills.count + 1, fill
-;End Sub
+
 ;'Constructor for building fill stores from component pieces.
 ;'Note, the fill store has a fillgraph, a fill function, and a supply generator.
 ;Public Function makeFillStore(fillgraph As TimeStep_FillGraph, fillfunction As TimeStep_FillFunction, generator As TimeStep_SupplyGenerator) As TimeStep_ManagerOfFill
