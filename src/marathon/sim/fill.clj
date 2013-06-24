@@ -149,24 +149,14 @@
 ;   demandgroup as the follow-ons.
 ;
 
-
-;Public Function deriveRule(demand As TimeStep_DemandData, fillstore As TimeStep_ManagerOfFill) As String
-;deriveRule = fillstore.fillgraph.sinklabel(demand.primaryunit)
-;End Function
 (defn sink-label   [x] [x :sink])   ;memoize!
 (defn source-label [x] [x :source]) ;memoize!
 
-;(defn derive-rule [demand fillstore]
-;  (let [label (sink-label (:primaryunit demand))]
 ;;Refactor -> we don't need a separate rule here really, just wrapping 
 ;sink-label
-
 (defn derive-rule [demand fillstore] (sink-label (:src demand)))
 
-;'Simple function to record fills (deployment records)
-;Public Sub recordFill(fill As TimeStep_Fill, fillstore As TimeStep_ManagerOfFill)
-;fillstore.Fills.add fillstore.Fills.count + 1, fill
-;End Sub
+;account for the fill in the fillstore, basically just conj it to the history.
 (defn record-fill [fillstore fill] 
   (let [fillcount (count (:fills fillstore))]
     (assoc-in fillstore [:fills] (inc fillcount) fill)))
@@ -187,6 +177,11 @@
 
 (defn followon? [u] (:followoncode u))
 (defn ghost-followon? [u] (and (ghost? u) (followon? u)))
+
+
+;Sourcing a demand is really the composition of three smaller functions: 
+;find-supply, take n items from the supply, fill the demand with the n items.
+
 
 ;TOM Change 14 Mar 2011 -> Re-writing this from scratch.  We no longer use 
 ;baked-in rules. Assuming we have a fillfunction, given a demand, we try to fill
@@ -209,12 +204,21 @@
         (if-let [fill-list (generate generator (:required demand) phase)]
           (->> fill-list 
             (reduce record-fill fillstore) 
+
+;return an ordered sequence of actions that can result in supply...
+;I 
+(defn find-supply [fillfunc rule demand & [supplybucket phase]]
+  (when (has-rule? fillfunc rule)
+    (query fillfunc rule (:demandgroup demand) (:name demand) 
+           supplybucket phase)))
             
-;Function sourceDemand(supplystore As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, _
-;                        fillstore As TimeStep_ManagerOfFill, ctx As TimeStep_SimContext, _
-;                            policystore As TimeStep_ManagerOfPolicy, t As Single, _
-;                                demand As TimeStep_DemandData, sourcetype As String, _
-;                                    Optional supplybucket As Dictionary, Optional phase As FillPhase) As Boolean
+;Function sourceDemand
+; (supplystore As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, _
+;   fillstore As TimeStep_ManagerOfFill, ctx As TimeStep_SimContext, _
+;    policystore As TimeStep_ManagerOfPolicy, t As Single, _
+;      demand As TimeStep_DemandData, sourcetype As String, _
+;        Optional supplybucket As Dictionary, Optional phase As FillPhase) 
+;          As Boolean
 ;
 ;Dim rule As String
 ;Dim fillList As Dictionary
@@ -225,22 +229,28 @@
 ;rule = deriveRule(demand, fillstore)
 ;
 ;
-
-;With fillstore.fillfunction '<---this is new, we now dispatch on the type of fill....
+;this is new, we now dispatch on the type of fill....
+;With fillstore.fillfunction 
 ;    If .exists(rule) Then 'we can try to fill this demand.
-;        .Query rule, demand.demandgroup, demand.name, supplybucket, phase, supplystore
+;        .Query rule, demand.demandgroup, demand.name, supplybucket, phase, 
+;           supplystore
 ;        'This will take more....i think context for sure.
-;        Set fillList = .take(demand.required, phase)  'try to get the required fills
+
+;        'try to get the required fills
+;        Set fillList = .take(demand.required, phase)  
 ;        If fillList.count > 0 Then
-;            If fillList.count = demand.required Then sourceDemand = True 'found units to fill required...
+;            'found units to fill required...
+;            If fillList.count = demand.required Then sourceDemand = True 
 ;            For Each deployer In fillList
                  (for [[deployer fill] fills]
                      
 ;                Set fill = fillList(deployer)
-;                recordFill fill, fillstore 'this may get to be too big at some point, maybe not.....
+;               'this may get to be too big at some point, maybe not.....
+;                recordFill fill, fillstore 
 ;                Set unit = fill.source
 ;                'Decoupled
-;                SimLib.triggerEvent FillDemand, demand.name, unit.name, "Filled Demand ", , ctx
+;                SimLib.triggerEvent FillDemand, demand.name, unit.name, 
+;                   "Filled Demand ", , ctx
                  (filled-demand! (:name demand) (:name unit))
 ;                'Tom Change 18 Aug 2011
                  (if (not (ghost? unit)) ctx
@@ -250,22 +260,24 @@
 ;                If unit.src = "Ghost" Then
 ;                    If unit.followoncode = vbNullString Then
 ;                        'Decoupled
-;                        SimLib.triggerEvent GhostDeployed, demand.src, demand.src, "Filled demand with ghost", "normal", ctx
+;                    SimLib.triggerEvent GhostDeployed, demand.src,  demand.src, 
+;                       "Filled demand with ghost", "normal", ctx
 ;                    Else
 ;                        'Decoupled
-;                        SimLib.triggerEvent GhostDeployed, demand.src, demand.src, "Ghost followed on to another demand", "followon", ctx
+;                    SimLib.triggerEvent GhostDeployed, demand.src, demand.src, 
+;                        "Ghost followed on to another demand", "followon", ctx
 ;                    End If
 ;                End If               
 ;                'TOM Change 30 Aug 2012
-                 (supply/deploy-unit supplystore ctx parameters policystore unit t
-                         (:quality fill) demand (policy/get-maxbog unit) (count (:fills fillstore))
-                         fill (params/interval->date t) (followon? unit))                           
-;                MarathonOpSupply.deployUnit supplystore, ctx, parameters, policystore, _
-;                            unit, t, fill.quality, demand, unit.policy.maxbog, fillstore.Fills.count, _
-;                                    fill, parameters.IntervalToDate(t), unit.followoncode <> vbNullString
-;            Next deployer
-;        End If
-;    End If
+   (supply/deploy-unit supplystore ctx parameters policystore unit t
+     (:quality fill) demand (policy/get-maxbog unit) (count (:fills fillstore))
+         fill (params/interval->date t) (followon? unit))                           
+;  MarathonOpSupply.deployUnit supplystore, ctx, parameters, policystore, _
+;   unit, t, fill.quality, demand, unit.policy.maxbog, fillstore.Fills.count, _
+;         fill, parameters.IntervalToDate(t), unit.followoncode <> vbNullString
+;  Next deployer
+; End If
+;End If
 ;End With
 ;
 ;
@@ -274,10 +286,12 @@
 ;TOM Change 27 SEp 2012 -> allow fencing of supply via tags...We pass 
 ;information to the comparer if the unit is fenced to the relative demand or 
 ;demand group.
-;Public Function isInsideFence(uic As TimeStep_UnitData, demandname As String, followoncode As String, tags As GenericTags) As Boolean
+;Public Function isInsideFence(uic As TimeStep_UnitData, demandname As String, 
+;        followoncode As String, tags As GenericTags) As Boolean
 ;
 ;With tags
-;    isInsideFence = .hasTag(uic.name, followoncode) Or .hasTag(uic.name, demandname)
+;    isInsideFence = .hasTag(uic.name, followoncode) Or 
+;                    .hasTag(uic.name, demandname)
 ;End With
 ;
 ;End Function
@@ -286,13 +300,15 @@
 ;information to the comparer if the unit is fenced to the relative demand or 
 ;demand group.  If a unit is fenced to a different demand or group, we return
 ;false.
-;Public Function isOutsideFence(uic As TimeStep_UnitData, demandname As String, followoncode As String, tags As GenericTags) As Boolean
+;Public Function isOutsideFence(uic As TimeStep_UnitData, demandname As String, 
+;   followoncode As String, tags As GenericTags) As Boolean
 ;
 ;With tags
 ;    If .hasTag("fenced", uic.name) Then
 ;        isOutsideFence = Not isInsideFence(uic, demandname, followoncode, tags)
 ;    Else
-;        isOutsideFence = False 'by default, units are included if they have no fencing rules.
+;        'by default, units are included if they have no fencing rules.
+;        isOutsideFence = False 
 ;    End If
 ;End With
 ;End Function
@@ -301,7 +317,9 @@
 
 ;'Constructor for building fill stores from component pieces.
 ;'Note, the fill store has a fillgraph, a fill function, and a supply generator.
-;Public Function makeFillStore(fillgraph As TimeStep_FillGraph, fillfunction As TimeStep_FillFunction, generator As TimeStep_SupplyGenerator) As TimeStep_ManagerOfFill
+;Public Function makeFillStore(fillgraph As TimeStep_FillGraph, fillfunction As 
+;   TimeStep_FillFunction, generator As TimeStep_SupplyGenerator) 
+;         As TimeStep_ManagerOfFill
 ;
 ;Set makeFillStore = New TimeStep_ManagerOfFill
 ;With makeFillStore
@@ -311,12 +329,14 @@
 ;End Function
 ;
 ;
-;'Process that encapsulates creating a new fillstore from coredata, appending the fillstore to the core data, and then
-;'returning a scoped set of core data, where the supply and demand have been reduced according to the relations
-;'embodied by the fillgraph.
-;'Assumes simState has valid supply, demand, and policystore instances (i.e. they've been initialzed,
-;'probably from tables).  Returns updated simState.
-;Public Function simStateToScopedSimState(simstate As TimeStep_SimState, Optional generator As TimeStep_SupplyGenerator) As TimeStep_ManagerOfFill
+;Process that encapsulates creating a new fillstore from coredata, appending 
+;the fillstore to the core data, and then returning a scoped set of core data, 
+;where the supply and demand have been reduced according to the relations
+;embodied by the fillgraph.
+;Assumes simState has valid supply, demand, and policystore instances 
+;(i.e. they've been initialzed, probably from tables). Returns updated simState.
+;Public Function simStateToScopedSimState(simstate As TimeStep_SimState, 
+;    Optional generator As TimeStep_SupplyGenerator) As TimeStep_ManagerOfFill
 ;
 ;Dim ff As TimeStep_FillFunction
 ;Dim fg As TimeStep_FillGraph
@@ -325,13 +345,15 @@
 ;With simstate
 ;    Set fg = composeFillGraph(.supplystore, .demandstore, .policystore)
 ;    If generator Is Nothing Then _
-;        Set generator = makeSupplyGenerator(simstate, , , simstate.parameters.getKey("DefaultSupplyPriority") = "RCPreSurge")
-;    Set ff = makeFillFunction("FillFunction", .supplystore, fg, .parameters, .context, generator)
+;        Set generator = makeSupplyGenerator(simstate, , , 
+;             simstate.parameters.getKey("DefaultSupplyPriority") = "RCPreSurge")
+;    Set ff = makeFillFunction("FillFunction", .supplystore, fg, .parameters, 
+;                                .context, generator)
 ;    Set fs = makeFillStore(fg, ff, generator)
 ;End With
 ;
 ;Set simstate.fillstore = fs
-;'Scopes the data as a final step, since we have handle on the fillgraph already.
+;'Scopes the data as a final step, since we have a handle on the fillgraph.
 ;Set simstate = scopeSimState(fg, simstate)
 ;Set ff = Nothing
 ;Set fg = Nothing
@@ -339,24 +361,33 @@
 ;
 ;End Function
 ;'Performs a large scoping operation on core data, using any fillgraph.
-;Public Function scopeSimState(fillgraph As TimeStep_FillGraph, simstate As TimeStep_SimState) As TimeStep_SimState
-;scope fillgraph.reducedgraph, simstate.fillstore, simstate.parameters, simstate.supplystore, simstate.demandstore, simstate.context
+;Public Function scopeSimState(fillgraph As TimeStep_FillGraph, 
+;                          simstate As TimeStep_SimState) As TimeStep_SimState
+;scope fillgraph.reducedgraph, simstate.fillstore, simstate.parameters, 
+;                simstate.supplystore, simstate.demandstore, simstate.context
 ;Set scopeSimState = simstate
 ;End Function
-;'Given pre-built stores of supply, demand, and policy, composes them into a fillgraph.
-;Public Function composeFillGraph(supplystore As TimeStep_ManagerOfSupply, demandstore As TimeStep_ManagerOfDemand, policystore As TimeStep_ManagerOfPolicy) As TimeStep_FillGraph
-;Set composeFillGraph = BuildFillGraph(New TimeStep_FillGraph, supplystore, demandstore, policystore)
+
+;'Composes pre-built stores of supply, demand, and policy into a fillgraph.
+;Public Function composeFillGraph(supplystore As TimeStep_ManagerOfSupply, 
+;   demandstore As TimeStep_ManagerOfDemand, 
+;      policystore As TimeStep_ManagerOfPolicy) As TimeStep_FillGraph
+;Set composeFillGraph = BuildFillGraph(New TimeStep_FillGraph, supplystore, 
+;                           demandstore, policystore)
 ;End Function
-;'Given a set of tables defining supply, demand, and relation records, composes a fillgraph.
-;Public Function tablesToFillgraph(sourcesTbl As GenericTable, sinksTbl As GenericTable, relationsTbl As GenericTable) As TimeStep_FillGraph
-;Set tablesToFillgraph = FillGraphFromTables(New TimeStep_FillGraph, sourcesTbl, sinksTbl, relationsTbl)
+;'Composes tables defining supply, demand, and relation records into a fillgraph
+;Public Function tablesToFillgraph(sourcesTbl As GenericTable, 
+;  sinksTbl As GenericTable, relationsTbl As GenericTable) As TimeStep_FillGraph
+;Set tablesToFillgraph = FillGraphFromTables(New TimeStep_FillGraph, sourcesTbl,
+;                             sinksTbl, relationsTbl)
 ;End Function
 ;
 ;'Produces a new fill function from inputs.
-;Public Function makeFillFunction(nm As String, supplystore As TimeStep_ManagerOfSupply, _
-;                                    graph As IGraph, parameters As TimeStep_Parameters, _
-;                                        context As TimeStep_SimContext, _
-;                                            generator As TimeStep_SupplyGenerator) As TimeStep_FillFunction
+;Public Function makeFillFunction
+; (nm As String, supplystore As TimeStep_ManagerOfSupply, _
+;    graph As IGraph, parameters As TimeStep_Parameters, _
+;       context As TimeStep_SimContext, _
+;           generator As TimeStep_SupplyGenerator) As TimeStep_FillFunction
 ;
 ;Set makeFillFunction = New TimeStep_FillFunction
 ;With makeFillFunction
@@ -371,83 +402,79 @@
 ;
 ;End Function
 ;
-;'A constructor for supply generators.  Currently, there's only one kind of generator, based off the legacy supply
-;'system.  We'll have to fix this.  Extensibility via new generators is pretty fundamental.
-;'Fergusonmode is a legacy hack that basically sets a flag to change the prioritization scheme for
-;'pre surge periods.  It came about when we needed to use a different prioritization scheme....
-;'Maybe we should have complex priotization schemes, just like we have composite policies.
+;'A constructor for supply generators.  Currently, there's only one kind of 
+;'generator, based off the legacy supply system.  We'll have to fix this.  
+;'Extensibility via new generators is pretty fundamental. Fergusonmode is a 
+;'legacy hack that basically sets a flag to change the prioritization scheme for
+;'pre surge periods.  It came about when we needed to use a different 
+;'prioritization scheme.... Maybe we should have complex priotization schemes, 
+;'just like we have composite policies.
 ;Public Function makeSupplyGenerator _
 ;    (simstate As TimeStep_SimState, Optional gpolicy As TimeStep_Policy, _
-;        Optional gcompo As String, Optional fergusonmode As Boolean, Optional comparer As IComparator) As TimeStep_SupplyGenerator
+;        Optional gcompo As String, Optional fergusonmode As Boolean,
+;           Optional comparer As IComparator) As TimeStep_SupplyGenerator
 ;
 ;Set makeSupplyGenerator = New TimeStep_SupplyGenerator
 ;
 ;With makeSupplyGenerator
-;    'TODO -> this is just a temporary decoupling.  I need to extract out the supply generator further.  Parent is
-;    'just pointing at a supplystore now (now unlike a partially applied function).  Still, the dependencies kinda suck.
+; 'TODO -> this is just a temporary decoupling.  I need to extract out the 
+; 'supply generator further.  Parent is just pointing at a supplystore now 
+; '(not unlike a partially applied function).Still, the dependencies kinda suck.
 ;    'Decoupled
 ;    'Set .parent = supplystore
 ;    Set .simstate = simstate
 ;    'Decoupled
-;    If gpolicy Is Nothing Then Set gpolicy = simstate.policystore.policies("Ghost365_45")
+;    If gpolicy Is Nothing Then 
+;       Set gpolicy = simstate.policystore.policies("Ghost365_45")
 ;    If gcompo = vbNullString Then gcompo = "Ghost" 'no component
 ;    Set .ghostpolicy = gpolicy
 ;    .ghostcompo = gcompo
 ;    'Decoupled
 ;    Set .tags = simstate.supplystore.tags
-;    Set .comparer = New TimeStep_ComparerUnit 'Too coupled.  Need to fix unit comparison to allow general prioritization.
+;    'Too coupled.  Need to fix unit comparison to allow general prioritization.
+;    Set .comparer = New TimeStep_ComparerUnit 
 ;    If fergusonmode Then .comparer.RCpresurgePreference = True
 ;End With
 ;
 ;End Function
-;'TODO ->  Do a better job separating concerns here... Building a fill graph and viewing the
-;'intermediate results are likely orthogonal...
+;'TODO ->  Do a better job separating concerns here... Building a fill graph and
+;'viewing the intermediate results are likely orthogonal...
 ;'Accumulate a fill graph from supplymanager, policymanager and demands...
-;Public Function BuildFillGraph(sourcegraph As TimeStep_FillGraph, _
-;                                supplystore As TimeStep_ManagerOfSupply, _
-;                                        demandstore As TimeStep_ManagerOfDemand, _
-;                                            policystore As TimeStep_ManagerOfPolicy) As TimeStep_FillGraph
+;Public Function BuildFillGraph
+;    (sourcegraph As TimeStep_FillGraph, _
+;       supplystore As TimeStep_ManagerOfSupply, _
+;          demandstore As TimeStep_ManagerOfDemand, _
+;             policystore As TimeStep_ManagerOfPolicy) As TimeStep_FillGraph
 ;
 ;Set BuildFillGraph = sourcegraph
 ;
 ;With sourcegraph
 ;    Set BuildFillGraph = .fromsupply(supplystore)
-;'    If rendergraphs And allgraphs Then renderGraph "SourcesGraph", BuildFillGraph.graph, , True
 ;    Set BuildFillGraph = .fromPolicy(policystore)
-;'    If rendergraphs And allgraphs Then renderGraph "Sources_RelationsGraph", BuildFillGraph.graph, , True
 ;    Set BuildFillGraph = .FromDemand(demandstore)
-;'    If rendergraphs And allgraphs Then renderGraph "Sources_Relations_SinksGraph", BuildFillGraph.graph, , True
 ;End With
 ;
-;'Tom note -> these are debug tools.
-;'renderGraph "FullGraph", BuildFillGraph.graph
 ;'currently we build this into the fillgraph build process.  We want to know
 ;'where there are islands....
 ;sourcegraph.decompose
-;
-;'If rendergraphs And allgraphs Then renderGraph "Sources_Relations_Sinks_Decomposed", BuildFillGraph.graph, , True
-;'If rendergraphs Then renderGraph "Source_SinksReducedGraph", BuildFillGraph.reducedgraph, , True
-;
-;'scope BuildFillGraph.reducedgraph, parameters, supplystore, demandstore, ctx
+
 ;End Function
 ;
-;'TODO ->  Do a better job separating concerns here... Building a fill graph and viewing the
-;'intermediate results are likely orthogonal...
+;'TODO ->  Do a better job separating concerns here... Building a fill graph and
+; viewing the intermediate results are likely orthogonal...
 ;'Accumulate a fill graph from supplymanager, policymanager and demands...
-;Public Function FillGraphFromTables(sourcegraph As TimeStep_FillGraph, _
-;                                supply As GenericTable, _
-;                                        demand As GenericTable, _
-;                                            policy As GenericTable) As TimeStep_FillGraph
+;Public Function FillGraphFromTables
+;          (sourcegraph As TimeStep_FillGraph, _
+;             supply As GenericTable, _
+;                demand As GenericTable, _
+;                   policy As GenericTable) As TimeStep_FillGraph
 ;
 ;Set FillGraphFromTables = sourcegraph
 ;
 ;With sourcegraph
 ;    Set FillGraphFromTables = .FromSourceTable(supply)
-;'    If rendergraphs And allgraphs Then renderGraph "SourcesGraph", FillGraphFromTables.graph, , True
 ;    Set FillGraphFromTables = .fromRelationTable(policy)
-;'    If rendergraphs And allgraphs Then renderGraph "Sources_RelationsGraph", FillGraphFromTables.graph, , True
 ;    Set FillGraphFromTables = .FromSinkTable(demand)
-;'    If rendergraphs And allgraphs Then renderGraph "Sources_Relations_SinksGraph", FillGraphFromTables.graph, , True
 ;End With
 ;
 ;'Tom note -> these are debug tools.
@@ -456,13 +483,13 @@
 ;'where there are islands....
 ;sourcegraph.decompose
 ;
-;'If rendergraphs And allgraphs Then renderGraph "Sources_Relations_Sinks_Decomposed", FillGraphFromTables.graph, , True
-;'If rendergraphs Then renderGraph "Source_SinksReducedGraph", FillGraphFromTables.reducedgraph, , True
-;
 ;End Function
 ;
-;'This is the simplest initializer for building and initializing a fill store.  Closest to the legacy stuff as well.
-;Public Function fillStoreFromTables(simstate As TimeStep_SimState, sources As GenericTable, sinks As GenericTable, relations As GenericTable) As TimeStep_ManagerOfFill
+;'This is the simplest initializer for building and initializing a fill store.  
+;'Closest to the legacy stuff as well.
+;Public Function fillStoreFromTables(simstate As TimeStep_SimState, 
+;   sources As GenericTable, sinks As GenericTable, relations As GenericTable) 
+;      As TimeStep_ManagerOfFill
 ;Dim fg As TimeStep_FillGraph
 ;Dim ff As TimeStep_FillFunction
 ;Dim sg As TimeStep_SupplyGenerator
@@ -471,7 +498,8 @@
 ;Set fg = FillGraphFromTables(fg, sources, sinks, relations)
 ;
 ;Set sg = makeSupplyGenerator(simstate)
-;Set ff = makeFillFunction("FillFunction", simstate.supplystore, fg.graph, simstate.parameters, simstate.context, sg)
+;Set ff = makeFillFunction("FillFunction", simstate.supplystore, fg.graph, 
+;                              simstate.parameters, simstate.context, sg)
 ;Set fillStoreFromTables = makeFillStore(fg, ff, sg)
 ;
 ;Set sg = Nothing
@@ -488,11 +516,8 @@
 ;
 ;With staticGraph
 ;    Set staticGraph = .FromSourceTable(supply)
-;'    If rendergraphs And allgraphs Then renderGraph "SourcesGraph", staticGraph.graph, , True
 ;    Set staticGraph = .fromRelationTable(policy)
-;'    If rendergraphs And allgraphs Then renderGraph "Sources_RelationsGraph", staticGraph.graph, , True
 ;    Set staticGraph = .FromSinkTable(demand)
-;'    If rendergraphs And allgraphs Then renderGraph "Sources_Relations_SinksGraph", staticGraph.graph, , True
 ;End With
 ;
 ;'Tom note -> these are debug tools.
@@ -501,12 +526,10 @@
 ;'where there are islands....
 ;staticGraph.decompose
 ;
-;'If rendergraphs And allgraphs Then renderGraph "Sources_Relations_Sinks_Decomposed", staticGraph.graph, , True
-;'If rendergraphs Then renderGraph "Source_SinksReducedGraph", staticGraph.reducedgraph, , True
-;
 ;
 ;End Function
-;'Sets flags on the fillstore to indicate all graphs should be rendered with GraphViz
+;'Sets flags on the fillstore to indicate all graphs should be rendered with 
+;'GraphViz
 ;Public Sub renderAllGraphs(fillstore As TimeStep_ManagerOfFill)
 ;fillstore.rendergraphs = True
 ;fillstore.allgraphs = True
@@ -516,11 +539,15 @@
 ;Dim k
 ;Set fs.outofscope = SetLib.union(fs.outofscope, outofscope)
 ;End Sub
-;'TOM change 24 Mar 2011 -> Utilize the reduced fillgraph to determine which elements of supply and demand
-;'should be scoped out of the study, remove these elements from demand and supply.
-;Public Sub scope(reduced As GenericGraph, fillstore As TimeStep_ManagerOfFill, parameters As TimeStep_Parameters, _
-;                    supplystore As TimeStep_ManagerOfSupply, demandstore As TimeStep_ManagerOfDemand, _
-;                        ctx As TimeStep_SimContext, Optional csv As Boolean)
+;'TOM change 24 Mar 2011 -> Utilize the reduced fillgraph to determine which 
+;'elements of supply and demand should be scoped out of the study, remove these 
+;'elements from demand and supply.
+;Public Sub scope
+;    (reduced As GenericGraph, fillstore As TimeStep_ManagerOfFill, 
+;       parameters As TimeStep_Parameters, _
+;          supplystore As TimeStep_ManagerOfSupply, 
+;             demandstore As TimeStep_ManagerOfDemand, _
+;                ctx As TimeStep_SimContext, Optional csv As Boolean)
 ;Dim island
 ;Dim islands As Dictionary
 ;Dim strm As IRecordStream
@@ -618,19 +645,22 @@
 ;msg = "FillManager found " & islands("Supply").count & " Unused Supply Sources"
 ;'Decoupled
 ;SimLib.triggerEvent ScopedSupply, fillstore.name, supplystore.name, msg, , ctx
-;'Tom change 16 June 2011 -> inserted True into scope, removes units from supply.
+;'Tom change 16 June; inserted True into scope, removes units from supply.
 ;'Decoupled
 ;MarathonOpSupply.scopeSupply supplystore, islands("Supply"), True
-;msg = "FillManager found " & islands("Demand").count & " Unfillable Demand Sinks"
+;msg = "FillManager found " & islands("Demand").count & 
+;          " Unfillable Demand Sinks"
 ;'Decoupled
 ;SimLib.triggerEvent ScopedDemand, fillstore.name, demandstore.name, msg, , ctx
-;'Tom change 16 June 2011 -> inserted True into scope, removes demands from demand.
+;'Tom change; inserted True into scope, removes demands from demand.
 ;'Decoupled
 ;MarathonOpDemand.scopeDemand demandstore, islands("Demand"), True
 ;
 ;End Sub
-;'Discovers islands in a graph, annotating them in the fillstore and in/out of scope rules.
-;Public Function findIslands(source As GenericGraph, Optional fillstore As TimeStep_ManagerOfFill) As Dictionary
+;'Discovers islands in a graph, annotating them in the fillstore and in/out of 
+;'scope rules.
+;Public Function findIslands(source As GenericGraph, 
+;                Optional fillstore As TimeStep_ManagerOfFill) As Dictionary
 ;Dim res As Dictionary
 ;Dim islands As Dictionary
 ;Dim outofscope As Dictionary
@@ -709,7 +739,8 @@
 ;If UBound(tmp, 1) = 1 Then
 ;    translateRule = tmp(1)
 ;Else
-;    Err.Raise 101, , "Irregular rule :" & inrule & " should be delimited by a single _ "
+;    Err.Raise 101, , 
+;      "Irregular rule :" & inrule & " should be delimited by a single _ "
 ;End If
 ;End Function
 ;'Aux function to describe the type of island, whether a source or a sink.
@@ -729,7 +760,8 @@
 ;'init parent
 ;'End Sub
 ;
-;'Public Sub FromTables(sources As GenericTable, sinks As GenericTable, relations As GenericTable)
+;'Public Sub FromTables(sources As GenericTable, sinks As GenericTable, 
+;                            relations As GenericTable)
 ;''Decouple
 ;'init parent, True, sources, sinks, relations
 ;'End Sub
