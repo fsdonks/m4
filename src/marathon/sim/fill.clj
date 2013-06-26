@@ -156,6 +156,11 @@
 ;   demandgroup as the follow-ons.
 ;
 
+(defmacro defpath [& ks] `(~'fn [~'m] (get-in ~'m ~ks)))
+(defn get-fillstore [ctx] (get-in ctx [:state :fillstore]))
+(defn get-parameters [ctx] (get-in ctx [:state :parameters])
+
+
 (defn sink-label   [x] [x :sink])   ;memoize!
 (defn source-label [x] [x :source]) ;memoize!
 
@@ -276,9 +281,21 @@
         (ghost-followed! unit ctx) 
         (ghost-deployed! unit ctx))))
 
-;Temporary implementation of apply-fill, this should really be generic
+;Temporary implementation of apply-fill, this should really be generic or 
+;protocol-based.  apply-fill should represent the new context emerging from 
+;applying a realized fill, in the form of filldata, to a demand.  Originally,
+;this meant that fills would always result in a deployment at the end.  By 
+;elevating apply-fill into the API, we can actually implement things that 
+;would otherwise be difficult, i.e. delayed fills (pre-allocating units and 
+;scheduling them to deploy at a later date, while nominally "filling" the 
+;demand).  We could just change deploy-unit as well....
 (defn apply-fill [filldata demand ctx]
-  (->> ctx 
+  (let [unit (:unit filldata)
+        fillstore   (get-fillstore ctx)
+        supplystore (get-supplystore ctx)
+        policystore (get-policystore ctx)
+        params      (get-parameters ctx)]
+    (->> ctx 
       (supply/deploy-unit supplystore ctx parameters policystore unit t
           quality demand (policy/get-maxbog unit) (count (:fills fillstore))
           filldata (params/interval->date t) (followon? unit))))

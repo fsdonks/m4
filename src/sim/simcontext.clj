@@ -248,6 +248,16 @@
             (if (= k :trigger) (v c) 
             (assoc-state k v c)))))
 
+(def *paths* (atom {}))
+(defn add-path [pathname p] (swap! *paths* assoc pathname p))
+
+(defmacro defpath [pathname & ks] `(~'defn ~pathname [~'m] (get-in ~'m ~ks)))
+(defn state-path  [pathname & ks]  (defpath pathname (into [:state] ks)))
+
+(state-path get-fillstore   [:fillstore])
+(state-path get-parameters  [:parameters])
+(state-path get-supplystore [:supplystore])
+(state-path get-demandstore [:demandstore])
 
 ;it'd be really nice if we had a simple language for describing updates...
 ;not unlike Conrad's "patch" 
