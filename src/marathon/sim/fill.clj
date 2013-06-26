@@ -156,9 +156,8 @@
 ;   demandgroup as the follow-ons.
 ;
 
-(defmacro defpath [& ks] `(~'fn [~'m] (get-in ~'m ~ks)))
-(defn get-fillstore [ctx] (get-in ctx [:state :fillstore]))
-(defn get-parameters [ctx] (get-in ctx [:state :parameters])
+
+
 
 
 (defn sink-label   [x] [x :sink])   ;memoize!
