@@ -10,9 +10,10 @@
 (declare source-demand)
 
 ;TEMPORARILY ADDED - need to fit this somewhere in protocols or core.
-(declare realize-fill promise-fill)
+(declare realize-fill promise-fill apply-fill)
 ;promise-fill::'a->simcontext->(simcontext->'a->[filldata,simcontext])
-;realize-fill::simcontext->promise-fill->[filldata, simcontext] 
+;realize-fill::promise-fill->simcontext->[filldata, simcontext]
+;apply-fill::filldata->demand->ctx->ctx
 
 
 ;This is a decoupling of the original TimeStep_ManagerOfFill class.
@@ -256,20 +257,43 @@
     (query fillfunc rule (:demandgroup demand) (:name demand) 
            supplybucket phase)))
 
-;Second: Allocate a sequence of candidate fills against a demand.
-;Assuming we have a sequence of candidate fills, and a demand that needs filling
+;Second: Allocate a candidate fill against a demand.
+;-Assuming we have a candidate fill, and a demand that needs filling
 ;-the demand is assumed to have inspired the list of candidates, but it's not 
 ;-consequential for allocation purposes--
+
 ;we reduce the sequence of candidates by allocating them to the demand, 
 ;returning a resulting context that represents the allocated demand.
 ;--we need a supplementary function here, to realize the candidate and 
 ;--incorporate it into the context.  In some cases we're actually generating 
 ;--new, random units, so realizing a promised fill may require substantial 
 ;--changes to the context (like creating an entity, adding the entity to supply
-;--logging the fact, etc).
+;--logging the fact, etc).  
 
-(defn fill-demand [demand candidate ctx]
-  (
+(defn check-ghost [unit ctx]
+  (if (not (ghost? unit)) ctx
+      (if (followon? unit) 
+        (ghost-followed! unit ctx) 
+        (ghost-deployed! unit ctx))))
+
+;Temporary implementation of apply-fill, this should really be generic
+(defn apply-fill [filldata demand ctx]
+  (->> ctx 
+      (supply/deploy-unit supplystore ctx parameters policystore unit t
+          quality demand (policy/get-maxbog unit) (count (:fills fillstore))
+          filldata (params/interval->date t) (followon? unit))))
+
+;Applies the act of filling a demand, by realizing a promised fill, logging if
+;any ghosts were used to fill (may change this...) and updating the context 
+;to reflect a.
+(defn fill-demand [demand promised-fill ctx]
+  (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
+         unit    (:source filldata)
+         quality (:quality filldata)] 
+    (->> ctx 
+         (filled-demand! (:name demand) (:name unit))
+         (check-ghost unit)
+         (apply-fill filldata demand)))) 
 
 ;Function sourceDemand
 ; (supplystore As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, _
@@ -310,12 +334,7 @@
 ;                'Decoupled
 ;                SimLib.triggerEvent FillDemand, demand.name, unit.name, 
 ;                   "Filled Demand ", , ctx
-                 (filled-demand! (:name demand) (:name unit))
-;                'Tom Change 18 Aug 2011
-                 (if (not (ghost? unit)) ctx
-                     (if (followon? unit) 
-                       (ghost-followed! unit) 
-                       (ghost-deployed! unit)))                        
+                    
 ;                If unit.src = "Ghost" Then
 ;                    If unit.followoncode = vbNullString Then
 ;                        'Decoupled
@@ -328,9 +347,7 @@
 ;                    End If
 ;                End If               
 ;                'TOM Change 30 Aug 2012
-   (supply/deploy-unit supplystore ctx parameters policystore unit t
-     (:quality fill) demand (policy/get-maxbog unit) (count (:fills fillstore))
-         fill (params/interval->date t) (followon? unit))                           
+                          
 ;  MarathonOpSupply.deployUnit supplystore, ctx, parameters, policystore, _
 ;   unit, t, fill.quality, demand, unit.policy.maxbog, fillstore.Fills.count, _
 ;         fill, parameters.IntervalToDate(t), unit.followoncode <> vbNullString
