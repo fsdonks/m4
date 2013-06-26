@@ -9,6 +9,12 @@
 ;TEMPORARILY ADDED for marathon.sim.demand
 (declare source-demand)
 
+;TEMPORARILY ADDED - need to fit this somewhere in protocols or core.
+(declare realize-fill promise-fill)
+;promise-fill::'a->simcontext->(simcontext->'a->[filldata,simcontext])
+;realize-fill::simcontext->promise-fill->[filldata, simcontext] 
+
+
 ;This is a decoupling of the original TimeStep_ManagerOfFill class.
 ;The class functions were pulled out and decoupled.  The old
 ;ManagerOfFill class actually handled the creation of a couple of
@@ -178,10 +184,8 @@
 (defn followon? [u] (:followoncode u))
 (defn ghost-followon? [u] (and (ghost? u) (followon? u)))
 
-
 ;Sourcing a demand is really the composition of three smaller functions: 
 ;find-supply, take n items from the supply, fill the demand with the n items.
-
 
 ;TOM Change 14 Mar 2011 -> Re-writing this from scratch.  We no longer use 
 ;baked-in rules. Assuming we have a fillfunction, given a demand, we try to fill
@@ -203,15 +207,70 @@
                              supplybucket phase)]
         (if-let [fill-list (generate generator (:required demand) phase)]
           (->> fill-list 
-            (reduce record-fill fillstore) 
+            (reduce record-fill fillstore))))))
+  ;INCOMPLETE
+  ) 
+
+;We can break source-demand (originally a largish function) into a few smaller
+;functions and a reduction:
+;  find-supply 'given a fill 
+;  
+
+;All a fill-function is, in the old object model, is a partially applied 
+;function that closes over a fillgraph, and a supplygenerator.  Since we only 
+;had one type of supply generator, the supply generator is really just a 
+;function that uses the fill graph to provide an ordered list of supply
+;on demand.
+
+;All the fill function did was wrap both the fill graph and a mutable generator.
+;It provided an interface to initialize queries and maintain state.  Since we 
+;were pulling from multiple "buckets" of supply, according to an ordering 
+;dictated by shortest paths, we had the "generator" automatically pointing at 
+;multiple buckets....
+
+;The ultimate purpose of a fill function is to provide the answer to a simple 
+;query:  Given a demand (or a rule that describes the demand), and a supplystore
+;which entities (in order of suitability) are eligible to fill the demand?
+;So it's really a very simple, isolated querying mechanism...
+;We will actually NEED a reference to a supplystore in this case...
+;The mutable version maintained a reference to the supply internally in the 
+;fillfunction,  in this case, we are NOT.  So we MAY NEED to provide the 
+;supplystore as an extra argument.
+
+;Decoupling the fill process....
+;-------------------------------
+;First: "find the most suitable supply".
 
 ;return an ordered sequence of actions that can result in supply...
-;I 
+;this effectively applies the suitability function related to fillfunc to the 
+;rule, the demand, and the supplybucket/supplystore.  The result is a sequence
+;of potential fills....where potential fills are data structures that include 
+;the context of the fill (i.e. the unit, the actions required to realize the 
+;fill, and other meta data).  This represents an ordered sequence of candidate
+;fills....we may not, in fact, utilize every candidate.  A better description
+;is that find-supply provides a list of  fill-promises, which are realized as
+;needed.  A fill-promise is a function that consumes the current context and 
+;returns a pair of [promised-unit, new-context].
 (defn find-supply [fillfunc rule demand & [supplybucket phase]]
   (when (has-rule? fillfunc rule)
     (query fillfunc rule (:demandgroup demand) (:name demand) 
            supplybucket phase)))
-            
+
+;Second: Allocate a sequence of candidate fills against a demand.
+;Assuming we have a sequence of candidate fills, and a demand that needs filling
+;-the demand is assumed to have inspired the list of candidates, but it's not 
+;-consequential for allocation purposes--
+;we reduce the sequence of candidates by allocating them to the demand, 
+;returning a resulting context that represents the allocated demand.
+;--we need a supplementary function here, to realize the candidate and 
+;--incorporate it into the context.  In some cases we're actually generating 
+;--new, random units, so realizing a promised fill may require substantial 
+;--changes to the context (like creating an entity, adding the entity to supply
+;--logging the fact, etc).
+
+(defn fill-demand [demand candidate ctx]
+  (
+
 ;Function sourceDemand
 ; (supplystore As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, _
 ;   fillstore As TimeStep_ManagerOfFill, ctx As TimeStep_SimContext, _
