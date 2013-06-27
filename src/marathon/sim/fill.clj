@@ -170,8 +170,7 @@
 
 ;notify everyone that we've filled a demand...
 (defn filled-demand! [demand-name unit-name ctx] 
-  (sim/trigger :FillDemand demand-name unit-name
-    "Filled Demand" nil ctx))  
+  (sim/trigger :FillDemand demand-name unit-name "Filled Demand" nil ctx))  
 ;ghosts raise special attention when they deploy.
 (defn ghost-deployed! [demand-src ctx]
   (sim/trigger :GhostDeployed demand-src demand-src "Filled demand with  ghost" 
@@ -180,7 +179,6 @@
 (defn ghost-followed! [demand-src ctx]
   (sim/trigger :GhostDeployed demand-src demand-src 
      "Ghost followed on to another demand" :followon ctx))
-
 
 (defn followon? [u] (:followoncode u))
 (defn ghost-followon? [u] (and (ghost? u) (followon? u)))
@@ -275,7 +273,7 @@
         (ghost-followed! unit ctx) 
         (ghost-deployed! unit ctx))))
 
-;Temporary implementation of apply-fill, this should really be generic or 
+;A temporary implementation of apply-fill; this should really be generic or 
 ;protocol-based.  apply-fill should represent the new context emerging from 
 ;applying a realized fill, in the form of filldata, to a demand.  Originally,
 ;this meant that fills would always result in a deployment at the end.  By 
