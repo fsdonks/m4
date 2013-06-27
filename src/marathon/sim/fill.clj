@@ -156,10 +156,6 @@
 ;   demandgroup as the follow-ons.
 ;
 
-
-
-
-
 (defn sink-label   [x] [x :sink])   ;memoize!
 (defn source-label [x] [x :source]) ;memoize!
 

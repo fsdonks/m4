@@ -248,16 +248,28 @@
             (if (= k :trigger) (v c) 
             (assoc-state k v c)))))
 
-(def *paths* (atom {}))
-(defn add-path [pathname p] (swap! *paths* assoc pathname p))
+;defines a path to a resource, specifically a function that can get a nested 
+;resource from an associative structure.
+;A ton of our work will be in dissecting nested structures, particularly the 
+;simcontext.
+(defmacro defpath
+  "Allows definitions of nested paths into associative structures.  Creates 
+   a function, named pathname, that consume a map and apply get-in 
+   using the supplied path denoted by a sequence of literals, ks."
+  [pathname & ks] `(~'defn ~pathname [~'m] (get-in ~'m ~@ks)))
+(defmacro defpaths
+  "Allows multiple paths to be defined at once, with the possibility of sharing 
+   a common prefix.  Consumes a map of [pathname path] and applies defpath to 
+   each in turn.  A common prefix may be supplied to the paths. "
+  ([kvps]         `(defpaths [] ~kvps))
+  ([prefix kvps]  
+    `(do ~@(map (fn [[n p]] `(defpath ~n ~(into prefix p))) kvps))))
 
-(defmacro defpath [pathname & ks] `(~'defn ~pathname [~'m] (get-in ~'m ~ks)))
-(defn state-path  [pathname & ks]  (defpath pathname (into [:state] ks)))
-
-(state-path get-fillstore   [:fillstore])
-(state-path get-parameters  [:parameters])
-(state-path get-supplystore [:supplystore])
-(state-path get-demandstore [:demandstore])
+(defpaths [:state] {get-fillstore   [:fillstore]
+                    get-parameters  [:parameters]
+                    get-supplystore [:supplystore]
+                    get-demandstore [:demandstore]
+                    get-policystore [:policystore]})
 
 ;it'd be really nice if we had a simple language for describing updates...
 ;not unlike Conrad's "patch" 
