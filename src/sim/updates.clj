@@ -90,6 +90,8 @@
     (update-in ctx [:updater] 
                request-update update-time requested-by update-type trequest)))
 
+;NOTE: this is too specific, the update mechanism is actually quite general.
+;The notion of different "kinds" or channels for updates is externally defined.
 ;TODO -> may need to add a route for :policy-update
 (def routes {:supply-update record-update-handler 
              :demand-update record-update-handler

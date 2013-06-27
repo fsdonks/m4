@@ -1,3 +1,8 @@
+;TARGET FOR REMOVAL
+;This Namespace is outdated, and was a failed attempt to generate xml 
+;programmatically in accordance with Excel 2007 .xlsx specs.  It's 
+;not bad for learning from a library standpoint.
+
 ;a library for maniuplating xlsx files programatically...
 (ns marathon.archiving.excel
   (:require [clojure.java [io :as io]]

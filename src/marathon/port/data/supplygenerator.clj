@@ -45,7 +45,7 @@
   (take-next [g]))
 
 (defn empty-generator? [g] (zero? (capacity g)))
-(def supply-remaining? empty-generator?) ;alias
+(def  supply-remaining? empty-generator?) ;alias
 
 (defrecord+ generator [currentbucket 
                        currentsupply 

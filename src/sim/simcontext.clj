@@ -46,7 +46,8 @@
 
 (ns sim.simcontext
   (:require [sim [data :as sim] [agenda :as agenda] [updates :as updates]]
-            [sim.pure [network :as simnet]]))
+            [sim.pure [network :as simnet]]
+            [util [metaprogramming :as util]]))
 ;probably need to move from marathon.updates to something in the sim namespace.
 
 (defn next-type
@@ -248,28 +249,6 @@
             (if (= k :trigger) (v c) 
             (assoc-state k v c)))))
 
-;defines a path to a resource, specifically a function that can get a nested 
-;resource from an associative structure.
-;A ton of our work will be in dissecting nested structures, particularly the 
-;simcontext.
-(defmacro defpath
-  "Allows definitions of nested paths into associative structures.  Creates 
-   a function, named pathname, that consume a map and apply get-in 
-   using the supplied path denoted by a sequence of literals, ks."
-  [pathname & ks] `(~'defn ~pathname [~'m] (get-in ~'m ~@ks)))
-(defmacro defpaths
-  "Allows multiple paths to be defined at once, with the possibility of sharing 
-   a common prefix.  Consumes a map of [pathname path] and applies defpath to 
-   each in turn.  A common prefix may be supplied to the paths. "
-  ([kvps]         `(defpaths [] ~kvps))
-  ([prefix kvps]  
-    `(do ~@(map (fn [[n p]] `(defpath ~n ~(into prefix p))) kvps))))
-
-(defpaths [:state] {get-fillstore   [:fillstore]
-                    get-parameters  [:parameters]
-                    get-supplystore [:supplystore]
-                    get-demandstore [:demandstore]
-                    get-policystore [:policystore]})
 
 ;it'd be really nice if we had a simple language for describing updates...
 ;not unlike Conrad's "patch" 

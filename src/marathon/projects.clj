@@ -1,3 +1,5 @@
+;;TARGET FOR DELETION.  MAY MIGRATE STUFF OUT.
+
 ;project management module
 (ns DEVS.projects
     (:use [clojure.contrib.repl-utils :exclude [source apropos javadoc]]

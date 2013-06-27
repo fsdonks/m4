@@ -3,17 +3,28 @@
 ;were bubbling up in each of the domain-specific modules.  As a result, we'll 
 ;just shove them in here.  If we don't, we'll end up with circular dependencies.
 ;Nobody wants that...
-(ns marathon.sim.core)
+(ns marathon.sim.core
+  (require [util [metaprogramming :as util]]))
 
 (defn get-demandstore [ctx]   (get-in ctx [:state :demandstore]))
+
+;Creates a set of getters for our simulation state.  This allows us to 
+;dissect our map a bit easier.
+(util/defpaths [:state] 
+  {get-fillstore   [:fillstore]
+   get-parameters  [:parameters]
+   get-supplystore [:supplystore]
+   get-demandstore [:demandstore]
+   get-policystore [:policystore]})
+
 (defn update-unit [u ctx]
   (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
 
 ;Generic tag-related....These apply equally to supplystore, demandstore, etc.
 ;The interface is identical.  Only the interpretation of the tags is different.
-(defn is-enabled [demandstore demandname] 
-  (tag/has-tag? (:tags demandstore) :enabled demandname))
-(defn enable [demandstore demandname]
-  (update-in demandstore [:tags] tag/tag-subject :enabled demandname))
-(defn disable [demandstore demandname]
-  (update-in demandstore [:tags] tag/untag-subject :enabled demandname))
+(defn is-enabled [store item] 
+  (tag/has-tag? (:tags store) :enabled item))
+(defn enable [store item]
+  (update-in store [:tags] tag/tag-subject :enabled item))
+(defn disable [store demandname]
+  (update-in store [:tags] tag/untag-subject :enabled item))
