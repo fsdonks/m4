@@ -23,7 +23,7 @@
 ;and a SupplyGenerator.  Functions in this module fill the role
 ;of creating and composing each of these elements in kind.
 ;
-;                        ***About Filling
+;##About Filling##
 ;The FillFunction provides a high-level wrapper that queries a
 ;set of rules about feasible and desired relations between elements
 ;of supply & demand, aka. Fill Rules, along with a candidate supply of
@@ -34,7 +34,7 @@
 ;because the concept of priority is highly variable (even time/event dependent),
 ;and may change from study to study or run to run.
 ;
-;                        ***Fill Rules and The Fill Graph
+;#Fill Rules and The Fill Graph#
 ;FillRules, encoded in a FillGraph, actually tell us a lot before we simulate.
 ;The FillGraph is generated, as a pre-process step, by analyzing the supply 
 ;entity records, the demand entity records, and the relation records for 
@@ -80,7 +80,7 @@
 ;pre-processing the FillGraph actually reduces the interior nodes, and provides
 ;a simplified graph that is very quick to search.
 ;
-;                    ***Querying Rules to Find the Most Suitable Supply
+;##Querying Rules to Find the Most Suitable Supply##
 ;The current/default scheme for prioritizing supply is to query the ruleset to
 ;find an ordered set of matches between sets, or buckets, of supply and the
 ;demand in need of filling.  Due to substitution and other criteria, the buckets
@@ -93,7 +93,7 @@
 ;desirable, as it effectively partitions the search space and provides an 
 ;efficient means of selecting sets of units for possible deployment.
 ;
-;                    ***Generating Deployable Supply
+;##Generating Deployable Supply##
 ;A SupplyGenerator takes the possible paths defined by the query, and 
 ;effectively stitches them together in what appears to be a single sequence of 
 ;units.  Within each subset of units, a fine-grained prioritization function is
@@ -114,7 +114,7 @@
 ;functions exist, including preferences by component (either AC or RC first).  
 ;Check the TimeStep_UnitComparer class for more.
 ;
-;                    ***Providing a Total Ordering of Supply
+;##Providing a Total Ordering of Supply##
 ;Using the policy coordinate as a comparator, the fill function orders each 
 ;subset of units so that their policy coordinate, and thus readiness, is sorted
 ;in descending order.  The total ordering then, is a sorting of units by Min 
@@ -238,9 +238,8 @@
 ;fillfunction,  in this case, we are NOT.  So we MAY NEED to provide the 
 ;supplystore as an extra argument.
 
-;Decoupling the fill process....
-;-------------------------------
-;First: "find the most suitable supply".
+;##Decoupling the fill process....##
+;#First: "find the most suitable supply".#
 
 ;return an ordered sequence of actions that can result in supply...
 ;this effectively applies the suitability function related to fillfunc to the 
@@ -257,7 +256,7 @@
     (query fillfunc rule (:demandgroup demand) (:name demand) 
            supplybucket phase)))
 
-;Second: Allocate a candidate fill against a demand.
+;#Second: Allocate a candidate fill against a demand.#
 ;-Assuming we have a candidate fill, and a demand that needs filling
 ;-the demand is assumed to have inspired the list of candidates, but it's not 
 ;-consequential for allocation purposes--
@@ -294,7 +293,7 @@
       (supply/deploy-unit supplystore ctx parameters policystore unit t
           quality demand (policy/get-maxbog unit) (count (:fills fillstore))
           filldata (params/interval->date t) (followon? unit))))
-
+)
 ;Applies the act of filling a demand, by realizing a promised fill, logging if
 ;any ghosts were used to fill (may change this...) and updating the context 
 ;to reflect a.
@@ -336,9 +335,7 @@
 ;        If fillList.count > 0 Then
 ;            'found units to fill required...
 ;            If fillList.count = demand.required Then sourceDemand = True 
-;            For Each deployer In fillList
-                 (for [[deployer fill] fills]
-                     
+;            For Each deployer In fillList                     
 ;                Set fill = fillList(deployer)
 ;               'this may get to be too big at some point, maybe not.....
 ;                recordFill fill, fillstore 
