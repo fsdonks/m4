@@ -1,9 +1,8 @@
 (ns marathon.sim.demand
-  (:require [marathon.demand [demanddata :as d]
+  (require  [marathon.demand [demanddata :as d]
                              [demandstore :as store]]
-            [marathon.sim [supply :as supply] [policy :as policy]
-                          [unit :as u]
-                          [fill :as fill]]           
+            [marathon.sim [core :as core] [supply :as supply] [policy :as policy]
+                          [unit :as u][fill :as fill]]           
             [sim [simcontext :as sim]]
             [util [tags :as tag]]))
 
@@ -172,13 +171,8 @@
 ;note -> we can modify the sorting key to include followon information, to make 
 ;things homogenous, just adding a special comparison function. 
 
-;fetch a sorted-map of demands related to a category.
-;returns a map of <key, string>, where vals are demand names.
-;DUPLICATE in sim.core 
-(defn get-demandstore [ctx]   (get-in ctx [:state :demandstore]))
-
 (defn unfilled-categories [demandstore] 
-  (keys (demandstore :unfilledq)))
+  (keys (:unfilledq demandstore)))
 (defn unfilled-demands [category demandstore] 
   (get-in demandstore [:unfilledq category]))
 (defn get-demand [demandstore name] (get-in demandstore [:demandmap name]))
@@ -193,7 +187,7 @@
     (reduce (fn [store demand-name] 
               (let [demands (:demand-map store)]
                 (if (contains? demands demand-name)
-                  (f (disable store demand-name) demand-name) store)))
+                  (f (core/disable store demand-name) demand-name) store)))
       demandstore (mapcat (partial tag/get-subjects tags) disable-tags))))
 
 ;1) Tom Note 20 May 2013 -> It would be nice to have a function or macro for 
@@ -203,7 +197,7 @@
     (let [{:keys [activations deactivations demand-map]} demandstore
           demand (get demand-map demandname)
           dname  (:name demand)
-          tstart  (:startday demand)
+          tstart (:startday demand)
           tfinal (+ tstart (:duration demand))]
       (-> demandstore                                                        ;1)
         (update-in [:demand-map] dissoc demand-map demandname)
@@ -211,15 +205,6 @@
         (update-in [:deactivations]  
                    update-in deactivations [tfinal] dissoc dname)))
     demandstore)) 
-
-;THESE COULD BE CORE FUNCTIONS .....
-(defn is-enabled [demandstore demandname] 
-  (tag/has-tag? (:tags demandstore) :enabled demandname))
-(defn enable [demandstore demandname]
-  (update-in demandstore [:tags] tag/tag-subject :enabled demandname))
-(defn disable [demandstore demandname]
-  (update-in demandstore [:tags] tag/untag-subject :enabled demandname))
-;THESE COULD BE CORE FUNCTIONS ^^^^
 
 ;Simple wrapper for demand update requests.  
 (defn request-demand-update! [t demandname ctx]
@@ -323,9 +308,9 @@
 
 
 ;generic accessors - could probably make this implicit with a macro?
-(defn get-activations [dstore t] (get-in dstore [:activations t] #{}))
+(defn get-activations [dstore t]   (get-in dstore [:activations t] #{}))
 (defn set-activations [dstore t m] (assoc-in dstore [:activations t] m))
-(defn get-deactivations [dstore t] (get-in dstore [:deactivations t] #{}))
+(defn get-deactivations [dstore t] (get-in dstore   [:deactivations t] #{}))
 (defn set-deactivations [dstore t m] (assoc-in dstore [:deactivations t] m))
 
 ;TOM note 27 Mar 2011 ->  I'd like to factor these two methods out into a single 
@@ -382,17 +367,16 @@
 ;the same function.  Now we distinguish via source-mode, and allow the function 
 ;to dispatch based on the source-mode.  Could turn this into a multimethod...
 (defn source-demand [demand source-mode ctx]
-  (let [simstate (:state ctx)] ;handles the unpacking of state for us.
-    (fill/source-demand 
-      (:supply-store simstate)
-      (:parameters simstate)
-      (:fillstore simstate)
-      ctx 
-      (:policystore simstate)
-      (sim/current-time ctx) ;maybe change this..
-      demand
-      ;NEED TO ACCOUNT FOR RESTRICTED SUPPLY....buckets, so to speak.
-      source-mode)))
+  (fill/source-demand 
+    (core/get-supplystore ctx)
+    (core/get-parameters ctx)
+    (core/get-fillstore ctx)
+    ctx 
+    (core/get-policystore ctx)
+    (sim/current-time ctx) ;maybe change this..
+    demand
+    ;NEED TO ACCOUNT FOR RESTRICTED SUPPLY....buckets, so to speak.
+    source-mode))
 
 ;Tom change 6 Dec 2010
 ;Sub to register or deregister Demands from the UnfilledQ
@@ -590,8 +574,8 @@
 
 ;higher-order function for filling demands.
 (defn fill-demands-with [ctx f]
-  (reduce (fn [acc c] (f (get-demandstore acc) c acc))
-      ctx (unfilled-categories (get-demandstore ctx))))
+  (reduce (fn [acc c] (f (core/get-demandstore acc) c acc))
+      ctx (unfilled-categories (core/get-demandstore ctx))))
 
 ;implements the default hierarchal, stop-early fill scheme.
 (defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
@@ -646,9 +630,9 @@
 
 ;This could be refactored....REPETITIVE!
 (defn activate-demands [t ctx]
-  (let [demandstore (get-demandstore ctx)]
+  (let [demandstore (core/get-demandstore ctx)]
 	  (reduce (fn [ctx dname] 
-	            (let [store (get-demandstore ctx)]
+	            (let [store (core/get-demandstore ctx)]
 	              (activate-demand store t (get-demand store dname) ctx))) 
 	          ctx 
 	          (get-activations demandstore))))
@@ -680,7 +664,7 @@
 (defn send-home [t demand unit ctx] 
   (let [unitname  (:name unit)
         startloc  (:locationname unit)
-        unit (u/update unit (- t (sim/last-update unitname ctx))) ;WRONG?
+        unit      (u/update unit (- t (sim/last-update unitname ctx))) ;WRONG?
         demandgroup (:demandgroup demand)]
     (->> (sim/trigger-event :supply-update :DemandStore unitname ;WRONG
               (str "Send Home Caused SupplyUpdate for " unitname) ctx) ;WRONG
@@ -729,7 +713,7 @@
       (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
       (sim/merge-updates
         {:demandstore 
-         (assoc-in (get-demandstore ctx) [:demandmap (:name demand)]
+         (assoc-in (core/get-demandstore ctx) [:demandmap (:name demand)]
                    (assoc demand :units-assigned {}))}))))
   
 (defn deactivate-demand [demandstore t d ctx]
@@ -743,9 +727,9 @@
 
 ;This could be refactored....REPETITIVE!
 (defn deactivate-demands [t ctx]
-  (let [demandstore (get-demandstore ctx)]
+  (let [demandstore (core/get-demandstore ctx)]
     (reduce (fn [ctx dname] 
-              (let [store (get-demandstore ctx)]
+              (let [store (core/get-demandstore ctx)]
                 (deactivate-demand store t (get-demand store dname) ctx))) 
             ctx 
             (get-deactivations demandstore))))
