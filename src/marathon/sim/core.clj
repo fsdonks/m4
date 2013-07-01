@@ -4,7 +4,7 @@
 ;just shove them in here.  If we don't, we'll end up with circular dependencies.
 ;Nobody wants that...
 (ns marathon.sim.core
-  (require [util [metaprogramming :as util]]))
+  (:require [util [metaprogramming :as util]]))
 
 (defn get-demandstore [ctx]   (get-in ctx [:state :demandstore]))
 

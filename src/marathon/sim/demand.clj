@@ -1,5 +1,5 @@
 (ns marathon.sim.demand
-  (require  [marathon.demand [demanddata :as d]
+  (:require  [marathon.demand [demanddata :as d]
                              [demandstore :as store]]
             [marathon.sim [core :as core] [supply :as supply] [policy :as policy]
                           [unit :as u][fill :as fill]]           
