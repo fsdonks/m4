@@ -1,5 +1,5 @@
 (ns marathon.sim.fill
-  (:require [marathon.demand [demanddata :as d] [demandstore :as store]]
+  (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
             [marathon.sim [demand :as dem]   [policy :as pol]
                           [unit :as u]          [fill :as fill]]           
@@ -248,54 +248,80 @@
 ;fills....we may not, in fact, utilize every candidate.  A better description
 ;is that find-supply provides a list of  fill-promises, which are realized as
 ;needed.  A fill-promise is a function that consumes the current context and 
-;returns a pair of [promised-unit, new-context].
+;returns a pair of [promised-unit, new-context].  That way we can update the 
+;context by realizing the fill-promise (i.e. applying it against a context we 
+;thread through), and then do something with the unit that was promised.  Since
+;these are just promises, i.e. potential supply, we don't mutate anything or 
+;make any changes to the context until we need to.
+;find-supply::(rule->demand->demandgroup->name->supply->phase->[fill-promise])
+;             ->rule->demand->supply->phase->[fill-promise]
+;where fill-promise::(simcontext->'a->[filldata,simcontext])
 (defn find-supply [fillfunc rule demand & [supplybucket phase]]
   (when (has-rule? fillfunc rule)
     (query fillfunc rule (:demandgroup demand) (:name demand) 
            supplybucket phase)))
+;We can coerce our list of fill promises into actual fills by applying 
+;realize-fill to them.  Assuming a fill promise consumes a context, we simply 
+;apply the promise to a given context.  This should produce a pair of the 
+;filldata --the context of the unit realized for filling-- and an updated 
+;context.
+;realize-fill::promise-fill->simcontext->[filldata, simcontext]
+(defn realize-fill [fill-promise ctx] (fill-promise ctx))
 
 ;#Second: Allocate a candidate fill against a demand.#
-;-Assuming we have a candidate fill, and a demand that needs filling
-;-the demand is assumed to have inspired the list of candidates, but it's not 
-;-consequential for allocation purposes--
+;Assuming we have a candidate fill, and a demand that needs filling, we define
+;the consequences of using the candidate (via some filldata) to logically "fill"
+;the demand.  The result is a new context, since there may be additional 
+;consequences to the context due to a fill.
 
-;we reduce the sequence of candidates by allocating them to the demand, 
-;returning a resulting context that represents the allocated demand.
-;--we need a supplementary function here, to realize the candidate and 
-;--incorporate it into the context.  In some cases we're actually generating 
-;--new, random units, so realizing a promised fill may require substantial 
-;--changes to the context (like creating an entity, adding the entity to supply
-;--logging the fact, etc).  
+;While the demand is assumed to have inspired the list of candidates, but it's 
+;not consequential for allocation purposes--in fact the list of candidates could
+;be completely random or drawn in an otherwise arbitrary fashion.
+;-Note- that would make a great _test_, having a random fill function.
 
-(defn check-ghost [unit ctx]
-  (if (not (ghost? unit)) ctx
-      (if (followon? unit) 
-        (ghost-followed! unit ctx) 
-        (ghost-deployed! unit ctx))))
 
-;A temporary implementation of apply-fill; this should really be generic or 
-;protocol-based.  apply-fill should represent the new context emerging from 
-;applying a realized fill, in the form of filldata, to a demand.  Originally,
-;this meant that fills would always result in a deployment at the end.  By 
-;elevating apply-fill into the API, we can actually implement things that 
-;would otherwise be difficult, i.e. delayed fills (pre-allocating units and 
-;scheduling them to deploy at a later date, while nominally "filling" the 
-;demand).  We could just change deploy-unit as well....
+;Assuming we have a chunk of realized filldata, we define a way to apply it to 
+;a demand to accomplish any updates necessary for filling.  This is a primitive
+;function that will support the higher-order notion of "filling" a demand.  
+;apply-fill should represent the new context emerging from applying a realized 
+;fill, in the form of filldata, to a demand.  Originally, this meant that fills 
+;would always result in a deployment at the end.  By elevating apply-fill into
+;the API, we can actually implement things that would otherwise be difficult, 
+;i.e. delayed fills (pre-allocating units and scheduling them to deploy at a 
+;later date, while nominally "filling" the demand).
+;apply-fill::filldata->demand->ctx->ctx 
 (defn apply-fill [filldata demand ctx]
   (let [unit (:unit filldata)
         fillstore   (get-fillstore ctx)
         supplystore (get-supplystore ctx)
         policystore (get-policystore ctx)
         params      (get-parameters ctx)]
-    (->> ctx 
-      (supply/deploy-unit supplystore ctx parameters policystore unit t
-          quality demand (policy/get-maxbog unit) (count (:fills fillstore))
-          filldata (params/interval->date t) (followon? unit))))
-)
-;Applies the act of filling a demand, by realizing a promised fill, logging if
-;any ghosts were used to fill (may change this...) and updating the context 
-;to reflect a.
-(defn fill-demand [demand promised-fill ctx]
+    (->> ctx
+        (supply/deploy-unit supplystore ctx parameters policystore unit t
+         quality demand (policy/get-maxbog unit) (count (:fills fillstore))
+         filldata (params/interval->date t) (followon? unit)))))
+
+;Auxillary function to broadcast information about just-in-time, or "ghost" 
+;unit utilization.  May be replaced with something more general in the future.
+(defn check-ghost [unit ctx]
+  (if (not (ghost? unit)) ctx
+      (if (followon? unit) 
+        (ghost-followed! unit ctx) 
+        (ghost-deployed! unit ctx))))
+
+;We wrap the atomic fill process inside a nice high-level function, fill-demand.
+;fill-demand takes any fill-promise, realizes the fill-promise, applies the 
+;the realized filldata to fill a demand.  It wraps some of the low-level context
+;shuffling that is necessary behind a simple, high-level interface amenable to 
+;use in a reduction.
+;The end result is a new context, representing the consequences of filling said 
+;demand with the promised fill.  Under this scheme, apply-fill will 
+;automatically handle the realization of a fill-promise, and thread its updated
+;context through the process of deploying the unit associated with the realized 
+;filldata.
+;Enacts filling a demand, by realizing a promised fill, logging if any ghosts 
+;were used to fill (may change this...) and updating the context.
+(defn fill-demand [demand ctx promised-fill]
   (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
          unit    (:source filldata)
          quality (:quality filldata)] 
@@ -304,6 +330,32 @@
          (check-ghost unit)
          (apply-fill filldata demand)))) 
 
+;Since we know how to go effectively apply promised fills towards demands via 
+;fill-demand in an atomic fashion, we can define the notion of completely 
+;filling a demand as finding the supply for the demand, using fill-demand on 
+;each candidate element of supply, and drawing from the supply until either the
+;demand is filled, or the supply runs out.
+;1)Assumes candidate preference is invariant.  There may be a time when we need
+;  to re-evaluate the ordering of candidates while we're filling, i.e. the 
+;  amount of fill may impact the order of candidates.  For now, we assume that 
+;  the ordering of candidates is independent of the demand fill.
+;fill-demand-completely 
+(defn fill-demand-completely [demand ctx & [supplybucket phase]]
+  (let [fillstore (core/get-fillstore ctx)
+        fillfunc  (core/get-fill-function ctx)
+        candidates (find-supply fillfunc      ;1)
+                     (derive-rule demand fillstore) demand supplybucket phase)
+        demand-name (:name demand)]
+    (loop [d demand           
+           xs candidates 
+           current-ctx ctx]
+      (cond (zero? (:required d)) [:filled current-ctx]
+            (empty? xs)           [:unfilled current-ctx]
+            :else  
+              (let [nextctx (fill-demand d current-ctx (first xs))
+                    nextd (-> (core/get-demandstore nextctx)
+                              (dem/get-demand demand-name))]
+                (recur nextd (rest xs) nextctx)))))) 
 ;Function sourceDemand
 ; (supplystore As TimeStep_ManagerOfSupply, parameters As TimeStep_Parameters, _
 ;   fillstore As TimeStep_ManagerOfFill, ctx As TimeStep_SimContext, _

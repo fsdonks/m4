@@ -11,11 +11,13 @@
 ;Creates a set of getters for our simulation state.  This allows us to 
 ;dissect our map a bit easier.
 (util/defpaths [:state] 
-  {get-fillstore   [:fillstore]
-   get-parameters  [:parameters]
-   get-supplystore [:supplystore]
-   get-demandstore [:demandstore]
-   get-policystore [:policystore]})
+  {get-fillstore     [:fillstore]
+   get-parameters    [:parameters]
+   get-supplystore   [:supplystore]
+   get-demandstore   [:demandstore]
+   get-policystore   [:policystore]
+   get-fillstore     [:fillstore]
+   get-fill-function [:fillstore :fillfunction]})
 
 (defn update-unit [u ctx]
   (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
