@@ -1,15 +1,22 @@
-;sim.engine is basically the essence of Marathon.  It acts as a 
-;harness around the simulation state, and dictates the flow of control through 
-;the simulation.  At a high level of abstraction, the engine is a process that
-;manages one or more concurrent threads of execution.  The simulation is 
-;effectively a snapshot of simulation states, or contexts, that are computed via
-;transfer 
-;engine wakes each thread sequentially, to simulate the flow of units through a
-;supply, the presence of demands, and the flow of units between supply and
-;demand via fills.  As such, the engine serves as the causal backbone for every
-;bit of logic executed during the course of the simulation.  The main method,
-;EventStep_Marathon, displays the order of execution of each logical subsystem 
-;(or thread). Engine's entire purpose is to prosecute a simulation.
+;##Overview##
+;sim.engine contains the higher-level operations that define Marathon.  It acts 
+;as a harness around the simulation context, and guides the flow of control 
+;throughout the simulation.  At a high level of abstraction, the engine is a 
+;process that coordinates one or more concurrent processes to calculate 
+;new simulation contexts from prior simulation contexts.  From a functional 
+;perspecive, the engine defines an ordered composition of transfer functions 
+;that, when applied to a initial context, returns a new or updated simulation 
+;context. When performed repeatedly, feeding preceding simulation contexts into
+;the transfer function, a recurrence relation between previous contexts and 
+;future contexts emerges.  The result is effectively a snapshot of simulation 
+;contexts, which are computed via a simple transfer function, sim-step, which 
+;simulates multiple domains relevant to Marathon: 
+;the flow of units through a supply, the presence of demands, and the flow of 
+;units between supply and demand via fills.  
+;Thus, the engine serves as the causal backbone, and coordinating mechansim, 
+;for every bit of logic executed during the course of the simulation. The 
+;primary function, event-step-marathon, prescribes the order of application of 
+;each logical subsystem. 
 (ns marathon.sim.engine
   (:require [sim    [simcontext :as sim]]
             [supply [:refer [manage-supply manage-follow-ons]]]
@@ -41,6 +48,7 @@
 ;##Simulation Initialization##
 
 ;#Auxillary functions, and legacy functions#
+
 (defn set-time
   "Initialize the start and stop time of the simulation context, based on 
    last-day."
@@ -50,6 +58,7 @@
 
 ;this is just a handler that gets added, it was "placed" in the engine object
 ;in the legacy VBA version.
+
 (defn control-io
   "Forces all entities in supply to be brought up to date."
   [ctx edata]
@@ -95,6 +104,7 @@
 ;Shift the simulation period into a final period.  Forces sampling and any other
 ;cleanup actions, like computing final bog:Dwell ratios, truncating unit 
 ;lifecycles, etc. Notify any other listeners that the simulation has terminated.
+
 (defn finalize [t state]
   (let [ctx (:context state)
         s  (-> (manage-policies :final t state)   
@@ -108,6 +118,7 @@
 ;Update Logic for beginning a day.  Broadcasts the beginning of the current day
 ;on the simulation context's event stream.  Also, if a GUI is involved, notifies
 ;listeners whether a user has paused the simulation.
+
 (defn day-msg [msg day]  (str "<-------- " msg " Day " day " ---------->"))
 (defn check-pause
   "In an interactive simulation, like the legacy sim, this hook lets us check 
@@ -141,6 +152,7 @@
 ;order function to wrap the simulation, along with the aforementioned begin-day
 ;logic.  The default behavior is to trigger a sampling event, to record daily 
 ;samples, and to broadcast the end-of-day to interested parties.
+
 (defn end-day
   "Logs the passing of the day, notifies listeners of a need to generate samples
    for the day, and possibly truncates the simulation early if criteria have 
@@ -156,6 +168,7 @@
 ;not utilized during a simulation period.  To do this, we have to sample the 
 ;entire unit population, which this event handler does.  This is a specific bit
 ;of functionality that we should probably move out of here at some point.
+
 (defn sample-unit-cycles
   "This is a special event handler where the simulation context is notified of a 
    need to sample all units in the supply.  This typically happens when a period 
@@ -196,16 +209,16 @@
 ;we should warn the user about missing data leading to the absence of "stuff"
 ;to simulate.
 
-;If the simulation state is feasible, then we simulate each eventful day using a composition of
-;simulation systems in Marathon.  Each system acts in turn, changing pieces of the overall simulation
-;state.  Some systems communicate with eachother, and have direct access to eachother for efficiency and
-;clarity.
-
-(declare sim-step)
-;SHOULD REPLACE THIS WITH A CALL TO EVENT-STEPPER higher order function.
+;#State Transition Function#
+;If the simulation state is feasible, then we simulate each eventful day using a
+;composition of simulation systems in Marathon.  Each system acts in turn, 
+;computing updates to pieces of the overall simulation state.  Some systems 
+;communicate with eachother via events.  All systems have access to the entire
+;simulation context, including the event queue, for communication purposes.
 
 ;note -> these are all just partially applied functions.  could probably just 
 ;reduce...
+
 (defn sim-step
   "Primary state transition function for Marathon.  Threads the next day and
    an initial state through a series of transfer functions that address 
@@ -223,6 +236,9 @@
     (end-day day last-day)  ;End of day logic and notifications.
     (manage-changed-demands day)));Clear set of changed demands in demandstore.
 
+
+;#Simulation Interface#
+
 (defn event-step-marathon
   "Higher order simulation handling function.  Given an initial state and an 
    upper bound on simulated time, computes the resulting simulation context via
@@ -236,20 +252,20 @@
       (if (not (keep-simulating? state))
           (finalize day state) ;base case, return the final state and clean up.
           (let [next-day   (sim/advance-time (:context state)) ;WRONG
-                next-state (sim-step next-day state)] ;Updates the simulation scheduler to the next scheduled eventful time.
+                next-state (sim-step next-day state)] ;Transition to next state.
             (recur next-day next-state))))))
 
 (comment 
-;an alternate version, may be cleaner?
+;an alternate version using reduce. cleaner?
 (defn sim-step2 [day state]
   (reduce (fn [s f] (f day s)) state 
-    [begin-day ;Trigger beginning-of-day logic and notifications.
-     manage-supply  ;update unit positions and policies.
-     manage-policies  ;Activate/DeActivate policies, also moves/rotates supply...
-     manage-demands  ;Activate/DeActiveate demands.  Send home units that are at DeActivating demands.      
-     fill-demands ;Try to fill Active, Unfilled demands in priority order.  Moves units as needed to fill demands.
-     manage-follow-ons ;Ensure that any unused units in a follow-on status are allowed to re-enter their policy.
-     #(end-day %1 last-day %2) ;End of day logic and notifications.  Triggers sampling, possibly truncates the simulation.
-     manage-changed-demands]))   ;Eliminate the set of changed demands in the demandstore.  Used for sampling purposes.
+    [begin-day 
+     manage-supply  
+     manage-policies
+     manage-demands      
+     fill-demands
+     manage-follow-ons
+     #(end-day %1 last-day %2)
+     manage-changed-demands]))
 )
 
