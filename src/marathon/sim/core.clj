@@ -39,3 +39,12 @@
         (vector? x) :src-and-group 
         (map? x)    :rule-map
         :else (throw (Exception. "Unknown category type " (type x)))))
+
+;This is a general utility function, that allows us to derive predicates based
+;on atomic values, sets, or maps.  Used for filtering (currently in demand 
+;categories and supply categories).
+;Can probably extend this to allow for arbitrary predicate functions (later).
+(defn make-member-pred [g]
+  (if (or (set? g) (map? g))
+    #(contains? g %)
+    #(= g %)))

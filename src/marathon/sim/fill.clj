@@ -37,12 +37,27 @@
 (defmethod derive-supply-rule :simple 
   [demand fillstore & [category]]
   (sink-label category))
+
 ;For categories that require a demand group, namely follow-on fills, we 
 ;just inject the sink-label into the vector: 
 ;     [src group] ->  [(sink-label src) group]
 (defmethod derive-supply-rule :src-and-group 
   [demand fillstore & [category]]
   [(sink-label (first category)) (second category)])
+
+;Not yet implemented, but the intent is to have a simple idiom for parsing 
+;abstract categories into rules that can be used to query supply or demand 
+;or anything.
+(defn rule->supply-rule [rule]
+  (throw (Exception. "Not implemented!")))
+
+;For complex categories that contain information in a map structure, we 
+;will have an way to parse the supply rule, which could be arbitrarily complex.
+(defmethod derive-supply-rule :rule-map
+  [demand fillstore & [category]]
+  (rule->supply-rule category))
+
+
 
 ;account for the fill in the fillstore, basically just conj it to the history.
 (defn record-fill [fillstore fill] 

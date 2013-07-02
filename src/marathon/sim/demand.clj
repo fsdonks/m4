@@ -477,32 +477,33 @@
 
 ;Note -> find-eligible demands is...in a general sense, just a select-where 
 ;query executed against the demandstore...        
-(defmulti find-eligible-demands (fn [store cat] (core/category-type cat)))
-
-;matches for srcs and keys.
-(defmethod find-eligible-demands :simple [store category] 
-  (get-in store [:unfilledq category])) ;priority queue of demands.
-
-;This is a general utility function, that allows us to derive predicates based
-;on atomic values, sets, or maps.  Used for filtering demands.
-;Can probably extend this to allow for arbitrary predicate functions (later).
-(defn make-member-pred [g]
-  (if (or (set? g) (map? g))
-    #(contains? g %)
-    #(= g %)))
-
-;matches 
+(defmulti category->demand-rule core/category-type)
+;Interprets a category as a rule that finds demands based on an src.
+(defmethod category->demand-rule :simple [src]
+  (fn [store] 
+    (get-in store [:unfilledq src]))) ;priority queue of demands.
+;Interprets a category as a composite rule that matches demands based on an 
+;src, and filters based on a demand-group.
 ;[src demandgroup|#{group1 group2 groupn}|{group1 _ group2 _ ... groupn _}]  
-(defmethod find-eligible-demands :src-and-group [store category]
-  (let [[cat g] category
-        eligible? (make-member-pred g)]
-    (->> (seq (find-eligible-demands store (first cat))) ;INEFFICIENT
-      (filter (fn [[pk d]] (eligible? (:demand-group d))))
-      (into (sorted-map))))) ;returns priority-queue of demands.
+(defmethod category->demand-rule :src-and-group [[src group]]
+  (let [eligible? (core/make-member-pred group)]
+    (->> (seq (find-eligible-demands store src)) ;INEFFICIENT
+         (filter (fn [[pk d]] (eligible? (:demand-group d))))
+         (into (sorted-map))))) ;returns priority-queue of demands.
 
 ;matches {:keys [src group]}, will likely extend to allow tags...
 (defmethod find-eligible-demands :rule-map [store category]
   (throw (Exception. "Not implemented!")))
+
+
+(defn find-eligible-demands [store category]
+  ((category->demand-rule category) store))
+
+;analogous to category->supply-rule
+;Not yet implemented, but the intent is to have a simple idiom for parsing 
+;abstract categories into rules that can be used to query supply or demand 
+;or anything.
+(defn category->demand-rule [rule] (throw (Exception. "Not implemented!")))
 
 ;Since we allowed descriptions of categories to be more robust, we now abstract
 ;out the - potentially complex - category entirely.  This should allow us to 
