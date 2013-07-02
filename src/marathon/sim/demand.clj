@@ -584,6 +584,7 @@
 
 ;implements the default hierarchal, stop-early fill scheme.
 (defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
+
 ;implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 (defn fill-followons [ctx]
   (if-let [groups (core/get-followon-keys ctx)] 

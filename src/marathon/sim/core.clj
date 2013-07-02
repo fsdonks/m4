@@ -6,6 +6,9 @@
 (ns marathon.sim.core
   (:require [util [metaprogramming :as util]]))
 
+(defmacro stub [msg & empty-body]  
+  `(~'fn ~'[& args] (~'throw (~'Exception. ~msg))))
+
 (defn get-demandstore [ctx]   (get-in ctx [:state :demandstore]))
 
 ;Creates a set of getters for our simulation state.  This allows us to 
@@ -19,6 +22,10 @@
    get-fillstore     [:fillstore]
    get-fill-function [:fillstore :fillfunction]})
 
+;The name here is a bit generic.  We're really trying to acquire the keys of 
+;a map that contains information about followon-eligible supply.  In this 
+;context, the keys are actually the followon-code of the unit, (typically a
+;demandgroup). 
 (defn get-followon-keys
   "Returns a sequence of followon codes that are currently present in the 
    supply.  Used for constraining or preferring supply during the followon 
