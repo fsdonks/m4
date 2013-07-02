@@ -5,14 +5,13 @@
 (defrecord+ supplystore 
   [[name :SupplyStore]
    srcs-in-scope ;Set of unique SRCs in scope.
-   deployable-buckets ;Map of entities to supply categories that can fill demands.
-   followon-buckets ;Map of entities to supply categories, eligible for follow-on.
-   unitmap ;Map of entities to unitdata\
+   deployable-buckets ;{category entity}, indicates entities that can fill demand.
+   followon-buckets ;{demandgroup {category entity}}, indicates follown eligibility.
+   unitmap        ;{entity-name unitdata}, map of unique unit entities.
    unit-behaviors ;map of named unit behaviors.  may move this out...
    unit-updates ;set of eventful unit-days....might be able to handle this outside.
                 ;this was listed as a tag structure earlier...not certain..
-   [tags tag/empty-tags];a generic set of tags...need to probably move this out to an external 
-        ;tag-store.
+   [tags tag/empty-tags];set of supply tags...should move to a global tag-store.
    has-ghosts ;boolean flag to determine if the supply can generate ghosts..might change.
    follow-ons]) ;map of entity-names to units that are in follow-on status.
 

@@ -176,6 +176,8 @@
 (defn unfilled-demands [category demandstore] 
   (get-in demandstore [:unfilledq category]))
 (defn get-demand [demandstore name] (get-in demandstore [:demandmap name]))
+;Simple api function to group active demands from the store by their src. 
+(defn demands-by-src [store src] (get-in store [:unfilledq src]))
  
 ;procedure that allows us to, using the fillgraph, derive a set of tags whose 
 ;associated demands should be disabled.  if removal is true, the demands will be 
@@ -308,9 +310,9 @@
 
 
 ;generic accessors - could probably make this implicit with a macro?
-(defn get-activations [dstore t]   (get-in dstore [:activations t] #{}))
-(defn set-activations [dstore t m] (assoc-in dstore [:activations t] m))
-(defn get-deactivations [dstore t] (get-in dstore   [:deactivations t] #{}))
+(defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
+(defn set-activations   [dstore t m] (assoc-in dstore [:activations t] m))
+(defn get-deactivations [dstore t]   (get-in dstore   [:deactivations t] #{}))
 (defn set-deactivations [dstore t m] (assoc-in dstore [:deactivations t] m))
 
 ;TOM note 27 Mar 2011 ->  I'd like to factor these two methods out into a single 
@@ -478,32 +480,43 @@
 ;Note -> find-eligible demands is...in a general sense, just a select-where 
 ;query executed against the demandstore...        
 (defmulti category->demand-rule core/category-type)
+
 ;Interprets a category as a rule that finds demands based on an src.
+;Note -> we should probably decouple the get-in part of the definition, and 
+;hide it behind a protocol function, like get-demands.  
 (defmethod category->demand-rule :simple [src]
-  (fn [store] 
-    (get-in store [:unfilledq src]))) ;priority queue of demands.
+  (fn [store] (get-in store [:unfilledq src]))) ;priority queue of demands.
+
 ;Interprets a category as a composite rule that matches demands based on an 
-;src, and filters based on a demand-group.
+;src, and filters based on a specified demand-group.
 ;[src demandgroup|#{group1 group2 groupn}|{group1 _ group2 _ ... groupn _}]  
-(defmethod category->demand-rule :src-and-group [[src group]]
-  (let [eligible? (core/make-member-pred group)]
+(defmethod category->demand-rule :src-and-group [[src groups]]
+  (let [eligible? (core/make-member-pred groups)] ;make a group filter
     (->> (seq (find-eligible-demands store src)) ;INEFFICIENT
          (filter (fn [[pk d]] (eligible? (:demand-group d))))
          (into (sorted-map))))) ;returns priority-queue of demands.
 
 ;matches {:keys [src group]}, will likely extend to allow tags...
-(defmethod find-eligible-demands :rule-map [store category]
-  (throw (Exception. "Not implemented!")))
+;Currently, provides a unified interface for rules, so we can just use simple 
+;maps. Should probably migrate other calls to this simple format.
+(defmethod category->demand-rule :rule-map [category]
+  (let [has-every-key? (comp every? #(contains? category %))]
+    (cond (has-every-key? [:src :groups]) 
+             (category->demand-rule ((juxt :src :groups) category))  
+          (has-every-key? [:src]) 
+             (category->demand-rule (:src category))                  
+          :else ;Future extensions.  Might allow arbitrary predicates and tags. 
+             (throw (Exception. "Not implemented!")))))      
 
-
-(defn find-eligible-demands [store category]
+;High-level API to find a set of eligible demands that match a potentially 
+;complex category.  Uses the category->demand-rule interpreter to parse the 
+;rule into a query function, then applies the query to the store.
+(defn find-eligible-demands 
+  "Given a demand store, and a valid categorization of the demand, interprets
+   the category into a into a demand selection function, then applies the query
+   to the store."
+  [store category]
   ((category->demand-rule category) store))
-
-;analogous to category->supply-rule
-;Not yet implemented, but the intent is to have a simple idiom for parsing 
-;abstract categories into rules that can be used to query supply or demand 
-;or anything.
-(defn category->demand-rule [rule] (throw (Exception. "Not implemented!")))
 
 ;Since we allowed descriptions of categories to be more robust, we now abstract
 ;out the - potentially complex - category entirely.  This should allow us to 
@@ -543,7 +556,7 @@
             demandname  (:name demand)           ;try to fill the topmost demand
             startfill   (unit-count demand)
             ctx         (request-fill! demandstore category ctx)
-            fill-result (source-demand demand category ctx)                  ;1) 
+            fill-result (fill/source-demand demand category ctx)             ;1) 
             stopfill    (unit-count (:demand fill-result))
             can-fill?   (demand-filled? (:demand fill-result))
             ctx         (if (= stopfill startfill)  ;UGLY 
@@ -571,11 +584,11 @@
 
 ;implements the default hierarchal, stop-early fill scheme.
 (defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
-;implements the try to fill all demands, using follow-on-supply.
+;implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 (defn fill-followons [ctx]
-  (if-let [followon-keys (supply/get-followon-keys ctx)] ;DECOUPLE, eliminate supply dependency...
+  (if-let [groups (core/get-followon-keys ctx)] 
     (->> (fn [store category ctx] 
-           (fill-category store [category followon-keys] ctx :stop-early false))
+           (fill-category store [category groups] ctx :stop-early false))
       (fill-demands-with ctx))))
 
 ;Note -> we're just passing around a big fat map, we'll use destructuring in the 

@@ -19,6 +19,12 @@
    get-fillstore     [:fillstore]
    get-fill-function [:fillstore :fillfunction]})
 
+(defn get-followon-keys
+  "Returns a sequence of followon codes that are currently present in the 
+   supply.  Used for constraining or preferring supply during the followon 
+   fill phase."
+  [supplystore] (keys (:followon-buckets supplystore)))
+
 (defn update-unit [u ctx]
   (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
 
