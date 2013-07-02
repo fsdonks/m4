@@ -86,6 +86,7 @@
 ;(and indirect) to advertise the state, and to allow the observers to link to it
 ;as needed. Observers/watchers will need to be expanded on, since watches will 
 ;involve effects.
+
 (defn initialize-sim
   "Given an initial - presumably empty state - and an optional upper bound on 
    on the simulation time - lastday - returns a simulation context that is 
@@ -101,23 +102,30 @@
     (initialize-control)))
 
 ;##Simulation Termination Logic##
-;Shift the simulation period into a final period.  Forces sampling and any other
-;cleanup actions, like computing final bog:Dwell ratios, truncating unit 
-;lifecycles, etc. Notify any other listeners that the simulation has terminated.
+;When we exit the simulation, we typically want to perform some final tasks.
+;For instance, any resources (for logging, display, etc.) may need to be freed.
+;The default mechanism for this is to propogate some events through the context
+;and let interested parties handle themselves appropriately.
 
-(defn finalize [t state]
+(defn finalize
+  "Shifts the simulation period into a final period.  Forces sampling and any
+   other cleanup actions, like computing final statistics, truncating unit 
+   lifecycles, etc. Notify any other listeners that the simulation has 
+   terminated.  Such notification is particularly important for observers that 
+   may be stewarding resources."
+  [t state]
   (let [ctx (:context state)
-        s  (-> (manage-policies :final t state)   
-             (assoc-in [:parameters :work-state] :outputing)
-             (log-status "Processing Output")
-             (assoc-in [:parameters :work-state] :terminating)
-             (assoc  :time-finish (now)))]
+        s   (-> (manage-policies :final t state)   
+              (assoc-in [:parameters :work-state] :outputing)
+              (log-status "Processing Output")
+              (assoc-in [:parameters :work-state] :terminating)
+              (assoc  :time-finish (now)))]
     (sim/trigger-event :terminate :Engine :Engine "Simulation OVER!" s)))
 
 ;##Begin Day Logic##
-;Update Logic for beginning a day.  Broadcasts the beginning of the current day
-;on the simulation context's event stream.  Also, if a GUI is involved, notifies
-;listeners whether a user has paused the simulation.
+;Prior to starting a new time inteval (currently a day), we typically want to 
+;perform some pre-processing or updating. 
+
 
 (defn day-msg [msg day]  (str "<-------- " msg " Day " day " ---------->"))
 (defn check-pause
@@ -126,14 +134,19 @@
   [state] 
   (if (paused? state)
      (sim/trigger :pause-simulation :Engine :Engine 
-                  "Simulation Paused" [day (sim/get-next-time state)])
-     state)) ;PLACE Holder
+                  "Simulation Paused" [day (sim/get-next-time state)]) state)) 
 
-(defn begin-day [day state]
+;_Note_: in _begin-day_, check-pause is incidental to the ui, not the repl. 
+;The call should be yanked.
+(defn begin-day
+  "Update Logic for beginning a day.  Broadcasts the beginning of the current 
+   day on the simulation context's event stream.  Also, if a GUI is involved, 
+   notifies listeners whether a user has paused the simulation."
+  [day state]
   (->> state 
     (sim/trigger-event :begin-day :Engine :Engine
                        (day-msg "Begin" day) [day (sim/get-next-time state)])
-    (check-pause))) ;check-pause is incidental to the ui, not the repl.  yank.
+    (check-pause)))  
 
 (defn check-truncation
   "Legacy function that checks to see if the simulation can be truncated, i.e. 
@@ -146,6 +159,7 @@
            (str "Truncated the simulation on day " day ", tfinal is now : " 
                 (sim/get-final-time state)) state) 
       (assoc :found-truncation true))))
+
 ;##End Day Logic##
 ;At the end of each "day" or discrete time step, we typically mark the passage 
 ;of time with some processing.  This notion could be abstracted into a higher 
@@ -210,14 +224,11 @@
 ;to simulate.
 
 ;#State Transition Function#
-;If the simulation state is feasible, then we simulate each eventful day using a
-;composition of simulation systems in Marathon.  Each system acts in turn, 
-;computing updates to pieces of the overall simulation state.  Some systems 
-;communicate with eachother via events.  All systems have access to the entire
-;simulation context, including the event queue, for communication purposes.
-
-;note -> these are all just partially applied functions.  could probably just 
-;reduce...
+;We simulate each eventful day using a composition of simulation systems in 
+;Marathon.  Each system acts in turn, computing updates to pieces of the overall
+;simulation state.  Some systems communicate with eachother via events.  
+;All systems have access to the entire simulation context, including the event 
+;queue, for communication purposes.
 
 (defn sim-step
   "Primary state transition function for Marathon.  Threads the next day and
@@ -236,8 +247,8 @@
     (end-day day last-day)  ;End of day logic and notifications.
     (manage-changed-demands day)));Clear set of changed demands in demandstore.
 
-
 ;#Simulation Interface#
+;sim.engine/event-step-marathon is the entry point for Marathon.
 
 (defn event-step-marathon
   "Higher order simulation handling function.  Given an initial state and an 
