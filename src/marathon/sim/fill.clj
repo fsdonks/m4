@@ -25,8 +25,24 @@
 (defn source-label [x] [x :source]) ;memoize!
 
 ;;Refactor -> we don't need a separate rule here really, just wrapping 
-;sink-label
-(defn derive-rule [demand fillstore] (sink-label (:src demand)))
+;sink-label.  Note: we're passing in a new notion of categories when we 
+;fill demands now.  This means we don't just derive the rule and be done.
+;We need to dispatch on the category, and map the demand category into an 
+;appropriate rule that query can apply to the supply to find elements of supply.
+(defmulti derive-supply-rule 
+  (fn [demand fillstore & [category]]  
+    (let [cat (or category (:src demand))]  (core/category-type c))))
+;for simple categories, ala "SRC_1" or :SRC_1, we just compute existing 
+;label for the demand, which maps to a node in the fill graph.
+(defmethod derive-supply-rule :simple 
+  [demand fillstore & [category]]
+  (sink-label category))
+;For categories that require a demand group, namely follow-on fills, we 
+;just inject the sink-label into the vector: 
+;     [src group] ->  [(sink-label src) group]
+(defmethod derive-supply-rule :src-and-group 
+  [demand fillstore & [category]]
+  [(sink-label (first category)) (second category)])
 
 ;account for the fill in the fillstore, basically just conj it to the history.
 (defn record-fill [fillstore fill] 
@@ -251,6 +267,10 @@
 ;all of the complexity for us and allows us to trivially change how supply is 
 ;ordered.
 
+;Currently undefined function
+;query::fillfunc->rule->supplystore->[unit]
+(declare query) 
+
 ;#It's all about finding supply.#
 ;The ultimate purpose of querying a fill-function is to answer a simple query:  
 ;Given a demand (or a rule that describes the demand), and a supplystore
@@ -268,7 +288,7 @@
 ;promises, i.e. potential supply, we don't mutate anything or make any changes
 ;to the context until we need to.
 ;find-supply::(rule->demand->demandgroup->name->supply->phase->[fill-promise])
-;             ->rule->demand->supply->phase->[fill-promise]
+;             ->supply->rule->[fill-promise]
 ;where fill-promise::(simcontext->'a->[filldata,simcontext])
 (defn find-supply
   "Returns an ordered sequence of actions that can result in supply.
@@ -277,10 +297,9 @@
    potential fills....where potential fills are data structures that contain 
    the context of the fill (i.e. the unit, the actions required to realize the 
    fill, and other meta data), typically a filldata record."
-  [fillfunc rule demand & [supplybucket phase]]
-  (when (has-rule? fillfunc rule)
-    (query fillfunc rule (:demandgroup demand) (:name demand) 
-           supplybucket phase)))
+  [fillfunc supplystore rule]
+  (query fillfunc rule supplystore))
+
 ;We can coerce our list of fill promises into actual fills by applying 
 ;realize-fill to them.  Assuming a fill promise consumes a context, we simply 
 ;apply the promise to a given context.  This should produce a pair of the 
@@ -344,14 +363,13 @@
 ;were used to fill (may change this...) and updating the context.
 (defn fill-demand [demand ctx promised-fill]
   (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
-         unit    (:source filldata)
-         quality (:quality filldata)] 
+         unit    (:source filldata)] 
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))
          (check-ghost unit)
          (apply-fill filldata demand)))) 
 
-;Since we know how to go effectively apply promised fills towards demands via 
+;Since we know how to effectively apply promised fills towards demands via 
 ;fill-demand in an atomic fashion, we can define the notion of completely 
 ;filling a demand as finding the supply for the demand, using fill-demand on 
 ;each candidate element of supply, and drawing from the supply until either the
@@ -360,13 +378,15 @@
 ;  to re-evaluate the ordering of candidates while we're filling, i.e. the 
 ;  amount of fill may impact the order of candidates.  For now, we assume that 
 ;  the ordering of candidates is independent of the demand fill.
-;fill-demand-completely::demand->ctx->{unit}->'a->[fill-status ctx]
-;                      where fill-status = :filled | :unfilled 
-(defn fill-demand-completely [demand ctx & [supplybucket phase]]
-  (let [fillstore (core/get-fillstore ctx)
-        fillfunc  (core/get-fill-function ctx)
-        candidates (find-supply fillfunc      ;1)
-                     (derive-rule demand fillstore) demand supplybucket phase)
+;satisfy-demand::demand->category->ctx->[fill-status ctx]
+;                where fill-status = :filled | :unfilled 
+(defn satisfy-demand [demand category ctx]
+  (let [fillstore   (core/get-fillstore ctx)
+        fillfunc    (core/get-fill-function ctx)
+        supplystore (core/get-supplystore ctx)
+        candidates  (find-supply fillfunc supplystore ;1)
+                      (derive-supply-rule demand fillstore category) 
+                                 demand supplybucket phase)
         demand-name (:name demand)]
     (loop [d demand           
            xs candidates 
@@ -378,7 +398,6 @@
                     nextd (-> (core/get-demandstore nextctx)
                               (dem/get-demand demand-name))]
                 (recur nextd (rest xs) nextctx))))))
-
 
 ;#Constructors and Data Munging Functions#
 ;Constructors to create all three, independently, now exist in this module.  

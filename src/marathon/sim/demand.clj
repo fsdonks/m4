@@ -472,22 +472,13 @@
 ;    we already have a some book-keeping, in the form of a set of units that 
 ;    are in follow-status due to disengagement. 
 
-;Categories are used by two new functions: find-eligible-demands, defined here,
-;and find-eligible-supply, defined in marathon.sim.supply
+;Categories are used by three new functions: find-eligible-demands, defined here,
+;and find-eligible-supply, defined in marathon.sim.supply, as well as  .
 
 ;Note -> find-eligible demands is...in a general sense, just a select-where 
-;query executed against the demandstore...
+;query executed against the demandstore...        
+(defmulti find-eligible-demands (fn [store cat] (core/category-type cat)))
 
-;find-eligible-demands is implemented as multimethod that dispatches based on 
-;type of the category that's passed in.  category-type provides a simple 
-;dispatch mechanism.  Note-> could use built-in hierarchy functions to do this.
-(defn category-type [x]
-  (cond (or (keyword? x) (string? x))  :simple            
-        (vector? x) :src-group 
-        (map? x)    :rule-map
-        :else (throw (Exception. "Unknown category type " (type x)))))
-        
-(defmulti find-eligible-demands (fn [store category] (category-type category)))
 ;matches for srcs and keys.
 (defmethod find-eligible-demands :simple [store category] 
   (get-in store [:unfilledq category])) ;priority queue of demands.
@@ -501,8 +492,8 @@
     #(= g %)))
 
 ;matches 
-;[src demandgroup|#{group1 group2 groupn}|{:group1 _ :group2 _ ... :groupn _}]  
-(defmethod find-eligible-demands :src-group [store category]
+;[src demandgroup|#{group1 group2 groupn}|{group1 _ group2 _ ... groupn _}]  
+(defmethod find-eligible-demands :src-and-group [store category]
   (let [[cat g] category
         eligible? (make-member-pred g)]
     (->> (seq (find-eligible-demands store (first cat))) ;INEFFICIENT

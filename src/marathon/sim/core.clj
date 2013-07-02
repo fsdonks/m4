@@ -30,3 +30,12 @@
   (update-in store [:tags] tag/tag-subject :enabled item))
 (defn disable [store demandname]
   (update-in store [:tags] tag/untag-subject :enabled item))
+
+;find-eligible-demands is implemented as multimethod that dispatches based on 
+;type of the category that's passed in.  category-type provides a simple 
+;dispatch mechanism.  Note-> could use built-in hierarchy functions to do this.
+(defn category-type [x]
+  (cond (or (keyword? x) (string? x))  :simple            
+        (vector? x) :src-and-group 
+        (map? x)    :rule-map
+        :else (throw (Exception. "Unknown category type " (type x)))))
