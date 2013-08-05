@@ -85,7 +85,7 @@
 (defn add-composition [m r]
   (if (contains? r :Composition)
     (conj acc (record->composition r))
-    (let [{:keys [CompositeName CompositionType] r}]
+    (let [{:keys [CompositeName CompositionType]} r]
       (case CompositionType 
         "Periodic" (update-in acc [CompositeName] assoc (:Period r) (:Policy r))
         "Sequential" (do (assert (not (contains? acc rulename)))
