@@ -1,3 +1,4 @@
+;;Documentation for the policy simulation used by Marathon.
 (ns marathon.sim.policy
   (:require [sim [simcontext :as sim]]
             [marathon.data [protocols :as core]]
@@ -11,6 +12,7 @@
 ;NOTE -> THERE IS A DUPLICATE FUNCTION IN sim.policy.policydata
 (declare get-policy) 
 
+;#Policy Simulation Notes#
 ;This is the companion module to the TimeStep_ManagerOfPolicy class.  The 
 ;primary functions contained herein surround the management of an abstract 
 ;policy context in the simulation, which is embodied in the policystore.  Most 
@@ -18,7 +20,7 @@
 ;registering policies with the policystore, registering simulation periods with 
 ;the policystore, and managing policies and periods during the simulation.
 ;
-;                                '***What is a policy context?
+;#What is a policy context?#
 ;Policy is vital because it determines the criteria for both the eligibility and 
 ;suitability of supply to fill demand.  A conservative policy may provide few 
 ;opportunities for units to fill demand, limiting the deployable supply 
@@ -59,7 +61,7 @@
 ;policy context that can either be simple and uniform (i.e. one policy, one 
 ;period), or very unique (N different policies, K periods).
 ;
-;                            '***What are policies?
+;#What are policies?#
 ;Policies describe a set of states and durations that -usually- conform to a
 ;rotational policy. Policies are very important, as they serve as the 
 ;instruction set for unit entity behavior.
@@ -110,13 +112,13 @@
 ;add new policy definitions by supplying data that describes how to combine
 ;pre-existing policies.
 ;
-;                            '***Atomic Policies
+;#Atomic Policies#
 ;Normal TimeStep_Policy objects are effectively Atomic policies, in that they
 ;represent a single set of instructions that describe a rotational policy.  They
 ;do not change.  Therefore, if a unit entity subscribes to such an atomic 
 ;policy, it will always follow the same set of instructions.
 ;
-;                            '***Composite Policies
+;#Composite Policies#
 ;Composite policies represent an association of one or more Atomic policies.  
 ;This allows us to capitalize on the atomic policies, and express new policies
 ;as simple compositions of N atomic policies.
