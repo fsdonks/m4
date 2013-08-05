@@ -385,7 +385,6 @@
       (->> (spawning-unit! unit ctx)
            (update-deploy-status supply unit)))))
 
-
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
 (defn new-unit [supplystore parameters policystore behaviors name src title 

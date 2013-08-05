@@ -9,13 +9,10 @@
 (defmacro stub [msg & empty-body]  
   `(~'fn ~'[& args] (~'throw (~'Exception. ~msg))))
 
-(defn get-demandstore [ctx]   (get-in ctx [:state :demandstore]))
-
 ;Creates a set of getters for our simulation state.  This allows us to 
 ;dissect our map a bit easier.
 (util/defpaths [:state] 
-  {get-fillstore     [:fillstore]
-   get-parameters    [:parameters]
+  {get-parameters    [:parameters]
    get-supplystore   [:supplystore]
    get-demandstore   [:demandstore]
    get-policystore   [:policystore]
