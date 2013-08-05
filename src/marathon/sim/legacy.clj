@@ -3,6 +3,134 @@
 ;;efforts.
 (ns marathon.sim.legacy)
 
+(comment :supply :deferred          
+;------------Deferred------------
+;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, 
+;   parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior,
+;      ctx As TimeStep_SimContext, Optional ensureghost As Boolean) 
+;        As TimeStep_ManagerOfSupply
+;Dim tbl As GenericTable
+;Dim gunit As TimeStep_UnitData
+;
+;Set SupplyfromExcel = New TimeStep_ManagerOfSupply
+;'TODO -> turn this into a function.
+;UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, 
+;   policystore, ctx
+;
+;If ensureghost Then
+;    If Not SupplyfromExcel.hasGhosts Then
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto",
+;          parameters, policystore)
+;        Set gunit = associateUnit(gunit, SupplyfromExcel, ctx)
+;        registerUnit SupplyfromExcel, behaviors, gunit, True, ctx
+;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;            "added Default ghost unit to unitmap in supplymanager."
+;    End If
+;End If
+;
+
+;Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As 
+;        TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, 
+;           behaviors As TimeStep_ManagerOfBehavior, ctx As TimeStep_SimContext
+;              Optional ensureghost As Boolean)
+;
+;Dim gunit As TimeStep_UnitData
+;
+;UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, 
+;   policystore, ctx
+;
+;If ensureghost Then
+;    If Not supplystore.hasGhosts Then
+;        Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto",
+;                                    parameters, policystore)
+;        'Decoupled
+;        Set gunit = associateUnit(gunit, supplystore, ctx)
+;        'decoupled
+;       Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
+;        Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;            "added Default ghost unit to unitmap in supplymanager."
+;    End If
+;End If
+;
+;End Sub
+;Public Sub UnitsFromSheet(sheetname As String, supplystore As 
+;      TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior,
+;          parameters As TimeStep_Parameters, policystore As 
+;                TimeStep_ManagerOfPolicy, ctx As TimeStep_SimContext)
+;Dim tbl As GenericTable
+;
+;Set tbl = New GenericTable
+;tbl.FromSheet Worksheets(sheetname)
+;
+;MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, 
+;   policystore, ctx
+;
+;
+;End Sub
+;Public Sub UnitsFromDictionary(unitrecords As Dictionary, 
+;    parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior,
+;       policystore As TimeStep_ManagerOfPolicy, supplystore As 
+;           TimeStep_ManagerOfSupply, ctx As TimeStep_SimContext)
+;'Decouple
+;UnitsFromRecords unitrecords, parameters, behaviors, policystore,
+;     supplystore, ctx
+;
+;End Sub
+)
+
+(comment :policyio :deferred
+;-----------DEFERRED--------------------
+
+;Returns a policystore object initialized from default tables in Excel.  
+;Mostly for compatibility.
+
+;Public Function policyStoreFromExcel() As TimeStep_ManagerOfPolicy
+;Set policyStoreFromExcel = tablesToPolicyStore(getTable("RelationRecords"), _
+;                             getTable("PeriodRecords"), _
+;                             getTable("PolicyRecords"), _
+;                             getTable("CompositePolicyRecords"))
+;End Function
+;Public Function policyStoreFromFiles() As TimeStep_ManagerOfPolicy
+;Dim tbl
+;Dim tblist As Collection
+;Dim p As String
+;p = ActiveWorkbook.path & "\"
+;
+;Set tblist = list("RelationRecords", "PeriodRecords", "PolicyRecords", 
+;                  "CompositePolicyRecords")
+;For Each tbl In tblist
+;    TableLib.saveTable getTable(CStr(tbl)), p & "\" & CStr(tbl) & ".json"
+;Next tbl
+;                             
+;Set policyStoreFromFiles = 
+;       tablesToPolicyStore(getTable(p & "RelationRecords" & ".json"), _
+;                           getTable(p & "PeriodRecords" & ".json"), _
+;                           getTable(p & "PolicyRecords" & ".json"), _
+;                           getTable(p & "CompositePolicyRecords" & ".json"))
+;
+;End Function
+
+;Public Function folderToPolicyStore(folderpath As String) 
+;   As TimeStep_ManagerOfPolicy
+;Dim tbl
+;Dim tblist As Collection
+;Dim p As String
+;p = folderpath
+;
+;Set tblist = list("RelationRecords", "PeriodRecords", "PolicyRecords", 
+;                                     "CompositePolicyRecords")
+;Set folderToPolicyStore = 
+;    tablesToPolicyStore(getTable(p & "RelationRecords" & ".json"),
+;                        getTable(p & "PeriodRecords" & ".json"), _
+;                        getTable(p & "PolicyRecords" & ".json"), _
+;                        getTable(p & "CompositePolicyRecords" & ".json"))
+;                             
+;End Function
+)
+         
+         
+    
+
 (comment :marathon.sim.fill 
          
 ;#Legacy Code#
