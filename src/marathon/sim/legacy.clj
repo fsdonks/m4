@@ -688,6 +688,72 @@
 )
          
          
+(comment :marathon.sim.demand :notes
+         
+;TOM Note 20 May 2013   -> We can probably generalize the explicit process
+;denoted below.  There are, arbitrarily, 1..n phases of filling, this is one 
+;possible ordering.
+
+;TOM Change 21 Sep 2011 -> this is the first pass we engage in the fill process.
+;The intent is to ensure that we bifurcate our fill process, forcing the 
+;utilization of follow-on units.  We split the fill process into 2 phases...
+;Phase 1:  Find out which demands in the UnfilledQ(FillRule) are eligible for 
+;          Follow-On supply. If a demand is eligible for follow-on supply 
+;          (it has a corresponding Group in FollowOns in supplymanager.
+;          Add the demand to a new priority queue for the fillrule (lexically 
+;          scoped).  Basically, we;re getting a subset of eligible demands 
+;          (by fillrule) from the existing unfilledQ for the fillrule.
+;
+;          Pop ALL Demands off the new priorityQ for the fillrule, trying to 
+;          fill them using supply from the followonbuckets relative to the 
+;          applicable demand group. (basically a heapsorted traversal)
+;          This may result in some demands being filled.
+;          If a demand is filled, we update its fill status (mutate the 
+;          unfilledQ) just as in the normal fill routine.
+;               If it;s not filled, we leave it alone.
+;                       *Update -> thre problem is, our fill function, if 
+;                                  allowed to make ghosts, will KEEP trying to 
+;                                  fill, and effectively short circuit our other 
+;                                  supply.  categories prevent the fill function
+;                                  from making ghosts in phase1.
+;             The biggest difference is that we DO NOT stop, or short-circuit
+;             the fill process if we don't find follow-on supply.  We give every 
+;             eligible demand a look. After phase 1 is complete, all demands 
+;             that were eligible for follow-ons will have recieved follow-on
+;             supply.  Any demands completely filled by follow-ons will have 
+;             been eliminated from further consideration. Demands with 
+;             requirements remaining are still in the unfilledQ for our normal, 
+;             ARFORGEN-based fill.
+;Phase 2:  This is the normal, ARFORGEN-based fill routine.  Anything left in 
+;          the unfilledQ is processed as we did before.  This time, we should
+;          only be looking at ARFORGEN supply (since our follow-on supply was
+;          utilized in the Phase 1)  This phase is also known as hierarchical
+;          fill.
+
+
+  
+;Going to redirect this sub to incorporate unfilledQ. The idea is to look for 
+;the highest priority demand, by SRC . Specifically, we will be redirecting the 
+;portion of the routine that finds "a demand" to be filled.
+;In the previous algorithm, we just traversed thousands of demands until we 
+;found one with a status of False, then tried to fill it.
+;In this new algorithm, instead of a loop over each demand in the demanddata 
+;array, we consult our bookeeping:
+;For each independent set of prioritized demands (remember, we partition based 
+;on substitutionjSRC keys), we use our UnfilledQ to quickly find unfilled 
+;demands. UnfilledQ keeps demands in priority order for us, priority is stored 
+;in demanddata.
+
+;We only fill while we have feasible supply left.
+;We check deployables too efficiently find feasible supply.
+;Not currently kept in priority order .... could be converted easily enough
+;though.
+;If we fill a demand, we take it off the queue.
+;If we fail to fill a demand, we have no feasible supply, thus we leave it on 
+;the queue, stop filling, and proceed to the next independent set.
+;After all independent sets have been processed, we're done.
+;Tom Note 20 May 2013 -> Independent means we can do this in parallel.
+)
 
 (comment :marathon.sim.demand
 ;>>>>>>>>>>>>>>>>>>Deferred>>>>>>>>>>>>>>>>>>>>>>

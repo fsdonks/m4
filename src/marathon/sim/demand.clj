@@ -1,3 +1,9 @@
+;;The demand system provides functions for scheduling demands, as well as 
+;;defining the order in which demands are filled.  The namespace contains 
+;;primitive functions for operating on demandstores, as well as demand-related
+;;notifications and a high-level demand management API.
+;Functions for creating, initializing, resetting, and updating state related to
+;the demand simulation are also found here.
 (ns marathon.sim.demand
   (:require  [marathon.demand [demanddata :as d]
                              [demandstore :as store]]
@@ -6,26 +12,12 @@
             [sim [simcontext :as sim]]
             [util [tags :as tag]]))
 
-;This is the companion module to the TimeStep_ManagerOfDemand class.
-;The module contains library functions for the demand simulation in Marathon.
-;Functions for creating, initializing, resetting, and updating state related to
-;the Demand simulation are found here.
-
-;One problem area in the port from VBA->Clojure was the handling of 
-;decentralized state updates.  This primarily happens via event dispatch, or 
-;through side-effects called during management functions.  The solution for our
-;pure simulation is to formalize batch updates to the simulation by using 
-;simcontext/merge-updates   This allows us to pass maps of updates around, and 
-;the updates are merged with the simulation state in a predefined manner.  
-;We may wish to formalize this as a language feature (i.e. macro) to define 
-;different types of update.
-
 ;;Undefined as of yet...
 ;(defn new-demand [name tstart duration overlap primary-unit quantity 
 ;      priority demandstore policystore ctx operation vignette source-first]
 ;
 
-;--------PURE FUNCTIONS :: 'a -> demandstore 
+;;#Primitive Demand and DemandStore Operations#
 (defn can-simulate? [demandstore]
   (> (count (tag/get-subjects (:tags demandstore) :enabled)) 0))
 
@@ -79,13 +71,8 @@
           :fillables {}
           :tags (tag/tag-subject (tag/empty-tags) :Sinks)}))
 
-;TEMPORARY...
-;move this to supply or unit....
+;;__TODO__ Possibly move unit-related functionality to supply/unit simulations..
 
-;This is a temporary HACK! Reaches too deeply into the state? 
-;returns a context.
-(defn update-unit [u ctx]
-  (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
 (defn set-followon [unit code] (assoc unit :followoncode code))
 (defn ghost? [unit] (= (:src unit) "Ghost"))
 (defn ungrouped? [g] (= g "UnGrouped"))
@@ -93,73 +80,7 @@
 (defn demand-filled? [d] (= (count (:units-assigned d)) (:quantity d)))
 (defn empty-demand? [d] (zero? (unit-count d)))
 (defn priority-key [demand] [(:name demand) (:priority demand)]) 
-;END TEMPORARY 
-
-
-;TOM Note 20 May 2013   -> We can probably generalize the explicit process
-;denoted below.  There are, arbitrarily, 1..n phases of filling, this is one 
-;possible ordering.
-
-;TOM Change 21 Sep 2011 -> this is the first pass we engage in the fill process.
-;The intent is to ensure that we bifurcate our fill process, forcing the 
-;utilization of follow-on units.  We split the fill process into 2 phases...
-;Phase 1:  Find out which demands in the UnfilledQ(FillRule) are eligible for 
-;          Follow-On supply. If a demand is eligible for follow-on supply 
-;          (it has a corresponding Group in FollowOns in supplymanager.
-;          Add the demand to a new priority queue for the fillrule (lexically 
-;          scoped).  Basically, we;re getting a subset of eligible demands 
-;          (by fillrule) from the existing unfilledQ for the fillrule.
-;
-;          Pop ALL Demands off the new priorityQ for the fillrule, trying to 
-;          fill them using supply from the followonbuckets relative to the 
-;          applicable demand group. (basically a heapsorted traversal)
-;          This may result in some demands being filled.
-;          If a demand is filled, we update its fill status (mutate the 
-;          unfilledQ) just as in the normal fill routine.
-;               If it;s not filled, we leave it alone.
-;                       *Update -> thre problem is, our fill function, if 
-;                                  allowed to make ghosts, will KEEP trying to 
-;                                  fill, and effectively short circuit our other 
-;                                  supply.  categories prevent the fill function
-;                                  from making ghosts in phase1.
-;             The biggest difference is that we DO NOT stop, or short-circuit
-;             the fill process if we don't find follow-on supply.  We give every 
-;             eligible demand a look. After phase 1 is complete, all demands 
-;             that were eligible for follow-ons will have recieved follow-on
-;             supply.  Any demands completely filled by follow-ons will have 
-;             been eliminated from further consideration. Demands with 
-;             requirements remaining are still in the unfilledQ for our normal, 
-;             ARFORGEN-based fill.
-;Phase 2:  This is the normal, ARFORGEN-based fill routine.  Anything left in 
-;          the unfilledQ is processed as we did before.  This time, we should
-;          only be looking at ARFORGEN supply (since our follow-on supply was
-;          utilized in the Phase 1)  This phase is also known as hierarchical
-;          fill.
-
-
-  
-;Going to redirect this sub to incorporate unfilledQ. The idea is to look for 
-;the highest priority demand, by SRC . Specifically, we will be redirecting the 
-;portion of the routine that finds "a demand" to be filled.
-;In the previous algorithm, we just traversed thousands of demands until we 
-;found one with a status of False, then tried to fill it.
-;In this new algorithm, instead of a loop over each demand in the demanddata 
-;array, we consult our bookeeping:
-;For each independent set of prioritized demands (remember, we partition based 
-;on substitutionjSRC keys), we use our UnfilledQ to quickly find unfilled 
-;demands. UnfilledQ keeps demands in priority order for us, priority is stored 
-;in demanddata.
-
-;We only fill while we have feasible supply left.
-;We check deployables too efficiently find feasible supply.
-;Not currently kept in priority order .... could be converted easily enough
-;though.
-;If we fill a demand, we take it off the queue.
-;If we fail to fill a demand, we have no feasible supply, thus we leave it on 
-;the queue, stop filling, and proceed to the next independent set.
-;After all independent sets have been processed, we're done.
-;Tom Note 20 May 2013 -> Independent means we can do this in parallel.
-           
+          
 ;We can break the fill into a couple of simple queries...
 ;
 ;we've got a category of demand...
@@ -179,8 +100,8 @@
 ;Simple api function to group active demands from the store by their src. 
 (defn demands-by-src [store src] (get-in store [:unfilledq src]))
  
-;procedure that allows us to, using the fillgraph, derive a set of tags whose 
-;associated demands should be disabled.  if removal is true, the demands will be 
+;procedure that allows us to process a set of tags indicating associated demands
+;that should be disabled.  if removal is true, the demands will be 
 ;removed from memory as well. in cases where there are a lot of demands, this 
 ;may be preferable.
 (defn scope-demand [demandstore disable-tags & {:keys [removal]}]
@@ -212,21 +133,7 @@
 (defn request-demand-update! [t demandname ctx]
   (sim/request-update t demandname :demand-update ctx))
 
-;TODO - look at this guy.  There's some linkage here with the fill logic.
-;;source-demand is actually a fill function...
-;(defn source-demand 
-;  [supplystore parameters fillstore ctx policystore t demand :useEveryone]
-;  :blah!)
-
-;TODO -> implement defmessage macro....
-
-;Tom note 20 May 2013 -> message functions like the following, are suffixed by
-;   the \! character, by convention, to denote the possibility of side effects.
-;   The function signatures are pure, in that they return a context.  The naming
-;   convention will help identify when "messaging" is occuring.
-
-;STATUS MESSAGES/ANNOUNCEMENTS -> build a macro or something...too repetitive.
-;CONTEXUAL
+;;#Demand Notifications#
 (defn request-fill! [demandstore category d ctx]
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
      (str "Highest priority demand in Category " category " is " (:name d) 
@@ -306,21 +213,18 @@
   (sim/trigger-event :added-demand "DemandStore" "DemandStore" 
        (str "Added Demand " (:name demand)) nil ctx))
 
-;;END MESSAGING
-
-
-;generic accessors - could probably make this implicit with a macro?
+;;#Demand Registration and Scheduling#
 (defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
 (defn set-activations   [dstore t m] (assoc-in dstore [:activations t] m))
 (defn get-deactivations [dstore t]   (get-in dstore   [:deactivations t] #{}))
 (defn set-deactivations [dstore t m] (assoc-in dstore [:deactivations t] m))
+
 
 ;TOM note 27 Mar 2011 ->  I'd like to factor these two methods out into a single 
 ;function, discriminating based on a parameter, rather than having two entire 
 ;methods.
 ;Register demand activation for a given day, given demand.
 ;TOM Change 7 Dec 2010
-;CONTEXTUAL
 (defn add-activation [t demandname dstore ctx]
   (let [actives (get-activations dstore t)]
     (->> (request-demand-update! t demandname ctx) ;FIXED - fix side effect
@@ -330,7 +234,6 @@
 ;Register demand deactviation for a given day, given demand.
 ;1)Tom Note 20 May 2013 -> Our merge-updates function looks alot like entity 
 ;  updates in the component-based model.  Might be easy to port...
-;CONTEXTUAL
 (defn add-deactivation [t demandname demandstore ctx]
   (let [inactives (get-deactivations demandstore t)
         tlast     (max (:tlastdeactivation demandstore) t)]
@@ -341,13 +244,11 @@
                 (set-deactivations t (conj inactives demandname)))}))))
 
 ;Schedule activation and deactivation for demand. -> Looks fixed.
-;CONTEXTUAL
 (defn schedule-demand [demand demandstore ctx]
   (let [{:keys [startday demand-name duration]} demand]
     (->> (add-activation startday demand-name demandstore ctx)
          (add-deactivation (+ startday duration) demand-name demandstore))))
 
-;CONTEXTUAL
 (defn register-demand [demand demandstore policystore ctx]
   (let [dname    (:name demand)
         newstore (tag-demand demand (add-demand demandstore demand))]
@@ -357,57 +258,42 @@
          :policy-store  (policy/register-location dname policystore)})
       (schedule-demand demand newstore)))) 
 
-(defn merge-fill-results [res ctx] 
-  (throw (Exception. "merge-fill-results not implemented")))
-
 ;utility function....
 (defn pop-priority-map [m]
   (if (empty? m) m (dissoc m (first (keys m)))))
 
-;this is a wrapper around marathon.sim.policy/source-demand.
-;we had two different sourcing criteria before, and two - largely copies - of 
-;the same function.  Now we distinguish via source-mode, and allow the function 
-;to dispatch based on the source-mode.  Could turn this into a multimethod...
-(defn source-demand [demand source-mode ctx]
-  (fill/source-demand 
-    (core/get-supplystore ctx)
-    (core/get-parameters ctx)
-    (core/get-fillstore ctx)
-    ctx 
-    (core/get-policystore ctx)
-    (sim/current-time ctx) ;maybe change this..
-    demand
-    ;NEED TO ACCOUNT FOR RESTRICTED SUPPLY....buckets, so to speak.
-    source-mode))
 
-;Tom change 6 Dec 2010
-;Sub to register or deregister Demands from the UnfilledQ
-;UnfilledQ partitions the set of demands that are unfilled
-;When we go to look for demands that need filling, we traverse keys in order.
-;Only keys that exist will be filled ...
-;Currently, we have no implemented way of prioritizing SRC fills over eachother, 
-;but it also should not matter due to the independence of the SRC populations.
-;Unfilled demands exist in a priority queue, based on the demand's priority, 
-;this is data driven/positional.
-;The basic idea is this:
-;Upon initialization of the demand, we tag a field in the demand and associate
-;it with priority. Note - with the advent of "priority" associated with
-;the demand, we can always just read this in as another parameter in the data. 
-;Basic demand events are Activation, Deactivation, Fill, Unfill.
-;Our goal is to move this information from a polling environment, where we must
-;traverse the entire array in O(N) worst case time, every day, to a pushing 
-;environment. In a push environment, we check for the existence of unfilled 
-;demands very effeciently, 0(1) constant time, and upon discovering the
-;existence, we retrieve the highest priority demand in 0(1) time.
-;Activation and unfill events manifest in demandnames being added to the 
-;unfilledQ. Deactivation and filled events manifest in demandnames being removed 
-;from the unfilledQ. The bottom line is that we want to quickly find out if 
-;A. there are unfilled demands, 
-;B. what the most important unfilled demand is, 
-;C. what happens when we fill the demand (take the demand off the q or not?)
+;;#Managing the Fill Status of Changing Demands#
+;;Unfilled demands exist in a priority queue, UnfilledQ, ordered by the demand's 
+;;priority field value - typically an absolute, static ordering, set at 
+;;construction.
+;;UnfilledQ partitions the set of active demands that are unfilled.
+;;When we go to look for demands that need filling, we traverse keys in 
+;;priority order. 
+;;We use a priority queue to effeciently respond to changes in a demand's fill 
+;;status, and to only try to fill demands when we need to.  Older algorithms 
+;;naively polled the demands, and led to quadratic complexity.  In this case, 
+;;the priority queue lets us implement a push algorithm, and if we're filling 
+;;hierarchically, we can terminate the fill process early if we fail to satisfy
+;;a demand.  
+ 
+;;Basic demand events are Activation, Deactivation, Fill, Unfill.
+;;Activation and unfill events manifest in demandnames being added to the 
+;;unfilledQ. Deactivation and filled events manifest in demandnames being 
+;;removed from the unfilledQ. We want to effeciently find out if 
+;;there are unfilled demands,  what the most important unfilled demand is, 
+;;and what happens when we fill the demand (take the demand off the q or not?)
+;;Using the fill queue, the update-fill function provides a general hub to 
+;;enforce these invariants.  You'll see it get used a bit when we make changes
+;;to a demand, either filling, activating, etc.  It applies the appropriate 
+;;processing to keep a demand's fill status consistent.
 
-;CONTEXTUAL - UGLY!
-(defn update-fill [demandstore demandname ctx]
+(defn update-fill
+  "Derives a demand's fill status based on its current data.  Satisfied demands 
+   are removed from the unfilled queue, unsatisfied demands are kept or added to
+   the unfilled queue.  Deactivating unfilled demands are detected as well.
+   Propogates notifications for each special case."
+  [demandstore demandname ctx]
   (let [demand (get-in demandstore [:demandmap demandname])
         fill-key (priority-key demand)
         unfilled (:unfilledq demandstore)]
@@ -433,72 +319,87 @@
                        (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
 
-;Tom note 20 May 2013 -> After a lengthy thinking cycle, I resolved to define 
-;a useful little language for describing categories, that is, elements of 
-;demand and the contextual information for how they may be filled. 
-;This should eliminate a slew of duplication and complexity from the VBA 
-;implementation, since we can use the category of fill to select eligible 
-;demands, and to inform suitable supply.  
+;;#Describing Categories of Demand To Inform Demand Fill Rules#
+;;Demands have typically been binned into gross categories, based on the type 
+;;of capability required to meet a demand.  Additional complexities arose as
+;;subcategories - such as the notion of follow-on demands - became a necessity.
+;;After a lengthy thinking cycle, I resolved to define 
+;;a useful little language for describing categories, that is, elements of 
+;;demand and the contextual information for how they may be filled. 
 
-;Examples of categories follow:
+;;This should eliminate a slew of duplication and complexity from the VBA 
+;;implementation, since we can use the category of fill to select eligible 
+;;demands, and to inform suitable supply.  
 
-;(fill-demands "SRC1" "Group2") ; => find all eligible demands for SRC1 that 
-;have group2 as a demandgroup, if there's any grouped supply, try using that to
-;fill the demands for SRC1 in order.
+;;Examples of categories follow:
 
-;=> find all eligible demands for SRC1 that have group2 as a demandgroup, if 
-;there's any grouped supply, try using that to fill the demands for SRC1 in 
-;order.
+;;(fill-demands "SRC1" "Group2") ; => find all eligible demands for SRC1 that 
+;;have group2 as a demandgroup, if there's any grouped supply, try using that to
+;;fill the demands for SRC1 in order.
 
-;maybe use category as a little query language.
-;then use the query to select demands and supply! 
+;;=> find all eligible demands for SRC1 that have group2 as a demandgroup, if 
+;;there's any grouped supply, try using that to fill the demands for SRC1 in 
+;;order.
 
-;just adopt a broader notion of category...
-;in the simple case, when the category is a string, or a key, we act like normal 
-;filling..
-;(fill-category "SRC2") ;=> find all eligible demands for SRC2.
+;;We use category as a little query language, which the fill system can 
+;;interpret as query to find supply. 
 
-;in a complex case, when the category is a sequence, we parse it appropriately.
-;category can be a pair, which is interpreted as a category of SRC and a 
-;grouping.
+;;In the simple case, when the category is a string, or a key, we act like 
+;;normal filling..
+;;(fill-category "SRC2") ;=> find all eligible demands for SRC2.
+
+;;In a complex case, when the category is a sequence, we parse it appropriately.
+;;Pairs define a more constrained category, which is interpreted as a category 
+;;of SRC and a grouping.  
+
 ;(fill-category ["SRC2" "Group1"]) ;=> find the eligible demands for SRC2, where 
 ;the demand group is group1.
 
-;category can be a map, which is interpreted as a filter....
-;(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
-;                :supply {:followoncode "Group2"}})
-;categories serve to link supply AND demand.
-;From the supply-side, we determine which supply is eligible to fill 
-;["SRC1" "Group2"]
-; -> all feasible substitutes for "SRC1", where their followon code is "Group2"
-;    we already have a some book-keeping, in the form of a set of units that 
-;    are in follow-status due to disengagement. 
+;;Detailed categories come in the forms of maps, which are interpreted as a 
+;;filter by default.  
 
-;Categories are used by three new functions: find-eligible-demands, defined here,
-;and find-eligible-supply, defined in marathon.sim.supply, as well as  .
+;;(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
+;;                :supply {:followoncode "Group2"}})
 
-;Note -> find-eligible demands is...in a general sense, just a select-where 
-;query executed against the demandstore...        
+;;categories serve to link supply AND demand, since categories are parsed by 
+;;ISupplier functions into supply ordering queries.
+;;For example,  from the supply-side, we determine which supply is eligible to 
+;;fill an ["SRC1" "Group2"] category of demand.
+;;By default, the query should look for supply matching "SRC1", and all feasible
+;;substitutes for "SRC1", where the constraint that the supply followon code 
+;;also equals "Group2".
+
+;;Categories can be interpreted an arbitrary number of ways, but the preceding
+;;conventions should cover both the 90% use cases, for simple SRC matches, and 
+;;almost unlimited extensibility via encoding categories as maps, to be 
+;;interpreted by an ISupplier.
+
+;;#Demand Category Methods#
+;;Categories are used by three new functions: find-eligible-demands, 
+;;defined here, and find-supply, defined in marathon.sim.fill.
+
+;;Note -> find-eligible demands is...in a general sense, just a select-where 
+;;query executed against the demandstore...        
 (defmulti category->demand-rule core/category-type)
 
-;Interprets a category as a rule that finds demands based on an src.
-;Note -> we should probably decouple the get-in part of the definition, and 
-;hide it behind a protocol function, like get-demands.  
+;;Interprets a category as a rule that finds demands based on an src.
+;;Note -> we should probably decouple the get-in part of the definition, and 
+;;hide it behind a protocol function, like get-demands.  
 (defmethod category->demand-rule :simple [src]
   (fn [store] (get-in store [:unfilledq src]))) ;priority queue of demands.
 
-;Interprets a category as a composite rule that matches demands based on an 
-;src, and filters based on a specified demand-group.
-;[src demandgroup|#{group1 group2 groupn}|{group1 _ group2 _ ... groupn _}]  
+;;Interprets a category as a composite rule that matches demands based on an 
+;;src, and filters based on a specified demand-group.
+;;[src demandgroup|#{group1 group2 groupn}|{group1 _ group2 _ ... groupn _}]  
 (defmethod category->demand-rule :src-and-group [[src groups]]
   (let [eligible? (core/make-member-pred groups)] ;make a group filter
     (->> (seq (find-eligible-demands store src)) ;INEFFICIENT
          (filter (fn [[pk d]] (eligible? (:demand-group d))))
          (into (sorted-map))))) ;returns priority-queue of demands.
 
-;matches {:keys [src group]}, will likely extend to allow tags...
-;Currently, provides a unified interface for rules, so we can just use simple 
-;maps. Should probably migrate other calls to this simple format.
+;;matches {:keys [src group]}, will likely extend to allow tags...
+;;Currently, provides a unified interface for rules, so we can just use simple 
+;;maps. Should probably migrate other calls to this simple format.
 (defmethod category->demand-rule :rule-map [category]
   (let [has-every-key? (comp every? #(contains? category %))]
     (cond (has-every-key? [:src :groups]) 
@@ -508,15 +409,20 @@
           :else ;Future extensions.  Might allow arbitrary predicates and tags. 
              (throw (Exception. "Not implemented!")))))      
 
-;High-level API to find a set of eligible demands that match a potentially 
-;complex category.  Uses the category->demand-rule interpreter to parse the 
-;rule into a query function, then applies the query to the store.
+;;High-level API to find a set of eligible demands that match a potentially 
+;;complex category.  Uses the category->demand-rule interpreter to parse the 
+;;rule into a query function, then applies the query to the store.
 (defn find-eligible-demands 
   "Given a demand store, and a valid categorization of the demand, interprets
    the category into a into a demand selection function, then applies the query
    to the store."
   [store category]
   ((category->demand-rule category) store))
+
+
+;;__TODO__ Check implementation in simcontext.
+(defn merge-fill-results [res ctx] 
+  (throw (Exception. "merge-fill-results not implemented")))
 
 ;Since we allowed descriptions of categories to be more robust, we now abstract
 ;out the - potentially complex - category entirely.  This should allow us to 
@@ -652,12 +558,12 @@
         unitname    (:name unit)]
 	  (cond 
 	    (ungrouped? demandgroup) 
-	      (-> (update-unit (set-followon unit demandgroup) ctx)                ;1)
-	          (u/change-state :AbruptWithdraw 0 nil ctx))                      ;2)      
+	      (->> (core/update-unit (set-followon unit demandgroup) ctx)          ;1)
+	           (u/change-state unitname :AbruptWithdraw 0 nil))                ;2)      
 	    (not (ghost? unit))
-	      (u/change-state unit :AbruptWithdraw 0 nil ctx)                      ;2) 
+	      (u/change-state unitname :AbruptWithdraw 0 nil ctx)                  ;2) 
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
-	            (u/change-state unit :Reset 0 nil)))))                         ;2)
+	            (u/change-state unitname :Reset 0 nil)))))                     ;2)
 
 ;This sub implements the state changes required to deactivate a demand, namely, 
 ;to send a unit back to reset. The cases it covers are times when a demand is 

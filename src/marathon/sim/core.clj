@@ -1,6 +1,6 @@
 ;;marathon.sim.core is a glue library that provides access to a common set of 
-;;subsystems upon which the more complicated federated simulation infrastructure
-;;is implemented.  The general design for marathon is to provide a simulation 
+;;subsystems upon which a more complicated federated simulation infrastructure
+;;is implemented.  The general design for Marathon is to provide a simulation 
 ;;context, which provides primitive access to heterogenous chunks of data 
 ;;relevant to different domains of the simulation.  Systems are then defined 
 ;;over this shared architecture, and further elaborate on means to affect a 
@@ -9,19 +9,6 @@
 ;;state transition function that maps one simulation context to the next.
 (ns marathon.sim.core
   (:require [util [metaprogramming :as util]]))
-
-;A collection of shared functions, might turn into protocols someday...
-;This should contain only core functionality shared across subsystems defined 
-;in other namespaces, to eliminate redunancy.
-;I started this due to the fact that several functions - primarily accessors, 
-;were bubbling up in each of the domain-specific modules.  As a result, we'll 
-;just shove them in here.  If we don't, we'll end up with circular dependencies.
-;Nobody wants that...
-
-;;Stubs were used during the initial port to toss exceptions if an unimplemented
-;;or deferred function was called.  
-(defmacro stub [msg & empty-body]  
-  `(~'fn ~'[& args] (~'throw (~'Exception. ~msg))))
 
 ;;#Providing Common Access to the State in the Simulation Context#
 ;;The simulation context contains a large nested map of information that 
@@ -33,7 +20,6 @@
 ;;paths - a higher level of abstraction and clarity - OR they may dip down to 
 ;;low level operations on the raw state.  This should maintain a balance between
 ;;flexibility and clarity.
-
 
 ;;#Common Paths to Simulation Resources #
 
@@ -54,8 +40,11 @@
    get-fillstore     [:fillstore]
    get-fill-function [:fillstore :fillfunction]})
 
-
 ;;#Shared Functions#
+
+;;These functions were extracted due to use across multiple domains.  I may 
+;;refactor them into core services, but for now, relocating them in sim.core 
+;;allows every system access to them.
 
 ;;The name here is a bit generic.  We're really trying to acquire the keys of 
 ;;a map that contains information about followon-eligible supply.  In this 
@@ -68,10 +57,10 @@
   [supplystore] (keys (:followon-buckets supplystore)))
 
 (defn update-unit
-  "A unit in the supplystore."
+  "Associates unit u into the context's supply store, using the unit's name 
+   as a key."
   [u ctx]
   (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
-
 
 ;;#Tag Related Functions#
 ;;Another useful bit of higher order, or meta data, is the notion of simple 
@@ -90,6 +79,8 @@
 (defn disable [store demandname]
   (update-in store [:tags] tag/untag-subject :enabled item))
 
+;;#Fill Related Functions#
+
 ;find-eligible-demands is implemented as multimethod that dispatches based on 
 ;type of the category that's passed in.  category-type provides a simple 
 ;dispatch mechanism.  Note-> could use built-in hierarchy functions to do this.
@@ -99,6 +90,20 @@
         (map? x)    :rule-map
         :else (throw (Exception. "Unknown category type " (type x)))))
 
+;;#Utility Functions and Macros#
+
+;;A collection of shared functions, might turn into protocols someday...
+;;This should contain only core functionality shared across subsystems defined 
+;;in other namespaces, to eliminate redunancy.
+;;I started this due to the fact that several functions - primarily accessors, 
+;;were bubbling up in each of the domain-specific modules.  As a result, we'll 
+;;just shove them in here.  If we don't, we'll get circular dependencies.
+
+;;Stubs were used during the initial port to toss exceptions if an unimplemented
+;;or deferred function was called.  
+(defmacro stub [msg & empty-body]  
+  `(~'fn ~'[& args] (~'throw (~'Exception. ~msg))))
+
 ;This is a general utility function, that allows us to derive predicates based
 ;on atomic values, sets, or maps.  Used for filtering (currently in demand 
 ;categories and supply categories).
@@ -107,3 +112,24 @@
   (if (or (set? g) (map? g))
     #(contains? g %)
     #(= g %)))
+
+;;##Notes##
+
+;;#Transitioning from Effectful Simulation and State Updating#
+;;One problem area in the port from VBA->Clojure was the handling of 
+;;decentralized state updates.  This primarily happened via event dispatch, or 
+;;through side-effects called during management functions.  The solution for our
+;;pure simulation is to formalize batch updates to the simulation by using 
+;;simcontext/merge-updates.  This allows us to pass maps of updates around, and 
+;;the updates are merged with the simulation state in a predefined manner.  
+;;We may wish to formalize this as a language feature (i.e. macro) to define 
+;;different types of update.
+
+;;#Conventions for Notifications/Events/Messaging Functions#
+;;Message functions are suffixed by the \! character, by convention, to denote 
+;;the possibility of side effects. The function signatures are pure, in that 
+;;they return a context.  The naming convention will help identify when 
+;;"messaging" is occuring.  While effects may happen, in the form of logging 
+;;or display updating, the internal simulation mechanics are still pure.
+
+;TODO -> implement defmessage macro....

@@ -1,3 +1,9 @@
+;;A collection of functions that define the process of mapping classes of demand
+;;to eligible supply, and filling demand with suitable supply.  The fill system
+;;acts as a service for the engine, and provides operations used - primarily - 
+;;by the demand simulation.  The process of filling pushes changes on the 
+;;supply, since the act of filling usually consumes some resources in supply and
+;;motivates a kind of motion in the supply simulation.
 (ns marathon.sim.fill
   (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
@@ -7,64 +13,21 @@
             [util [tags :as tag]]
             [cljgraph [graph :as graph]]))
 
-;;TEMPORARILY ADDED for marathon.sim.demand
-;;__SHOULD BE CHANGED__ to __Satisfy Demand__
-(declare source-demand)
-
-;TEMPORARILY ADDED - need to fit this somewhere in protocols or core.
-(declare realize-fill promise-fill apply-fill)
-;promise-fill::'a->simcontext->(simcontext->'a->[filldata,simcontext])
-;realize-fill::promise-fill->simcontext->[filldata, simcontext]
-;apply-fill::filldata->demand->ctx->ctx
-
 ;The old ManagerOfFill class actually handled the creation of a couple of
 ;dependent chunks of data; namely a FillFunction, a FillGraph,
 ;and a SupplyGenerator.  Functions in this module fill the role
 ;of creating and composing each of these elements in kind.
-;
 
-(defn sink-label   [x] [x :sink])   ;memoize!
-(defn source-label [x] [x :source]) ;memoize!
-
-;;Refactor -> we don't need a separate rule here really, just wrapping 
-;sink-label.  Note: we're passing in a new notion of categories when we 
-;fill demands now.  This means we don't just derive the rule and be done.
-;We need to dispatch on the category, and map the demand category into an 
-;appropriate rule that query can apply to the supply to find elements of supply.
-(defmulti derive-supply-rule 
-  (fn [demand fillstore & [category]]  
-    (let [cat (or category (:src demand))]  (core/category-type c))))
-;for simple categories, ala "SRC_1" or :SRC_1, we just compute existing 
-;label for the demand, which maps to a node in the fill graph.
-(defmethod derive-supply-rule :simple 
-  [demand fillstore & [category]]
-  (sink-label category))
-
-;For categories that require a demand group, namely follow-on fills, we 
-;just inject the sink-label into the vector: 
-;     [src group] ->  [(sink-label src) group]
-(defmethod derive-supply-rule :src-and-group 
-  [demand fillstore & [category]]
-  [(sink-label (first category)) (second category)])
-
-;Not yet implemented, but the intent is to have a simple idiom for parsing 
-;abstract categories into rules that can be used to query supply or demand 
-;or anything.
-(defn rule->supply-rule [rule]
-  (throw (Exception. "Not implemented!")))
-
-;For complex categories that contain information in a map structure, we 
-;will have an way to parse the supply rule, which could be arbitrarily complex.
-(defmethod derive-supply-rule :rule-map
-  [demand fillstore & [category]]
-  (rule->supply-rule category))
-
-
-
+;;#Primitive Operations#
 ;account for the fill in the fillstore, basically just conj it to the history.
 (defn record-fill [fillstore fill] 
   (let [fillcount (count (:fills fillstore))]
     (assoc-in fillstore [:fills] (inc fillcount) fill)))
+
+(defn followon? [u] (:followoncode u))
+(defn ghost-followon? [u] (and (ghost? u) (followon? u)))
+
+;;#Fill-Related Notifications#
 
 ;notify everyone that we've filled a demand...
 (defn filled-demand! [demand-name unit-name ctx] 
@@ -78,9 +41,13 @@
   (sim/trigger :GhostDeployed demand-src demand-src 
      "Ghost followed on to another demand" :followon ctx))
 
-(defn followon? [u] (:followoncode u))
-(defn ghost-followon? [u] (and (ghost? u) (followon? u)))
-
+;;Auxillary function to broadcast information about just-in-time, or "ghost" 
+;;unit utilization.  May be replaced with something more general in the future.
+(defn check-ghost [unit ctx]
+  (if (not (ghost? unit)) ctx
+      (if (followon? unit) 
+        (ghost-followed! unit ctx) 
+        (ghost-deployed! unit ctx))))
 
 ;##Decomposing the Fill Process....##
 ;Sourcing a demand is really the composition of three simpler tasks: 
@@ -189,7 +156,62 @@
 ;entire subset of supply as a certain class, with a uniform priority.  This is
 ;desirable, as it effectively partitions the search space and provides an 
 ;efficient means of selecting sets of units for possible deployment.
-;
+
+;;#Fill Rule Interpretation#
+;;Given a common description of a demand category, the fill function should be 
+;;able to interpret the demand rule into a corresponding supply rule.  After
+;;converting to a common supply rule, different fill functions may interpret 
+;;the same rule in completely different manners, or we can have a robust 
+;;language for describing and interpreting rules.  The end result should be a 
+;;way to map classes of demand to ordered sets of supply in a general and 
+;;flexible fashion.
+
+;;In the legacy implementation, the rule structure is actual embedded in the 
+;;topology of a directed graph.  Labelled 'sink nodes' on the graph represent 
+;;possible demand categories, while primitive 'source nodes' are primitive 
+;;elements of supply.  Complex rules for substitution and equivalence are 
+;;encoded in the intermediate arcs of the graph.  These functions help interpret
+;;to and from the graph encoding in the legacy implementation.
+
+;;Standard labels for defining source and sink rules.  Maybe memoize these.
+(defn sink-label   [x] [x :sink])   
+(defn source-label [x] [x :source]) 
+
+;;Refactor -> we don't need a separate rule here really, just wrapping 
+;sink-label.  Note: we're passing in a new notion of categories when we 
+;fill demands now.  This means we don't just derive the rule and be done.
+;We need to dispatch on the category, and map the demand category into an 
+;appropriate rule that query can apply to the supply to find elements of supply.
+(defmulti derive-supply-rule 
+  (fn [demand fillstore & [category]]  
+    (let [cat (or category (:src demand))]  (core/category-type c))))
+
+;for simple categories, ala "SRC_1" or :SRC_1, we just compute existing 
+;label for the demand, which maps to a node in the fill graph.
+(defmethod derive-supply-rule :simple 
+  [demand fillstore & [category]]
+  (sink-label category))
+
+;For categories that require a demand group, namely follow-on fills, we 
+;just inject the sink-label into the vector: 
+;     [src group] ->  [(sink-label src) group]
+(defmethod derive-supply-rule :src-and-group 
+  [demand fillstore & [category]]
+  [(sink-label (first category)) (second category)])
+
+;Not yet implemented, but the intent is to have a simple idiom for parsing 
+;abstract categories into rules that can be used to query supply or demand 
+;or anything.
+(defn rule->supply-rule [rule]
+  (throw (Exception. "Not implemented!")))
+
+;For complex categories that contain information in a map structure, we 
+;will have an way to parse the supply rule, which could be arbitrarily complex.
+(defmethod derive-supply-rule :rule-map
+  [demand fillstore & [category]]
+  (rule->supply-rule category))
+
+
 ;##Legacy Means For Generating A Stream of Deployable Supply##
 ;In the legacy implementation,  a SupplyGenerator object served as a poor man's 
 ;version of a sequence abstraction (or an iterator in other languages).  It used
@@ -284,9 +306,30 @@
 ;all of the complexity for us and allows us to trivially change how supply is 
 ;ordered.
 
-;Currently undefined function
-;query::fillfunc->rule->supplystore->[unit]
-(declare query) 
+;;The protocol ISupplier provides an abstraction for systems that can interpret
+;;a rule that describes classes of supply, find and order eligible supply in a 
+;;given store.  While rules are abstract, they will be implemented in a common
+;;language for describing fill rules, which should facilitate communication 
+;;between a party asking for supply, and the supplier who can provide it.  This 
+;;should allow for a very flexible arrange of rule descriptions, as well as
+;;varying degrees of interpretation rule interpretation, and the generation of 
+;;promised supply.
+(defprotocol ISupplier 
+  (query [s rule store] 
+  "Given a rule that orders eligible supply, s applies the
+   rule to store to return an ordered sequence of promised supply."))
+
+;;__TODO__ Provide a default implementation of the ISupplier that can parse 
+;;simple rules.  Specifically, one that can match src to src for instance.
+;;__TODO__ Provide a set of extended Supplier definitions, possibly combinators
+;;for compound supply rules, that allow users to easily define prioritization 
+;;and possible supply generation criteria.  For instance, we need a way to 
+;;implement the existing default stack of preferences: ordered by fence, 
+;;followon status, capability (i.e. substitution), max normalized dwell.  
+;;Another would be a function that can generate new supply according to some 
+;;constraint (possibly unconstrained).
+
+;;##High Level Fill 
 
 ;#It's all about finding supply.#
 ;The ultimate purpose of querying a fill-function is to answer a simple query:  
@@ -307,6 +350,7 @@
 ;find-supply::(rule->demand->demandgroup->name->supply->phase->[fill-promise])
 ;             ->supply->rule->[fill-promise]
 ;where fill-promise::(simcontext->'a->[filldata,simcontext])
+
 (defn find-supply
   "Returns an ordered sequence of actions that can result in supply.
    This effectively applies the suitability function related to fillfunc to the 
@@ -322,8 +366,12 @@
 ;apply the promise to a given context.  This should produce a pair of the 
 ;filldata --the context of the unit realized for filling-- and an updated 
 ;context.
-;realize-fill::promise-fill->simcontext->[filldata, simcontext]
-(defn realize-fill [fill-promise ctx] (fill-promise ctx))
+
+(defn realize-fill
+  "Applies the a function, fill-promise, that maps a context to a pair of 
+   [filldata, updated-context].  The updated-context should represent the result
+   of realizing the promised fill."
+  [fill-promise ctx] (fill-promise ctx))
 
 ;#Second: Allocate a candidate fill against a demand.#
 ;Assuming we have a candidate fill, and a demand that needs filling, we define
@@ -336,7 +384,6 @@
 ;be completely random or drawn in an otherwise arbitrary fashion.
 ;-Note- that would make a great _test_, having a random fill function.
 
-
 ;Assuming we have a chunk of realized filldata, we define a way to apply it to 
 ;a demand to accomplish any updates necessary for filling.  This is a primitive
 ;function that will support the higher-order notion of "filling" a demand.  
@@ -346,8 +393,10 @@
 ;the API, we can actually implement things that would otherwise be difficult, 
 ;i.e. delayed fills (pre-allocating units and scheduling them to deploy at a 
 ;later date, while nominally "filling" the demand).
-;apply-fill::filldata->demand->ctx->ctx 
-(defn apply-fill [filldata demand ctx]
+
+(defn apply-fill
+  "Deploys the unit identified in filldata to demand via the supply system."
+  [filldata demand ctx]
   (let [unit (:unit filldata)
         fillstore   (core/get-fillstore ctx)
         supplystore (core/get-supplystore ctx)
@@ -355,36 +404,37 @@
         params      (core/get-parameters ctx)]
     (->> ctx
         (supply/deploy-unit supplystore ctx parameters policystore unit t
-         quality demand (policy/get-maxbog unit) (count (:fills fillstore))
-         filldata (params/interval->date t) (followon? unit)))))
+            quality demand (policy/get-maxbog unit) (count (:fills fillstore))
+            filldata (params/interval->date t) (followon? unit)))))
 
-;Auxillary function to broadcast information about just-in-time, or "ghost" 
-;unit utilization.  May be replaced with something more general in the future.
-(defn check-ghost [unit ctx]
-  (if (not (ghost? unit)) ctx
-      (if (followon? unit) 
-        (ghost-followed! unit ctx) 
-        (ghost-deployed! unit ctx))))
+;;#Incremental Demand Filling# 
 
-;We wrap the atomic fill process inside a nice high-level function, fill-demand.
-;fill-demand takes any fill-promise, realizes the fill-promise, applies the 
-;the realized filldata to fill a demand.  It wraps some of the low-level context
-;shuffling that is necessary behind a simple, high-level interface amenable to 
-;use in a reduction.
-;The end result is a new context, representing the consequences of filling said 
-;demand with the promised fill.  Under this scheme, apply-fill will 
-;automatically handle the realization of a fill-promise, and thread its updated
-;context through the process of deploying the unit associated with the realized 
-;filldata.
-;Enacts filling a demand, by realizing a promised fill, logging if any ghosts 
-;were used to fill (may change this...) and updating the context.
-(defn fill-demand [demand ctx promised-fill]
+;;We wrap the atomic fill process inside a high-level function, fill-demand.
+;;fill-demand takes any fill-promise, realizes the fill-promise, applies the 
+;;the realized filldata to fill a demand. It wraps some of the low-level context
+;;shuffling that is necessary behind a simple, high-level interface amenable to 
+;;use in a reduction.
+;;The end result is a new context, representing the consequences of filling said 
+;;demand with the promised fill.  Under this scheme, apply-fill will 
+;;automatically handle the realization of a fill-promise, and thread its updated
+;;context through the process of deploying the unit associated with the realized 
+;;filldata.  Since fill-promises are typically for single elements of supply,  
+;;fill-demand will typically only apply a single unit towards a demand.
+
+(defn fill-demand
+  "Enacts filling a demand, by realizing a promised fill, logging if any ghosts 
+   were used to fill (may change this...) and updating the context.  Applies the
+   result of one promised fill to the demand, which may or may not satisfy the 
+   demand."
+  [demand ctx promised-fill]
   (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
          unit    (:source filldata)] 
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))
          (check-ghost unit)
          (apply-fill filldata demand)))) 
+
+;;#Trying to Completely Satisfy a Demand#
 
 ;Since we know how to effectively apply promised fills towards demands via 
 ;fill-demand in an atomic fashion, we can define the notion of completely 
@@ -397,8 +447,13 @@
 ;  the ordering of candidates is independent of the demand fill.
 ;satisfy-demand::demand->category->ctx->[fill-status ctx]
 ;                where fill-status = :filled | :unfilled
-;Replaces sourceDemand from the old vba code.
-(defn satisfy-demand [demand category ctx]
+
+(defn satisfy-demand
+  "Attempts to satisfy the demand by finding supply and applying promised 
+   fills to the demand.  Returns a result pair of 
+   [:filled|:unfilled updated-context], where :filled indicates the demand is 
+   satisifed, and updated-context is the resulting simulation context."
+  [demand category ctx]
   (let [fillstore   (core/get-fillstore ctx)
         fillfunc    (core/get-fill-function ctx)
         supplystore (core/get-supplystore ctx)

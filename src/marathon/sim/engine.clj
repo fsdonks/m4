@@ -26,6 +26,8 @@
 
 (defn now [] (System/currentTimeMillis))
 
+
+;;These functions are currently missing, possibly due to deprecation.
 ;--------Missing Functionality>>>>>>>>>>>>>>>>>>
 (comment  ;stub is somewhat useless at the moment.
 	(stub "guess-last-day"
@@ -62,7 +64,7 @@
 (defn control-io
   "Forces all entities in supply to be brought up to date."
   [ctx edata]
-  (if (= (:type ctx) :update-all-units)
+  (if (= (:type edata) :update-all-units)
     (update-all-supply ctx)
     (throw (Exception. (str "Unknown event type " edata)))))
 
@@ -265,18 +267,4 @@
           (let [next-day   (sim/advance-time (:context state)) ;WRONG
                 next-state (sim-step next-day state)] ;Transition to next state.
             (recur next-day next-state))))))
-
-(comment 
-;an alternate version using reduce. cleaner?
-(defn sim-step2 [day state]
-  (reduce (fn [s f] (f day s)) state 
-    [begin-day 
-     manage-supply  
-     manage-policies
-     manage-demands      
-     fill-demands
-     manage-follow-ons
-     #(end-day %1 last-day %2)
-     manage-changed-demands]))
-)
 
