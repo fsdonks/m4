@@ -47,7 +47,7 @@
 ;sim.demand => get-followon-keys release-max-utilizers
 
 ;TEMPORARILY ADDED for marathon.sim.demand
-(declare get-followon-keys release-max-utilizers)
+(declare release-max-utilizers)
 
 ;marathonopsupply
 ;11 July 2012 -> recasting of supply management.
