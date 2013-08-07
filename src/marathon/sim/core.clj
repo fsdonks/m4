@@ -72,11 +72,11 @@
 
 ;Generic tag-related....These apply equally to supplystore, demandstore, etc.
 ;The interface is identical.  Only the interpretation of the tags is different.
-(defn is-enabled [store item] 
-  (tag/has-tag? (:tags store) :enabled item))
+(defn enabled? [store item]  (tag/has-tag? (:tags store) :enabled item))
+(defn disabled? [store item] (not (enabled? store item)))
 (defn enable [store item]
   (update-in store [:tags] tag/tag-subject :enabled item))
-(defn disable [store demandname]
+(defn disable [store item]
   (update-in store [:tags] tag/untag-subject :enabled item))
 
 ;;#Fill Related Functions#
@@ -112,6 +112,24 @@
   (if (or (set? g) (map? g))
     #(contains? g %)
     #(= g %)))
+
+;If function results in an empty map, contained within another map, 
+;removes the entry associated with the empty map.
+(defn prune-in [m ks f & args]
+  (let [updated (apply update-in ks f args)]
+    (if (empty? (get-in updated ks))
+      (let [path   (butlast ks)
+            parent (get-in m path)]            
+        (assoc-in m path (dissoc parent (last ks))))
+      updated)))
+
+(defn key-tag-maker
+  "Creates a little keyword factory that allows to to define descriptive 
+   tags using keywords efficiently and consistently."
+  [base] (memoize (fn [tag] (keyword (str base tag)))))
+
+;helper macro for defining key-building functions.
+(defmacro defkey [name base] `(def ~name (~'key-tag-maker ~base)))
 
 ;;##Notes##
 

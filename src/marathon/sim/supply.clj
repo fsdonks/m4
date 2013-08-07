@@ -9,9 +9,6 @@
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]))
 
-;TEMPORARILY ADDED for marathon.sim.demand
-(declare release-max-utilizers)
-
 ;;#Primitive Operations and Supply Queries#
 
 ;'TODO -> formalize dependencies and pre-compilation checks....
@@ -20,29 +17,28 @@
 (defn unit-msg [unit] 
   (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
 
-(defn enabled? [tags unitname] (tag/has-tag? tags :enabled unitname))
-(defn disable  [tags unitname] (tag/untag-subject tags unitname :enabled))
-(defn ghost? [tags unit] (tag/has-tag? tags :ghost (:name unit)))
+(defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
 (defn set-ghosts [x ctx] (assoc-in ctx [:state :supplystore :has-ghosts] x))
 
 (defn add-unit [supply unit]    (assoc-in supply [:unitmap (:name unit)] unit))
+(defn drop-unit [supply unitname] 
+  (update-in supply [:unit-map] dissoc unit-name))
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
+
+
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
 (defn assign-behavior [behaviors unit behaviorname]
   (behaviors/assign-behavior unit behaviorname))
 (defn empty-position? [unit] (nil? (:position-policy unit)))
 
 
-;;#Tag Keywords#
-(defn key-tag [base tag] (memoize (keyword (str base tag))))
-;helper function for defining key-building functions.
-(defmacro defkey [name base] `(def ~name (~'partial ~'key-tag ~base))) 
-(defkey source-key "SOURCE_")
-(defkey sink-key   "SINK_")
-(defkey compo-key  "COMPO_") 
-(defkey behavior-key "BEHAVIOR_")
-(defkey title-key   "TITLE_")
-(defkey policy-key  "POLICY_")
+;;#Keyword Tag Builders#
+(core/defkey source-key "SOURCE_")
+(core/defkey sink-key   "SINK_")
+(core/defkey compo-key  "COMPO_") 
+(core/defkey behavior-key "BEHAVIOR_")
+(core/defkey title-key   "TITLE_")
+(core/defkey policy-key  "POLICY_")
 (def ghost-source-tag (source-key "Ghost"))
 
 ;;#Tag Operations#
@@ -101,6 +97,15 @@
 (defn multiple-ghosts? [supplytags]
   (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
 
+;procedure that allows us to, using the fillgraph, derive a set of tags whose 
+;associated units should be deactivated.  if removal is true, the units will be
+;removed from memory as well. in cases where there are a lot of units, this may 
+;be preferable.
+(defn scope-supply [supply disable-tags & [removal]]
+  (let [f (if removal remove-unit (fn [s u] s))]
+    (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
+          (reduce (fn [s u] (-> (core/disable s u) f u)) supply))))
+
 ;;#Supply Population Operations#
 ;this might be suitable to keep in the supplymanager...
 (defn add-src [supply src] 
@@ -108,6 +113,11 @@
     (if (contains? scoped src) supply 
       (assoc-in supply [:srcs-in-scope src] (count scoped)))))
 (defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
+
+;DOUBLE CHECK....do we really mean to drop the entire src? 
+(defn remove-unit [supply unitname]
+  (-> (drop-unit supply unitname)
+      (remove-src (:src (get-unit supply unitname))))) 
 
 (defn get-buckets [supply] (:buckets supply))
 (defn add-bucket [supply bucket-name]
@@ -126,8 +136,6 @@
          :behavior behavior   :cycletime cycletime :policy p}
         (u/map->unitdata))))
 ;----------END FOREIGN------
-
-
 
 
 ;;#Supply Updating#
@@ -161,11 +169,11 @@
   "Ages an individual unit, based on how much time has elapsed - for the unit -
    between time t and its last update."
   [t supplystore unitname ctx]
-  (if (not (enabled? (:tags supplystore) unitname)) ctx 
-    (let [unit (get-unit supplystore unitname)]
-      (->> ctx       
-        (u/update unit (updates/elapsed t (sim/last-update unitname ctx)))
-        (supply-update! supplystore unit (unit-msg unit))))))
+  (if (core/disabled? supplystore unitname) ctx 
+      (let [unit (get-unit supplystore unitname)]
+        (->> ctx       
+          (u/update unit (updates/elapsed t (sim/last-update unitname ctx)))
+          (supply-update! supplystore unit (unit-msg unit))))))
 
 (defn update-units
   "Given a sequence of unit keys, xs, brings each unit up to date according to 
@@ -181,27 +189,6 @@
   (->> (or unitnames (keys (get supply :unitmap)))
        (filter (partial up-to-date? t ctx))
        (update-units t supply ctx)))
-
-;;#Supply Management#
-
-;TOM Change 24 April 2012 -> decoupled the getUpdates....now we pass in a list 
-;of updates from outside (usually via the engine), rather than having 
-;supplymanager need visibility on it.
-(defn manage-supply
-  "High level hook for the supply system.  For entities that have scheduled 
-   updates at time t, they are brought up to date and have their changes 
-   incorporated into the context.  The entity behaviors will typically 
-   use some of the supply system functions defined below to alter the context."
-  [t ctx]
-  (let [supply (core/get-supplystore ctx)]
-    (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
-      (update-units t supply ctx today-updates)
-      ctx)))
-
-;'A simple wrapper to unify the high level supply management.  We were calling 
-;this inline, it's more consistent now.
-(defn manage-followons [day ctx] 
-  (release-followons (core/get-supplystore ctx) ctx))
 
 ;;#General Supply Notifications#
 
@@ -239,13 +226,8 @@
   (sim/trigger :outofstock "SupplyManager" src 
      (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
 
-;'TOM Change 3 Jan 2011
-;'aux function for logging/recording the fact that a unit changed locations
-;'TODO -> it'd be nice to figure out how to unify this reporting, right now 
-;LogMove gets to reach directly into the tables of outputmanager and manipulate.
-;This is fast and simple, but it's not pure ....
-;One current problem is -> we have to transform fromloc/toloc into something 
-;palatable for trending ...
+
+;Aux function for logging/recording the fact that a unit changed locations
 (defn log-move! [t fromloc toloc unit & [duration ctx]]
   (sim/trigger :unitMoved (:name unit) toloc "" unit ctx))
 
@@ -260,7 +242,7 @@
   (sim/trigger :PositionUnit "SupplyManager" (:name unit) 
      (str "UIC " (:name unit) " has repositioned from " frompos " to " topos)
      nil ctx))
-;aux function for logging/recording the fact that a unit deployed
+;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
   [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
   (sim/trigger :deploy "SupplyManager" (:name unit)               
@@ -370,7 +352,7 @@
         {:supplystore (add-unit supply (conj-policy unit new-policy))} ctx))                                                  
     ctx))
 
-;;#Deploying Supply#
+;;#Functions for Deploying Supply#
 (defn check-followon-deployer! [followon? unitname demand t ctx]
   (let [supply (core/get-supplystore ctx)
         unit   (get-unit ctx unitname)]
@@ -411,7 +393,12 @@
 ;Critical function.
 ;---------CHECK PARAMETERS -> lots of unused stuff here (might be legacy fluff, 
 ;most of which is in context.
-(defn deploy-unit [supply ctx parameters policystore unit t sourcetype demand 
+(defn deploy-unit
+  "Deploys a unit entity, registered in supply, at time t, to demand.  The 
+   expected length of stay, bog, will determine when the next update is 
+   scheduled for the unit.  Propogates logging information about the context 
+   of the deployment."
+  [supply ctx parameters policystore unit t sourcetype demand 
                      bog fillcount filldata deploydate  & [followon?]]
   (assert  (u/valid-deployer? unit) 
     "Unit is not a valid deployer! Must have bogbudget > 0, 
@@ -439,40 +426,40 @@
              deploydate (policy/find-period t policystore))
           (supply-update! supply unit nil)))) 
 
-
-;UTILITY FUNCTION
-;If function results in an empty map, contained within another map, 
-;removes the entry associated with the empty map.
-(defn prune-in [m ks f & args]
-  (let [updated (apply update-in ks f args)]
-    (if (empty? (get-in updated ks))
-      (let [path   (butlast ks)
-            parent (get-in m path)]            
-        (assoc-in m path (dissoc parent (last ks))))
-      updated)))
-;END UTILITY 
+;;#Tracking Follow-On Supply#
 
 ;The call for update-deploy-status is UGLY.  Might be nice to use keyword args..
-(defn add-followon [supply unit ctx] 
+(defn add-followon
+  "Registers the unit as eligible for follow on status."
+  [supply unit ctx] 
   (-> (assoc-in supply [:followons (:name unit)] unit)
       (update-deploy-status unit true nil ctx)))
 
-(defn remove-followon [store unit]
+(defn remove-followon
+  "Drops the supply entity from supply store's registry of units in follow-on 
+   status."
+  [store unit]
   (let [unitname (:name unit)
         fcode    (:followoncode unit)
         src      (:src unit)]
     (-> store 
         (update-in [:followons] dissoc unitname)
-        (prune-in  [:followonbuckets fcode src] dissoc unitname)
+        (core/prune-in  [:followonbuckets fcode src] dissoc unitname)
         (assoc-in  [:unit-map (:name unit)] 
           (assoc unit :followoncode nil)))))
 
-(defn get-unit [supplystore unitname] (get-in supplystore [:unitmap unitname]))
-(defn followon-unit? [store unit] (contains? (:followons store) (:name unit)))
+(defn followon-unit?
+  "Determines if a particular unit is known to be eligible for follow-on use."
+  [store unit] (contains? (:followons store) (:name unit)))
 
 ;;__TODO__Detangle release-followon-unit.
-;;Convoluded.  Need to detangle this guy.
-(defn release-followon-unit [ctx unitname]
+
+(defn release-followon-unit
+  "Convoluted.  Need to detangle this guy. 
+   Assuming a unit associated with unitname was held in follow-on status, the 
+   unit is released from holding and allowed to progress back into the global 
+   supply."
+  [ctx unitname]
   (let [store (core/get-supplystore ctx)
         ctx   (->> (sim/merge-updates 
                      {:supplystore (remove-followon store unit)} ctx)
@@ -482,12 +469,14 @@
       (core/get-supplystore ctx) (get-unit store unitname) nil nil ctx)))
 
 
-;process the unused follow-on units, changing their policy to complete cycles.
-;CONTEXTUAL
+;;Process the unused follow-on units, changing their policy to complete cycles.
 (defn release-followons [supplystore & [ctx]]
   (reduce release-followon-unit ctx (keys (:followons supplystore))))         
 
-;UGLY....this could be prettier....although it refactored nicely.  
+;;__TODO__ Deprecate release-max-utilizers
+;;This is probably a deprecated function.  It was a corner case to ensure that 
+;;we handled a special class of follow on units, who followed a special max 
+;;utilization policy.  We can probably replace it with something more general.
 (defn release-max-utilizers [supplystore & [ctx]]
   (let [{:keys [followons normal]} 
            (group-by #(if (followon-unit? store %) :followon :normal)
@@ -496,24 +485,29 @@
     (reduce release-followon-unit (sim/merge-updates {:supplystore store} ctx)
             followons)))         
 
-;announce that the unit is in fact following on, remove it from followons.
+;;announce that the unit is in fact following on, remove it from followons.
 (defn record-followon [supply unit demand ctx]
   (->> (sim/merge-updates {:supplystore (remove-followon supply unit)} ctx)
        (unit-followon-event! unit demand?)))
 
-(defn drop-unit [supply unitname] 
-  (update-in supply [:unit-map] dissoc unit-name))
+;;#Supply Management#
 
-;DOUBLE CHECK....do we really mean to drop the entire src? 
-(defn remove-unit [supply unitname]
-  (-> (drop-unit supply unitname)
-      (remove-src (:src (get-unit supply unitname))))) 
+(defn manage-supply
+  "High level hook for the supply system.  For entities that have scheduled 
+   updates at time t, they are brought up to date and have their changes 
+   incorporated into the context.  The entity behaviors will typically 
+   use some of the supply system functions defined above to alter the context."
+  [t ctx]
+  (let [supply (core/get-supplystore ctx)]
+    (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
+      (update-units t supply ctx today-updates)
+      ctx)))
 
-;procedure that allows us to, using the fillgraph, derive a set of tags whose 
-;associated units should be deactivated.  if removal is true, the units will be
-;removed from memory as well. in cases where there are a lot of units, this may 
-;be preferable.
-(defn scope-supply [supply disable-tags & [removal]]
-  (let [f (if removal remove-unit (fn [s u] s))]
-    (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
-          (reduce (fn [s u] (-> (update-in s [:tags] disable u) f u)) supply))))
+;;A simple wrapper to unify the high level supply management.  We were calling 
+;;this inline, it's more consistent now.
+(defn manage-followons
+  "Ensures that entities held in a temporary follow-on status are released and
+   circulated back into supply.  Typically used after we try to fill demands."
+  [day ctx] 
+  (release-followons (core/get-supplystore ctx) ctx))
+
