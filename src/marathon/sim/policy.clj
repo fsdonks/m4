@@ -1,10 +1,25 @@
-;;Documentation for the policy simulation used by Marathon.
+;;This is the source of functionality for the policy system in Marathon.
+;;Policies define ordered transitions that entities follow, and usually map 
+;;directly to a state transition graph for a finite state machine.  Each 
+;;entity may follow a unique policy, or participate in a global policy, or 
+;;alternate as needed.  Some policies are scheduled to change at discrete times
+;;in the simulation, with a sub policy assigned to various periods of simulation
+;;time.  The policy system manages the definitions for a library of policies, 
+;;tracks the current scheduled or conditional periods in the simulation, and 
+;;handles system-wide policy changes for relevant policies.
+
+;;The primary functions contained herein surround the management of an abstract 
+;;policy context in the simulation, which is embodied in a policystore.  Most 
+;;of the functions here deal with creating policies, composing policies, 
+;;registering policies with the policystore, registering simulation periods with 
+;;the policystore, and managing policies and periods during the simulation.
 (ns marathon.sim.policy
   (:require [sim [simcontext :as sim]]
             [marathon.data [protocols :as core]]
             [marathon.policy [policydata :as p] [policystore :as pstore]]            
             [util [tags :as tag]
                   [graph :as gr]]))
+
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
 (declare register-location atomic-name find-period)
 
@@ -12,13 +27,18 @@
 ;NOTE -> THERE IS A DUPLICATE FUNCTION IN sim.policy.policydata
 (declare get-policy) 
 
-;#Policy Simulation Notes#
-;This is the companion module to the TimeStep_ManagerOfPolicy class.  The 
-;primary functions contained herein surround the management of an abstract 
-;policy context in the simulation, which is embodied in the policystore.  Most 
-;of the functions here deal with creating policies, composing policies, 
-;registering policies with the policystore, registering simulation periods with 
-;the policystore, and managing policies and periods during the simulation.
+;;__TODO__ Replace references to TimeStep_
+;;__TODO__ Replace util.graph with either cljgraph or the topograph from cljgui.
+
+;;#Policy Simulation Notes#
+;;Policies are the backbone of the entity behavioral system and provide a 
+;;high level mechanism for parameterizing entity behavior.  Policies 
+;;are the scripts that entities consult to determine where to go, how long to 
+;;stay, and how to transition between states.  The other significant component
+;;of the behavioral system are entity behaviors, which act as policy 
+;;interpreters, and actually implement (or ignore) state transitions described 
+;;by a unit's policy structure.  Behaviors are detailed in another namespace.
+
 ;
 ;#What is a policy context?#
 ;Policy is vital because it determines the criteria for both the eligibility and 
@@ -39,7 +59,8 @@
 ;demand has receded, the simulation typically tries to return to the 
 ;pre-existing policy context, or an intermediate policy that re-establishes 
 ;stability in the rotational supply.  All of this behavior is scriptable, and
-;can be modified by changing input data rather than rewiring logic.
+;can be modified by changing policy data rather than rewiring logic.  As such,
+;policies provide a simple, yet powerful scripting mechanism.  
 ;
 ;Marathon has historically maintained a notion of an overarching policy context
 ;throughout the simulation.  In fact, the simulation timeline is typically 
@@ -56,7 +77,7 @@
 ;mechanism for parameterizing the simulation and managing varied policy 
 ;contexts.  Marathon is currently structured with one default timeline, which is
 ;composed of N contiguous periods.  As the periods change, any policies that 
-;depend upon a period being active are engaged, and units subscribing to these
+;depend upon a period being active are engaged, and units following to these
 ;policies alter their behavior accordingly.  This is how Marathon manages a 
 ;policy context that can either be simple and uniform (i.e. one policy, one 
 ;period), or very unique (N different policies, K periods).
@@ -66,7 +87,7 @@
 ;rotational policy. Policies are very important, as they serve as the 
 ;instruction set for unit entity behavior.
 ;
-;Unit entities interpret policies with their unit behavior, in which the meaning
+;Unit entities "act" on policies with their unit behavior, in which the meaning
 ;of the states in the policy is interpreted and acted upon.  Additionally, unit
 ;behaviors consult a policy to figure out what the next state should be, how 
 ;long the unit will stay in said state, etc.
@@ -78,15 +99,13 @@
 ;indicate the transition time between state changes.  Policies can have at most
 ;one cycle, and are typically represented as a Directed Graph.
 ;
-;Note -> unit behaviors are typically implemented statically, as actual classes
-;in VBA, where policies are much more flexible and can be specified as data.  
-;More information on unit behaviors can be found in the MarathonOpUnit module,
-;and the TimeStep_UnitBehavior[x] classes.
+;Note -> Unit behaviors are typically implemented statically, as functions
+;where policies are much specified as data.  
 ;
 ;Next to supply and demand, policy is the most variable higher-order data.  As 
 ;such, we need a robust, flexible way to specify different policies easily, so
 ;that rather than changing code, an end-user can simply modify the data that
-;describes the policy (not unlike a script) and effect a change in unit entity 
+;describes the policy (not unlike a script) and affect a change in unit entity 
 ;behavior easily and transparently.
 ;
 ;One way to provide flexibility is to use a template system, where users can
@@ -100,13 +119,13 @@
 ;the actual structure for each policy template, as well as routines that provide
 ;default policies for multiple contexts (rather than reading data).
 ;
-;Technically, anything that implements the IRotationPolicy interface can serve
+;Technically, anything that implements the IRotationPolicy protocol can serve
 ;as a policy, so developers can extend policy responsibilities to many different
 ;implementations. Marathon provides two implementations of IRotationPolicy, 
 ;which work in tandem to fulfill a composite design pattern.  The current 
 ;implementation, TimeStep_Policy, and TimeStep_PolicyComposite, provide a 
 ;flexible mechanism for defining policies and composing multiple policies 
-;together.  They both implement the IRotationPolicy interface, albeit 
+;together.  They both implement the IRotationPolicy protocol, albeit 
 ;differently.  The key to their flexibility is that composite policies are 
 ;defined in terms of Atomic policies.  So users can, without changing any logic,
 ;add new policy definitions by supplying data that describes how to combine
@@ -135,53 +154,48 @@
 ;the simulation, then only the periods that intersect the simulation will ever 
 ;be used. This is useful for describing possible behaviors, where the periods
 ;correspond to corner-cases that may be triggered by external events.
-;
 
+
+;;#Defining Time Periods#
 
 ;Utility function.  
 (defn flip [f] (fn [x y] (f y x)))
-;maybe a utility function.
-;(defn exists? [x] (not (nil? x)))
-
 
 ;'Helper sub to partially fill in fields for the more generic RequestUpdate sub.
 (defn policy-update! [t ctx] 
   (sim/request-update t :PolicyManager :policy-update nil ctx))  
 
-;OBE
-  ;TODO -> We need to build in some glue code in the CoreSimulation...
-  ;The previously coupled code has addPeriod adding the period to the policy 
-  ;store AND sending out event notifications (scheduling).  We now schedule in a 
-  ;separate function. As a consequence, addPeriod doesn't require a simulation 
-  ;context (doesn't need to send events).
-
-;Allows the addition of known periods of time....
-;TODO -> assert non-duplicate entries...
-(defn add-period [policystore per] 
+(defn add-period  "Registers a period data structure with the policystore."
+  [policystore per] 
   (assoc-in policystore [:periods (:name per)] per))
 
 
-;Import a list of periods into the policystore, where each period is a 
-;GenericPeriod object.
-(defn add-periods [periods policystore] (reduce add-period policystore periods))
+(defn add-periods  "Import a sequence of periods into the policystore"  
+  [periods policystore] 
+  (reduce add-period policystore periods))
 
-;Notifies interested parties of the beginning and ending of a period.
-;Schedules a policy update to coincide with the beginning and ending of the period,
-;so that policy management runs when a period changes.
-(defn added-period! [per ctx]
+
+(defn added-period!
+  "Notifies interested parties of the beginning and ending of a period.
+   Schedules a policy update to coincide with the beginning and ending of the 
+   period, so that policy management runs when a period changes."
+  [per ctx]
   (sim/trigger :added-period (:name per) (:name per) 
                (str "Added period " per) nil ctx))
 
-(defn schedule-period [per ctx]
+(defn schedule-period
+  "Arranges for policy updates on the beginning and end of known periods."
+  [per ctx]
   (->> ctx 
     (added-period! per)
     (policy-update! (:fromday per))
     (policy-update! (:today per))))
 
-(defn get-periods [policystore] (:periods policystore))
-(defn get-period [policystore periodname] 
+(defn get-periods [policystore] "Yield registered periods in the policystore." 
+  (:periods policystore))
+(defn get-period [policystore periodname] "Find a period in the policystore."
   (get (get-periods policystore) periodname))
-(defn schedule-periods [policystore ctx]
+(defn schedule-periods [policystore ctx] "Schedule multiple periods."
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
 
 ;aux function.
@@ -193,7 +207,10 @@
 ;infrequent, and amenable to caching.  We'll stick with memoization for now...
 ;Returns the period name(s) that exist at time t, as defined by the period 
 ;records stored in the policystore.
-(defn find-period [t policystore]
+
+(defn find-period
+  "Finds all periods in the policy store that intersect time t."
+  [t policystore]
   (->> (get-periods policystore)
        (take-while #(<= t (:today %)))
        (some #(between t  (:fromday %) (:today %)))))
@@ -201,6 +218,12 @@
 ;Returns the the period currently active in the policy store.  This may change 
 ;when I introduce multiple timelines....
 (defn get-active-period [policystore] (:activeperiod policystore))
+
+;;#Policy Location Queries#
+;;As we define policies, we parse their node labels to derive abstract policy 
+;;locations.   
+
+;;Defining abstract locations.  
 (defn get-locations [policystore] (:locationmap policystore))
 
 ;This sub helps us to keep track of demand and policy locations.
@@ -216,6 +239,7 @@
 (def default-locations [:available :ready :train :reset :deployed :overlapping])
 (defn register-default-locations [policystore] 
   (register-locations default-locations policystore))  
+
 ;Derives locations from the policy.
 ;each location in a policy should be registered in the locations dictionary.
 ;---TODO - Abstract out the call to graph, maybe have policy handle it...
@@ -249,10 +273,11 @@
 (defn add-policies [policies policystore]
   (reduce (flip add-policy) policystore policies)) 
 
-;Shorthand for triggering a period change on the event stream of a simulation context.
+;Shorthand for triggering a period change in the simulation context.
 (defn period-change! [fromname toname ctx]
   (sim/trigger :periodChange :PolicyManager toname 
       (str "Period changed from " fromname " to " toname) nil ctx))
+
 ;Event notifying the need to update all units due to a change in the the period, 
 ;or epoch, of the simulation.
 (defn period-driven-update! [fromname toname ctx]
@@ -260,12 +285,16 @@
      (str "Period change from " fromname 
           " to "  toname " caused all units to update.") toname ctx))
 
-;TODO -> make sure this constructor doesn't exist somewhere else...
-;Constructor for building periods.  Original implementation was in
-;GenericPeriod.
+;;#Period Data Structures#
+
+;;__TODO__ make sure the period constructor doesn't exist somewhere else...
+
+;;Constructor for building periods.  Original implementation was in
+;;GenericPeriod.  Periods are now just simple maps.
 (defn ->period [name fromday today] {:name name :fromday fromday :today today})
-;Swaps out the active period.  If the new period is the final period, then caps
-;the final period to the current day.
+
+;;Swaps out the active period.  If the new period is the final period, then caps
+;;the final period to the current day.
 (defn update-period [day toname policystore]
   (->> (if (= toname :final) (->period :final day day) 
                              (get-period policystore toname))
@@ -275,13 +304,17 @@
 (defn final-period [fromname toname ctx] 
   (period-driven-update! fromname toname ctx))
 
-;Queues a unit's status as having a pending policy change.  Right now, this is 
-;maintained in unit data.  When the unit has an opportunity to change policies, 
-;if it can't change immediately, it retains the policy change until the 
-;opportuntity arises.
-;This could probably be in the unit level simulation.
+;;#Changing Policies in Response to Periods#
+
+;queue-policy-change could probably be in the unit level simulation.
 ;Note -> returns unit-updates....CONSUME WITH sim/merge-updates
-(defn queue-policy-change [unit newpolicy period ctx]
+
+(defn queue-policy-change
+  "Queues a unit's status as having a pending policy change.  Right now, status 
+   is maintained in unit data.  When the unit has an opportunity to change 
+   policies, if it can't change immediately, it retains the policy change until
+   the opportuntity arises."
+  [unit newpolicy period ctx]
   (let [current-policy (get-active-policy (:policy unit))
         atomic-policy  (core/get-policy newpolicy period)
         unit           (u/change-policy atomic-policy ctx)]
@@ -293,27 +326,38 @@
 (defn update-policy [policystore p] 
   (assoc-in policystore [:policies (:name p)] p))
 
-;Affects a change in policy.  This is currently only caused when periods change
-;in a composite policy.  I'd really like to get more reactive behavior involved.
-(defn alter-unit-policies [subscribers period newpolicy ctx]
+
+(defn alter-unit-policies
+  "Affects a change in policy.  This is currently only caused when periods 
+   change in a composite policy.  I'd really like to get more reactive behavior 
+   involved."
+  [subscribers period newpolicy ctx]
   (->> (map #(queue-policy-change %1 newpolicy period) subscribers) 
        (reduce #(sim/merge-updates %1 %2) ctx)))
 
-(defn change-policy [current-period new-period policy policystore ctx]
+(defn change-policy
+  "High level policy management.  For policies that are period-driven, enforces 
+   a policy shift to the sub policy defined over the new period.  If the period
+   is undefined, no change happens."
+  [current-period new-period policy policystore ctx]
   (let [subscribers (get-subscribers policy policystore)
         new-policy  (pol/on-period-change policy new-period)]
         (->> (alter-unit-policies subscribers new-period policy ctx)
              (sim/merge-updates 
                {:policystore (update-policy policystore new-policy)}))))
 
-;Returns a filtered list of all the composite policies that have changed.
+
 ;We define change in a composite policy by the existence of both the new period 
 ;and the old period in the composite policy.  Atomic policies are defined across 
 ;all periods.  So the only ones that should show up here are policies that 
 ;contained both the old and new, or current and new periods. 
+
 ;This function is a predicate that effectively filters out composite policies 
 ;that are undefined over both periods.
-(defn get-changed-policies [current-period new-period candidates]
+
+(defn get-changed-policies
+  "Returns a filtered sequence of all the composite policies that have changed."
+  [current-period new-period candidates]
   (if (= current-period :Initialization) nil
       (filter (fn [p] (and (has-subscribers? p) 
                            (policy-defined? current-period p)
@@ -333,7 +377,12 @@
 ;tell each policy to have its subscriber change to a new policy.
 ;Simple algorithm -> fetch the new policy associated with the period.
 ;Tell each policy to change to the new policy.
-(defn change-policies [current-period new-period policystore ctx]
+
+(defn change-policies
+  "High level system that propogates policy changes all the way down to entities 
+   that participate in the affected policies.  Typically called in response to 
+   period changes."
+  [current-period new-period policystore ctx]
   (if (= current-period :Initialization) ctx ;short-circuit 
       (->> (get-changed-policies current-period new-period
                                  (:composites policystore))
@@ -342,6 +391,7 @@
 
 (defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
 
+;;#Managing Policies and Periods#
 ;This is the primary routine to manage policies for a policy store, which are 
 ;driven by period changes.  Many policies are defined over abstract periods, 
 ;so if periods are scheduled to change, they will propogate a change in entity
@@ -350,7 +400,12 @@
 ;any number of concurrent periods, or time-lines, which would facilitate 
 ;sophisticated behaviors, or policy-states, for unique elements of the supply.
 ;TODO -> extend from a single-active period to multiple active periods.
-(defn manage-policies [day state & [toname]]
+
+(defn manage-policies
+  "The policy system checks to see if we entered a new period, and changes 
+   the governing policies to fit the new period.  High level entry point, 
+   typically called by the simulation engine."
+  [day state & [toname]]
   (let [ctx (:context state)
         policystore (get-policystore state)
         period   (:activeperiod policystore)
@@ -361,22 +416,6 @@
              (sim/merge-updates {:policystore (update-period day toname)})
              (period-change! fromname toname)
              (change-policies fromname toname)))))
-
-;Tom notes->
-;Policy changes were encapsulated in the IRotationPolicy implementations.
-;This assumed that units would change policies, regardless of event-context.
-;That's actually a decent assumption.
-;However, when we tell unitdata to change policy, it evokes a change state 
-;evaluation.
-;Under the decoupled architecture, this requires simulation context.
-
-;I'm going to have the policy ops define a function (really just adapted from 
-;policymanager), that passes the context needed.  This is in-line with other 
-;decoupled, functional representations.
-;I have to rewire the IRotationPolicy implementation.....specifically taking 
-;out the onperiodchange event handling.
-;Rather, we'll let policy ops take care of changing units' composite policies.  
-;The good news is, all the bits are here.  Just need to re-organize the code.
 
 ;Fetches a policy, by name, from the policystore.
 ;TODO -> add in a policy does not exist exception...
@@ -398,6 +437,8 @@
 ;demand representation never changing, but it works for now and
 ;is relatively easy to patch.
 (defn demand-location? [location-name] (= (first location-name) \[))
+
+;;#Policy Construction and Composition#
 
 ;Primitive wrapper for appending atomic policies to composite policies.
 ;TODO -> extend this to incorporate the semantics for generalized rotation 
@@ -501,12 +542,15 @@
   (into {} (for [p (vals (get-policies policystore))]
              [(policy-name p) (position-graph p)])))
 
+
+;;#Policystore Creation#
 ;'TODO -> get this constructor back online.
 ;'Rewire this....
 ;'What we're really doing is building a policymanager from several sources...
 ;'relations::     list<(relation, recepient, donor, cost)>
 ;'periods::       list<genericperiod>
 ;'atomicpolicies::list<TimeStep_Policy>
+
 (defn make-policystore 
   [relations periods atomic-policies & [composite-policies store]]
   (->> (or store pstore/empty-policystore)

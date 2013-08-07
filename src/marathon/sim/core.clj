@@ -202,3 +202,19 @@
 ;;  an element of the container.  It's the container's job to understand how 
 ;;  to lift the updating function into the proper context, and return the new 
 ;;  container.  monads/monoids anyone? 
+
+;;#Policy Management Notes#
+;;Policy changes were encapsulated in the IRotationPolicy implementations.
+;;This assumed that units would change policies, regardless of event-context.
+;;That's actually a decent assumption.
+;;However, when we tell unitdata to change policy, it evokes a change state 
+;;evaluation.
+;;Under the decoupled architecture, this requires simulation context.
+
+;;I'm going to have the policy ops define a function (really just adapted from 
+;;policymanager), that passes the context needed.  This is in-line with other 
+;;decoupled, functional representations.
+;;I have to rewire the IRotationPolicy implementation.....specifically taking 
+;;out the onperiodchange event handling.
+;;Rather, we'll let policy ops take care of changing units' composite policies.  
+;;The good news is, all the bits are here.  Just need to re-organize the code.
