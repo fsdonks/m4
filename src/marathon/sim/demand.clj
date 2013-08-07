@@ -323,48 +323,71 @@
 ;;Demands have typically been binned into gross categories, based on the type 
 ;;of capability required to meet a demand.  Additional complexities arose as
 ;;subcategories - such as the notion of follow-on demands - became a necessity.
-;;After a lengthy thinking cycle, I resolved to define 
-;;a useful little language for describing categories, that is, elements of 
-;;demand and the contextual information for how they may be filled. 
+;;This resulted in a multi-phase fill process: where we initially selected 
+;;demands to fill based on a simple priority - supplied by the user - we quickly
+;;found a set of conditional or meta priorities that required "trying to fill"
+;;a class of demands - follow-on eligible demands - with supply first.  This 
+;;mapped to the need to utilize pre-deployed supply to avoid incidental waste of 
+;;resources, when pre-deployed supply - supply already local to the demand - 
+;;could be flowed directly to compatible concurrent local demands. 
+;;The need to utilize of a special class of supply resulted in a duplication
+;;of the fill logic, where the first "phase" tried to exhaust all follow-on 
+;;supply, with the second or general phase determining demand priority under 
+;;a simple priority scheme.   
 
-;;This should eliminate a slew of duplication and complexity from the VBA 
+;;#Categories are a Little Language for Relating Supply to Demand#
+;;As the potential for additional "special cases" of fill arose, it became 
+;;obvious that a general mechanism for unambiguously describing cases would 
+;;simplify the filling logic, and allow for future rule expansions.
+;;After a lengthy thinking cycle, I resolved to define a useful little language
+;;for describing categories, that is, elements of demand and the contextual 
+;;information for how they should be filled.  Categories are encoded as simple 
+;;clojure data structures, and interpreted by both the demand system and the 
+;;supply system to affect queries.  Thus, they act as a cross-domain 
+;;protocol for matching and ordering entities.
+
+;;This should eliminate a slew of duplication and complexity from the legacy 
 ;;implementation, since we can use the category of fill to select eligible 
-;;demands, and to inform suitable supply.  
+;;demands, and to inform suitability of supply.  
 
-;;Examples of categories follow:
-
-;;(fill-demands "SRC1" "Group2") ; => find all eligible demands for SRC1 that 
-;;have group2 as a demandgroup, if there's any grouped supply, try using that to
-;;fill the demands for SRC1 in order.
-
-;;=> find all eligible demands for SRC1 that have group2 as a demandgroup, if 
-;;there's any grouped supply, try using that to fill the demands for SRC1 in 
-;;order.
-
-;;We use category as a little query language, which the fill system can 
-;;interpret as query to find supply. 
+;;#Category Examples#
 
 ;;In the simple case, when the category is a string, or a key, we act like 
 ;;normal filling..
-;;(fill-category "SRC2") ;=> find all eligible demands for SRC2.
+;;__(fill-category "SRC2")__ 
+;;=> find all eligible demands for SRC2.
 
-;;In a complex case, when the category is a sequence, we parse it appropriately.
+;;In a complex case, when the category is a sequence, we parse it according to 
+;;the following:
 ;;Pairs define a more constrained category, which is interpreted as a category 
 ;;of SRC and a grouping.  
 
-;(fill-category ["SRC2" "Group1"]) ;=> find the eligible demands for SRC2, where 
-;the demand group is group1.
+;;__(fill-category ["SRC2" "Group1"])__ 
+;;=> find the eligible demands for SRC2, where the demand group is group1.
 
-;;Detailed categories come in the forms of maps, which are interpreted as a 
-;;filter by default.  
+;;If the category rule is a pair, and the second element is also a sequence, 
+;;the sequence is parsed as a simple set filter.  The second element then forms
+;;a union query that can incorporate multiple demand groups into the criteria.
 
-;;(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
-;;                :supply {:followoncode "Group2"}})
+;;__(fill-category ["SRC2" ["Group1" "Group2"]])__ 
+;;=> find the eligible demands for SRC2, where the demand group is either Group1 
+;;or Group2.
 
-;;categories serve to link supply AND demand, since categories are parsed by 
+;;Detailed categories come in the forms of maps, which are interpreted as as 
+;;category pair, and a set of filters by default.  We can use tags to create 
+;;general filters as well, which should let us create a unique set of queries.
+;;A trivial (and useful) extension will be to allow arbitrary tags to be 
+;;included.  For instance, the map associated with the :supply-tags key in the 
+;;example could result in an additional tag query to be executed against 
+;;candidate supply.
+
+;;>__(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
+;;                   :supply-tags {:just-in-time :state-side}})__  
+
+;;Categories serve to link supply AND demand, since categories are parsed by 
 ;;ISupplier functions into supply ordering queries.
 ;;For example,  from the supply-side, we determine which supply is eligible to 
-;;fill an ["SRC1" "Group2"] category of demand.
+;;fill an ["SRC1" "Group2"] category of demand:  
 ;;By default, the query should look for supply matching "SRC1", and all feasible
 ;;substitutes for "SRC1", where the constraint that the supply followon code 
 ;;also equals "Group2".
@@ -372,7 +395,14 @@
 ;;Categories can be interpreted an arbitrary number of ways, but the preceding
 ;;conventions should cover both the 90% use cases, for simple SRC matches, and 
 ;;almost unlimited extensibility via encoding categories as maps, to be 
-;;interpreted by an ISupplier.
+;;interpreted by an ISupplier.  This also simplifies the demand fill logic, 
+;;since we can implement the same "phased" or hierarchical fill process by 
+;;encoding the information in the category being filled.  The solution to the 
+;;existing "follow-on" fill still provides a phased fill approach, but it uses
+;;the same demand ordering function (rather than duplicating and slightly 
+;;modifying).  This makes it possible to define a plethora of filling schemes
+;;by either querying or building demand categories, and composing eligibilty 
+;;functions in a desired order.
 
 ;;#Demand Category Methods#
 ;;Categories are used by three new functions: find-eligible-demands, 
@@ -409,9 +439,11 @@
           :else ;Future extensions.  Might allow arbitrary predicates and tags. 
              (throw (Exception. "Not implemented!")))))      
 
+;;#Finding Demands#
 ;;High-level API to find a set of eligible demands that match a potentially 
 ;;complex category.  Uses the category->demand-rule interpreter to parse the 
 ;;rule into a query function, then applies the query to the store.
+
 (defn find-eligible-demands 
   "Given a demand store, and a valid categorization of the demand, interprets
    the category into a into a demand selection function, then applies the query
@@ -419,10 +451,6 @@
   [store category]
   ((category->demand-rule category) store))
 
-
-;;__TODO__ Check implementation in simcontext.
-(defn merge-fill-results [res ctx] 
-  (throw (Exception. "merge-fill-results not implemented")))
 
 ;Since we allowed descriptions of categories to be more robust, we now abstract
 ;out the - potentially complex - category entirely.  This should allow us to 
@@ -460,24 +488,21 @@
     (if (empty? pending) ctx ;no demands to fill!      
       (let [demand      (val (first pending))                    
             demandname  (:name demand)           ;try to fill the topmost demand
-            startfill   (unit-count demand)
             ctx         (request-fill! demandstore category ctx)
-            fill-result (fill/source-demand demand category ctx)             ;1) 
-            stopfill    (unit-count (:demand fill-result))
-            can-fill?   (demand-filled? (:demand fill-result))
-            ctx         (if (= stopfill startfill)  ;UGLY 
-                          ctx 
-                          (->> (demand-fill-changed! demandstore demand ctx) ;2)
-                            (sim/merge-updates               ;UGLY 
-                              {:demandstore 
-                                  (register-change demandstore demandname)})
-                            (merge-fill-results fill-result)))]
+            [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)                         
+            can-fill?   (= fill-status :filled) 
+            next-ctx    (if (= fill-status :unfilled) fill-ctx 
+                          (->> fill-ctx 
+                               (demand-fill-changed! demandstore demand) ;2)
+                               (sim/merge-updates               ;UGLY 
+                                 {:demandstore 
+                                  (register-change demandstore demandname)})))]
         (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
-          ctx                                                                ;3)
+          next-ctx                                                           ;3)
           ;otherwise, continue filling!
           (recur (pop-priority-map pending) ;advance to the next unfilled demand
-                 (->> (sourced-demand! demandstore demand ctx)     ;notification 
-                   (update-fill     demandstore demandname)   ;update unfilledQ.
+                 (->> (sourced-demand! demandstore demand next-ctx);notification 
+                   (update-fill      demandstore demandname)  ;update unfilledQ.
                    (can-fill-demand! demandstore demandname))))))));notification
 
 ;NOTE...since categories are independent, we could use a parallel reducer here..

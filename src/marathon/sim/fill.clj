@@ -463,14 +463,15 @@
         demand-name (:name demand)]
     (loop [d demand           
            xs candidates 
+           fill-status :unfilled
            current-ctx ctx]
-      (cond (zero? (:required d)) [:filled current-ctx]
-            (empty? xs)           [:unfilled current-ctx]
+      (cond (zero? (:required d)) [:filled     current-ctx]
+            (empty? xs)           [fill-status current-ctx]
             :else  
               (let [nextctx (fill-demand d current-ctx (first xs))
                     nextd (-> (core/get-demandstore nextctx)
                               (dem/get-demand demand-name))]
-                (recur nextd (rest xs) nextctx))))))
+                (recur nextd (rest xs) :added-fill nextctx))))))
 
 ;#Constructors and Data Munging Functions#
 ;Constructors to create all three, independently, now exist in this module.  
