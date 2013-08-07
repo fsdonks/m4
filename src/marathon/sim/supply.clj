@@ -1,7 +1,6 @@
 ;;An implementation of the supply simulation used by Marathon.
-;;This documentation is particularly weak, and needs to be refactored.
-;;We're creating circular dependencies....that's bad.
-;;We need to create some shared protocols, and then implement them.
+;;All the operations for pushing supply, in the context of a simulation are 
+;;maintained here.
 (ns marathon.sim.supply
   (:require [marathon.demand [demanddata :as d] [demandstore :as store]]
             [marathon.supply [unitdata :as udata]]
@@ -10,64 +9,8 @@
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]))
 
-;Note--> I'm noticing some patterns emerging that might make for nice 
-;abstractions...
-;We seem to be doing a lot of nested updates for particular bits of a system.
-;A lot of updates also appear to be existential in nature, i.e. if the 
-;update is a dissoc, and the resulting collection is empty, we want to 
-;remove the empty entry from the parent container.
-
-;Also, we define operations that just trigger notifications, basically a 
-;messaging system.  Might look into a nice higher-level defmessage abstraction.
-
-;Also, we have a class of functions that specifically shovels context around.
-;By context, I mean the environment in which the simulation is happening, as 
-;in a simcontext from sim.simcontext.  We can clean up some of the function 
-;signatures by allowing macros to operate in this context, possibly even a 
-;special evaluator.
-
-;On the topic of special evaluators, in each namespace, we end up defining 
-;pure functions that act to update specific bits of a context, sometimes 
-;acting on isolated structures within the context.  There's typically a 
-;nested structure in the context's :state, which destructure and update in 
-;pieces.  It might be nice to have something like #'doto. 
-
-;It might be nice to have a macro that lets us define ways to address or query
-;the context's state.  This leads directly to the entity-store stuff I already 
-;built, and facilitates a component-based architecture.
-
-;Finally, we probably want some kind of language for specifying different 
-;types of updates to the context.  For instance, we end up -inside the local 
-;namespaces - defining functions that operate on a specific aread of the context
-;often with deep nesting paths.  I already introduced the notion of updates and
-;merge-updates in the simcontext.  It might be as simple as defining
-;multimethods, or a protocol, that implements the merge protocol.
-
-;COUPLING 
-;sim.demand => get-followon-keys release-max-utilizers
-
 ;TEMPORARILY ADDED for marathon.sim.demand
 (declare release-max-utilizers)
-
-;marathonopsupply
-;11 July 2012 -> recasting of supply management.
-;We define a supply simulation as a set of operations on supply simulation state.
-;It's basically a decoupling of the earlier object hierarchy.
-;Instead of encapsulating everything in the supply manager class, we're pulling 
-;out as much of the methods as possible, and providing a functional interface to
-;modify supply managers.
-;
-;The end result is a lower-order supply manager that handles little to no 
-;internal functions, and manages some state that we need.  All the operations
-;for pushing supply, in the context of a simulation are maintained here.
-
-;TOM Change->
-;   This is serving as a template for reorganizing the simulation.
-;   The desire is to separate operations from data.
-;   We have multiple levels of operations....
-;   This library groups several levels of operations along the Supply domain.
-;   The primary function is the ManageSupply function....
-;   Manage supply eats core data....
 
 ;Notifies the context of a supply update.
 (defn supply-update! [supply unit msg ctx]

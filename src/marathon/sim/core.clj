@@ -131,5 +131,35 @@
 ;;they return a context.  The naming convention will help identify when 
 ;;"messaging" is occuring.  While effects may happen, in the form of logging 
 ;;or display updating, the internal simulation mechanics are still pure.
+;;__TODO__ -> implement defmessage macro....
 
-;TODO -> implement defmessage macro....
+;;#Cries for Better Abstractions#
+;;Note--> I'm noticing some patterns emerging that might make for nice 
+;;abstractions...
+;;We seem to be doing a lot of nested updates for particular bits of a system.
+;;A lot of updates also appear to be existential in nature, i.e. if the 
+;;update is a dissoc, and the resulting collection is empty, we want to 
+;;remove the empty entry from the parent container.
+
+;;Also, we have a class of functions that specifically shovels context around.
+;;By context, I mean the environment in which the simulation is happening, as 
+;;in a simcontext from sim.simcontext.  We can clean up some of the function 
+;;signatures by allowing macros to operate in this context, possibly even a 
+;;special evaluator.
+
+;;On the topic of special evaluators, in each namespace, we end up defining 
+;;pure functions that act to update specific bits of a context, sometimes 
+;;acting on isolated structures within the context.  There's typically a 
+;;nested structure in the context's :state, which destructure and update in 
+;;pieces.  It might be nice to have something like #'doto. 
+
+;;It might be nice to have a macro that lets us define ways to address or query
+;;the context's state.  This leads directly to the entity-store stuff I already 
+;;built, and facilitates a component-based architecture.
+
+;;Finally, we probably want some kind of language for specifying different 
+;;types of updates to the context.  For instance, we end up -inside the local 
+;;namespaces - defining functions that operate on a specific area of the context
+;;often with deep nesting paths.  I already introduced the notion of updates and
+;;merge-updates in the simcontext.  It might be as simple as defining
+;;multimethods, or a protocol, that implements the merge protocol.

@@ -439,7 +439,7 @@
           :else ;Future extensions.  Might allow arbitrary predicates and tags. 
              (throw (Exception. "Not implemented!")))))      
 
-;;#Finding Demands#
+;;#Finding Demands by Category#
 ;;High-level API to find a set of eligible demands that match a potentially 
 ;;complex category.  Uses the category->demand-rule interpreter to parse the 
 ;;rule into a query function, then applies the query to the store.
@@ -508,15 +508,17 @@
 ;NOTE...since categories are independent, we could use a parallel reducer here..
 ;filling all unfilled demands can be phrased in terms of fill-category...
 
-;higher-order function for filling demands.
+;;#High Level Demand API#
+
+;;Higher-order function for filling demands.
 (defn fill-demands-with [ctx f]
   (reduce (fn [acc c] (f (core/get-demandstore acc) c acc))
       ctx (unfilled-categories (core/get-demandstore ctx))))
 
-;implements the default hierarchal, stop-early fill scheme.
+;;Implements the default hierarchal, stop-early fill scheme.
 (defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
 
-;implements the try-to-fill-all-demands, using only follow-on-supply scheme.
+;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 (defn fill-followons [ctx]
   (if-let [groups (core/get-followon-keys ctx)] 
     (->> (fn [store category ctx] 
@@ -527,29 +529,33 @@
 ;signatures to pull the args out from it...the signature of each func is 
 ;state->state
 
-;Perform a prioritized fill of demands, heirarchically filling demands using 
-;followon supply, then using the rest of the supply.
-;TOM Note 20 May 2013 -> 't may not be necessary, since we can derive it from 
-;context.  
-(defn fill-demands [t ctx]
+;;TOM Note 20 May 2013 -> the t arg may not be necessary, since we can derive it
+;;from context.  
+(defn fill-demands
+  "Default fill order for demands.  Performs a prioritized fill of demands, 
+   hierarchically filling demands using followon supply, then using the rest of 
+   the supply."
+  [t ctx]
   (->> ctx
     (fill-followons ctx)
     (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
     (fill-hierarchically)))
 
-;Its purpose is to maintain a running list of demands (ActiveDemands dictionary)
-;which will help us only fill active demands. How do demands get added to the 
-;list? Upon initialization, we schedule their activation day and deactivation 
-;day (start + duration). During the course of the simulation, we have a 
-;listener that checks to see if the current day is a day of interest, 
-;specifically if it's an activation day. 
 
-;Note that this idea, partitioning our days into "days of interest", while 
-;localized to handle demand activations and deactivations, could easily be 
-;extended to a general "days of interest" manager, with subscribed handlers and 
-;subroutines to run. In fact, this is exactly what an event step simulation 
-;does. We;re just copping techniques and modifying them for use in a timestep 
-;sim to make it more efficient.
+;;#Demand Scheduling#
+;;In addition to serving demands for filling, scheduling demands for activation 
+;;and deactivation is a primary service of the demand system.  The following 
+;;functions define operations that pertain to the timing and updating of 
+;;demands. 
+
+
+;;#Demand Activation#
+;;Over time, we maintain a set of active demands which will help us only fill 
+;;active demands. How do demands get added to the set? Upon initialization, we 
+;;schedule their activation day and deactivation day (start + duration). During
+;;the course of the simulation, we have a listener that checks to see if the 
+;;current day is a day of interest, specifically if it's an activation day or
+;;a deactivation day. 
 
 (defn activations? [t demandstore] 
   (contains? (:activations demandstore) t))
@@ -559,14 +565,19 @@
 (defn  get-activations  [demandstore t] (get (:activations demandstore) t))
 (defn  get-deactivations [demandstore t] (get (:deactivations demandstore) t))
 
-(defn activate-demand [demandstore t d ctx]
+(defn activate-demand
+  "Shifts demand d to the active set of demands, updates its fill status, and 
+   notifies any interested parties."
+  [demandstore t d ctx]
   (let [store (-> (assoc-in demandstore [:activedemands (:name d)] d)
                   (register-change (:name d)))]               
     (->> (activating-demand! store d t ctx)
       (update-fill store (:name d)))))    
 
-;This could be refactored....REPETITIVE!
-(defn activate-demands [t ctx]
+(defn activate-demands
+  "For the set of demands registered with the context's demand store, relative 
+   to time t, any demands scheduled to start at t are activated."
+  [t ctx]
   (let [demandstore (core/get-demandstore ctx)]
 	  (reduce (fn [ctx dname] 
 	            (let [store (core/get-demandstore ctx)]
@@ -574,11 +585,22 @@
 	          ctx 
 	          (get-activations demandstore))))
 
-;CONTEXTUAL
+;;#Shifting Elements of Supply To and From Demand#
+;;As supply is selected to fill demand, the supply is actively assigned to a 
+;;specific demand.  From this status, we may see supply stay there indefinitely,
+;;shift from an actively assigned state to an overlapping state, or completely 
+;;disengage from the demand and return to the global supply.  The following 
+;;functions implement these scenarios.
+
 ;1) ASSUMES update-unit returns a context.
 ;2) ASSUMES change-state returns a context...
-; ::unit->string->context->context 
-(defn withdraw-unit [unit demand ctx]
+
+(defn withdraw-unit
+  "Auxillary function that dissociates an element of supply, unit, from a 
+   related element of demand, demand.  Typically used when a demand deactivation
+   prematurely sends a unit home.  Shifts the unit entity into a withdraw state,
+   and notifies systems of the entity's abrupt withdraw."
+  [unit demand ctx]
   (let [demandgroup (:demandgroup demand)
         unitname    (:name unit)]
 	  (cond 
@@ -590,15 +612,13 @@
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
 	            (u/change-state unitname :Reset 0 nil)))))                     ;2)
 
-;This sub implements the state changes required to deactivate a demand, namely, 
-;to send a unit back to reset. The cases it covers are times when a demand is 
-;deactivated, and units are not expecting to overlap. If units are overlapping 
-;at a newly-inactive demand, then they get sent home simultaneously. 
-;TOM Change 14 Mar 2011 <- provide the ability to send home all units or one 
-;unit...default is all units
-;CONTEXTUAL
-; :: float -> demand -> string -> context -> context
-(defn send-home [t demand unit ctx] 
+(defn send-home
+  "Implements the state changes required to deactivate a demand, namely, to send
+   a unit back to reset. The cases it covers are times when a demand is 
+   deactivated, and units are not expecting to overlap. If units are 
+   overlapping at a newly-inactive demand, then they get sent home
+   simultaneously."
+  [t demand unit ctx] 
   (let [unitname  (:name unit)
         startloc  (:locationname unit)
         unit      (u/update unit (- t (sim/last-update unitname ctx))) ;WRONG?
@@ -608,7 +628,7 @@
          (withdraw-unit unit demand) 
          (disengaging! demand unitname)))) 
 
-
+;;#Notes on calling change-state for the unit-level system#
 ;there WILL be things happening to the ctx, possible mutations and such, that 
 ;we may need to carry forward (although we can discipline ourselves for now).
 
@@ -620,10 +640,16 @@
 ;unit simulation, or the supply simulation.
 
 
-;TEMPORARY.....until I figure out a better, cleaner solution.
+;;#Disengagement#
+;;Disengagement is the primitive process for shifting a unit of supply's role 
+;;from actually filling a demand, into an optional overlapping status.  
+;;Overlapping supply is still associated with the demand, i.e. proximate and 
+;;in use, but it is not ready to return to the global supply.
+
+
+;TEMPORARY private helper function.....until I figure out a cleaner solution.
 ;broke out uber function into a smaller pairing of disengagement functions, to 
 ;handle specific pieces of the contextual change.
-;CONTEXTUAL
 (defn- disengage-unit [demand demandstore unit ctx & [overlap]]
   (if overlap 
     (->> (overlapping! demandstore demand unit ctx)
@@ -633,9 +659,11 @@
 
 ;This is also called independently from Overlapping_State.....
 ;Remove a unit from the demand.  Have the demand update its fill status.
-;move the unit from the assigned units, to overlappingunits.
-;CONTEXTUAL
-(defn disengage [demandstore unit demandname ctx & [overlap]]
+;Move the unit from the assigned units, to Overlapping Units.
+(defn disengage
+  "Shifts the unit from being actively assigned to the demand, to passively 
+   overlapping at the demand.  Updates the demand's fill status."
+  [demandstore unit demandname ctx & [overlap]]
   (let [demand    (get-in demandstore [:demandmap demandname])
         nextstore (register-change demandstore demandname)
         ctx       (disengage-unit demand demandstore unit ctx overlap)]  
@@ -643,7 +671,12 @@
       (update-fill demandname (:unfilledq demandstore) demandstore ctx)
       ctx)))
 
-(defn send-home-units [demand t ctx]
+(defn send-home-units
+  "Sends home all units from a demand, essentially freeing consumed resources.  
+   Only called against active demands as part of the deactivation process.  If
+   demand is empty, a notification is sent, otherwise the demand is cleared of 
+   units."
+  [demand t ctx]
   (if (empty-demand? demand)
     (deactivating-empty-demand! demand t ctx)
     (->> (:units-assigned demand) ;otherwise send every unit home.
@@ -652,8 +685,13 @@
         {:demandstore 
          (assoc-in (core/get-demandstore ctx) [:demandmap (:name demand)]
                    (assoc demand :units-assigned {}))}))))
-  
-(defn deactivate-demand [demandstore t d ctx]
+
+;;#Demand DeActivation#
+
+(defn deactivate-demand
+  "Frees resources associated with a demand, sending home any units proximate 
+   to the demand.  Removes the demand from the active set."
+  [demandstore t d ctx]
   (assert (contains? (:activedemands demandstore) (:name d)) 
     (throw (Exception. (str "DeActivating an inactive demand: " (:name d))))) 
   (let [store (-> (update-in demandstore [:activedemands] dissoc (:name d))
@@ -662,8 +700,10 @@
          (send-home-units d t)
          (update-fill store (:name d)))))    
 
-;This could be refactored....REPETITIVE!
-(defn deactivate-demands [t ctx]
+(defn deactivate-demands
+  "Deactivates any demands - in the demandstore of the context - scheduled to 
+   end at time t."
+  [t ctx]
   (let [demandstore (core/get-demandstore ctx)]
     (reduce (fn [ctx dname] 
               (let [store (core/get-demandstore ctx)]
@@ -671,9 +711,14 @@
             ctx 
             (get-deactivations demandstore))))
 
-;The big finale...
-;CONTEXTUAL
-(defn manage-demands [t ctx]
+;;#Demand Management#
+
+(defn manage-demands
+  "High level demand management API.  The primary system service used by the 
+   simulation engine.  Processes the activation and deactivation of demands 
+   at time t, which adds demands to the active set, queuing them for filling,
+   or removes active demands, freeing supply resources in the process."
+  [t ctx]
   (->> ctx
     (activate-demands t)
     (deactivate-demands t))) 
