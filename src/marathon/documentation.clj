@@ -17,24 +17,30 @@
 ;;Basically a bumper sticker namespace with summary info.
 (def prelude ["marathon.prelude"])
 
+(defn expand-paths [root xs] (map #(str root \. %) xs))
+(defn path->files [p]
+  (str "/src/marathon/" (clojure.string/replace p \. \/) ".clj"))
+
 ;;#Discrete Event Simulation Library.#
 (def simulation-lib
-  ["sim.simcontext"
-   "sim.pure.network"
-   "sim.updates"
-   "sim.agenda"
-   "sim.data"])
+   ["sim.simcontext"
+    "sim.pure.network"
+    "sim.updates"
+    "sim.agenda"
+    "sim.data"])
 
 ;;#Graph Operations#
 ;;Currently using cljgraph, another library I built.
 
 ;;#Stochastic Demand PreProcessing Libraries#
 (def stochastic-demand
-  ["marathon.processing.helmet" ["core"
-                                 "collision"
-                                 "split"]
-   "util.sampling"
-   "util.stats"])
+  (into (expand-paths 
+          "marathon.processing.helmet" 
+          ["core"
+           "collision"
+           "split"])
+          ["util.sampling"
+           "util.stats"]))
   
 ;;#Aggregate and primitive data used by Marathon#
 (def marathon-data 
@@ -54,22 +60,24 @@
    "marathon.data.output"])
 
 ;;#High Level Simulation Functions in Marathon#
-(def marathon-operations 
-  ["marathon.sim" ["core" 
-                   "engine"
-                   "fill"
-                   "demand"
-                   "supply"
-                   "policy"
-                   "policyio"]])
+(def marathon-sim
+  (expand-paths "marathon.sim" 
+    ["core" 
+     "engine"
+     "fill"
+     "demand"
+     "supply"
+     "policy"
+     "policyio"]))
 
 ;;#Processing Tasks# 
 (def processing 
-  ["marathon.processing" ["deployments"
-                          "highwater"
-                          "forgereader"
-                          "excel"]])
-
+  (expand-paths "marathon.processing" 
+    ["deployments"
+     "highwater"
+     "forgereader"
+     "excel"]))
+  
 ;;#GUI/Processing#
 (def user-interface 
   ["marathon.core"])
@@ -80,12 +88,31 @@
    "marathon.project.excel"
    "marathon.project.projectviews"])
 
+(defn build-config
+  "Specify different build configurations for various levels of documentation."
+  [xs]
+   (flatten (into [doc prelude] xs)))
+
+(def build-everything 
+  (build-config [user-interface 
+                 marathon-project
+                 marathon-sim 
+                 stochastic-demand
+                 marathon-data
+                 processing 
+                 simulation-lib]))
+
+(def simulation-only 
+  (build-config [marathon-sim marathon-data simulation-lib]))
+
+(defn marge-command [xs]
+  (str "lein marg "  
+             (clojure.string/join \space (map path->files xs))))
 (defn build-docs
   "Spits a set of file paths to marginalia for documentation."
   [files]
   (clojure.java.shell/sh 
-    :in (clojure.string/join \space (into ["lein marg"]
-                                          files))))
+    :in (marge-command files))) 
     
   
 
