@@ -5,10 +5,11 @@
 ;;supply, since the act of filling usually consumes some resources in supply and
 ;;motivates a kind of motion in the supply simulation.
 (ns marathon.sim.fill
-  (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
+  (:require [marathon.data [protocols :as protocols]]
+            [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
             [marathon.sim [core :as core] [demand :as dem]   [supply :as supply]
-                          [policy :as pol] [unit :as u] 
+                          [policy :as policy] [unit :as u] 
                           [deployment :as deployment]]           
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]
@@ -399,10 +400,11 @@
         fillstore   (core/get-fillstore ctx)
         supplystore (core/get-supplystore ctx)
         policystore (core/get-policystore ctx)
-        params      (core/get-parameters ctx)]
+        params      (core/get-parameters ctx)
+        t           (sim/get-time ctx)]
     (->> ctx
-        (deployment/deploy-unit supplystore ctx parameters policystore unit t
-            quality demand (policy/get-maxbog unit) (count (:fills fillstore))
+        (deployment/deploy-unit supplystore ctx params policystore unit t
+            demand (/get-max-bog unit) (count (:fills fillstore))
             filldata (params/interval->date t) (followon? unit)))))
 
 ;;#Incremental Demand Filling# 

@@ -454,7 +454,6 @@
 (defn first-deployment? [unit store]
   (not (tag/has-tag? (:tags store) (:name unit) :hasdeployed))) 
 
-
 ;;#Supply Management#
 (defn manage-supply
   "High level hook for the supply system.  For entities that have scheduled 

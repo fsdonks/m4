@@ -409,6 +409,9 @@
 ;;Categories are used by three new functions: find-eligible-demands, 
 ;;defined here, and find-supply, defined in marathon.sim.fill.
 
+;;placeholder for allowing out of order definitions, defined later.
+(declare find-eligible-demands)
+
 ;;Note -> find-eligible demands is...in a general sense, just a select-where 
 ;;query executed against the demandstore...        
 (defmulti category->demand-rule core/category-type)
@@ -424,9 +427,10 @@
 ;;[src demandgroup|#{group1 group2 groupn}|{group1 _ group2 _ ... groupn _}]  
 (defmethod category->demand-rule :src-and-group [[src groups]]
   (let [eligible? (core/make-member-pred groups)] ;make a group filter
-    (->> (seq (find-eligible-demands store src)) ;INEFFICIENT
-         (filter (fn [[pk d]] (eligible? (:demand-group d))))
-         (into (sorted-map))))) ;returns priority-queue of demands.
+    (fn [store]
+      (->> (seq (find-eligible-demands store src)) ;INEFFICIENT
+        (filter (fn [[pk d]] (eligible? (:demand-group d))))
+        (into (sorted-map)))))) ;returns priority-queue of demands.
 
 ;;matches {:keys [src group]}, will likely extend to allow tags...
 ;;Currently, provides a unified interface for rules, so we can just use simple 

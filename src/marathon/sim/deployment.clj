@@ -18,12 +18,12 @@
           (supply/record-followon supply unit demand ctx)
           (u/re-deploy-unit unit t (:deployment-index unit) ctx))))
 
-(defn check-first-deployer!   [supplystore unitname ctx]
-  (let [unit (get-unit supplystore unitname)]  
-    (if (first-deployment? unit supply)
-      (->> (supply/set-supplystore ctx (tag-as-deployed unit supply))
-           (first-deployment! supply unit)
-           (adjust-max-utilization! supply unit)))))
+(defn check-first-deployer!   [store unitname ctx]
+  (let [unit (supply/get-unit store unitname)]  
+    (if (supply/first-deployment? unit store)
+      (->> (supply/set-supplystore ctx (supply/tag-as-deployed unit store))
+           (supply/first-deployment! store unit)
+           (supply/adjust-max-utilization! store unit)))))
 
 ;Enacts context changes and updates necessary to constitute deploying a unit.
 ;Critical function.
@@ -34,8 +34,8 @@
    expected length of stay, bog, will determine when the next update is 
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
-  [supplystore ctx parameters policystore unit t sourcetype demand 
-                     bog fillcount filldata deploydate  & [followon?]]
+  [supplystore ctx parameters policystore unit t demand bog fillcount 
+   filldata deploydate  & [followon?]]
   (assert  (u/valid-deployer? unit) 
     "Unit is not a valid deployer! Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment")
@@ -50,9 +50,9 @@
         unit          (-> unit ;MOVE THIS TO A SEPARATE FUNCTION? 
                        (assoc :position-policy to-position) 
                        (assoc :dwell-time-when-deployed (udata/get-dwell unit)))
-        supplystore   (supply/drop-fence (:tags supply) (:name unit))]
+        supplystore   (supply/drop-fence (:tags supplystore) (:name unit))]
      (->> (sim/merge-updates {:demandstore (dem/add-demand demandstore demand)
-                              :supplystore supply} ctx)
+                              :supplystore supplystore} ctx)
           (u/change-location! unit (:name demand)) ;unit -> str ->ctx -> ctx....
           (supply/check-followon-deployer! 
             followon? supplystore unitname demand t)
@@ -61,4 +61,4 @@
           (supply/update-deployability unit false false) 
           (supply/log-deployment! t from-location demand unit fillcount filldata 
                                   deploydate (policy/find-period t policystore))
-          (supply/supply-update! supply unit nil)))) 
+          (supply/supply-update! supplystore unit nil)))) 
