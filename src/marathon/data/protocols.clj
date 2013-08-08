@@ -4,7 +4,7 @@
 ;core data structures....especially if the core data structures are just 
 ;maps or records (which support a map API).
 (ns marathon.data.protocols
-  [util.metaprogramming :only [keyvals->constants]])
+  (:use [util.metaprogramming :only [keyvals->constants]]))
 
 ;This is the policy interface.  We have both constant and composite 
 ;(or time/event variant) policies. This interface is used to implement a common 

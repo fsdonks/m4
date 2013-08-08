@@ -7,11 +7,12 @@
 (ns marathon.sim.fill
   (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim [demand :as dem]   [policy :as pol]
-                          [unit :as u]          [fill :as fill]]           
+            [marathon.sim [core :as core] [demand :as dem]   [supply :as supply]
+                          [policy :as pol] [unit :as u] 
+                          [deployment :as deployment]]           
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]
-            [cljgraph [graph :as graph]]))
+            [util [graph :as graph]]))
 
 ;The old ManagerOfFill class actually handled the creation of a couple of
 ;dependent chunks of data; namely a FillFunction, a FillGraph,
@@ -24,28 +25,25 @@
   (let [fillcount (count (:fills fillstore))]
     (assoc-in fillstore [:fills] (inc fillcount) fill)))
 
-(defn followon? [u] (:followoncode u))
-(defn ghost-followon? [u] (and (ghost? u) (followon? u)))
-
 ;;#Fill-Related Notifications#
 
 ;notify everyone that we've filled a demand...
 (defn filled-demand! [demand-name unit-name ctx] 
-  (sim/trigger :FillDemand demand-name unit-name "Filled Demand" nil ctx))  
+  (sim/trigger-event :FillDemand demand-name unit-name "Filled Demand" nil ctx))  
 ;ghosts raise special attention when they deploy.
 (defn ghost-deployed! [demand-src ctx]
-  (sim/trigger :GhostDeployed demand-src demand-src "Filled demand with  ghost" 
+  (sim/trigger-event :GhostDeployed demand-src demand-src "Filled demand with  ghost" 
                :normal ctx))
 ;ghosts raise special attention if they followon.
 (defn ghost-followed! [demand-src ctx]
-  (sim/trigger :GhostDeployed demand-src demand-src 
+  (sim/trigger-event :GhostDeployed demand-src demand-src 
      "Ghost followed on to another demand" :followon ctx))
 
 ;;Auxillary function to broadcast information about just-in-time, or "ghost" 
 ;;unit utilization.  May be replaced with something more general in the future.
 (defn check-ghost [unit ctx]
-  (if (not (ghost? unit)) ctx
-      (if (followon? unit) 
+  (if (not (core/ghost? unit)) ctx
+      (if (core/followon? unit) 
         (ghost-followed! unit ctx) 
         (ghost-deployed! unit ctx))))
 
@@ -184,7 +182,7 @@
 ;appropriate rule that query can apply to the supply to find elements of supply.
 (defmulti derive-supply-rule 
   (fn [demand fillstore & [category]]  
-    (let [cat (or category (:src demand))]  (core/category-type c))))
+    (let [cat (or category (:src demand))]  (core/category-type category))))
 
 ;for simple categories, ala "SRC_1" or :SRC_1, we just compute existing 
 ;label for the demand, which maps to a node in the fill graph.
@@ -403,7 +401,7 @@
         policystore (core/get-policystore ctx)
         params      (core/get-parameters ctx)]
     (->> ctx
-        (supply/deploy-unit supplystore ctx parameters policystore unit t
+        (deployment/deploy-unit supplystore ctx parameters policystore unit t
             quality demand (policy/get-maxbog unit) (count (:fills fillstore))
             filldata (params/interval->date t) (followon? unit)))))
 

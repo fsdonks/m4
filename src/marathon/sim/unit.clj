@@ -1,8 +1,9 @@
 (ns marathon.sim.unit)
 
-;TEMPORARILY ADDED for marathon.sim.demand
+;TEMPORARILY ADDED for marathon.sim.deman, marathon.sim.policy
 (declare change-state update can-deploy? change-location! 
-         re-deploy-unit deploy-unit) 
+         re-deploy-unit deploy-unit change-policy
+         valid-deployer?) 
 
 ;'marathonopunit
 ;'A module for unit behaviors...

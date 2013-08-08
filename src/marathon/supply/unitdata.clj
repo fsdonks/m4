@@ -1,7 +1,8 @@
 (ns marathon.supply.unitdata
-  (:use [marathon.util :only [defrecord+]]))
-
-(in-ns 'marathon.unit)
+  (:require [marathon.sim [core :as core]]
+            [marathon.data [cycle :as cyc]]
+            [marathon.policy [policydata :as pol]])
+  (:use [util.record :only [defrecord+ inc-field dec-field get-vals]]))
 
 ;record for unitdata state.
 (defrecord+ unitdata 
@@ -21,7 +22,8 @@
    spawntime ;the time in which the unit spawned.
    oi-title ;the description of the unit.
    locationhistory ;list of all the locations visited.
-   dwell-time-when-deployed ;dwell time ])
+   dwell-time-when-deployed ;dwell time 
+   ])
 
 (def empty-unit
   (-> (make-unitdata)
@@ -33,8 +35,10 @@
 (defn unit-update [u msg]
   ((:behavior u) u msg))
 
-;allow units to be entities 
-(extend unitdata IEntity (assoc default-entity :process-msg unit-update))
+;;Pending.  When we move to the component entity system, we'll pull this back
+;;in.
+;;allow units to be entities 
+;(extend unitdata IEntity (assoc default-entity :process-msg unit-update))
 
 
 ;Public Sub InitCycles(t As Single)
@@ -50,6 +54,10 @@
 
 ;End Sub
 
+;;__TODO__ Rename this to something cleaner.
+(defn newcycle [t policy]
+  (let [{:keys [MaxBOG MaxDwell cyclelength MaxMOB]} policy]    
+    (cyc/make-cyclerecord t MaxBOG MaxDwell cyclelength MaxMOB)))
 
 (defn initCycles [u t]
   (let [policy (:policy u)
@@ -99,7 +107,7 @@
   (let [cyclerecord (-> (:currentcycle u) 
                 (inc-field :bogtime t) 
                 (dec-field :bogbudget t))]   
-  (add-duration (merge u {:currentcycle cyclerecord}) t))
+    (add-duration (merge u {:currentcycle cyclerecord}) t)))
   
 ;Public Sub AddDwell(dwelltime As Single, Optional available As Boolean)
 ;If available Then CurrentCycle.availableTime = CurrentCycle.availableTime + dwelltime
@@ -240,11 +248,16 @@
 
 ;End Sub
 
+;;__TODO__ Move changepolicy to sim.unit
 ;probably need to figure out a way to thread time for these guys, or 
 ;establish parent/child relations.
-(defn changePolicy [u ^IRotationaPolicy newpolicy]
+;newpolicy should be an IRotationalPolicy
+;Time is not threaded, shift this to the unit level simulation.
+(comment 
+(defn changePolicy [u newpolicy]
   (if (not= (:name newpolicy) (-> u :policy :name))
     (changestate u "PolicyChange" (- (get-time u) (last-update u)))))
+)
 
 ;Public Function getStats() As String
 ;getStats = "Policy:" & policy.AtomicName & " Cycletime: " & cycletime
@@ -275,24 +288,46 @@
 ;End If
 ;End Sub
 
+
+;;__TODO__ Move trigger move to sim.unit, this should not be 
+;;encapsulated and requires a simulation context.
 ;note need to define entity-trigger 
+(comment 
 (defn- trigger-move [u newlocation]
   (let [nm (:name u)
         t (get-time u)
         loc (:locationname u)
         msg (str nm " moved from " loc " to " newlocation " on day " t)]
       (entity-trigger u (make-packet :UnitMoved nm newlocation msg u))))
-                      
+)                      
 
-(defn changelocation [u newlocation]
+          
+
+;;__TODO__ Move changelocation  to sim.unit, this should not be 
+;;encapsulated and requires a simulation context.
+;note need to define entity-trigger 
+(comment 
+(defn change-location [u newlocation]
   (if (or (= newlocation (:locationname u)) (not (:moved u)))
         (-> (trigger-move u newlocation) 
              (merge {:moved true :locationname newlocation}))
         u))        
+)
+
+(core/stub "Change Location"
+   (defn change-location [& args]))      
+
+;;__TODO__ Move changelocation  to sim.unit, this should not be 
+;;encapsulated and requires a simulation context.
+;note need to define entity-trigger 
+
+
 
 ;Note -> not implemented.
 ;Public Sub ChangePolicyPosition(newposition As String)
 ;End Sub
+(core/stub "ChangePolicyPosition"
+   (defn change-policy-position [& args]))
 ;Private Function hasParent() As Boolean
 ;hasParent = Not (parent Is Nothing)
 ;End Function

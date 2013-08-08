@@ -6,11 +6,12 @@
 ;the demand simulation are also found here.
 (ns marathon.sim.demand
   (:require  [marathon.demand [demanddata :as d]
-                             [demandstore :as store]]
-            [marathon.sim [core :as core] [supply :as supply] [policy :as policy]
-                          [unit :as u][fill :as fill]]           
-            [sim [simcontext :as sim]]
-            [util [tags :as tag]]))
+                              [demandstore :as store]]
+             [marathon.sim [core :as core] [supply :as supply] [policy :as policy]
+                           [unit :as u]
+                           [fill :as fill]]           
+             [sim [simcontext :as sim]]
+             [util [tags :as tag]]))
 
 ;;Undefined as of yet...
 ;(defn new-demand [name tstart duration overlap primary-unit quantity 

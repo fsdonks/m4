@@ -11,15 +11,15 @@
 ;;for now, we'll just do this manually.
 
 ;;#Documentation - i.e. this file#
-(def doc "marathon.documentation")
+(def documentation "marathon.documentation")
 
 ;;#The standard prelude for all marathon docs.#
 ;;Basically a bumper sticker namespace with summary info.
 (def prelude ["marathon.prelude"])
 
 (defn expand-paths [root xs] (map #(str root \. %) xs))
-(defn path->files [p]
-  (str "/src/marathon/" (clojure.string/replace p \. \/) ".clj"))
+(defn path->file [p]
+  (str "src/" (clojure.string/replace p \. \/) ".clj"))
 
 ;;#Discrete Event Simulation Library.#
 (def simulation-lib
@@ -91,7 +91,7 @@
 (defn build-config
   "Specify different build configurations for various levels of documentation."
   [xs]
-   (flatten (into [doc prelude] xs)))
+   (flatten (into [documentation prelude] xs)))
 
 (def build-everything 
   (build-config [user-interface 
@@ -107,11 +107,12 @@
 
 (defn marge-command [xs]
   (into ["lein.bat" "marg"]  
-        (clojure.string/join \space (map path->files xs))))
+        (map path->file xs)))
+
 (defn build-docs
   "Spits a set of file paths to marginalia for documentation."
   [files]
-  (clojure.java.shell/sh 
+  (apply clojure.java.shell/sh 
     (marge-command files))) 
     
   

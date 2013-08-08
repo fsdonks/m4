@@ -15,8 +15,9 @@
 ;;the policystore, and managing policies and periods during the simulation.
 (ns marathon.sim.policy
   (:require [sim [simcontext :as sim]]
-            [marathon.data [protocols :as core]]
-            [marathon.policy [policydata :as p] [policystore :as pstore]]            
+            [marathon.data [protocols :as protocols]]
+            [marathon.policy [policydata :as p] [policystore :as pstore]]
+            [marathon.sim [core :as core] [unit :as u]]            
             [util [tags :as tag]
                   [graph :as gr]]))
 
@@ -156,6 +157,16 @@
 ;correspond to corner-cases that may be triggered by external events.
 
 
+;;#Missing Functions#
+;;__TODO__ Implement subscribe-unit-to-policy.  Used to be associated with the policy object, 
+;;now we have the policy store maintaining a table of unit id's to policies.
+(defn subscribe-unit-to-policy [u p policystore ctx]
+    (throw (Exception. "subscribe-unit-to-policy not implemented")))
+;;__TODO__ Implement get-subscribers.  Used to be associated with the policy object, 
+;;now we have the policy store maintaining a table of unit id's to policies.
+(defn get-subscribers [policy-name policystore]
+  (throw (Exception. "get-subscribers not implemented")))
+
 ;;#Defining Time Periods#
 
 ;Utility function.  
@@ -180,7 +191,7 @@
    Schedules a policy update to coincide with the beginning and ending of the 
    period, so that policy management runs when a period changes."
   [per ctx]
-  (sim/trigger :added-period (:name per) (:name per) 
+  (sim/trigger-event :added-period (:name per) (:name per) 
                (str "Added period " per) nil ctx))
 
 (defn schedule-period
@@ -197,6 +208,7 @@
   (get (get-periods policystore) periodname))
 (defn schedule-periods [policystore ctx] "Schedule multiple periods."
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
+
 
 ;aux function.
 (defn between [x l r] (and (>= x l) (<= x r)))
@@ -251,7 +263,7 @@
 
 ;Predicate to determine if a Rotation Policy is defined over a period.
 (defn policy-defined? [period policy] 
-  (or (atomic-policy? policy) (not (nil? (core/get-policy policy period))))) 
+  (or (atomic-policy? policy) (not (nil? (protocols/get-policy policy period))))) 
 
 ;Adds a composite policy to the policystore.  Special, because we keep track of 
 ;composite policies for special consideration during management of the policy 
@@ -275,13 +287,13 @@
 
 ;Shorthand for triggering a period change in the simulation context.
 (defn period-change! [fromname toname ctx]
-  (sim/trigger :periodChange :PolicyManager toname 
+  (sim/trigger-event :periodChange :PolicyManager toname 
       (str "Period changed from " fromname " to " toname) nil ctx))
 
 ;Event notifying the need to update all units due to a change in the the period, 
 ;or epoch, of the simulation.
 (defn period-driven-update! [fromname toname ctx]
-  (sim/trigger :updateAllUnits :PolicyManager :PolicyManager 
+  (sim/trigger-event :updateAllUnits :PolicyManager :PolicyManager 
      (str "Period change from " fromname 
           " to "  toname " caused all units to update.") toname ctx))
 
@@ -315,13 +327,13 @@
    policies, if it can't change immediately, it retains the policy change until
    the opportuntity arises."
   [unit newpolicy period ctx]
-  (let [current-policy (get-active-policy (:policy unit))
-        atomic-policy  (core/get-policy newpolicy period)
+  (let [current-policy (protocols/get-active-policy (:policy unit))
+        atomic-policy  (protocols/get-policy newpolicy period)
         unit           (u/change-policy atomic-policy ctx)]
-    (if (= (:name (:policy unit)) (:name atomic-policy)
+    (if (= (:name (:policy unit)) (:name atomic-policy))
            {:unit-update (assoc unit :policy newpolicy)}
            {:unit-update (-> (assoc unit :policy current-policy)
-                             (update-in  [:policystack] [newpolicy]))}))))        
+                             (update-in  [:policystack] [newpolicy]))})))        
 
 (defn update-policy [policystore p] 
   (assoc-in policystore [:policies (:name p)] p))
@@ -341,7 +353,7 @@
    is undefined, no change happens."
   [current-period new-period policy policystore ctx]
   (let [subscribers (get-subscribers policy policystore)
-        new-policy  (pol/on-period-change policy new-period)]
+        new-policy  (protocols/on-period-change policy new-period)]
         (->> (alter-unit-policies subscribers new-period policy ctx)
              (sim/merge-updates 
                {:policystore (update-policy policystore new-policy)}))))
@@ -359,8 +371,7 @@
   "Returns a filtered sequence of all the composite policies that have changed."
   [current-period new-period candidates]
   (if (= current-period :Initialization) nil
-      (filter (fn [p] (and (has-subscribers? p) 
-                           (policy-defined? current-period p)
+      (filter (fn [p] (and (policy-defined? current-period p)
                            (policy-defined? new-period p))) candidates)))
 
 ;Transcription Note -> in the original design, we delegated a lot of control 
@@ -387,7 +398,7 @@
       (->> (get-changed-policies current-period new-period
                                  (:composites policystore))
            (reduce #(change-policy current-period new-period %2 
-                                   (get-policystore %1) %1) ctx))))
+                                   (core/get-policystore %1) %1) ctx))))
 
 (defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
 
@@ -407,7 +418,7 @@
    typically called by the simulation engine."
   [day state & [toname]]
   (let [ctx (:context state)
-        policystore (get-policystore state)
+        policystore (core/get-policystore state)
         period   (:activeperiod policystore)
         fromname (:name period)
         toname   (or toname (find-period day policystore))]
@@ -503,7 +514,7 @@
 (defn get-equivalencies [policystore] 
   (get-in policystore [:rules :equivalencies]))
 ;accessor for substitution relations in a policystore
-(defn get-subs [policystore] (get-in polcystore [:rules :substitutions]))
+(defn get-subs [policystore] (get-in policystore [:rules :substitutions]))
 ;Adds an equivalence relationship to the policystore
 (defn add-equivalence [recepient donor policystore]
   (let [delim (:ruledelim policystore)] 
@@ -540,7 +551,7 @@
 ;Return the set of policy graphs
 (defn get-policy-graphs [policystore]
   (into {} (for [p (vals (get-policies policystore))]
-             [(policy-name p) (position-graph p)])))
+             [(protocols/policy-name p) (protocols/position-graph p)])))
 
 
 ;;#Policystore Creation#

@@ -8,7 +8,8 @@
 ;;function, or an engine, orders and composes the systems into a comprehensive 
 ;;state transition function that maps one simulation context to the next.
 (ns marathon.sim.core
-  (:require [util [metaprogramming :as util]]))
+  (:require [util [metaprogramming :as util]
+                  [tags :as tag]]))
 
 ;;#Providing Common Access to the State in the Simulation Context#
 ;;The simulation context contains a large nested map of information that 
@@ -61,6 +62,10 @@
    as a key."
   [u ctx]
   (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
+
+(defn ghost? [unit] (= (:src unit) "Ghost"))
+(defn followon? [u] (:followoncode u))
+(defn ghost-followon? [u] (and (ghost? u) (followon? u)))
 
 ;;#Tag Related Functions#
 ;;Another useful bit of higher order, or meta data, is the notion of simple 
@@ -129,7 +134,7 @@
   [base] (memoize (fn [tag] (keyword (str base tag)))))
 
 ;helper macro for defining key-building functions.
-(defmacro defkey [name base] `(def ~name (~'key-tag-maker ~base)))
+(defmacro defkey [name base] `(def ~name (key-tag-maker ~base)))
 
 ;;##Notes##
 
