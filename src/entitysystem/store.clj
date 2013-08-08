@@ -1,56 +1,51 @@
 (ns entitysystem.store)
-  ;(:use [DEVS.Schedule]))
 
-(comment 
-"A component-based architecture is a collection of Domains, Systems, Components,
-and entities.  
-
-The central idea behind the architecture is to find a way to decompose the 
-traditional hierarchical, intermixed data and functionality present in many 
-object-oriented designs along orthogonal, domain-specific lines.  
-In the existing simulation framework for Marathon, entities are instances of 
-unitdata or demanddata classes.  They have a significant amount of 
-functionality associated with (and stuck IN) the class.  There is a sense of 
-modularity in the sense that unit policy, behavior, etc. are also objects with 
-independent functions.  However, the design suffers from extensibility due to
-the encapsulation of domain-specific data and functionality, particularly where 
-more than one domain may be accessed.   We have to define the relation between 
-unitdata and policy explicitly in the unitdata class…indiciating that all 
-unitdata objects (and hence unit entities) must have a policy.  We also see 
-data duplication due to encapsulation inside of classes.  Encapsulation also 
-limits the visibility of state data (by design) unless everything is made 
-public.  No longer can we push around collections of primitive data, we must 
-access public members of a class instance (even if we just need a simple 
-container for the class data).  As a result, our notion of classes will become 
-harder to maintain and extend over time….even with less-primitive OOP 
-facilities than in VBA, developing a deep inheritance hierarchy in an OOP 
-system inexorably leads to an inflexible and unwieldy design.
-
-A domain is an orthogonal aspect of the simulated environment upon which 
-reality is partitioned and modeled.  To describe a component-based architecture, 
-we probably need to know what components are.   We’ll do a bit of mutual 
-recursion, and rely on another definition to give insight into what a component 
-is.  Components are derived from Domains….so what’s a Domain? Domains are the 
-orthogonal aspects of a simulated environment upon which the environment is 
-partitioned and modeled.   In other words, domains represent clear boundaries 
-between functionality, and enable us to abstract a complicated, tangled 
-environment into a set of unique domains with clearly defined operations for
-each domain, and across said domains.  Domains represent our understanding of
-the unique properties of the environment. 
-
-A component is a collection of functionally-similar, or domain-specific data 
-(traditionally not functions or methods!)  Strictly speaking, components are 
-domain-specific data.   Components derive their meaning from domains because 
-they represent an implicit encoding of domain-specific information.  We can 
-infer from the set of components, which domains are covered by the environment, 
-without having to explicitly state the domains.  This allows for a grass-roots 
-approach to design, in which domains are defined in small pieces, and composed.  
-The smaller and more specific the component, the more obvious the domain 
-context, and the easier it is to factor out duplicate functionality into truly 
-unique data (which reinforces our desire to maintain orthogonal domains)."
-
-)
-
+;A component-based architecture is a collection of Domains, Systems, Components,
+;and entities.  
+;
+;The central idea behind the architecture is to find a way to decompose the 
+;traditional hierarchical, intermixed data and functionality present in many 
+;object-oriented designs along orthogonal, domain-specific lines.  
+;In the existing simulation framework for Marathon, entities are instances of 
+;unitdata or demanddata classes.  They have a significant amount of 
+;functionality associated with (and stuck IN) the class.  There is a sense of 
+;modularity in the sense that unit policy, behavior, etc. are also objects with 
+;independent functions.  However, the design suffers from extensibility due to
+;the encapsulation of domain-specific data and functionality, particularly where 
+;more than one domain may be accessed.   We have to define the relation between 
+;unitdata and policy explicitly in the unitdata class…indiciating that all 
+;unitdata objects (and hence unit entities) must have a policy.  We also see 
+;data duplication due to encapsulation inside of classes.  Encapsulation also 
+;limits the visibility of state data (by design) unless everything is made 
+;public.  No longer can we push around collections of primitive data, we must 
+;access public members of a class instance (even if we just need a simple 
+;container for the class data).  As a result, our notion of classes will become 
+;harder to maintain and extend over time….even with less-primitive OOP 
+;facilities than in VBA, developing a deep inheritance hierarchy in an OOP 
+;system inexorably leads to an inflexible and unwieldy design.
+;
+;A domain is an orthogonal aspect of the simulated environment upon which 
+;reality is partitioned and modeled. To describe a component-based architecture, 
+;we probably need to know what components are.   We’ll do a bit of mutual 
+;recursion, and rely on another definition to give insight into what a component 
+;is.  Components are derived from Domains….so what’s a Domain? Domains are the 
+;orthogonal aspects of a simulated environment upon which the environment is 
+;partitioned and modeled.   In other words, domains represent clear boundaries 
+;between functionality, and enable us to abstract a complicated, tangled 
+;environment into a set of unique domains with clearly defined operations for
+;each domain, and across said domains.  Domains represent our understanding of
+;the unique properties of the environment. 
+;
+;A component is a collection of functionally-similar, or domain-specific data 
+;(traditionally not functions or methods!)  Strictly speaking, components are 
+;domain-specific data.   Components derive their meaning from domains because 
+;they represent an implicit encoding of domain-specific information.  We can 
+;infer from the set of components, which domains are covered by the environment, 
+;without having to explicitly state the domains.  This allows for a grass-roots 
+;approach to design, in which domains are defined in small pieces, and composed.  
+;The smaller and more specific the component, the more obvious the domain 
+;context, and the easier it is to factor out duplicate functionality into truly 
+;unique data (which reinforces our desire to maintain orthogonal domains).
 
 (defprotocol IEntityStore
   "The entitystore is an abstract protocol for defining functionality necessary 

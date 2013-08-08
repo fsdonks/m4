@@ -487,34 +487,3 @@
       (union-handlers message-net)))) ;combine it with the message-net.
 
 )
-
-;-------legacy notes------
-;This is a simple implementation of the oberserver pattern.
-;An observer serves as an interface for registering "listeners" that respond to 
-;any number of external stimuli by triggering subscribed procedures...
-;This is an explicit implementation of native .Net language features.  When we 
-;port to .Net or clojure, we "probably" won;t even need this class.
-
-;Basically, the observer keeps an internal list of procedures to call.  We;ll do
-;this with object references So, an observer keeps a list of Callables. A 
-;callable is just a delegate<;T>, basically it takes an argument and performs 
-;some sideffect with it. We will use observers to flexibly automate tasks like 
-;logging events, keep track of statistics, recording graphs and trends, etc.
-
-;As a result, the main control flow of the program will populate the event 
-;stream, which can be listened to [observed] by any number of registered 
-;observers.  The observers will, by convention, perform side effects that 
-;DO NOT affect the control flow of the simulation.  They are primarily 
-;responsible for recording state, updating the user interface, writing to files, 
-;storing statistics for later retrieval. Basically, they accessorize the engine, 
-;and provide an easily extendable mechanism to add lots and lots of ad-hoc 
-;functionality to the basic simulation without screwing with the dedicated 
-;internals of the simulation.
-
-;Note -> we can also use observers to model functional composition, by passing 
-;state references through an observer chain, where each oberver partially 
-;mutates the referenced state. While useful, this is again discouraged....
-;mutation can inhibit reasoning about the program state, and could create funky 
-;bugs that are hard to spot.  Still, if necessary, it could be a powerful tool.
-
-
