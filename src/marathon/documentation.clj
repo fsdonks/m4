@@ -106,13 +106,13 @@
   (build-config [marathon-sim marathon-data simulation-lib]))
 
 (defn marge-command [xs]
-  (str "lein marg "  
-             (clojure.string/join \space (map path->files xs))))
+  (into ["lein.bat" "marg"]  
+        (clojure.string/join \space (map path->files xs))))
 (defn build-docs
   "Spits a set of file paths to marginalia for documentation."
   [files]
   (clojure.java.shell/sh 
-    :in (marge-command files))) 
+    (marge-command files))) 
     
   
 
