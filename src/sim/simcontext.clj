@@ -22,7 +22,7 @@
 
 ;The updater allows us to encode localized updates or patches to entities, 
 ;and to keep track of the last "time" an entity was updated.  For temporal 
-;simulations, this is valuable as it provides effeicient, localized updating 
+;simulations, this is valuable as it provides efficient, localized updating 
 ;of entities, and keeps the system consistent (i.e. prevents the application of
 ;old time-dependent updates with outdated notions of elapsed time).
 ;Much of the simulation domain requires time deltas to compute the next step 

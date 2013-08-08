@@ -1,7 +1,4 @@
 ;Data required to constitute a simulation environment.
-;For maximum flexibility, I am going to embed the simulation state inside of 
-;an entity store, which is basically a fancy database with some special 
-;properties.
 (ns marathon.data.simstate
   (:use [util.record :only [defrecord+]]
         [marathon.supply.supplystore]
@@ -11,7 +8,7 @@
         [marathon.events.eventstore]
         [marathon.fill.fillstore])
   (:require  [sim [simcontext :as sim]]))
-             ;[entitysystem [store :as store]]))
+            ;[entitysystem [store :as store]]))
 
 ;simstate is a consolidation of all the simulation state required for Marathon 
 ;to do its thing.  Each of these bits used to be part of a hierarchical object 
@@ -24,9 +21,12 @@
 ;than classic OOP where data is encapsulated and bundled with 
 ;methods/properties.  The result is a simplification of the data model, as well
 ;as functions that can produce and consume bits of data necessary for the 
-;simulation.  This simState object really just gathers all the data in one 
+;simulation.  This simstate object really just gathers all the data in one 
 ;place, so that functions that need to access multiple components of data
-;simultaneously CAN. 
+;simultaneously CAN.  Since it's a record, and most of the elements are also 
+;records, we get the benefit of using clojure's associative map functions and 
+;sequence libraries to access and modify our state, rather than having to deal
+;with a special set of one-off functions.
 
 (defrecord+ simstate 
   [[supplystore empty-supplystore];Chunk of state for unit entity data.
@@ -65,13 +65,15 @@
                      ;requirements analysis only....    
    found-truncation]) ;flag the indicates a reason to truncate.
 
-;When I get this more mature, I'm switching the component-based architecture
-;defined by the entity store...
+;For maximum flexibility, I am going to embed the simulation state inside of 
+;an entity store, which is basically a fancy database with some special 
+;properties.  This hasn't happened yet, but the change to a component entity 
+;system is on the horizon.
 
 ;An alternate view....instead of a record, we can view the sim state as an 
 ;entity store, with components, which lets us define a specification to build
 ;one...
-;(defentity simstore [id name]
+;(defentity simstate [id name]
 ;  [:name name 
 ;   :supplystore {} ;Chunk of state for unit entity data.
 ;   :demandstore {} ;Chunk of state for demand entity data.
