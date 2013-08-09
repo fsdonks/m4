@@ -12,10 +12,10 @@
 ;the transfer function, a recurrence relation between previous contexts and 
 ;future contexts emerges.  The result is effectively a snapshot of simulation 
 ;contexts, which are computed via a simple transfer function, __sim-step__,  
-;which simulates multiple domains relevant to Marathon: 
-;1. The flow of units through a supply
-;2. The presence of demands
-;3. The flow of units between supply and demand via fills.  
+;which simulates multiple domains relevant to Marathon:   
+;1. The flow of units through a supply  
+;2. The presence of demands  
+;3. The flow of units between supply and demand via fills.    
 
 ;Thus, the engine serves as the causal backbone, and coordinating mechansim, 
 ;for every bit of logic executed during the course of the simulation. The 
@@ -59,18 +59,16 @@
       (fn [ctx edata name] (engine-handler ctx edata)) [:update-all-units]))
 
 ;#Initialization
-;Initialization consists of 3 tasks:  
-;1. Prep the system for day 0
-
+;Initialization consists of 3 tasks:    
+;1. Prep the system for day 0  
 ;2. Adjust the context so that it defines a finite time horizon for simulation.
 ;   The last  day of the simulation is determined either by passing in value, 
-;   or by allowing the context to derive its own last day dynamically.
-
-;3.  Tell observers to sync themselves to the simulation state.  Some observers 
-;    need access to the specific elements of the state.  This makes it easy 
-;    (and indirect) to advertise the state, and to allow the observers to link 
-;    to it as needed. Observers/watchers will need to be expanded on, since 
-;    watches will involve effects.
+;   or by allowing the context to derive its own last day dynamically.  
+;3. Tell observers to sync themselves to the simulation state.  Some observers 
+;   need access to the specific elements of the state.  This makes it easy 
+;   (and indirect) to advertise the state, and to allow the observers to link 
+;   to it as needed. Observers/watchers will need to be expanded on, since 
+;   watches will involve effects.  
 
 (defn initialize-sim
   "Given an initial - presumably empty state - and an optional upper bound on 

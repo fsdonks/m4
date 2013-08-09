@@ -1,9 +1,15 @@
+;;##Filling
 ;;A collection of functions that define the process of mapping classes of demand
 ;;to eligible supply, and filling demand with suitable supply.  The fill system
 ;;acts as a service for the engine, and provides operations used - primarily - 
 ;;by the demand simulation.  The process of filling pushes changes on the 
 ;;supply, since the act of filling usually consumes some resources in supply and
 ;;motivates a kind of motion in the supply simulation.
+
+;;Note: This is one of the more involved pieces of documentation, and could 
+;;benefit from refinement.  However, filling has proven to be a sensitive 
+;;so the extra layer of commentary is still useful.
+
 (ns marathon.sim.fill
   (:require [marathon.data   [protocols :as protocols]]
             [marathon.demand [demanddata :as d] [demandstore :as dstore]]
@@ -68,7 +74,7 @@
 ;between elements of supply and elements of demand envisioned as a directed 
 ;acyclic graph.
 
-;#Legacy Filling Via the FillFunction Object#
+;#Legacy Filling Via the FillFunction Object
 ;The FillFunction used to be an object that provided a high-level interface for 
 ;querying a set of rules about feasible and desired relations between elements
 ;of supply & demand, aka. Fill Rules, along with a candidate supply of
@@ -85,7 +91,7 @@
 ;contextual rules for filling any demand.  It is used in explicit queries, vs. 
 ;containing a query method relative to a fillfunction object.
 ;
-;#Fill Rules and The Fill Graph#
+;#Fill Rules and The Fill Graph
 ;FillRules, encoded in a FillGraph, actually tell us a lot before we simulate.
 ;The FillGraph is generated, as a pre-process step, by analyzing the supply 
 ;entity records, the demand entity records, and the relation records for 
@@ -123,8 +129,9 @@
 ;While strictly related to the higher-level notion of filling demands, we can 
 ;exploit properties of the fillgraph - during a pre-processing phase - to make 
 ;searching the fillgraph more efficient, identify possible problems with the 
-;data, and identify possible areas for exploting data-parallelism.
-;*Islands Denote Possible Data Errors*
+;data, and identify possible areas for exploting data-parallelism.  
+
+;#Islands Denote Possible Data Errors
 ;In the case where there is NO path from either supply or demand, we have 
 ;"islands", or nodes that are unreachable (class B from the paragraph above).  
 ;These islands are usually the result of data errors, and indicate missing 
@@ -133,7 +140,7 @@
 ;automatically find islands, and all equivalence classes / strongly connected
 ;components in the FillGraph.
 
-;*PreProcessing Identifies Independent Data and Simplifies The Fill Graph
+;#PreProcessing Identifies Independent Data and Simplifies The Fill Graph
 ;One of the benefits of finding equivalence classes is that we can choose to 
 ;only simulate SRCs that are dependent. This lets us reduce the amount of work 
 ;into independent batches and divide the simulation into N smaller simulation 
@@ -155,7 +162,11 @@
 ;justification for selecting a sub set of supply, and serve to classify the 
 ;entire subset of supply as a certain class, with a uniform priority.  This is
 ;desirable, as it effectively partitions the search space and provides an 
-;efficient means of selecting sets of units for possible deployment.
+;efficient means of selecting sets of units for possible deployment.    
+
+;;When time permits, I intend to take this to the next logical step and just
+;;implement a min-cost max-flow fill algorithm instead of the k shortest   
+;;paths.
 
 ;;#Fill Rule Interpretation
 ;;Given a common description of a demand category, the fill function should be 
@@ -166,7 +177,7 @@
 ;;way to map classes of demand to ordered sets of supply in a general and 
 ;;flexible fashion.
 
-;;In the legacy implementation, the rule structure is actual embedded in the 
+;;In the legacy implementation, the rule structure is actually embedded in the 
 ;;topology of a directed graph.  Labelled 'sink nodes' on the graph represent 
 ;;possible demand categories, while primitive 'source nodes' are primitive 
 ;;elements of supply.  Complex rules for substitution and equivalence are 
@@ -179,15 +190,17 @@
 
 ;;Refactor -> we don't need a separate rule here really, just wrapping 
 ;sink-label.  Note: we're passing in a new notion of categories when we 
-;fill demands now.  This means we don't just derive the rule and be done.
+;fill demands now.  This means we can't just derive the rule and be done.
 ;We need to dispatch on the category, and map the demand category into an 
 ;appropriate rule that query can apply to the supply to find elements of supply.
 (defmulti derive-supply-rule 
   (fn [demand fillstore & [category]]  
     (let [cat (or category (:src demand))]  (core/category-type category))))
 
-;for simple categories, ala "SRC_1" or :SRC_1, we just compute existing 
-;label for the demand, which maps to a node in the fill graph.
+;for simple categories, ala "SRC_1" or :SRC_1, we just use the existing 
+;label for the demand, which maps to a node in the fill graph.  This label is 
+;typically a standard alphanumeric SRC, but it could be any identifier the user
+;chooses.
 (defmethod derive-supply-rule :simple 
   [demand fillstore & [category]]
   (sink-label category))
@@ -211,8 +224,9 @@
   [demand fillstore & [category]]
   (rule->supply-rule category))
 
+;;##Finding and Ordering Supply  
 
-;##Legacy Means For Generating A Stream of Deployable Supply
+;#Legacy Means For Generating A Stream of Deployable Supply
 ;In the legacy implementation,  a SupplyGenerator object served as a poor man's 
 ;version of a sequence abstraction (or an iterator in other languages).  It used
 ;internal state, combined with a reference to one or more buckets of supply, to
@@ -231,7 +245,7 @@
 ;facilitated higher-order expressions like "take" and "next" to allow consumers
 ;to view the SupplyGenerator as a sequence of units.
 
-;*Default Unit Comparison
+;#Default Unit Comparison
 ;To deal with highly variable supply ordering rules, the SupplyGenerator had a 
 ;modular unit prioritization object (a UnitComparer) for establishing the 
 ;fine-grained ordering of subsequences of units.  The default UnitComparer 
@@ -248,6 +262,9 @@
 ;__Note__ , this assumption holds for known rotational policies, but may fail if 
 ;readiness is not a function of time in cycle.  Also, other unit prioritization 
 ;functions exist, including preferences by component (either AC or RC first).  
+;In the end, notions of prioritization are highly context sensitive, depending 
+;on the goals of the study.  They are designed to be modular, easily changed,
+;composed, and selectively applied.
 
 ;##Default Legacy Total Ordering of Supply
 ;The default notion of ordering used in the legacy object model will remain the 
@@ -255,35 +272,37 @@
 ;mechanisms (minus the reliance on objects and mutable state).
 ;Using the policy coordinate as a comparator, the FillFunction orders each 
 ;subset of units so that their policy coordinate, and thus readiness, is sorted
-;in descending order.  The total ordering then, is a sorting of units by Min 
-;Path Length, then Max policy coordinate.  This provides a natural ordering that
-;corresponds with rotational policy, in that units, regardless of component, are
-;drawn evenly according to relative readiness, starting with units that directly
-;match the capability demanded, and that have had the most time to increase 
-;readiness (most capable, most ready), ending with units that least match the 
-;capability demanded, with the least amount of time to increase readiness (least 
-;capable, least ready). When units deploy, the context of the fill path is 
-;annotated on their deployment record, in addition to other stats such as path 
-;length.
-;
+;in descending order.    
+;Thus, the total ordering is a sorting of units by Min Path Length, then Max 
+;policy coordinate.  This provides a natural ordering that corresponds with 
+;rotational policy, in that units, regardless of component, are drawn evenly 
+;according to relative readiness, starting with units that directly match the
+;capability demanded, and that have had the most time to increase readiness 
+;(most capable, most ready), ending with units that least match the capability 
+;demanded, with the least amount of time to increase readiness (least capable,  
+;least ready). When units deploy, the context of the fill path is annotated on 
+;their deployment record, in addition to other stats such as path length.  
+
 ;#Effectful Filling Under the Legacy FillFunction
 ;Under the legacy FillFunction object, we typically prepped it with a query, 
-;which loaded the supply generator (providing an total ordering of eligible 
+;which loaded the supply generator (providing a total ordering of eligible 
 ;supply), and applied the "take" method of the FillFunction to a numeric 
 ;argument.  The result of "taking" 10 items, for example, would provide a 
 ;collection - implicitly the 10 (or less) most "suitable" elements of supply, 
-;represented by a collection of FillData objects.  Some forms of fill could 
-;cause the creation of just-in-time units, or Ghosts, which caused the 
-;side-effect of actually creating supply upon generation 
-;(inside the SupplyGenerator).  Going forward in the functional design, we 
-;make such side effects explicit data that must be interpreted and evaluated, 
-;rather than using hidden mutation.
+;represented by a collection of FillData objects.    
+
+;Some forms of fill could cause the creation of just-in-time units, or Ghosts,
+;which caused the side-effect of actually creating supply upon generation 
+;(inside the SupplyGenerator). Going forward in the functional design, we make 
+;such side effects explicit data that must be interpreted and evaluated, rather
+;than using hidden mutation.  
+
 ;With a valid, prioritized order of units in hand, the FillFunction tried to 
 ;fill the demand by selecting units in order until demand is filled, or no more
-;units exist.  Successfully or completely filling a demand would trigger 
-;additional effects.  Under the functional version, we maintain the spirit of 
-;these features - i.e. the communication of success or failure to fill - but 
-;again, we use explicit data structures to communicate effects.
+;units exist.  Completely filling a demand would trigger additional effects.  
+;Under the functional version, we maintain the spirit of these features - i.e. 
+;the communication of success or failure to fill - but again, we use explicit 
+;data structures to communicate effects.
 
 ;##Legacy (Mutable Object-Based) Fill Summary
 ;All the fill function did was wrap both the fill graph and a mutable generator, 
@@ -302,9 +321,9 @@
 ;ordered lazy sequence of candidates. This eliminates the complexity from have 
 ;multiple mutable buckets to draw from in the legacy verison.  Now, we simply 
 ;have an abstract "sequence" of candidates to draw from while we fill.  The 
-;function that generates said sequence, query, may be very complex, but it hides
-;all of the complexity for us and allows us to trivially change how supply is 
-;ordered.
+;function that generates said sequence, __query__, may be very complex, but it 
+;hides all of the complexity for us and allows us to trivially change how supply
+;is ordered.
 
 ;;The protocol ISupplier provides an abstraction for systems that can interpret
 ;;a rule that describes classes of supply, find and order eligible supply in a 
@@ -339,22 +358,23 @@
 
 ;#First: "Find the most suitable supply".
 ;This represents an ordered sequence of candidate fills....we may not, in fact,
-;utilize every candidate.  A better description is that find-supply provides a 
-;list of  fill-promises, which are realized as needed.  A fill-promise is a 
+;utilize every candidate.  A better description is that __find-supply__ provides
+;a list of  fill-promises, which are realized as needed.  A fill-promise is a 
 ;function that consumes the current context and returns a pair of 
 ;[promised-unit, new-context].  That way we can update the context by realizing
 ;the fill-promise (i.e. applying it against a context we thread through), and 
 ;then do something with the unit that was promised.  Since these are just 
 ;promises, i.e. potential supply, we don't mutate anything or make any changes
-;to the context until we need to.
-;find-supply::(rule->demand->demandgroup->name->supply->phase->[fill-promise])
-;             ->supply->rule->[fill-promise]
-;where fill-promise::(simcontext->'a->[filldata,simcontext])
+;to the context until we need to.  
+
+;find-supply::(rule->demand->demandgroup->name->supply->phase->[fill-promise])  
+;             ->supply->rule->[fill-promise]  
+;where fill-promise::(simcontext->'a->[filldata,simcontext])  
 
 (defn find-supply
   "Returns an ordered sequence of actions that can result in supply.
    This effectively applies the suitability function related to fillfunc to the 
-   rule, the demand, and the supplybucket.  The result is a sequence of 
+   rule, the demand, and the supply.  The result is a sequence of 
    potential fills....where potential fills are data structures that contain 
    the context of the fill (i.e. the unit, the actions required to realize the 
    fill, and other meta data), typically a filldata record."
@@ -362,10 +382,10 @@
   (query fillfunc rule supplystore))
 
 ;We can coerce our list of fill promises into actual fills by applying 
-;realize-fill to them.  Assuming a fill promise consumes a context, we simply 
+;__realize-fill__ to them.  Assuming a fill promise consumes a context, we  
 ;apply the promise to a given context.  This should produce a pair of the 
-;filldata --the context of the unit realized for filling-- and an updated 
-;context.
+;filldata --information about the unit realized for filling-- and an updated 
+;simulation context.
 
 (defn realize-fill
   "Applies the a function, fill-promise, that maps a context to a pair of 
@@ -379,20 +399,22 @@
 ;the demand.  The result is a new context, since there may be additional 
 ;consequences to the context due to a fill.
 
-;While the demand is assumed to have inspired the list of candidates, but it's 
-;not consequential for allocation purposes--in fact the list of candidates could
-;be completely random or drawn in an otherwise arbitrary fashion.
-;-Note- that would make a great _test_, having a random fill function.
+;While the demand is assumed to have inspired the list of candidates, it's 
+;not consequential for allocation purposes.  In fact, the list of candidates 
+;could be completely random or drawn in an otherwise arbitrary fashion.
+;__Note__ that would make a great _test_, having a random fill function.  
 
 ;Assuming we have a chunk of realized filldata, we define a way to apply it to 
 ;a demand to accomplish any updates necessary for filling.  This is a primitive
 ;function that will support the higher-order notion of "filling" a demand.  
-;apply-fill should represent the new context emerging from applying a realized 
-;fill, in the form of filldata, to a demand.  Originally, this meant that fills 
-;would always result in a deployment at the end.  By elevating apply-fill into
-;the API, we can actually implement things that would otherwise be difficult, 
-;i.e. delayed fills (pre-allocating units and scheduling them to deploy at a 
-;later date, while nominally "filling" the demand).
+;__apply-fill__ should represent the new context emerging from applying a 
+;realized fill, in the form of filldata, to a demand.  
+
+;Originally, this meant that fills would always result in a deployment at the
+;end.  By elevating apply-fill into the API, we can actually implement things 
+;that would otherwise be difficult, i.e. delayed fills (pre-allocating units 
+;and scheduling them to deploy at a later date, while nominally "filling" the 
+;demand).
 
 (defn apply-fill
   "Deploys the unit identified in filldata to demand via the supply system."

@@ -1,6 +1,7 @@
 ;;marathon.sim.core is a glue library that provides access to a common set of 
 ;;subsystems upon which a more complicated federated simulation infrastructure
 ;;is implemented.  
+
 ;;Marathon utilizes a generic simulation context, defined in __sim.simcontext__, 
 ;;which provides primitive access to a generic simulation state - heterogenous 
 ;;chunks of data relevant to different domains of the simulation - and a basic
@@ -10,6 +11,7 @@
 ;;level, a coordinating function, or an engine, orders and composes the systems 
 ;;into a comprehensive state transition function that maps one simulation 
 ;;context to the next.  
+
 ;;This core namespace started as a dumping ground for shared or duplicate 
 ;;functionality from the original object oriented design.  It continues to 
 ;;evolve as the source is reorganized along clearer lines, and serves as a 
@@ -24,15 +26,18 @@
                   [tags :as tag]]))
 
 ;;#Providing Common Access to the State in the Simulation Context
-;;The simulation context contains a large nested map of information that 
-;;is 'typically' partitioned by a particular domain.  However, certain systems
-;;like the fill function, need access to multiple domains to fulfill their 
-;;purpose.  We maintain an open, broad structure for the state portion of the 
-;;context, but provide a set of common paths or mappings to resources embedded
-;;in the state.  As a result, subsystems can query resources by predefined 
-;;paths - a higher level of abstraction and clarity - OR they may dip down to 
-;;low level operations on the raw state.  This should maintain a balance between
-;;flexibility and clarity.
+;;The simulation context contains the simulation state - a large nested map of 
+;;information that is 'typically' partitioned by a particular domain.  
+;;Some systems, like the fill function, need access to multiple domains to
+;;fulfill their purpose.  In response, we maintain an open, broad structure for 
+;;the state portion of the context, but provide a set of common paths or 
+;;mappings to resources embedded in the state.  
+
+;;As a result, subsystems can query resources by predefined paths - a higher 
+;;level of abstraction and clarity - OR they may dip down to low level 
+;;operations on the raw state.  
+
+;;This should maintain a balance between flexibility and clarity.
 
 ;;#Common Paths to Simulation Resources
 

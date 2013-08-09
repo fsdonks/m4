@@ -20,14 +20,21 @@
 ;;the highest level concepts early in any documentation, and then descend 
 ;;to the more granular implementation details.  
 
-;;I apologize up front for the current elegance, or lack thereof, of much of 
+;;I apologize up-front for the current elegance, or lack thereof, of much of 
 ;;the prose.  The current versions of the source code and the comments were 
-;;very recently lifted from a large code-base.  I am still porting both the 
-;;source code, and refining the prose.  My hope is to asymptotically approach 
-;;the quality and clarity of Don Knuth's writings, but that particular mountain
-;;top is quite distant.  
+;;very recently lifted from a large legacy code-base.  Apparently, the demons 
+;;from Marathon's previous environment, the padded walls of VBA, echoed through
+;;the 40K lines of code, hundreds of classes, and 30K lines of comments gathered
+;;over 2-3 years.  One reader of an earlier, somewhat "raw" draft likened 
+;;the document to "a man's journal of his own descent into madness."    
 
-;;Finally, as the documentation matures, I will try to take advantage of the 
+;;Such criticism is welcome, and I have since struggled to avoid offending
+;;readers' sensibilities. I am still porting both the source code, and 
+;;refining the prose.  My hope is to asymptotically approach the quality and 
+;;clarity of Don Knuth's writings, but that particular mountain top is quite 
+;;distant.  
+
+;;As the documentation matures, I will try to take advantage of the 
 ;;formatting options available, to help distinguish between my interspersed 
 ;;commentary, and commentary attached to specific source code.  
 
