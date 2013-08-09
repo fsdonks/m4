@@ -1,7 +1,7 @@
-(ns marathon.data.period)
 ;A module to capture functions that operate on periodic data.
 ;Periods are defined as having a start and and end time.
 ;We can test for intersection over a period.
+(ns marathon.data.period)
 
 ;->Re: the below discussion on a declarative specification for defining 
 ;    composable periods....We can simple bifurcate periods into two classes:
@@ -104,10 +104,10 @@
 ;
 ;End Function
 
-;(Type    Name    from-day to-day)
+;(Type    Name    FromDay ToDay)
 (defn record->period [r]
   (->> (named-period (:Name r))
-       (period-across (parse-inf (:from-day r)) (parse-inf (:to-day r)))))
+       (period-across (parse-inf (:FromDay r)) (parse-inf (:ToDay r)))))
 ;----------OBSOLETE--------?
 (defn make-temporal-period [& [start-day end-day period-name & rest]]
   (let [name (or period-name :Default)] (->period name start-day end-day)))

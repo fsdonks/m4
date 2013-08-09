@@ -1,3 +1,5 @@
+;;DEPRECATED
+
 (ns marathon.time
 "As the name implies, this object is responsible for managing time in the 
 simulation.  The current approach to time management caches a series of future 

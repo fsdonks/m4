@@ -12,8 +12,7 @@
                           [policy :as policy] [unit :as u] 
                           [deployment :as deployment]]           
             [sim  [simcontext :as sim] [updates :as updates]]
-            [util [tags :as tag]]
-            [util [graph :as graph]]))
+            [util [tags :as tag]]))
 
 ;The old ManagerOfFill class actually handled the creation of a couple of
 ;dependent chunks of data; namely a FillFunction, a FillGraph,
@@ -472,6 +471,10 @@
                               (dem/get-demand demand-name))]
                 (recur nextd (rest xs) :added-fill nextctx))))))
 
+;;#Pending# 
+;;Port fill store generation functions and IO functions/constructors from legacy 
+;;code.
+
 ;#Constructors and Data Munging Functions#
 ;Constructors to create all three, independently, now exist in this module.  
 ;Along with decoupled construction, operations for sourcing demands, relative to
@@ -479,9 +482,6 @@
 ;sourceDemand is probably the most notable/used function, as it...sources 
 ;demand!
 
-;;#Pending# 
-;;Port fill store generation functions and IO functions/constructors from legacy 
-;;code.
-
-
+;;Implement defquery or defgenerator, to allow easy composition of fill 
+;;functions.  This requires cljgraph.
 

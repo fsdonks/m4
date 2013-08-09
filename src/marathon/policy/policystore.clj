@@ -1,3 +1,4 @@
+;;Storage for domain specific data used by the policy system.
 (ns marathon.policy.policystore
   (:use [util.record :only [defrecord+]]))
 
