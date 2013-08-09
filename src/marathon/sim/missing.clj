@@ -40,3 +40,9 @@
 	    (defn log-status [msg]))
 )
 ;<<<<<<<<Missing Functionality----------------
+
+;marathon.sim.demand
+;;Undefined as of yet...
+;(defn new-demand [name tstart duration overlap primary-unit quantity 
+;      priority demandstore policystore ctx operation vignette source-first]
+;

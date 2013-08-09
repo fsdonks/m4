@@ -3,37 +3,6 @@
 ;We can test for intersection over a period.
 (ns marathon.data.period)
 
-;->Re: the below discussion on a declarative specification for defining 
-;    composable periods....We can simple bifurcate periods into two classes:
-;   Temporal and Reactive.
-;       Temporal are the current case; generally that periods are known in advance.
-;       The beginning and end of the period is known apriori.
-;   Reactive
-;       Reactive periods happen in response to observed events.
-;       The start of a reactive period is an oberserved event.
-;       The end of a reactive period is also an observed event.
-;       Thus, reactive periods are functions on oberservables.
-;   Seems like the simplest way to do this.
-;       Develop a little language for describing reactive events.
-;       StartOn: entityX spawns.
-;       StopOn:  DemandY deactivates.
-;   Very similar to reactive GUI stuff I've already ported....
-;   Periodicity is implicit.
-;   This gives us a simple notion of timelines...
-;       Scheduled/Known......
-;       Reactive/UnKnown....
-;   A timeline then, is a chunk of data, that can be queried via a function
-;   to determine which period(s) are active at time t.
-;   A timeline can be composed of scheduled and unscheduled periods.
-;   A reactive timeline implies some side-effecting notion.
-;       An observer listening for events.
-;       The observer can also be causing events, effectively I/O
-;Using the timeline abstraction, we can compose period-generating functions.
-;   A GenericPeriod can be seen as a period generating function, of the known variety.
-;   A ReactivePeriod can be seen a a period generating function, of the unknown variety.
-;Constructing ReactivePeriods requires some IO....
-;   holy shit, allows for User I/O (duh).
-
 (def inf-error 
   (Exception. "Only numbers, or :inf and :inf-negative are valid keys"))
 
@@ -83,27 +52,6 @@
 ;Determines if time t intersects the period p
 (defn intersects-period? [t p] (intersect-1d (:from-day p) (:to-day p)))
 
-;simple function for testing in other modules.
-;Public Function testPeriods() As Collection
-;Set testPeriods = list(namedPeriod("Initialization", periodTo(1)), _
-;                       namedPeriod("PreSurge", periodAcross(1, 200)), _
-;                       namedPeriod("Surge", periodAcross(200, 500)), _
-;                       namedPeriod("PostSurge", periodFrom(500)))
-;
-;End Function
-;Public Function tableToPeriods(tbl As GenericTable) As Collection
-;Dim rec As GenericRecord
-;
-;Set tableToPeriods = New Collection
-;
-;While Not tbl.EOF
-;    Set rec = tbl.getGenericRecord
-;    tableToPeriods.add recordToPeriod(rec)
-;    tbl.moveNext
-;Wend
-;
-;End Function
-
 ;(Type    Name    FromDay ToDay)
 (defn record->period [r]
   (->> (named-period (:Name r))
@@ -117,4 +65,16 @@
 ;End Function
 ;
 
+;Public Function tableToPeriods(tbl As GenericTable) As Collection
+;Dim rec As GenericRecord
+;
+;Set tableToPeriods = New Collection
+;
+;While Not tbl.EOF
+;    Set rec = tbl.getGenericRecord
+;    tableToPeriods.add recordToPeriod(rec)
+;    tbl.moveNext
+;Wend
+;
+;End Function
 

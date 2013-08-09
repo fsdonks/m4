@@ -430,17 +430,18 @@
 
 ;;#Incremental Demand Filling
 
-;;We wrap the atomic fill process inside a high-level function, fill-demand.
-;;fill-demand takes any fill-promise, realizes the fill-promise, applies the 
-;;the realized filldata to fill a demand. It wraps some of the low-level context
+;;The atomic fill process rests inside a high-level function, __fill-demand__ .
+;;__fill-demand__ takes any fill-promise, realizes the fill-promise, and applies
+;;the the realized filldata to fill a demand. It wraps the low-level context
 ;;shuffling that is necessary behind a simple, high-level interface amenable to 
-;;use in a reduction.
+;;use in a reduction ala __clojure.core/reduce__ .  
+
 ;;The end result is a new context, representing the consequences of filling said 
-;;demand with the promised fill.  Under this scheme, apply-fill will 
+;;demand with the promised fill.  Under this scheme, __apply-fill__ will 
 ;;automatically handle the realization of a fill-promise, and thread its updated
 ;;context through the process of deploying the unit associated with the realized 
 ;;filldata.  Since fill-promises are typically for single elements of supply,  
-;;fill-demand will typically only apply a single unit towards a demand.
+;;__fill-demand__ will typically only apply a single unit towards a demand.
 
 (defn fill-demand
   "Enacts filling a demand, by realizing a promised fill, logging if any ghosts 
@@ -458,17 +459,16 @@
 ;;#Trying to Completely Satisfy a Demand
 
 ;Since we know how to effectively apply promised fills towards demands via 
-;fill-demand in an atomic fashion, we can define the notion of completely 
-;filling a demand as finding the supply for the demand, using fill-demand on 
+;__fill-demand__ in an atomic fashion, we can define the notion of completely 
+;filling a demand as finding the supply for the demand, using __fill-demand__ on 
 ;each candidate element of supply, and drawing from the supply until either the
-;demand is filled, or the supply runs out.
-;1)Assumes candidate preference is invariant.  There may be a time when we need
-;  to re-evaluate the ordering of candidates while we're filling, i.e. the 
-;  amount of fill may impact the order of candidates.  For now, we assume that 
-;  the ordering of candidates is independent of the demand fill.
-;satisfy-demand::demand->category->ctx->[fill-status ctx]
-;                where fill-status = :filled | :unfilled
+;demand is filled, or the candidates are exhausted.  
 
+;1. Assumes candidate preference is invariant.  There may be a time when we need
+;   to re-evaluate the ordering of candidates while we're filling, i.e. the 
+;   amount of fill may impact the order of candidates.  For now, we assume that 
+;   the ordering of candidates is independent of the demand fill.
+  
 (defn satisfy-demand
   "Attempts to satisfy the demand by finding supply and applying promised 
    fills to the demand.  Returns a result pair of 

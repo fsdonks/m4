@@ -15,11 +15,6 @@
              [sim [simcontext :as sim]]
              [util [tags :as tag]]))
 
-;;Undefined as of yet...
-;(defn new-demand [name tstart duration overlap primary-unit quantity 
-;      priority demandstore policystore ctx operation vignette source-first]
-;
-
 ;;##Primitive Demand and DemandStore Operations
 
 (defn can-simulate? [demandstore]
@@ -334,7 +329,7 @@
 ;;mapped to the need to utilize pre-deployed supply to avoid incidental waste of 
 ;;resources, when pre-deployed supply - supply already local to the demand - 
 ;;could be flowed directly to compatible concurrent local demands. 
-;;The need to utilize of a special class of supply resulted in a duplication
+;;The need to utilize a special class of supply resulted in a duplication
 ;;of the fill logic, where the first "phase" tried to exhaust all follow-on 
 ;;supply, with the second or general phase determining demand priority under 
 ;;a simple priority scheme.   
@@ -377,7 +372,7 @@
 ;;=> find the eligible demands for SRC2, where the demand group is either Group1 
 ;;or Group2.
 
-;;Detailed categories come in the forms of maps, which are interpreted as as 
+;;Detailed categories come in the forms of maps, which are interpreted as a 
 ;;category pair, and a set of filters by default.  We can use tags to create 
 ;;general filters as well, which should let us create a unique set of queries.
 ;;A trivial (and useful) extension will be to allow arbitrary tags to be 
@@ -385,8 +380,8 @@
 ;;example could result in an additional tag query to be executed against 
 ;;candidate supply.
 
-;;>__(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}
-;;                   :supply-tags {:just-in-time :state-side}})__  
+;;(fill-category {:demand {:src "SRC1" :demandgroup "Group2"}    
+;;                :supply-tags {:just-in-time :state-side}})  
 
 ;;Categories serve to link supply AND demand, since categories are parsed by 
 ;;ISupplier functions into supply ordering queries.
@@ -409,13 +404,13 @@
 ;;functions in a desired order.
 
 ;;#Demand Category Methods
-;;Categories are used by three new functions: find-eligible-demands, 
-;;defined here, and find-supply, defined in marathon.sim.fill.
+;;Categories are used by two new functions: __find-eligible-demands__ , 
+;;defined here, and __find-supply__,  defined in marathon.sim.fill.
 
 ;;placeholder for allowing out of order definitions, defined later.
 (declare find-eligible-demands)
 
-;;Note -> find-eligible demands is...in a general sense, just a select-where 
+;;Note -> __find-eligible-demands__ is...in a general sense, just a select-where 
 ;;query executed against the demandstore...        
 (defmulti category->demand-rule core/category-type)
 
@@ -598,9 +593,6 @@
 ;;disengage from the demand and return to the global supply.  The following 
 ;;functions implement these scenarios.
 
-;1) ASSUMES update-unit returns a context.
-;2) ASSUMES change-state returns a context...
-
 (defn withdraw-unit
   "Auxillary function that dissociates an element of supply, unit, from a 
    related element of demand, demand.  Typically used when a demand deactivation
@@ -611,12 +603,12 @@
         unitname    (:name unit)]
 	  (cond 
 	    (ungrouped? demandgroup) 
-	      (->> (core/update-unit (set-followon unit demandgroup) ctx)          ;1)
-	           (u/change-state unitname :AbruptWithdraw 0 nil))                ;2)      
+	      (->> (core/update-unit (set-followon unit demandgroup) ctx)          
+	           (u/change-state unitname :AbruptWithdraw 0 nil))                      
 	    (not (ghost? unit))
-	      (u/change-state unitname :AbruptWithdraw 0 nil ctx)                  ;2) 
+	      (u/change-state unitname :AbruptWithdraw 0 nil ctx)                   
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
-	            (u/change-state unitname :Reset 0 nil)))))                     ;2)
+	            (u/change-state unitname :Reset 0 nil)))))                     
 
 (defn send-home
   "Implements the state changes required to deactivate a demand, namely, to send

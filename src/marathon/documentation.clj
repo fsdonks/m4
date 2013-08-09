@@ -1,3 +1,11 @@
+;;##Note for Folks Viewing From a Browser
+;;If you're reading this, and you want to enable the syntax highlighting for
+;;the source code, you need to make sure javascript, or for Internet Explorer,
+;;ActiveX content is enabled.  The syntax highlighter is a small script that
+;;runs in the browser and colorizes the text.  The PDF version does not suffer
+;;this problem.
+
+;;#Documentation Overview
 ;;Marathon documentation serves dual purposes: it's a build script that we can 
 ;;run from the REPL to generate various pieces of documentation, and it 
 ;;provides a topical overview of the different namespaces the support Marathon.  

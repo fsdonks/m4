@@ -1749,3 +1749,225 @@
 ;
 ;End Function
 )
+
+(comment :behavior 
+         ;'Behavior Factory class ...
+;'Used for producing unit and demand behaviors ...
+;Option Explicit
+;Public name As String
+;Public parent As TimeStep_Engine
+;Public behaviors As Dictionary
+;Private tags As GenericTags
+;Private behptr As IUnitBehavior
+;Private basebehavior As IUnitBehavior
+;
+;Implements IVolatile
+;Private Sub Class_Initialize()
+;
+;
+;Dim acbeh As TimeStep_UnitBehaviorAC
+;Dim rcbeh As TimeStep_UnitBehaviorRC
+;Dim ghostbeh As TimeStep_UnitBehaviorGhost
+;
+;name = "Behaviors"
+;Set behaviors = New Dictionary
+;Set tags = New GenericTags
+;
+;Set basebehavior = New TimeStep_UnitBehaviorBase
+;
+;Set acbeh = New TimeStep_UnitBehaviorAC
+;acbeh.init basebehavior
+;
+;Set rcbeh = New TimeStep_UnitBehaviorRC
+;rcbeh.init basebehavior
+;
+;Set ghostbeh = New TimeStep_UnitBehaviorGhost
+;
+;addUnitBehavior basebehavior, "BaseBehavior"
+;addUnitBehavior acbeh, "DefaultACBehavior"
+;addUnitBehavior rcbeh, "DefaultRCBehavior"
+;addUnitBehavior ghostbeh, "DefaultGhostBehavior"
+;
+;End Sub
+;Public Sub initBehaviors(supply As TimeStep_ManagerOfSupply)
+;
+;Dim beh
+;For Each beh In behaviors
+;    Set behptr = behaviors(beh)
+;    behptr.init supply, basebehavior
+;    'registerSupply supply, behaviors(beh)
+;Next beh
+;    
+;End Sub
+;Public Sub registerSupply(supply As TimeStep_ManagerOfSupply, behavior As IUnitBehavior)
+;'Set behavior.parent = supply
+;End Sub
+;Public Sub addACUnitBehavior(beh As TimeStep_UnitBehaviorAC, Optional tag As String, Optional extratags As Dictionary)
+;Dim tg
+;If Not behaviors.exists(beh.name) Then
+;    behaviors.add beh.name, beh
+;    If tag <> vbNullString Xor Not (extratags Is Nothing) Then associate beh.name, tag, extratags
+;Else
+;    Err.Raise 101, , "Behavior already exists"
+;End If
+;
+;End Sub
+;Public Sub addRCUnitBehavior(beh As TimeStep_UnitBehaviorRC, Optional tag As String, Optional extratags As Dictionary)
+;Dim tg
+;If Not behaviors.exists(beh.name) Then
+;    behaviors.add beh.name, beh
+;    If tag <> vbNullString Xor Not (extratags Is Nothing) Then associate beh.name, tag, extratags
+;Else
+;    Err.Raise 101, , "Behavior already exists"
+;End If
+;
+;End Sub
+;Public Sub addGhostUnitBehavior(beh As TimeStep_UnitBehaviorGhost, Optional tag As String, Optional extratags As Dictionary)
+;Dim tg
+;If Not behaviors.exists(beh.name) Then
+;    behaviors.add beh.name, beh
+;    If tag <> vbNullString Xor Not (extratags Is Nothing) Then associate beh.name, tag, extratags
+;Else
+;    Err.Raise 101, , "Behavior already exists"
+;End If
+;
+;End Sub
+;Public Sub addUnitBehavior(beh As IUnitBehavior, Optional tag As String, Optional extratags As Dictionary)
+;Dim tg
+;'Set beh.parent = getSupply
+;If Not behaviors.exists(beh.name) Then
+;    behaviors.add beh.name, beh
+;    If tag <> vbNullString Xor Not (extratags Is Nothing) Then associate beh.name, tag, extratags
+;Else
+;    Err.Raise 101, , "Behavior already exists"
+;End If
+;
+;End Sub
+;'we can categorize behaviors....just like events.
+;Public Sub associate(behaviorname As String, tag As String, Optional extratags As Dictionary)
+;tags.addTag tag, behaviorname
+;tags.multiTagDict behaviorname, extratags
+;End Sub
+;Public Function behaviorFromTag(tag As String) As IUnitBehavior
+;Dim beh As Dictionary
+;Set beh = tags.getSubjects(tag)
+;
+;If beh.count = 1 Then
+;    Set behaviorFromTag = behaviors(beh.keys(0))
+;ElseIf beh.count = 0 Then
+;    Err.Raise 101, , "No tags associated with this behavior"
+;ElseIf beh.count > 1 Then
+;    Err.Raise 101, , "Multiple behaviors associated with this tag"
+;End If
+;
+;End Function
+;Public Function exists(behname As String) As Boolean
+;exists = behaviors.exists(behname)
+;End Function
+;Private Function getACBehavior(behname As String) As TimeStep_UnitBehaviorAC
+;If exists(behname) Then
+;    Set getACBehavior = behaviors(behname)
+;Else
+;    Err.Raise 101, , "does not exist"
+;End If
+;End Function
+;
+;Private Function getRCBehavior(behname As String) As TimeStep_UnitBehaviorRC
+;If exists(behname) Then
+;    Set getRCBehavior = behaviors(behname)
+;Else
+;    Err.Raise 101, , "does not exist"
+;End If
+;End Function
+;
+;Private Function getGhostBehavior(behname As String) As TimeStep_UnitBehaviorGhost
+;If exists(behname) Then
+;    Set getGhostBehavior = behaviors(behname)
+;Else
+;    Err.Raise 101, , "does not exist"
+;End If
+;End Function
+;Public Function assignBehavior(unit As TimeStep_UnitData, Optional specificbehavior As String) As TimeStep_UnitData
+;
+;With unit
+;    If specificbehavior = vbNullString Or specificbehavior = "Auto" Then
+;        Select Case .component
+;            Case Is = "AC"
+;                Set .behavior = defaultACBehavior
+;            Case Is = "RC"
+;                Set .behavior = defaultRCBehavior
+;            Case Is = "NG"
+;                Set .behavior = defaultRCBehavior
+;            Case Is = "Ghost"
+;                Set .behavior = defaultGhostBehavior
+;        End Select
+;    ElseIf exists(specificbehavior) Then
+;        Set .behavior = behaviors(specificbehavior)
+;    Else
+;        Err.Raise 101, , "Behavior does not exist in this codebase." & _
+;                                " Possibly not implemented or not spelled correctly."
+;    End If
+;End With
+;
+;Set assignBehavior = unit
+;
+;End Function
+;Public Function getSupply() As TimeStep_ManagerOfSupply
+;End Function
+;
+;Public Function defaultACBehavior() As TimeStep_UnitBehaviorAC
+;Set defaultACBehavior = behaviors("DefaultACBehavior")
+;End Function
+;Public Function defaultRCBehavior() As TimeStep_UnitBehaviorRC
+;Set defaultRCBehavior = behaviors("DefaultRCBehavior")
+;End Function
+;Public Function defaultGhostBehavior() As TimeStep_UnitBehaviorGhost
+;Set defaultGhostBehavior = behaviors("DefaultGhostBehavior")
+;End Function
+;
+;Private Sub Class_Terminate()
+;Set parent = Nothing
+;Set behaviors = Nothing
+;Set tags = Nothing
+;End Sub
+;
+;Private Sub IVolatile_Reset()
+;'should be no need to do anything with this guy.
+;End Sub
+;Private Sub IVolatile_Terminate()
+;End Sub
+)
+
+(comment :period-doc
+         
+         ;->Re: the below discussion on a declarative specification for defining 
+;    composable periods....We can simple bifurcate periods into two classes:
+;   Temporal and Reactive.
+;       Temporal are the current case; generally that periods are known in advance.
+;       The beginning and end of the period is known apriori.
+;   Reactive
+;       Reactive periods happen in response to observed events.
+;       The start of a reactive period is an oberserved event.
+;       The end of a reactive period is also an observed event.
+;       Thus, reactive periods are functions on oberservables.
+;   Seems like the simplest way to do this.
+;       Develop a little language for describing reactive events.
+;       StartOn: entityX spawns.
+;       StopOn:  DemandY deactivates.
+;   Very similar to reactive GUI stuff I've already ported....
+;   Periodicity is implicit.
+;   This gives us a simple notion of timelines...
+;       Scheduled/Known......
+;       Reactive/UnKnown....
+;   A timeline then, is a chunk of data, that can be queried via a function
+;   to determine which period(s) are active at time t.
+;   A timeline can be composed of scheduled and unscheduled periods.
+;   A reactive timeline implies some side-effecting notion.
+;       An observer listening for events.
+;       The observer can also be causing events, effectively I/O
+;Using the timeline abstraction, we can compose period-generating functions.
+;   A GenericPeriod can be seen as a period generating function, of the known variety.
+;   A ReactivePeriod can be seen a a period generating function, of the unknown variety.
+;Constructing ReactivePeriods requires some IO....
+;   holy shit, allows for User I/O (duh).
+)
