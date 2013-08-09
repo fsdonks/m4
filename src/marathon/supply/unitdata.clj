@@ -218,6 +218,7 @@
 ;End Property
 (defn get-bog [u] (-> u :currentcycle :bog))
 
+(defn unit-bog-budget [u] (-> u :currentcycle :bogbudget))
 ;Public Property Get dwell() As Single
 ;dwell = CurrentCycle.dwell
 ;End Property
@@ -230,6 +231,7 @@
 ;NOTE -> need to define cycle-bdr
 (defn- cycle-bdr [c] 0.0)
 (defn get-BDR [u] (cycle-bdr (:currentcycle u)))
+
 
 ;Public Sub changePolicy(newpolicy As IRotationPolicy)
 ;If Not (policy Is Nothing) Then policyStack.add newpolicy

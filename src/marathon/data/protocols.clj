@@ -220,7 +220,8 @@
   (max-dwell        [p])
   (max-mob          [p])
   (min-dwell        [p])
-  (add-policy       [p policy & args]))
+  (add-policy       [p policy & args])
+  (get-locations    [p]))
 
 
 

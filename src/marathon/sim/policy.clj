@@ -15,11 +15,13 @@
 ;;the policystore, and managing policies and periods during the simulation.
 (ns marathon.sim.policy
   (:require [sim [simcontext :as sim]]
-            [marathon.data [protocols :as protocols]]
+            [marathon.data [protocols :as protocols] 
+                           [period :as period]]
             [marathon.policy [policydata :as p] [policystore :as pstore]]
-            [marathon.sim [core :as core] [unit :as u]]            
-            [util [tags :as tag]
-                  [graph :as gr]]))
+            [marathon.sim  [missing :as missing]    
+                           [core :as core]    
+                           [unit :as u]]            
+            [util [tags :as tag]]))
 
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
 (declare register-location atomic-name find-period)
@@ -156,17 +158,6 @@
 ;be used. This is useful for describing possible behaviors, where the periods
 ;correspond to corner-cases that may be triggered by external events.
 
-
-;;#Missing Functions#
-;;__TODO__ Implement subscribe-unit-to-policy.  Used to be associated with the policy object, 
-;;now we have the policy store maintaining a table of unit id's to policies.
-(defn subscribe-unit-to-policy [u p policystore ctx]
-    (throw (Exception. "subscribe-unit-to-policy not implemented")))
-;;__TODO__ Implement get-subscribers.  Used to be associated with the policy object, 
-;;now we have the policy store maintaining a table of unit id's to policies.
-(defn get-subscribers [policy-name policystore]
-  (throw (Exception. "get-subscribers not implemented")))
-
 ;;#Defining Time Periods#
 
 ;Utility function.  
@@ -180,11 +171,9 @@
   [policystore per] 
   (assoc-in policystore [:periods (:name per)] per))
 
-
 (defn add-periods  "Import a sequence of periods into the policystore"  
   [periods policystore] 
   (reduce add-period policystore periods))
-
 
 (defn added-period!
   "Notifies interested parties of the beginning and ending of a period.
@@ -199,19 +188,17 @@
   [per ctx]
   (->> ctx 
     (added-period! per)
-    (policy-update! (:fromday per))
-    (policy-update! (:today per))))
+    (policy-update! (:from-day per))
+    (policy-update! (:to-day per))))
 
 (defn get-periods [policystore] "Yield registered periods in the policystore." 
   (:periods policystore))
+
 (defn get-period [policystore periodname] "Find a period in the policystore."
   (get (get-periods policystore) periodname))
+
 (defn schedule-periods [policystore ctx] "Schedule multiple periods."
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
-
-
-;aux function.
-(defn between [x l r] (and (>= x l) (<= x r)))
 
 ;MEMOIZE this guy...
 ;note -> this is a naive search, if we stored periods in a sorted map or set, 
@@ -224,8 +211,8 @@
   "Finds all periods in the policy store that intersect time t."
   [t policystore]
   (->> (get-periods policystore)
-       (take-while #(<= t (:today %)))
-       (some #(between t  (:fromday %) (:today %)))))
+       (take-while #(<= t (:to-day %)))
+       (some #(period/intersects-period? t  %))))
 
 ;Returns the the period currently active in the policy store.  This may change 
 ;when I introduce multiple timelines....
@@ -255,7 +242,7 @@
 ;Derives locations from the policy.
 ;each location in a policy should be registered in the locations dictionary.
 ;---TODO - Abstract out the call to graph, maybe have policy handle it...
-(defn get-policy-locations [p] (gr/nodes (:position-graph p)))
+(defn get-policy-locations [p] (protocols/get-locations p))
 
 ;TODO -> formalize this...it's really general right now...
 (defn composite-policy? [p] (contains? p :policies))
@@ -303,7 +290,7 @@
 
 ;;Constructor for building periods.  Original implementation was in
 ;;GenericPeriod.  Periods are now just simple maps.
-(defn ->period [name fromday today] {:name name :fromday fromday :today today})
+(defn ->period [name from-day to-day] {:name name :from-day from-day :to-day to-day})
 
 ;;Swaps out the active period.  If the new period is the final period, then caps
 ;;the final period to the current day.
@@ -352,7 +339,7 @@
    a policy shift to the sub policy defined over the new period.  If the period
    is undefined, no change happens."
   [current-period new-period policy policystore ctx]
-  (let [subscribers (get-subscribers policy policystore)
+  (let [subscribers (missing/get-subscribers policy policystore)
         new-policy  (protocols/on-period-change policy new-period)]
         (->> (alter-unit-policies subscribers new-period policy ctx)
              (sim/merge-updates 

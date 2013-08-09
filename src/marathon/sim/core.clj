@@ -67,6 +67,11 @@
 (defn followon? [u] (:followoncode u))
 (defn ghost-followon? [u] (and (ghost? u) (followon? u)))
 
+(defn interval->date [t ctx]
+  (let [[start-date time-scale] ((juxt [:start-date :time-scale])  
+                                  (get-parameters ctx))] 
+    (inc start-date (* time-scale t))))
+
 ;;#Tag Related Functions#
 ;;Another useful bit of higher order, or meta data, is the notion of simple 
 ;;tags.  We use tags as a simple mechanism to track all kinds of effects and 

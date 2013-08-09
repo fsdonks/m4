@@ -8,7 +8,13 @@
             [marathon.sim [core :as core] [demand :as dem] [policy :as policy]
                           [supply :as supply] [unit :as u]]
             [sim [simcontext :as sim]]
+            [marathon.data [protocols :as protocols]]
             [util [tags :as tag]]))
+
+(defn get-max-bog [unit policystore]
+  (let [bog-remaining (udata/unit-bog-budget unit)
+        p          (policy/get-policy (:policy unit))]
+    (- bog-remaining (protocols/overlap p))))
 
 ;;#Functions for Deploying Supply#
 (defn check-followon-deployer! [followon? unitname demand t ctx]
@@ -34,12 +40,16 @@
    expected length of stay, bog, will determine when the next update is 
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
-  [supplystore ctx parameters policystore unit t demand bog fillcount 
-   filldata deploydate  & [followon?]]
+  [ctx unit t demand bog filldata deploydate  & [followon?]]
   (assert  (u/valid-deployer? unit) 
     "Unit is not a valid deployer! Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment")
-  (let [demandname    (:name demand)
+  (let [supplystore   (core/get-supplystore ctx)
+        parameters    (core/get-parameters ctx)
+        policystore   (core/get-policystore ctx)
+        fillcount     (count (:fills (core/get-fillstore ctx)))
+        bog           (get-max-bog unit policystore) ;;Black sheep
+        demandname    (:name demand)
         demand        (d/assign demand unit) ;need to update this in ctx..
         demandstore   (core/get-demandstore ctx) ;Lift to a protocol.
         from-location (:locationname unit) ;may be extraneous

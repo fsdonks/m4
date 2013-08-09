@@ -5,13 +5,13 @@
 ;;supply, since the act of filling usually consumes some resources in supply and
 ;;motivates a kind of motion in the supply simulation.
 (ns marathon.sim.fill
-  (:require [marathon.data [protocols :as protocols]]
+  (:require [marathon.data   [protocols :as protocols]]
             [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim [core :as core] [demand :as dem]   [supply :as supply]
+            [marathon.sim [core :as core] [demand :as dem] [supply :as supply]
                           [policy :as policy] [unit :as u] 
                           [deployment :as deployment]]           
-            [sim [simcontext :as sim] [updates :as updates]]
+            [sim  [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]
             [util [graph :as graph]]))
 
@@ -31,10 +31,12 @@
 ;notify everyone that we've filled a demand...
 (defn filled-demand! [demand-name unit-name ctx] 
   (sim/trigger-event :FillDemand demand-name unit-name "Filled Demand" nil ctx))  
+
 ;ghosts raise special attention when they deploy.
 (defn ghost-deployed! [demand-src ctx]
-  (sim/trigger-event :GhostDeployed demand-src demand-src "Filled demand with  ghost" 
-               :normal ctx))
+  (sim/trigger-event :GhostDeployed demand-src demand-src 
+       "Filled demand with  ghost"  :normal ctx))
+
 ;ghosts raise special attention if they followon.
 (defn ghost-followed! [demand-src ctx]
   (sim/trigger-event :GhostDeployed demand-src demand-src 
@@ -396,16 +398,14 @@
 (defn apply-fill
   "Deploys the unit identified in filldata to demand via the supply system."
   [filldata demand ctx]
-  (let [unit (:unit filldata)
+  (let [unit        (:unit filldata)
         fillstore   (core/get-fillstore ctx)
         supplystore (core/get-supplystore ctx)
         policystore (core/get-policystore ctx)
         params      (core/get-parameters ctx)
         t           (sim/get-time ctx)]
-    (->> ctx
-        (deployment/deploy-unit supplystore ctx params policystore unit t
-            demand (/get-max-bog unit) (count (:fills fillstore))
-            filldata (params/interval->date t) (followon? unit)))))
+    (deployment/deploy-unit ctx unit t demand filldata 
+                            (core/interval->date t ctx) (core/followon? unit))))
 
 ;;#Incremental Demand Filling# 
 
@@ -458,8 +458,7 @@
         fillfunc    (core/get-fill-function ctx)
         supplystore (core/get-supplystore ctx)
         candidates  (find-supply fillfunc supplystore ;1)
-                      (derive-supply-rule demand fillstore category) 
-                                 demand supplybucket phase)
+                      (derive-supply-rule demand fillstore category))
         demand-name (:name demand)]
     (loop [d demand           
            xs candidates 
