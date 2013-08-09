@@ -6,13 +6,14 @@
 ;;in the simulation, with a sub policy assigned to various periods of simulation
 ;;time.  The policy system manages the definitions for a library of policies, 
 ;;tracks the current scheduled or conditional periods in the simulation, and 
-;;handles system-wide policy changes for relevant policies.
+;;handles system-wide policy changes for relevant policies.  
 
 ;;The primary functions contained herein surround the management of an abstract 
 ;;policy context in the simulation, which is embodied in a policystore.  Most 
 ;;of the functions here deal with creating policies, composing policies, 
 ;;registering policies with the policystore, registering simulation periods with 
 ;;the policystore, and managing policies and periods during the simulation.
+
 (ns marathon.sim.policy
   (:require [sim [simcontext :as sim]]
             [marathon.data [protocols :as protocols] 
@@ -33,7 +34,7 @@
 ;;__TODO__ Replace references to TimeStep_
 ;;__TODO__ Replace util.graph with either cljgraph or the topograph from cljgui.
 
-;;#Policy Simulation Notes#
+;;##Policy Simulation Overview
 ;;Policies are the backbone of the entity behavioral system and provide a 
 ;;high level mechanism for parameterizing entity behavior.  Policies 
 ;;are the scripts that entities consult to determine where to go, how long to 
@@ -42,8 +43,8 @@
 ;;interpreters, and actually implement (or ignore) state transitions described 
 ;;by a unit's policy structure.  Behaviors are detailed in another namespace.
 
-;
-;#What is a policy context?#
+
+;#What is a policy context?
 ;Policy is vital because it determines the criteria for both the eligibility and 
 ;suitability of supply to fill demand.  A conservative policy may provide few 
 ;opportunities for units to fill demand, limiting the deployable supply 
@@ -64,7 +65,7 @@
 ;stability in the rotational supply.  All of this behavior is scriptable, and
 ;can be modified by changing policy data rather than rewiring logic.  As such,
 ;policies provide a simple, yet powerful scripting mechanism.  
-;
+
 ;Marathon has historically maintained a notion of an overarching policy context
 ;throughout the simulation.  In fact, the simulation timeline is typically 
 ;viewed as a mapping of policy periods to segments of time.  Periods typically 
@@ -83,13 +84,13 @@
 ;depend upon a period being active are engaged, and units following to these
 ;policies alter their behavior accordingly.  This is how Marathon manages a 
 ;policy context that can either be simple and uniform (i.e. one policy, one 
-;period), or very unique (N different policies, K periods).
-;
-;#What are policies?#
+;period), or very unique (N different policies, K periods).  
+
+;#What are policies?
 ;Policies describe a set of states and durations that -usually- conform to a
 ;rotational policy. Policies are very important, as they serve as the 
-;instruction set for unit entity behavior.
-;
+;instruction set for unit entity behavior.  
+
 ;Unit entities "act" on policies with their unit behavior, in which the meaning
 ;of the states in the policy is interpreted and acted upon.  Additionally, unit
 ;behaviors consult a policy to figure out what the next state should be, how 
@@ -100,17 +101,17 @@
 ;etc.  All the policy has to do is specify which state a unit is in at a 
 ;particular policy position, specify a starting and stopping position, and 
 ;indicate the transition time between state changes.  Policies can have at most
-;one cycle, and are typically represented as a Directed Graph.
-;
+;one cycle, and are typically represented as a Directed Graph.  
+
 ;Note -> Unit behaviors are typically implemented statically, as functions
 ;where policies are much specified as data.  
-;
+
 ;Next to supply and demand, policy is the most variable higher-order data.  As 
 ;such, we need a robust, flexible way to specify different policies easily, so
 ;that rather than changing code, an end-user can simply modify the data that
 ;describes the policy (not unlike a script) and affect a change in unit entity 
-;behavior easily and transparently.
-;
+;behavior easily and transparently.  
+
 ;One way to provide flexibility is to use a template system, where users can
 ;derive a policy from an existing template, and then apply a set of parameters
 ;to transform or "mold" the policy into a desired form.  Marathon currently has
@@ -120,8 +121,8 @@
 ;serves as a central dispatch for invoking policy templates, applying
 ;modifications, and deriving new policies.  The MarathonPolicy module contains 
 ;the actual structure for each policy template, as well as routines that provide
-;default policies for multiple contexts (rather than reading data).
-;
+;default policies for multiple contexts (rather than reading data).  
+
 ;Technically, anything that implements the IRotationPolicy protocol can serve
 ;as a policy, so developers can extend policy responsibilities to many different
 ;implementations. Marathon provides two implementations of IRotationPolicy, 
@@ -132,19 +133,19 @@
 ;differently.  The key to their flexibility is that composite policies are 
 ;defined in terms of Atomic policies.  So users can, without changing any logic,
 ;add new policy definitions by supplying data that describes how to combine
-;pre-existing policies.
-;
-;#Atomic Policies#
+;pre-existing policies.  
+
+;#Atomic Policies
 ;Normal TimeStep_Policy objects are effectively Atomic policies, in that they
 ;represent a single set of instructions that describe a rotational policy.  They
 ;do not change.  Therefore, if a unit entity subscribes to such an atomic 
 ;policy, it will always follow the same set of instructions.
 ;
-;#Composite Policies#
+;#Composite Policies
 ;Composite policies represent an association of one or more Atomic policies.  
 ;This allows us to capitalize on the atomic policies, and express new policies
-;as simple compositions of N atomic policies.
-;
+;as simple compositions of N atomic policies.  
+
 ;The current implementation of composite policies was built under the notion of
 ;a simple labeling or association of a set of sub policies, where a period label
 ;serves as an index to an associated atomic policy.  Technically, periods are 
@@ -158,12 +159,12 @@
 ;be used. This is useful for describing possible behaviors, where the periods
 ;correspond to corner-cases that may be triggered by external events.
 
-;;#Defining Time Periods#
+;;##Implementation
+;;#Defining Time Periods
 
 ;Utility function.  
 (defn flip [f] (fn [x y] (f y x)))
 
-;'Helper sub to partially fill in fields for the more generic RequestUpdate sub.
 (defn policy-update! [t ctx] 
   (sim/request-update t :PolicyManager :policy-update nil ctx))  
 
@@ -200,13 +201,6 @@
 (defn schedule-periods [policystore ctx] "Schedule multiple periods."
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
 
-;MEMOIZE this guy...
-;note -> this is a naive search, if we stored periods in a sorted map or set, 
-;we could find them faster.  As it stands, period searches are typically 
-;infrequent, and amenable to caching.  We'll stick with memoization for now...
-;Returns the period name(s) that exist at time t, as defined by the period 
-;records stored in the policystore.
-
 (defn find-period
   "Finds all periods in the policy store that intersect time t."
   [t policystore]
@@ -218,7 +212,7 @@
 ;when I introduce multiple timelines....
 (defn get-active-period [policystore] (:activeperiod policystore))
 
-;;#Policy Location Queries#
+;;#Policy Location Queries
 ;;As we define policies, we parse their node labels to derive abstract policy 
 ;;locations.   
 
@@ -241,10 +235,10 @@
 
 ;Derives locations from the policy.
 ;each location in a policy should be registered in the locations dictionary.
-;---TODO - Abstract out the call to graph, maybe have policy handle it...
+;__TODO__ Abstract out the call to graph, maybe have policy handle it...
 (defn get-policy-locations [p] (protocols/get-locations p))
 
-;TODO -> formalize this...it's really general right now...
+;__TODO__ formalize this...it's really general right now...
 (defn composite-policy? [p] (contains? p :policies))
 (defn atomic-policy?  [p]  (not (composite-policy? p)))
 
@@ -284,18 +278,10 @@
      (str "Period change from " fromname 
           " to "  toname " caused all units to update.") toname ctx))
 
-;;#Period Data Structures#
-
-;;__TODO__ make sure the period constructor doesn't exist somewhere else...
-
-;;Constructor for building periods.  Original implementation was in
-;;GenericPeriod.  Periods are now just simple maps.
-(defn ->period [name from-day to-day] {:name name :from-day from-day :to-day to-day})
-
 ;;Swaps out the active period.  If the new period is the final period, then caps
 ;;the final period to the current day.
 (defn update-period [day toname policystore]
-  (->> (if (= toname :final) (->period :final day day) 
+  (->> (if (= toname :final) (period/->period :final day day) 
                              (get-period policystore toname))
        (assoc policystore :activeperiod)))
 
@@ -303,7 +289,7 @@
 (defn final-period [fromname toname ctx] 
   (period-driven-update! fromname toname ctx))
 
-;;#Changing Policies in Response to Periods#
+;;#Changing Policies in Response to Period Changes
 
 ;queue-policy-change could probably be in the unit level simulation.
 ;Note -> returns unit-updates....CONSUME WITH sim/merge-updates
@@ -389,7 +375,7 @@
 
 (defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
 
-;;#Managing Policies and Periods#
+;;#Managing Policies and Periods
 ;This is the primary routine to manage policies for a policy store, which are 
 ;driven by period changes.  Many policies are defined over abstract periods, 
 ;so if periods are scheduled to change, they will propogate a change in entity
@@ -436,7 +422,7 @@
 ;is relatively easy to patch.
 (defn demand-location? [location-name] (= (first location-name) \[))
 
-;;#Policy Construction and Composition#
+;;#Policy Construction and Composition
 
 ;Primitive wrapper for appending atomic policies to composite policies.
 ;TODO -> extend this to incorporate the semantics for generalized rotation 
@@ -541,7 +527,7 @@
              [(protocols/policy-name p) (protocols/position-graph p)])))
 
 
-;;#Policystore Creation#
+;;#Policystore Creation
 ;'TODO -> get this constructor back online.
 ;'Rewire this....
 ;'What we're really doing is building a policymanager from several sources...

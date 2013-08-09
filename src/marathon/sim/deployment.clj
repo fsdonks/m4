@@ -1,7 +1,8 @@
 ;;Deploying entities requires operating on multiple systems.  This namespace
 ;;builds on the services provided by supply, demand, and policy, to coordinate 
 ;;changes to the simulation context necessary to physically allocate supply to 
-;;demand - or to execute deployments.  Primarily used by sim.fill.
+;;demand - or to execute deployments.  
+;;Primarily used by __marathon.sim.fill__ .
 (ns marathon.sim.deployment
   (:require [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as udata]]
@@ -11,12 +12,13 @@
             [marathon.data [protocols :as protocols]]
             [util [tags :as tag]]))
 
+;;#Functions for Deploying Supply
+
 (defn get-max-bog [unit policystore]
   (let [bog-remaining (udata/unit-bog-budget unit)
         p          (policy/get-policy (:policy unit))]
     (- bog-remaining (protocols/overlap p))))
 
-;;#Functions for Deploying Supply#
 (defn check-followon-deployer! [followon? unitname demand t ctx]
   (let [supply (core/get-supplystore ctx)
         unit   (supply/get-unit ctx unitname)]
@@ -31,10 +33,8 @@
            (supply/first-deployment! store unit)
            (supply/adjust-max-utilization! store unit)))))
 
-;Enacts context changes and updates necessary to constitute deploying a unit.
 ;Critical function.
-;---------CHECK PARAMETERS -> lots of unused stuff here (might be legacy fluff, 
-;most of which is in context.
+
 (defn deploy-unit
   "Deploys a unit entity, registered in supply, at time t, to demand.  The 
    expected length of stay, bog, will determine when the next update is 
@@ -48,7 +48,7 @@
         parameters    (core/get-parameters ctx)
         policystore   (core/get-policystore ctx)
         fillcount     (count (:fills (core/get-fillstore ctx)))
-        bog           (get-max-bog unit policystore) ;;Black sheep
+        bog           (get-max-bog unit policystore) 
         demandname    (:name demand)
         demand        (d/assign demand unit) ;need to update this in ctx..
         demandstore   (core/get-demandstore ctx) ;Lift to a protocol.

@@ -1,7 +1,7 @@
 ;;The demand system provides functions for scheduling demands, as well as 
 ;;defining the order in which demands are filled.  The namespace contains 
 ;;primitive functions for operating on demandstores, as well as demand-related
-;;notifications and a high-level demand management API.
+;;notifications and a high-level demand management API.  
 ;Functions for creating, initializing, resetting, and updating state related to
 ;the demand simulation are also found here.
 (ns marathon.sim.demand
@@ -20,7 +20,8 @@
 ;      priority demandstore policystore ctx operation vignette source-first]
 ;
 
-;;#Primitive Demand and DemandStore Operations#
+;;##Primitive Demand and DemandStore Operations
+
 (defn can-simulate? [demandstore]
   (> (count (tag/get-subjects (:tags demandstore) :enabled)) 0))
 
@@ -136,7 +137,7 @@
 (defn request-demand-update! [t demandname ctx]
   (sim/request-update t demandname :demand-update ctx))
 
-;;#Demand Notifications#
+;;#Demand Notifications
 (defn request-fill! [demandstore category d ctx]
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
      (str "Highest priority demand in Category " category " is " (:name d) 
@@ -216,7 +217,7 @@
   (sim/trigger-event :added-demand "DemandStore" "DemandStore" 
        (str "Added Demand " (:name demand)) nil ctx))
 
-;;#Demand Registration and Scheduling#
+;;#Demand Registration and Scheduling
 (defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
 (defn set-activations   [dstore t m] (assoc-in dstore [:activations t] m))
 (defn get-deactivations [dstore t]   (get-in dstore   [:deactivations t] #{}))
@@ -266,13 +267,13 @@
   (if (empty? m) m (dissoc m (first (keys m)))))
 
 
-;;#Managing the Fill Status of Changing Demands#
+;;#Managing the Fill Status of Changing Demands
 ;;Unfilled demands exist in a priority queue, UnfilledQ, ordered by the demand's 
 ;;priority field value - typically an absolute, static ordering, set at 
-;;construction.
+;;construction.  
 ;;UnfilledQ partitions the set of active demands that are unfilled.
 ;;When we go to look for demands that need filling, we traverse keys in 
-;;priority order. 
+;;priority order.  
 ;;We use a priority queue to effeciently respond to changes in a demand's fill 
 ;;status, and to only try to fill demands when we need to.  Older algorithms 
 ;;naively polled the demands, and led to quadratic complexity.  In this case, 
@@ -322,7 +323,7 @@
                        (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
 
-;;#Describing Categories of Demand To Inform Demand Fill Rules#
+;;##Describing Categories of Demand To Inform Demand Fill Rules
 ;;Demands have typically been binned into gross categories, based on the type 
 ;;of capability required to meet a demand.  Additional complexities arose as
 ;;subcategories - such as the notion of follow-on demands - became a necessity.
@@ -338,7 +339,7 @@
 ;;supply, with the second or general phase determining demand priority under 
 ;;a simple priority scheme.   
 
-;;#Categories are a Little Language for Relating Supply to Demand#
+;;#Categories are a Little Language for Relating Supply to Demand
 ;;As the potential for additional "special cases" of fill arose, it became 
 ;;obvious that a general mechanism for unambiguously describing cases would 
 ;;simplify the filling logic, and allow for future rule expansions.
@@ -353,7 +354,7 @@
 ;;implementation, since we can use the category of fill to select eligible 
 ;;demands, and to inform suitability of supply.  
 
-;;#Category Examples#
+;;#Category Examples
 
 ;;In the simple case, when the category is a string, or a key, we act like 
 ;;normal filling..
@@ -407,7 +408,7 @@
 ;;by either querying or building demand categories, and composing eligibilty 
 ;;functions in a desired order.
 
-;;#Demand Category Methods#
+;;#Demand Category Methods
 ;;Categories are used by three new functions: find-eligible-demands, 
 ;;defined here, and find-supply, defined in marathon.sim.fill.
 
@@ -446,7 +447,7 @@
           :else ;Future extensions.  Might allow arbitrary predicates and tags. 
              (throw (Exception. "Not implemented!")))))      
 
-;;#Finding Demands by Category#
+;;#Finding Demands by Category
 ;;High-level API to find a set of eligible demands that match a potentially 
 ;;complex category.  Uses the category->demand-rule interpreter to parse the 
 ;;rule into a query function, then applies the query to the store.
@@ -479,14 +480,12 @@
 ;demand fill. If stop-early? is falsey, then we scan the entire set of demands, 
 ;trying to fill from a set of supply.
 
-;1)the result of trying to fill a demand should be a map with context
-   ;we can be more flexible here, maybe pass info on the success of the fill too
-   ;map of {:demand ... :demandstore ... :ctx ...}
-   ;NOTE -> we pass the category to communicate with supply during fill...
-;2)incorporate fill results.
-;3)If we fail to fill a demand, we have no feasible supply, thus we leave it on 
-;  the queue, stop filling. Note, the demand is still on the queue, we only 
-;  "tried" to fill it. No state changed .
+;1.  The result of trying to fill a demand should be a map with context
+;    we can be more flexible here, maybe pass info on the success of the fill.
+;2.  Incorporate fill results.
+;3.  If we fail to fill a demand, we have no feasible supply, thus we leave it 
+;    on the queue, and stop filling. Note, the demand is still on the queue, we
+;    only "tried" to fill it. No state changed .
 (defn fill-category [demandstore category ctx & {:keys [stop-early?] 
                                                  :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
@@ -515,7 +514,7 @@
 ;NOTE...since categories are independent, we could use a parallel reducer here..
 ;filling all unfilled demands can be phrased in terms of fill-category...
 
-;;#High Level Demand API#
+;;#High Level Demand Fill
 
 ;;Higher-order function for filling demands.
 (defn fill-demands-with [ctx f]
@@ -549,14 +548,14 @@
     (fill-hierarchically)))
 
 
-;;#Demand Scheduling#
+;;##Demand Scheduling
 ;;In addition to serving demands for filling, scheduling demands for activation 
 ;;and deactivation is a primary service of the demand system.  The following 
 ;;functions define operations that pertain to the timing and updating of 
 ;;demands. 
 
 
-;;#Demand Activation#
+;;#Demand Activation
 ;;Over time, we maintain a set of active demands which will help us only fill 
 ;;active demands. How do demands get added to the set? Upon initialization, we 
 ;;schedule their activation day and deactivation day (start + duration). During
@@ -592,7 +591,7 @@
 	          ctx 
 	          (get-activations demandstore))))
 
-;;#Shifting Elements of Supply To and From Demand#
+;;#Shifting Elements of Supply To and From Demand
 ;;As supply is selected to fill demand, the supply is actively assigned to a 
 ;;specific demand.  From this status, we may see supply stay there indefinitely,
 ;;shift from an actively assigned state to an overlapping state, or completely 
@@ -635,7 +634,7 @@
          (withdraw-unit unit demand) 
          (disengaging! demand unitname)))) 
 
-;;#Notes on calling change-state for the unit-level system#
+;;#Notes on calling change-state for the unit-level system
 ;there WILL be things happening to the ctx, possible mutations and such, that 
 ;we may need to carry forward (although we can discipline ourselves for now).
 
@@ -647,7 +646,7 @@
 ;unit simulation, or the supply simulation.
 
 
-;;#Disengagement#
+;;#Disengagement
 ;;Disengagement is the primitive process for shifting a unit of supply's role 
 ;;from actually filling a demand, into an optional overlapping status.  
 ;;Overlapping supply is still associated with the demand, i.e. proximate and 
@@ -693,7 +692,7 @@
          (assoc-in (core/get-demandstore ctx) [:demandmap (:name demand)]
                    (assoc demand :units-assigned {}))}))))
 
-;;#Demand DeActivation#
+;;#Demand DeActivation
 
 (defn deactivate-demand
   "Frees resources associated with a demand, sending home any units proximate 
@@ -718,7 +717,7 @@
             ctx 
             (get-deactivations demandstore))))
 
-;;#Demand Management#
+;;##Demand Management
 
 (defn manage-demands
   "High level demand management API.  The primary system service used by the 

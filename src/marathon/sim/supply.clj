@@ -1,4 +1,4 @@
-;;An implementation of the supply simulation used by Marathon.
+;;An implementation of the supply simulation used by Marathon.  
 ;;All the operations for pushing supply, in the context of a simulation are 
 ;;maintained here.
 (ns marathon.sim.supply
@@ -10,7 +10,7 @@
             [sim [simcontext :as sim] [updates :as updates]]
             [util [tags :as tag]]))
 
-;;#Primitive Operations and Supply Queries#
+;;#Primitive Operations and Supply Queries
 
 ;'TODO -> formalize dependencies and pre-compilation checks....
 (defn can-simulate? [supply] 
@@ -31,7 +31,7 @@
   (missing/assign-behavior unit behaviorname))
 (defn empty-position? [unit] (nil? (:position-policy unit)))
 
-;;#Keyword Tag Builders#
+;;#Keyword Tag Builders
 (core/defkey source-key "SOURCE_")
 (core/defkey sink-key   "SINK_")
 (core/defkey compo-key  "COMPO_") 
@@ -40,7 +40,7 @@
 (core/defkey policy-key  "POLICY_")
 (def ghost-source-tag (source-key "Ghost"))
 
-;;#Tag Operations#
+;;#Tag Operations
 ;default unit tags
 (defn default-tags [{:keys [src component behavior oi-title policy]}] 
   [(compo-key component) (behavior-key behavior) (title-key oi-title) 
@@ -91,7 +91,7 @@
         (tag/tag-subject unitname :dropped-fence))
     tags))   
 
-;;#Tag-Related Supply Queries#
+;;#Tag-Related Supply Queries
 (defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
 (defn multiple-ghosts? [supplytags]
   (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
@@ -105,7 +105,7 @@
     (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
           (reduce (fn [s u] (-> (core/disable s u) f u)) supply))))
 
-;;#Supply Population Operations#
+;;#Supply Population Operations
 ;this might be suitable to keep in the supplymanager...
 (defn add-src [supply src] 
   (let [scoped (:srcs-in-scope supply)]
@@ -137,7 +137,7 @@
 ;----------END FOREIGN------
 
 
-;;#Supply Updating#
+;;#Supply Updating
 ;;The supply simulation has many concurrent process - unit simulations - 
 ;;that are in various states of motion.  For efficiency, we treat these 
 ;;processes as relatively independent, with the exception of periodic 
@@ -189,7 +189,7 @@
        (filter (partial up-to-date? t ctx))
        (update-units t supply ctx)))
 
-;;#General Supply Notifications#
+;;#General Supply Notifications
 
 (defn spawning-unit! [unit ctx]
   (sim/trigger-event :spawnnit (:name unit) (:name unit)
@@ -260,7 +260,7 @@
   (sim/trigger-event :firstDeployment (:name supply) (:name supply) 
        (str "Unit " (:name unit) " Deployed for the First Time") nil ctx))  
 
-;;#Supply Availability#
+;;#Supply Availability
 
 (defn update-availability [unit supply ctx]
   (if (contains? (get-buckets supply) (:src unit))
@@ -289,17 +289,11 @@
            {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
          (out-of-stock! (:src unit)))))
 
-;Sub operates on uics to register them as deployable with a dictionary of 
-;dictionaries Dictionary<Rule, <UICName,Unitdata>>
-;UICs are tracked by a unique string name now, changed the unitdata structure 
-;to reflect this. This sub is only called when necessary, updates the available 
-;set, and limits the search effort required to find an available uic.
 
-
-;;I removed an vestigial argument for buckets from this guy.  We weren't using 
-;;it.  
-;1)NOTE -> reconcile the differences between u, udata
-(defn update-deployability [unit & [followon spawning ctx]]
+(defn update-deployability
+  "Sets a unit's deployable status, depending on the current context and the 
+   unit's policy state."
+  [unit & [followon spawning ctx]]
   (assert (not (empty-position? unit)) "invalid position!")
   (let [position (:position-policy unit)
         src      (:src unit)
@@ -322,7 +316,7 @@
 (defn update-deploy-status [supply unit [followon? spawning? ctx]]
     (update-deployability unit followon? spawning? ctx))
 
-;;#Registering New Supply#
+;;#Registering New Supply
 
 ;Note -> the signature for this originally returned the supply, but we're not 
 ;returning the context.  I think our other functions that use this guy will be
@@ -376,7 +370,7 @@
   (not= component :AC :Ghost))
 (defn check-max-utilization [params] (get params :TAA1519MaxUtilizationHack))
 
-;;#Tracking Follow-On Supply#
+;;#Tracking Follow-On Supply
 
 ;The call for update-deploy-status is UGLY.  Might be nice to use keyword args..
 (defn add-followon
@@ -436,7 +430,7 @@
     (reduce release-followon-unit (sim/merge-updates updates ctx)
             followons)))         
 
-;;#Deployment Related#
+;;#Deployment Related
 
 ;;announce that the unit is in fact following on, remove it from followons.
 (defn record-followon [supply unit demand ctx]
@@ -454,7 +448,7 @@
 (defn first-deployment? [unit store]
   (not (tag/has-tag? (:tags store) (:name unit) :hasdeployed))) 
 
-;;#Supply Management#
+;;##Supply Management
 (defn manage-supply
   "High level hook for the supply system.  For entities that have scheduled 
    updates at time t, they are brought up to date and have their changes 

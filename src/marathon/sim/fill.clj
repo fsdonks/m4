@@ -19,13 +19,13 @@
 ;and a SupplyGenerator.  Functions in this module fill the role
 ;of creating and composing each of these elements in kind.
 
-;;#Primitive Operations#
+;;#Primitive Operations
 ;account for the fill in the fillstore, basically just conj it to the history.
 (defn record-fill [fillstore fill] 
   (let [fillcount (count (:fills fillstore))]
     (assoc-in fillstore [:fills] (inc fillcount) fill)))
 
-;;#Fill-Related Notifications#
+;;#Fill-Related Notifications
 
 ;notify everyone that we've filled a demand...
 (defn filled-demand! [demand-name unit-name ctx] 
@@ -49,7 +49,7 @@
         (ghost-followed! unit ctx) 
         (ghost-deployed! unit ctx))))
 
-;##Decomposing the Fill Process....##
+;##Decomposing the Fill Process....
 ;Sourcing a demand is really the composition of three simpler tasks: 
 ;find-supply, take n items from the supply, fill the demand with the n items.
 ;The following text dissects each of these compenents into atomic, composable 
@@ -58,7 +58,7 @@
 ;examine the original object-based mechanisms for the fill process, and how 
 ;they remain in their functional counterparts.
 
-;##Understanding the Legacy Implemention of Fill Functions##
+;##Understanding the Legacy Implemention of Fill Functions
 ;The legacy notion of a fill-function is central to the idea of finding an 
 ;ordered set of candidate supply. In the old object model, the fill-function was
 ;effectively a partially-applied function that closed over a fillgraph and a 
@@ -119,7 +119,7 @@
 ;as supply for SRC1.  In this case, the set #{SRC1 SRC2} can be said to form an 
 ;equivalence class, or they form a strongly connected component.
 
-;#Ancillary Pre-Processing Via the FillGraph#
+;#Ancillary Pre-Processing Via the FillGraph
 ;While strictly related to the higher-level notion of filling demands, we can 
 ;exploit properties of the fillgraph - during a pre-processing phase - to make 
 ;searching the fillgraph more efficient, identify possible problems with the 
@@ -133,7 +133,7 @@
 ;automatically find islands, and all equivalence classes / strongly connected
 ;components in the FillGraph.
 
-;*PreProcessing Identifies Independent Data and Simplifies The Fill Graph*
+;*PreProcessing Identifies Independent Data and Simplifies The Fill Graph
 ;One of the benefits of finding equivalence classes is that we can choose to 
 ;only simulate SRCs that are dependent. This lets us reduce the amount of work 
 ;into independent batches and divide the simulation into N smaller simulation 
@@ -144,7 +144,7 @@
 ;a simplified graph that is very quick to search due to every path in the 
 ;reduced graph having, at most, 2 steps from unfilled to filled.
 
-;##Default Implementation for Querying Rules to Find the Most Suitable Supply##
+;##Default Implementation for Querying Rules to Find the Most Suitable Supply
 ;The default scheme for prioritizing supply is to query the ruleset to
 ;find an ordered set of matches between sets, or buckets, of supply and the
 ;demand in need of filling.  Due to substitution and other criteria, the buckets
@@ -157,7 +157,7 @@
 ;desirable, as it effectively partitions the search space and provides an 
 ;efficient means of selecting sets of units for possible deployment.
 
-;;#Fill Rule Interpretation#
+;;#Fill Rule Interpretation
 ;;Given a common description of a demand category, the fill function should be 
 ;;able to interpret the demand rule into a corresponding supply rule.  After
 ;;converting to a common supply rule, different fill functions may interpret 
@@ -212,7 +212,7 @@
   (rule->supply-rule category))
 
 
-;##Legacy Means For Generating A Stream of Deployable Supply##
+;##Legacy Means For Generating A Stream of Deployable Supply
 ;In the legacy implementation,  a SupplyGenerator object served as a poor man's 
 ;version of a sequence abstraction (or an iterator in other languages).  It used
 ;internal state, combined with a reference to one or more buckets of supply, to
@@ -231,7 +231,7 @@
 ;facilitated higher-order expressions like "take" and "next" to allow consumers
 ;to view the SupplyGenerator as a sequence of units.
 
-;*Default Unit Comparison*
+;*Default Unit Comparison
 ;To deal with highly variable supply ordering rules, the SupplyGenerator had a 
 ;modular unit prioritization object (a UnitComparer) for establishing the 
 ;fine-grained ordering of subsequences of units.  The default UnitComparer 
@@ -245,11 +245,11 @@
 ;between cycle time and readiness, the proportional representation of the policy
 ;coordinate provides a convenient measure of readiness as well.
 ;
-;Note*, this assumption holds for known rotational policies, but may fail if 
+;__Note__ , this assumption holds for known rotational policies, but may fail if 
 ;readiness is not a function of time in cycle.  Also, other unit prioritization 
 ;functions exist, including preferences by component (either AC or RC first).  
 
-;##Default Legacy Total Ordering of Supply##
+;##Default Legacy Total Ordering of Supply
 ;The default notion of ordering used in the legacy object model will remain the 
 ;default in the functional programming version, with ostensibly identical 
 ;mechanisms (minus the reliance on objects and mutable state).
@@ -266,7 +266,7 @@
 ;annotated on their deployment record, in addition to other stats such as path 
 ;length.
 ;
-;#Effectful Filling Under the Legacy FillFunction## 
+;#Effectful Filling Under the Legacy FillFunction
 ;Under the legacy FillFunction object, we typically prepped it with a query, 
 ;which loaded the supply generator (providing an total ordering of eligible 
 ;supply), and applied the "take" method of the FillFunction to a numeric 
@@ -285,7 +285,7 @@
 ;these features - i.e. the communication of success or failure to fill - but 
 ;again, we use explicit data structures to communicate effects.
 
-;##Legacy (Mutable Object-Based) Fill Summary##
+;##Legacy (Mutable Object-Based) Fill Summary
 ;All the fill function did was wrap both the fill graph and a mutable generator, 
 ;where the generator served as a live "cursor" to buckets or partitions of 
 ;supply.  This was effectively a poor man's inelegant version of a stream.
@@ -294,7 +294,7 @@
 ;dictated by shortest paths in the fillgraph, we had the "generator" 
 ;automatically pointing at multiple buckets
 
-;##Filling Functionally##
+;##Filling Functionally
 ;Under the new functional design, the fill-function is a chunk of data that 
 ;contains the rules necessary for ordering a set of units relative to a demand. 
 ;When combined with a query function, the data in the fill-function will 
@@ -331,13 +331,13 @@
 
 ;;##High Level Fill 
 
-;#It's all about finding supply.#
+;#It's all about finding supply.
 ;The ultimate purpose of querying a fill-function is to answer a simple query:  
 ;Given a demand (or a rule that describes the demand), and a supplystore
 ;(which contains supply), which elements of supply are are most suitable to fill 
 ;the demand, based on the interpretation of the fill-function?
 
-;#First: "Find the most suitable supply".#
+;#First: "Find the most suitable supply".
 ;This represents an ordered sequence of candidate fills....we may not, in fact,
 ;utilize every candidate.  A better description is that find-supply provides a 
 ;list of  fill-promises, which are realized as needed.  A fill-promise is a 
@@ -373,7 +373,7 @@
    of realizing the promised fill."
   [fill-promise ctx] (fill-promise ctx))
 
-;#Second: Allocate a candidate fill against a demand.#
+;#Second: Allocate a candidate fill against a demand.
 ;Assuming we have a candidate fill, and a demand that needs filling, we define
 ;the consequences of using the candidate (via some filldata) to logically "fill"
 ;the demand.  The result is a new context, since there may be additional 
@@ -406,7 +406,7 @@
     (deployment/deploy-unit ctx unit t demand filldata 
                             (core/interval->date t ctx) (core/followon? unit))))
 
-;;#Incremental Demand Filling# 
+;;#Incremental Demand Filling
 
 ;;We wrap the atomic fill process inside a high-level function, fill-demand.
 ;;fill-demand takes any fill-promise, realizes the fill-promise, applies the 
@@ -433,7 +433,7 @@
          (check-ghost unit)
          (apply-fill filldata demand)))) 
 
-;;#Trying to Completely Satisfy a Demand#
+;;#Trying to Completely Satisfy a Demand
 
 ;Since we know how to effectively apply promised fills towards demands via 
 ;fill-demand in an atomic fashion, we can define the notion of completely 
@@ -471,11 +471,11 @@
                               (dem/get-demand demand-name))]
                 (recur nextd (rest xs) :added-fill nextctx))))))
 
-;;#Pending# 
+;;#Pending
 ;;Port fill store generation functions and IO functions/constructors from legacy 
 ;;code.
 
-;#Constructors and Data Munging Functions#
+;#Constructors and Data Munging Functions
 ;Constructors to create all three, independently, now exist in this module.  
 ;Along with decoupled construction, operations for sourcing demands, relative to
 ;rules specified in a FillFunction, from a supply to a demand, are provided.  

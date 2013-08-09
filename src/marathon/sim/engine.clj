@@ -1,55 +1,38 @@
-;##Overview##
+;##Overview
 ;sim.engine contains the higher-level operations that define Marathon.  It acts 
 ;as a harness around the simulation context, and guides the flow of control 
 ;throughout the simulation.  At a high level of abstraction, the engine is a 
 ;process that coordinates one or more concurrent processes to calculate 
-;new simulation contexts from prior simulation contexts.  From a functional 
-;perspecive, the engine defines an ordered composition of transfer functions 
-;that, when applied to a initial context, returns a new or updated simulation 
-;context. When performed repeatedly, feeding preceding simulation contexts into
+;new simulation contexts from prior simulation contexts.  
+;From a functional perspecive, the engine defines an ordered composition of 
+;simpler transfer functions - or systems - that, when applied to a initial
+;context, returns a new simulation context.  
+
+;When performed repeatedly, feeding preceding simulation contexts into
 ;the transfer function, a recurrence relation between previous contexts and 
 ;future contexts emerges.  The result is effectively a snapshot of simulation 
-;contexts, which are computed via a simple transfer function, sim-step, which 
-;simulates multiple domains relevant to Marathon: 
-;the flow of units through a supply, the presence of demands, and the flow of 
-;units between supply and demand via fills.  
+;contexts, which are computed via a simple transfer function, __sim-step__,  
+;which simulates multiple domains relevant to Marathon: 
+;1. The flow of units through a supply
+;2. The presence of demands
+;3. The flow of units between supply and demand via fills.  
+
 ;Thus, the engine serves as the causal backbone, and coordinating mechansim, 
 ;for every bit of logic executed during the course of the simulation. The 
-;primary function, event-step-marathon, prescribes the order of application of 
-;each logical subsystem. 
+;primary function, __event-step-marathon__, prescribes the order of application 
+;;of each logical subsystem. 
 (ns marathon.sim.engine
   (:require [sim    [simcontext :as sim]]
+            [marathon.sim.core [:refer now]]
+            [marathon.sim.missing]
             [supply [:refer [manage-supply manage-follow-ons]]]
             [demand [:refer [manage-demands manage-changed-demands]]]
             [fill   [:refer [fill-demands]]]
             [policy [:refer [manage-policies]]]))
 
-(defn now [] (System/currentTimeMillis))
+;##Simulation Initialization
 
-
-;;These functions are currently missing, possibly due to deprecation.
-;--------Missing Functionality>>>>>>>>>>>>>>>>>>
-(comment  ;stub is somewhat useless at the moment.
-	(stub "guess-last-day"
-	   (defn guess-last-day [state & [last-day]]))
-	;If .interactive Then MarathonEngine.notifyUI DumbUI, .context 
-	;let folks know if we have a UI
-	(stub "notify-watches, check MarathonEngine"
-	   (defn notify-watches [state]))
-	(stub "initialize-ouput not implemented, reference MarathonSteup" 
-	   (defn initialize-output [state path]))
-	(stub "can-simulate? not implemented, check MarathonEngine"
-	   (defn can-simulate? [state]))
-	(stub "keep-simulating? not implemented, check MarathonEngine"
-	   (defn keep-simulating? [state]))
-	(stub "log-status not yet implemented"  
-	    (defn log-status [msg]))
-)
-;<<<<<<<<Missing Functionality----------------
-
-;##Simulation Initialization##
-
-;#Auxillary functions, and legacy functions#
+;#Auxillary functions, and legacy functions
 
 (defn set-time
   "Initialize the start and stop time of the simulation context, based on 
@@ -58,10 +41,10 @@
   (sim/set-time-horizon 1 (guess-last-day state last-day) ctx))
 
 
-;this is just a handler that gets added, it was "placed" in the engine object
-;in the legacy VBA version.
+;This is just a handler that gets added, it was "placed" in the engine object
+;in the legacy VBA version.  __TODO__ Relocate or eliminate engine-handler.
 
-(defn control-io
+(defn engine-handler
   "Forces all entities in supply to be brought up to date."
   [ctx edata]
   (if (= (:type edata) :update-all-units)
@@ -73,21 +56,21 @@
    after an :update-all-units event."
   [ctx]
   (sim/add-listener :Engine 
-      (fn [ctx edata name] (control-io ctx edata)) [:update-all-units]))
+      (fn [ctx edata name] (engine-handler ctx edata)) [:update-all-units]))
 
-;#Initialization#
-;Initialization consists of 3 tasks:
-;Prep the system for day 0
+;#Initialization
+;Initialization consists of 3 tasks:  
+;1. Prep the system for day 0
 
-;Adjust the context so that it defines a finite time horizon for the simulation.
-;The last  day of the simulation is determined either by passing in a lastday, 
-;or by allowing the context to set its own last day dynamically.
+;2. Adjust the context so that it defines a finite time horizon for simulation.
+;   The last  day of the simulation is determined either by passing in value, 
+;   or by allowing the context to derive its own last day dynamically.
 
-;Tell observers to sync themselves to the simulation state.  Some observers need
-;access to the specific elements of the state.  This makes it easy 
-;(and indirect) to advertise the state, and to allow the observers to link to it
-;as needed. Observers/watchers will need to be expanded on, since watches will 
-;involve effects.
+;3.  Tell observers to sync themselves to the simulation state.  Some observers 
+;    need access to the specific elements of the state.  This makes it easy 
+;    (and indirect) to advertise the state, and to allow the observers to link 
+;    to it as needed. Observers/watchers will need to be expanded on, since 
+;    watches will involve effects.
 
 (defn initialize-sim
   "Given an initial - presumably empty state - and an optional upper bound on 
@@ -103,7 +86,7 @@
     (notify-watches) 
     (initialize-control)))
 
-;##Simulation Termination Logic##
+;##Simulation Termination Logic
 ;When we exit the simulation, we typically want to perform some final tasks.
 ;For instance, any resources (for logging, display, etc.) may need to be freed.
 ;The default mechanism for this is to propogate some events through the context
@@ -124,10 +107,9 @@
               (assoc  :time-finish (now)))]
     (sim/trigger-event :terminate :Engine :Engine "Simulation OVER!" s)))
 
-;##Begin Day Logic##
+;##Begin Day Logic
 ;Prior to starting a new time inteval (currently a day), we typically want to 
 ;perform some pre-processing or updating. 
-
 
 (defn day-msg [msg day]  (str "<-------- " msg " Day " day " ---------->"))
 (defn check-pause
@@ -162,7 +144,7 @@
                 (sim/get-final-time state)) state) 
       (assoc :found-truncation true))))
 
-;##End Day Logic##
+;##End Day Logic
 ;At the end of each "day" or discrete time step, we typically mark the passage 
 ;of time with some processing.  This notion could be abstracted into a higher 
 ;order function to wrap the simulation, along with the aforementioned begin-day
@@ -198,7 +180,7 @@
     (sim/trigger-event :get-cycle-samples :Engine :Engine
        "Sample all UIC Cycles.  This is a hack." {:t t :uics units})))           
 
-;##Primary Simulation Logic##
+;##Primary Simulation Logic
 ;We enter the main engine of the Marathon simulation, which implements a 
 ;single-threaded, discrete event simulation by default.
 
@@ -249,7 +231,7 @@
     (end-day day last-day)  ;End of day logic and notifications.
     (manage-changed-demands day)));Clear set of changed demands in demandstore.
 
-;#Simulation Interface#
+;#Simulation Interface
 ;sim.engine/event-step-marathon is the entry point for Marathon.
 
 (defn event-step-marathon
