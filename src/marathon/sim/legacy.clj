@@ -3,7 +3,8 @@
 ;;efforts.
 (ns marathon.sim.legacy)
 
-(comment :marathon.policy.policydata :deferred 
+ ; :marathon.policy.policydata 
+ ; :deferred 
          ;'TOM Change 20 May 2011 -> Policy nodes are NOW POSITIONS, no longer Locations.
 ;    'Change in nomenclature.
 ;    'Has significant consquences, in that it separates spatial location from policy position.
@@ -646,9 +647,10 @@
 ;AddRoute Start, destination, TransferTime
 ;End Sub
 ;
-)
 
-(comment :supply :deferred          
+
+; :supply :deferred
+
 ;------------Deferred------------
 ;Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, 
 ;   parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior,
@@ -721,9 +723,10 @@
 ;     supplystore, ctx
 ;
 ;End Sub
-)
 
-(comment :policyio :deferred
+
+; :policyio :deferred
+
 ;-----------DEFERRED--------------------
 
 ;Returns a policystore object initialized from default tables in Excel.  
@@ -770,13 +773,9 @@
 ;                        getTable(p & "PolicyRecords" & ".json"), _
 ;                        getTable(p & "CompositePolicyRecords" & ".json"))
 ;                             
-;End Function
-)
-         
-         
-    
+;End Function                    
 
-(comment :marathon.sim.fill 
+; :marathon.sim.fill 
          
 ;#Legacy Code#
 ;Function sourceDemand
@@ -875,9 +874,7 @@
 ;End With
 ;End Function
 
-)
-
-(comment :marathon.sim.fill :construction
+;:marathon.sim.fill :construction
 
 ;'Constructor for building fill stores from component pieces.
 ;'Note, the fill store has a fillgraph, a fill function, and a supply generator.
@@ -1330,10 +1327,9 @@
 ;'init parent, True, sources, sinks, relations
 ;'End Sub
 ;'
-)
          
          
-(comment :marathon.sim.demand :notes
+;:marathon.sim.demand :notes
          
 ;TOM Note 20 May 2013   -> We can probably generalize the explicit process
 ;denoted below.  There are, arbitrarily, 1..n phases of filling, this is one 
@@ -1398,9 +1394,9 @@
 ;the queue, stop filling, and proceed to the next independent set.
 ;After all independent sets have been processed, we're done.
 ;Tom Note 20 May 2013 -> Independent means we can do this in parallel.
-)
 
-(comment :marathon.sim.demand
+
+; :marathon.sim.demand
 ;>>>>>>>>>>>>>>>>>>Deferred>>>>>>>>>>>>>>>>>>>>>>
 ;We'll port this when we  come to it....not sure we need it...
 
@@ -1444,11 +1440,9 @@
 ;
 ;End Sub
 ;<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-)
-         
 
 
-(comment :marathon.sim.policy 
+; :marathon.sim.policy 
 ;----------DEFERRED-------
 ;Policy Store operations.....
 ;Perform a reduction over a list of default policies....adding each one to the
@@ -1563,9 +1557,8 @@
 ;                                TimeStep_ManagerOfPolicy) As String
 ;LocationName = CStr(policystore.LocationIndex(locationID))
 ;End Function
-)
 
-(comment :marathon.data.period :deferred;--------------DEFERRED--------
+; :marathon.data.period :deferred ;--------------DEFERRED--------
 ;---IMPLEMENT LATER-----------
 ;Defines a period that exists over (potentially) multiple times.....
 ;Public Function periodWhen(startevent As Long, stopevent As Long, Optional eventsource As GenericObserver, Optional name As String) As GenericPeriodReactive
@@ -1748,10 +1741,11 @@
 ;Next rw
 ;
 ;End Function
-)
 
-(comment :behavior 
-         ;'Behavior Factory class ...
+; :behavior 
+
+;Behavior Factory class ...
+
 ;'Used for producing unit and demand behaviors ...
 ;Option Explicit
 ;Public name As String
@@ -1936,9 +1930,8 @@
 ;End Sub
 ;Private Sub IVolatile_Terminate()
 ;End Sub
-)
 
-(comment :period-doc
+; :period-doc
          
          ;->Re: the below discussion on a declarative specification for defining 
 ;    composable periods....We can simple bifurcate periods into two classes:
@@ -1970,4 +1963,3 @@
 ;   A ReactivePeriod can be seen a a period generating function, of the unknown variety.
 ;Constructing ReactivePeriods requires some IO....
 ;   holy shit, allows for User I/O (duh).
-)

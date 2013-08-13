@@ -33,7 +33,7 @@
 ;;very recently lifted from a large legacy code-base.  Apparently, the demons 
 ;;from Marathon's previous environment, the padded walls of VBA, echoed through
 ;;the 40K lines of code, hundreds of classes, and 30K lines of comments gathered
-;;over 2-3 years.  One reader of an earlier, somewhat "raw" draft likened 
+;;over 2 to 3 years.  One reader of an earlier, somewhat "raw" draft likened 
 ;;the document to "a man's journal of his own descent into madness."    
 
 ;;Such criticism is welcome, and I have since struggled to avoid offending
