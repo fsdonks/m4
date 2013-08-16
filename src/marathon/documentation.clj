@@ -44,16 +44,20 @@
 
 ;;As the documentation matures, I will try to take advantage of the 
 ;;formatting options available, to help distinguish between my interspersed 
-;;commentary, and commentary attached to specific source code.  
-
-;;Currently, the juxtaposition of commentary with code (to the right) implies a
-;;direct relation to the code.  
+;;commentary, and commentary attached to specific source code.  I have only 
+;;just begun to modify the default Cascading Style Sheet, and hope to find 
+;;a more pleasing form in the future.  
 
 ;;The code you will see throughout is from a Lisp dialect called Clojure: 
 ;;http://clojure.org/        
 
+;;The position of commentary directly preceding code implies a direct relation 
+;;to the code block. Code is called out via block formatting, with a simple 
+;;delimited line on the left margin.
+
 ;;Feel free to contact me at __thomas.spoon@us.army.mil__      
-;;__-Tom Spoon__
+;;__-Tom Spoon__  
+
 
 (ns marathon.documentation
   (:require [clojure.java [shell :as shell]]))
@@ -156,7 +160,7 @@
   (build-config [marathon-sim marathon-data simulation-lib]))
 
 (defn marge-command [xs]
-  (into ["lein.bat" "marg"]  
+  (into ["lein.bat" "margplus"]  
         (map path->file xs)))
 
 (defn build-docs
