@@ -1,3 +1,5 @@
+;;DEPRECATED 
+
 ;Defines useful operations for ripping tables from excel workbooks, and 
 ;piping data do excel workbooks programatically.  Uses Docjure, which in 
 ;turn uses the Apache POI libraries to interact with Excel docs.

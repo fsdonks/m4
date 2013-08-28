@@ -239,6 +239,8 @@
        (apply str)
        (keyword)))
                    
+;;Changes from DemandGroup to Vignette, changed operation to be concatenation 
+;;of vignette and draw index. 
 (defn build-case 
   [case-name case-rules future-count duration-max seed tfinal replacement]
   {case-name 
@@ -247,13 +249,16 @@
        (fn [case-futures] 
          (map-indexed 
            (fn [i rule-reps]               
-               (map #(merge % {:case-name  (tbl/field->string case-name)
-                               :case-future i
-                               :Operation  (str (:Operation %) "_" 
-                                                (:draw-index %))}) 
+               (map #(let [vig (str (:Vignette %) "_" (:draw-index %))]
+                       (merge % {:case-name  (tbl/field->string case-name)
+                                 :case-future i
+                                 :Vignette    vig
+                                 :Operation   (str vig  "_" (:Operation %))})) 
                     (flatten rule-reps)))
            (first case-futures)))                     
        (sample/->replications future-count [case-rules])))})
+
+
 
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
                                   (map parse-legacy-case)
@@ -325,22 +330,36 @@
   (into {} (for [r (tbl/table-records (get db tbl-name))]
              [(get r lookup-field) r])))
 
+;;Patched to support post-process-cases 
+(defn process-if [pred f xs] (if pred (f xs) xs))
+
+;;Changed the lookup field to use a column called DemandSplit, with 
+;;corresponding column in the population of records.
+
 (defn post-process-cases
   "Default post processing for each case.  We validate the case records by 
    handling collisions, and split the resulting data according to the 
    rules defined by DemandSplit."
-  [db futures & {:keys [log?]}]
-  (let [splitmap (table->lookup db :DemandSplit     :DemandGroup)
+  [db futures & {:keys [log? processes]}]
+  (let [splitmap (table->lookup db :DemandSplit     :DemandSplit)
         classes  (table->lookup db :ValidationRules :DependencyClass)]    
     (into {} 
       (for [[case-key case-records] futures]
-        [case-key (collide-and-split splitmap classes case-records :log? log?)]))))
+        [case-key
+         (->> case-records 
+              (process-if (:collide processes)
+                #(collision/process-collisions classes % :log? log?))
+              (process-if (:split processes) 
+                #(split/split-future splitmap %)))]))))              
 
-(defn xlsx->futures [wbpath & {:keys [ignore-dates? log?] 
+;;Patched to included discrete processes..
+
+(defn xlsx->futures [wbpath & {:keys [ignore-dates? log? processes] 
                                :or {ignore-dates? true
-                                    log? nil}}]
+                                    log? nil
+                                    processes #{:collide :split}}}]
   (let [db (read-casebook :wbpath wbpath :ignore-dates? ignore-dates?)]
-    (post-process-cases db (compile-cases db) :log? log?)))
+    (post-process-cases db (compile-cases db) :log? log? :processes processes)))
 
 (defn futures->tables [futures & 
                        {:keys [field-order] :or

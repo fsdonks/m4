@@ -5,6 +5,11 @@
 (ns marathon.processing.helmet.collision)
 
 (def ^:dynamic *log-collisions* nil) 
+;added from patch 
+(defn higher-priority [l r] (< (:Priority l) (:Priority r)))
+(defn adjacent? [l r] (= (end-time l) (start-time r)))
+
+
 
 (defn start-time [record] (:StartDay record))
 (defn end-time [record]   (+ (:StartDay record) (:Duration record)))
@@ -64,6 +69,18 @@
             [l (merge r {:StartDay    (end-time l)
                          :Duration (- (end-time r) (end-time l))})]))))
 
+;;New function to fix a third case of collisions.  Accounts for stretch cases.
+(defn fix-stretch [l r]
+  (when (not (adjacent? l r))
+    (if (higher-priority r l)
+      (with-response :left-stretches-to-right [l r]
+        [(assoc l :Duration (- (start-time r) (start-time l))) r])
+      (with-response :right-stretches-to-left  [l r]
+        [l (assoc r :StartDay (end-time l))]))))
+
+;;Patched due to a missing case, for records that need to be stretched, we were
+;;failing to perform any operation. 
+
 ;fix-collision::record -> record -> [record]
 (defn fix-collision [tmin l r]
   (if (not (near? tmin l r))
@@ -72,7 +89,8 @@
     ;if the two records have same priority
     (cond (priority-same? l r) (merge-records l r)
           (contained? l r)     (fix-contained l r)
-          (overlap? l r)       (fix-overlapped l r))))
+          (overlap? l r)       (fix-overlapped l r)
+          :else                (fix-stretch l r)))) ;new case
 
 ;should-fix?::record -> record -> boolean
 ;fix::record -> record -> [record]

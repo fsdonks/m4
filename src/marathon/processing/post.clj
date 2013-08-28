@@ -5,11 +5,10 @@
 (ns marathon.processing.post
   (:use     [marathon.project])
   (:require [spork.util [io :as io] [table :as tbl]]
-            [marathon.project [excel :as xlproj]]
-            [marathon.processing 
-            [excel     :as xl]
-            [highwater :as highwater] 
-            [fillrates :as fill]]))
+            [marathon.project     [excel :as xlproj]]
+            [marathon.processing  ;[excel     :as xl]
+                                  [highwater :as highwater] 
+                                  [fillrates :as fill]]))
 
 (declare compute-highwater compute-fillrates build-audit-trail)
 
