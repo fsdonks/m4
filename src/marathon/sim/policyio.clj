@@ -4,7 +4,7 @@
             [marathon.data [protocols :as core]
                            [period :as per]]
             [marathon.policy [policystore :as pstore]]
-            [util [table :as tbl]]))
+            [spork.util [table :as tbl]]))
 
 ;-------------TODO------------ 
 ;Port periodlib into marathon.data.period,  specifically for table->periods

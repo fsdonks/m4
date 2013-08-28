@@ -2,8 +2,8 @@
 ;;onto one or more Incanter scatter plots.  Consistent with the legacy 
 ;;deployment dot plots from Excel, but more flexible and interactive.
 (ns marathon.processing.deployments
-  (:require [util [io :as io]])
-  (:use [util.table]
+  (:require [spork.util [io :as io]])
+  (:use [spork.util.table]
         [incanter core charts extensions]))
 
 ;Processes a table of records.

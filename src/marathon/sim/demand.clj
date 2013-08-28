@@ -12,8 +12,8 @@
                            [policy :as policy]
                            [unit :as u]
                            [fill :as fill]]           
-             [sim [simcontext :as sim]]
-             [util [tags :as tag]]))
+             [spork.sim    [simcontext :as sim]]
+             [spork.util   [tags :as tag]]))
 
 ;;##Primitive Demand and DemandStore Operations
 

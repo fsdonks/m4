@@ -1,7 +1,7 @@
 ;Likely OBSOLETE
 (ns marathon.events.eventstore
-  (:use [util.record :only [defrecord+ with-record]]
-       [util.metaprogramming :only [defmany keyvals->constants]]))
+  (:use [spork.util.record :only [defrecord+ with-record]]
+        [spork.util.metaprogramming :only [defmany keyvals->constants]]))
 
 (declare default-events) ;defined below.
 

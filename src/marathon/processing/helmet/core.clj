@@ -4,12 +4,12 @@
 ;validates the resultant set of sample records, and allows 
 ;replications of the process.
 (ns marathon.processing.helmet.core
-  (:require [util [general :as gen]
-                  [table :as tbl]
-                  [stats :as stats]
-                  [record :as rec]
-                  [sampling :as sample]]
-            [util.excel [core :as xl]]
+  (:require [spork.util [general :as gen]
+                        [table :as tbl]
+                        [stats :as stats]
+                        [record :as rec]
+                        [sampling :as sample]]
+            [spork.util.excel [core :as xl]]
             [marathon.processing.helmet [split :as split] 
                                         [collision :as collision]]))
 ;utility-functions                        

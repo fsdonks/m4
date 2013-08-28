@@ -2,7 +2,7 @@
   (:require [marathon.sim [core :as core]]
             [marathon.data [cycle :as cyc]]
             [marathon.policy [policydata :as pol]])
-  (:use [util.record :only [defrecord+ inc-field dec-field get-vals]]))
+  (:use [spork.util.record :only [defrecord+ inc-field dec-field get-vals]]))
 
 ;record for unitdata state.
 (defrecord+ unitdata 

@@ -5,10 +5,11 @@
 ;time-series set of reductions hiding in here somewhere...
 
 (ns marathon.processing.highwater
-  (:use [util.record :only [defrecord+ with-record merge-from record-headers]]
-        [util.general :only [clumps]])
-  (:require [util [io :as io] 
-                  [table :as tbl]]))
+  (:use [spork.util.record 
+           :only [defrecord+ with-record merge-from record-headers]]
+        [spork.util.general :only [clumps]])
+  (:require [spork.util [io :as io] 
+                        [table :as tbl]]))
              
 ; --Highwater is a type of reduction performed on DemandTrends.txt, which is a
 ; --fairly large log file produced during simulation. The log file is in the

@@ -1,13 +1,13 @@
 (ns marathon.core
-  (:require [util [table :as tbl]
-                  [io :as io]]
+  (:require [spork.util [table :as tbl]
+                        [io :as io]]
             [marathon.processing.helmet [core :as helm]]
             [clojure [pprint :as pprint]]
-            [cljgui.components [swing :as gui]]
-            [cljgui [mvc :as mvc]]
-            [cljgui.events [observe :as obs]
+            [spork.cljgui.components [swing :as gui]]
+            [spork.cljgui            [mvc :as mvc]]
+            [spork.events  [observe :as obs]
                            [native :as swing-events]])
-  (:use [util.mailbox]
+  (:use [spork.util.mailbox]
         [marathon.processing.post]
         [marathon.project])
   (:import [javax.swing JFrame]) ;Bah!

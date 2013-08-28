@@ -1,5 +1,5 @@
 (ns marathon.output.outputstore
-  (use [util.record :only [defrecord+ with-record]]))
+  (use [spork.util.record :only [defrecord+ with-record]]))
 
 ;may be vestigial.
 (def dstreams {"LocationWatch", "xl"

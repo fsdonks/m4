@@ -1,7 +1,7 @@
 ;;A data store for unit entities and the supply system.
 (ns marathon.supply.supplystore
-  (:require [util [tags :as tag]])
-  (:use [util.record :only [defrecord+]]))
+  (:require [spork.util [tags :as tag]])
+  (:use     [spork.util.record :only [defrecord+]]))
 
 (defrecord+ supplystore 
   [[name :SupplyStore]

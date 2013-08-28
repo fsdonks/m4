@@ -73,17 +73,6 @@
 (defn path->file [p]
   (str "src/" (clojure.string/replace p \. \/) ".clj"))
 
-;;#Discrete Event Simulation Library.
-(def simulation-lib
-   ["sim.simcontext"
-    "sim.pure.network"
-    "sim.updates"
-    "sim.agenda"
-    "sim.data"])
-
-;;#Graph Operations
-;;In time, I will link to __cljgraph__, another library I built.
-
 ;;#Stochastic Demand PreProcessing Libraries#
 (def stochastic-demand
   (into (expand-paths 
@@ -153,11 +142,10 @@
                  marathon-sim 
                  stochastic-demand
                  marathon-data
-                 processing 
-                 simulation-lib]))
+                 processing ]))
 
 (def simulation-only 
-  (build-config [marathon-sim marathon-data simulation-lib]))
+  (build-config [marathon-sim marathon-data]))
 
 (defn marge-command [xs]
   (into ["lein.bat" "margplus"]  

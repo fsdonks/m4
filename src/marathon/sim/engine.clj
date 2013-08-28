@@ -22,13 +22,13 @@
 ;primary function, __event-step-marathon__, prescribes the order of application 
 ;;of each logical subsystem. 
 (ns marathon.sim.engine
-  (:require [sim    [simcontext :as sim]]
-            [marathon.sim.core [:refer now]]
+  (:require [marathon.sim.core [:refer now]]
             [marathon.sim.missing]
             [supply [:refer [manage-supply manage-follow-ons]]]
             [demand [:refer [manage-demands manage-changed-demands]]]
             [fill   [:refer [fill-demands]]]
-            [policy [:refer [manage-policies]]]))
+            [policy [:refer [manage-policies]]]
+            [spork.sim    [simcontext :as sim]]))
 
 ;##Simulation Initialization
 

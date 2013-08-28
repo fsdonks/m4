@@ -8,7 +8,7 @@
 ;than going the manual route...
 (ns marathon.processing.pre
   (:require [marathon [project :as prj]]
-            [util [table :as tbl]]))
+            [spork.util [table :as tbl]]))
 
 (defn test-project
   "Runs each test from tests against the project.  Reports failure context

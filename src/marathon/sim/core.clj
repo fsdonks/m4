@@ -22,8 +22,8 @@
 ;;largely ignored.
 
 (ns marathon.sim.core
-  (:require [util [metaprogramming :as util]
-                  [tags :as tag]]))
+  (:require [spork.util [metaprogramming :as util]
+                        [tags :as tag]]))
 
 ;;#Providing Common Access to the State in the Simulation Context
 ;;The simulation context contains the simulation state - a large nested map of 

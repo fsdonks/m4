@@ -1,6 +1,6 @@
 ;A container and associated functions necessary for managing demand entities.
 (ns marathon.demand.demanddata
-  (:use [util.record]))
+  (:use [spork.util.record]))
 
 ;demanddata is the basic information required to represent demand entities.
 (defrecord+ demanddata 

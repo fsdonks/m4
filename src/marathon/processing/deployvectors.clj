@@ -2,8 +2,8 @@
 ;deployments.  Given a deployments table, scans the table to construct a set
 ;of deployment intervals or deployment events. 
 (ns marathon.processing.deployvectors
-  (:require [util [table :as tbl]
-                  [general :as general]]))
+  (:require [spork.util [table :as tbl]
+                        [general :as general]]))
 
 ;our goal is to rip the trends apart into segments, for each unit.
 (defrecord deploy-interval [unit

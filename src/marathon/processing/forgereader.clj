@@ -3,8 +3,8 @@
 ;tracks, and events.  The forgereader provides a library for processing these
 ;tables, and producing 
 (ns marathon.processing.forgereader
-  (:require [util [table :as tbl]]
-            [util [bridging :as br]])
+  (:require [spork.util [table :as tbl]
+                        [bridging :as br]]))
 
 (defn SRCtext->table  
   "Rips text from string txt, parsing under the assumption that certain 

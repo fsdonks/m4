@@ -6,11 +6,12 @@
 (ns marathon.sim.deployment
   (:require [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim [core :as core] [demand :as dem] [policy :as policy]
-                          [supply :as supply] [unit :as u]]
-            [sim [simcontext :as sim]]
-            [marathon.data [protocols :as protocols]]
-            [util [tags :as tag]]))
+            [marathon.sim    [core :as core] [demand :as dem] 
+                             [policy :as policy] [supply :as supply] 
+                             [unit :as u]]
+            [marathon.data   [protocols :as protocols]]
+            [spork.sim       [simcontext :as sim]]
+            [spork.util      [tags :as tag]]))
 
 ;;#Functions for Deploying Supply
 

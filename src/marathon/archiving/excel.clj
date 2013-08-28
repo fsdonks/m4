@@ -6,7 +6,7 @@
 ;a library for maniuplating xlsx files programatically...
 (ns marathon.archiving.excel
   (:require [clojure.java [io :as io]]
-            [util [io :as iou] [xml :as xml]]))
+            [spork.util [io :as iou] [xml :as xml]]))
              
 
 (defn to-base10

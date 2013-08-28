@@ -1,7 +1,7 @@
 ;;Rotational policy data definitions.  Both atomic and composite policies are 
 ;;represented here.
 (ns marathon.policy.policydata
-  (:use [util.record :only [defrecord+]])
+  (:use [spork.util.record :only [defrecord+]])
   (:require [marathon.data [protocols :as core]]))
 
 ;__TODO__ Extend core/IRotationPolicy protocol to policy and policycomposite..

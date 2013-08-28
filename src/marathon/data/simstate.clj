@@ -1,13 +1,13 @@
 ;Data required to constitute a simulation environment.
 (ns marathon.data.simstate
-  (:use [util.record :only [defrecord+]]
+  (:use [spork.util.record :only [defrecord+]]
         [marathon.supply.supplystore]
         [marathon.demand.demandstore] 
         [marathon.policy.policystore]
         [marathon.output.outputstore]
         [marathon.events.eventstore]
         [marathon.fill.fillstore])
-  (:require  [sim [simcontext :as sim]]))
+  (:require  [spork.sim [simcontext :as sim]]))
 
 ;simstate is a consolidation of all the simulation state required for Marathon 
 ;to do its thing.  Each of these bits used to be part of a hierarchical object 

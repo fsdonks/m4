@@ -1,5 +1,5 @@
 (ns marathon.port.data.supplygenerator
-  (use [util.record :only [defrecord+ with-record]]))
+  (use [spork.util.record :only [defrecord+ with-record]]))
 (declare spawn-ghost)
 
 ;An implementation of a supply generator.  Note the relative few public methods 

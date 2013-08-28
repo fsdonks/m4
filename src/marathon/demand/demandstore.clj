@@ -1,6 +1,6 @@
 ;A generic container for data necessary to manage a set of demanddata.
 (ns marathon.demand.demandstore
-  (use [util.record :only [defrecord+ with-record]]))
+  (use [spork.util.record :only [defrecord+ with-record]]))
 
 (defrecord+ demandstore 
   [[name :DemandStore] 

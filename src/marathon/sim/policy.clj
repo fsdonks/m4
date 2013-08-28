@@ -15,14 +15,14 @@
 ;;the policystore, and managing policies and periods during the simulation.
 
 (ns marathon.sim.policy
-  (:require [sim [simcontext :as sim]]
-            [marathon.data [protocols :as protocols] 
+  (:require [marathon.data [protocols :as protocols] 
                            [period :as period]]
             [marathon.policy [policydata :as p] [policystore :as pstore]]
             [marathon.sim  [missing :as missing]    
                            [core :as core]    
                            [unit :as u]]            
-            [util [tags :as tag]]))
+            [spork.util [tags :as tag]]
+            [spork.sim  [simcontext :as sim]]))
 
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
 (declare register-location atomic-name find-period)

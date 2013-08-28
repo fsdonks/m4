@@ -17,8 +17,8 @@
             [marathon.sim [core :as core] [demand :as dem] [supply :as supply]
                           [policy :as policy] [unit :as u] 
                           [deployment :as deployment]]           
-            [sim  [simcontext :as sim] [updates :as updates]]
-            [util [tags :as tag]]))
+            [spork.sim  [simcontext :as sim] [updates :as updates]]
+            [spork.util [tags :as tag]]))
 
 ;The old ManagerOfFill class actually handled the creation of a couple of
 ;dependent chunks of data; namely a FillFunction, a FillGraph,

@@ -3,7 +3,7 @@
 ;turn uses the Apache POI libraries to interact with Excel docs.
 (ns marathon.processing.excel
   (:use [dk.ative.docjure.spreadsheet])
-  (:require [util [table :as tbl] [vector :as v] [io :as io]]))
+  (:require [spork.util [table :as tbl] [vector :as v] [io :as io]]))
 
 
 (comment 

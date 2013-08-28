@@ -7,8 +7,8 @@
             [marathon.sim [missing :as missing]
                           [core :as core] [policy :as policy] 
                           [unit :as u]]           
-            [sim [simcontext :as sim] [updates :as updates]]
-            [util [tags :as tag]]))
+            [spork.sim    [simcontext :as sim] [updates :as updates]]
+            [spork.util   [tags :as tag]]))
 
 ;;#Primitive Operations and Supply Queries
 

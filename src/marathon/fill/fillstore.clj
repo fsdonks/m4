@@ -1,5 +1,5 @@
 (ns marathon.fill.fillstore
-  (:use [util.record :only [defrecord+ with-record]]))
+  (:use [spork.util.record :only [defrecord+ with-record]]))
 
 ;Container to store all the data associated with matching supply to demand, 
 ;namely substitution rules, scoping (both in and out of scope) for the current

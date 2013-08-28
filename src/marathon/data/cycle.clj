@@ -1,5 +1,5 @@
 (ns marathon.data.cycle
-  (:use [util.record :only [defrecord+ with-record]]))
+  (:use [spork.util.record :only [defrecord+ with-record]]))
 
 ;cyclerecord
 ;Provides a container for an invidual unit's cycle information.  Specifically, 

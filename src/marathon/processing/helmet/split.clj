@@ -1,5 +1,5 @@
 (ns marathon.processing.helmet.split
-  (:require [util [sampling :as sample]]))
+  (:require [spork.util [sampling :as sample]]))
 
 (defn split-record
   "Overriding the function from sample/split-record, since it's boffed.  This is 

@@ -1,7 +1,7 @@
 (ns marathon.processing.surgereader
   (require [marathon.processing [forgereader :as forge]]
-           [util [io :as io] 
-                 [table :as tbl]]))
+           [spork.util [io :as io] 
+                       [table :as tbl]]))
 
 (def surgepath 
   (io/relative-path :docs
