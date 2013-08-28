@@ -4,7 +4,8 @@
 (ns marathon.processing.deployments
   (:require [spork.util [io :as io]])
   (:use [spork.util.table]
-        [incanter core charts extensions]))
+        [spork.incanter.extensions]
+        [incanter core charts]))
 
 ;Processes a table of records.
 ;First, splits the table into N subtables.
