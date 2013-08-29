@@ -2,9 +2,9 @@
   (:require [spork.util [table :as tbl]
                         [io :as io]]
             [marathon.processing.helmet [core :as helm]]
-            [clojure [pprint :as pprint]]
+            [clojure       [pprint :as pprint]]
             [spork.cljgui.components [swing :as gui]]
-            [spork  [mvc :as mvc]]
+            [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
                            [native :as swing-events]])
   (:use [spork.util.mailbox]

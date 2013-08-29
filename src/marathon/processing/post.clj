@@ -185,7 +185,7 @@
 (comment
 
 (def wbpath
-"C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling\\MPI_3.760298326.xlsm")
+"C:\\Users\\tom\\Documents\\Marathon_NIPR\\smallsampling\\MPI_3.76029832.xlsm")
 
 
 (def savepath 

@@ -34,7 +34,8 @@
    supply additional tables, or supply the :all keyword to get all tables."
   (let [wb (xl/as-workbook wbpath)]
     (into {} (for [[nm sheetname] (seq tables)]
-               [nm (xl/sheet->table (xl/as-sheet sheetname wb))])))) 
+               (do (println nm)
+                   [nm (xl/sheet->table (xl/as-sheet sheetname wb))]))))) 
 
 (defmethod load-project "xlsm" [path & {:keys [tables]}] 
   (-> (make-project
