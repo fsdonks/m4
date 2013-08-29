@@ -4,7 +4,8 @@
 ;validates the resultant set of sample records, and allows 
 ;replications of the process.
 (ns marathon.processing.helmet.core
-  (:require [spork.util [general :as gen]
+  (:require [spork.cljgui.components [swing :as gui]]
+            [spork.util [general :as gen]
                         [table :as tbl]
                         [stats :as stats]
                         [record :as rec]
@@ -276,7 +277,7 @@
 
 (defn read-casebook [& {:keys [wbpath ignore-dates?]}]
   (let [db (into {} (for [[k table] (xl/xlsx->tables 
-                                      (or wbpath (util.gui/select-file))
+                                      (or wbpath (gui/select-file))
                                       :ignore-dates? ignore-dates?)]
                       [k (tbl/keywordize-field-names table)]))
         case-records (read-legacy-cases (get db "Cases"))

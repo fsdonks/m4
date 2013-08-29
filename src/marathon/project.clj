@@ -4,10 +4,10 @@
 ;;Clojure serialized data, and tab delimited files.  JSON and XML are 
 ;;trivial to support. More to come.
 (ns marathon.project
-  (:require  [util [io :as io]            
-             [table :as tbl] 
-             [clipboard :as board]              
-             [general :as general]]
+  (:require  [spork.util [io :as io]            
+                         [table :as tbl] 
+                         [clipboard :as board]              
+                         [general :as general]]
              [clojure [string :as strlib]]))
 
 ;currently unused.

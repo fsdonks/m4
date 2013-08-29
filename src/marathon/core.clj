@@ -4,7 +4,7 @@
             [marathon.processing.helmet [core :as helm]]
             [clojure [pprint :as pprint]]
             [spork.cljgui.components [swing :as gui]]
-            [spork.cljgui            [mvc :as mvc]]
+            [spork  [mvc :as mvc]]
             [spork.events  [observe :as obs]
                            [native :as swing-events]])
   (:use [spork.util.mailbox]

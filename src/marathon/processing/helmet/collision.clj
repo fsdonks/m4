@@ -5,11 +5,6 @@
 (ns marathon.processing.helmet.collision)
 
 (def ^:dynamic *log-collisions* nil) 
-;added from patch 
-(defn higher-priority [l r] (< (:Priority l) (:Priority r)))
-(defn adjacent? [l r] (= (end-time l) (start-time r)))
-
-
 
 (defn start-time [record] (:StartDay record))
 (defn end-time [record]   (+ (:StartDay record) (:Duration record)))
@@ -28,6 +23,10 @@
   (= (:Priority record1) (:Priority record2)))
 (defn priority-greater? [record1 record2]
   (< (:Priority record1) (:Priority record2)))
+
+;added from patch 
+(defn higher-priority [l r] (< (:Priority l) (:Priority r)))
+(defn adjacent? [l r] (= (end-time l) (start-time r)))
 
 
 (defn- log-fix [cause in result]
