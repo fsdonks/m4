@@ -5,7 +5,7 @@
 ;;Patched..due to some complexities in splitting.
 
 (defn add-group-times [splitmap xs & {:keys [fields]
-                                      :or   {fields [:DemandSplit :draw-index]}}]
+                                      :or  {fields [:DemandSplit :draw-index]}}]
   (let [gtimes (into {} (for [[[splitkey _] recs]
                             (group-by (apply juxt fields) xs)]
                           [splitkey (min (map :start recs))]))]
@@ -78,10 +78,10 @@
   [splitmap xs & {:keys [exclude?] 
                   :or   {exclude? title32?}}]
   (->> (for [[[splitkey _] split-recs] 
-             (group-by (:DemandSplit :draw-index) (map add-start-dur xs))]
+             (group-by (juxt :DemandSplit :draw-index) (map add-start-dur xs))]
         (if-let [{:keys [SourceFirst DayRule]} (get splitmap splitkey)]
-          (let [tmin (reduce min (map :start split-recs))
-                recs-by-src (map #(sort-by :start %)
+          (let  [tmin (reduce min (map :start split-recs))
+                 recs-by-src (map #(sort-by :start %)
                                  (vals (group-by :SRC split-recs)))]
             (map (fn [recs]                   
                    (let  [{:keys [in out]} 

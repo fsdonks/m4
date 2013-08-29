@@ -15,7 +15,7 @@
 
 (def  path-history (atom [(System/getProperty "user.dir")]))
 (defn add-path! [p] (swap! path-history conj p))
-(defn active-path [] (last @path-history))
+(defn active-path [] (last @path-history))  
 
 (defn select-file []
   (let [p (gui/select-file (active-path))]
@@ -40,7 +40,6 @@
 
 ;Project-manager then routes tasks, using the currently-loaded project as its 
 ;environment. 
-
 
 (defn project-mvc [routes init-state]
   {:model (agent {:state init-state
@@ -99,20 +98,22 @@
     "Save-Project"    "Saves a project into the project path."
     "Save-Project-As" "Saves a currently-loaded project into path."
     "Convert-Project" "Convert a project from one format to another."
-    "Derive-Project"  "Allows one to derive multiple projects from the current."})
+    "Derive-Project"  "Allows one to derive multiple projects from the current."
+    "Audit-Project"   "Audits the current project."
+    "Audit-Projects"  "Audits multiple projects"})
 
 (def processing-menu-spec
-  {"Clean" "Cleans a run"
-   "High-Water" "Computes HighWater trails"
+  {"Clean"              "Cleans a run"
+   "High-Water"         "Computes HighWater trails"
    "Deployment-Vectors" "Analyzes deployments"
-   "Charts" "Generate plots."
-   "Stochastic-Demand" "Generate stochastic demand files from a casebook."   
-   "Custom" "Run a custom script on the project"
-   "Eval"   "Evaluate an expression in the context"})
+   "Charts"             "Generate plots."
+   "Stochastic-Demand"  "Generate stochastic demand files from a casebook."   
+   "Custom"             "Run a custom script on the project"
+   "Eval"               "Evaluate an expression in the context"})
 
 (def scripting-menu-spec
   {"Load-Script" "Load a clojure script into the environment."
-   "REPL"   "Jack in to a Read Evaluate Print Loop."})
+   "REPL"        "Jack in to a Read Evaluate Print Loop."})
 
 (def preferences-menu-spec
   {"Update" "Check for updates to Marathon."
@@ -129,7 +130,7 @@
     (mvc/make-modelview nil menus 
       {:menu-events (obs/multimerge-obs (vals menus))})))       
 
-
+;;This is helmet specific.
 (defn casekey->filename [[case-name future]]
   (str case-name \_ future ".txt"))
 
@@ -140,11 +141,18 @@
         (io/hock  (io/relative-path root-dir [file-name]) 
                   (tbl/table->tabdelimited tbl))))))
 
+(defmacro with-alert [alert body]
+  `(do (~'gui/alert ~alert)
+       ~body))
+
+(defmacro request-path [[bind alert] body]
+  `(when-let [~bind (with-alert ~alert (~'select-file))]
+     ~body))
+
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
-  (do (gui/alert "Please select the location of valid case-book.")
-    (let [wbpath      (select-file)           
-          cases       (helm/futures->tables 
+  (request-path [wbpath "Please select the location of valid case-book."]
+    (let [cases       (helm/futures->tables 
                         (helm/xlsx->futures wbpath :ignore-dates? true))
           ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
           dump-folder ;(if dump-same?
@@ -155,9 +163,8 @@
       (spit-tables cases dump-folder))))
 
 (defn clean-demand-dialogue []
-  (do (gui/alert "Please select the location of valid case-files.")
-    (let [wbpath      (select-file)
-          fl          (clojure.java.io/file wbpath)
+  (request-path [wbpath "Please select the location of valid case-files."]
+    (let [fl          (clojure.java.io/file wbpath)
           cases       {(str (io/fname fl) \_ "split.txt") (tbl/read-table fl)}
           ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
           dump-folder ;(if dump-same?
@@ -167,8 +174,17 @@
           _ (print (str "dumping to " dump-folder))]      
       (spit-tables cases dump-folder))))
 
-(defn split-demand-dialogue [])
-
+(defn audit-project-dialogue []
+  (request-path [wbpath "Please select the location of valid case-files."]  
+    (let [fl          (clojure.java.io/file wbpath)
+          cases       {(str (io/fname fl) \_ "split.txt") (tbl/read-table fl)}
+          ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
+          dump-folder ;(if dump-same?
+          (apply str (interleave (butlast (io/list-path wbpath))
+                                   (repeat "\\")))
+            ;(select-folder))
+            _ (print (str "dumping to " dump-folder))]      
+        (spit-tables cases dump-folder))))
 
 (defn hub [& {:keys [project exit?]}]
   (let [close-beh (if exit? (fn [^JFrame fr] 
@@ -197,7 +213,7 @@
               :routes (merge default-routes project-routes)})       
       (gui/display (->> (close-beh 
                           (gui/empty-frame "Marathon Project Management")) 
-                     (gui/add-menu main-menu))
+                        (gui/add-menu main-menu))
                    (gui/stack textlog  
                               (gui/text-box) 
                               audit))

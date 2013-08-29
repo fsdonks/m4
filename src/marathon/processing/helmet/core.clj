@@ -334,6 +334,14 @@
 ;;Patched to support post-process-cases 
 (defn process-if [pred f xs] (if pred (f xs) xs))
 
+
+(defn validate-splitmap [m]
+  (assert (not= (keys splitmap) (list nil))
+          "Splitting information appears to be invalid, ensure that you 
+            have a DemandSplit field in the DemandRecords table, and a 
+            DemandSplit field in the DemandSplit table.")
+  m)
+
 ;;Changed the lookup field to use a column called DemandSplit, with 
 ;;corresponding column in the population of records.
 
@@ -342,22 +350,23 @@
    handling collisions, and split the resulting data according to the 
    rules defined by DemandSplit."
   [db futures & {:keys [log? processes]}]
-  (let [splitmap (table->lookup db :DemandSplit     :DemandSplit)
-        classes  (table->lookup db :ValidationRules :DependencyClass)]    
+  (let [splitmap (validate-splitmap 
+                   (table->lookup db :DemandSplit     :DemandSplit))
+        classes  (table->lookup db   :ValidationRules :DependencyClass)]    
     (into {} 
       (for [[case-key case-records] futures]
         [case-key
          (->> case-records 
               (process-if (:collide processes)
                 #(collision/process-collisions classes % :log? log?))
-              (process-if (:split processes) 
+              (process-if false ;(:split processes) 
                 #(split/split-future splitmap %)))]))))              
 
 ;;Patched to included discrete processes..
 
 (defn xlsx->futures [wbpath & {:keys [ignore-dates? log? processes] 
                                :or {ignore-dates? true
-                                    log? nil
+                                    log? true
                                     processes #{:collide :split}}}]
   (let [db (read-casebook :wbpath wbpath :ignore-dates? ignore-dates?)]
     (post-process-cases db (compile-cases db) :log? log? :processes processes)))
