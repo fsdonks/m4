@@ -34,17 +34,17 @@
                           :high-water))
 
 ;A map of paths to resources, relative to a project-path.
-(def default-paths {:titles ["Titles.txt"]
-                    :supply-records ["SupplyRecords.txt"]
-                    :demand-records ["DemandRecords.txt"]                      
-                    :src-tag-records ["SRCTagRecords.txt"]
-                    :period-records ["PeriodRecords.txt"]
+(def default-paths {:titles           ["Titles.txt"]
+                    :supply-records   ["SupplyRecords.txt"]
+                    :demand-records   ["DemandRecords.txt"]                      
+                    :src-tag-records  ["SRCTagRecords.txt"]
+                    :period-records   ["PeriodRecords.txt"]
                     :relation-records ["RelationRecords.txt"]
-                    :in-scope ["InScope.txt"]
-                    :out-of-scope ["OutOfScope.txt"]
-                    :parameters ["Parameters.txt"]
-                    :deployments ["Deployments.txt"]                    
-                    :demand-trends ["DemandTrends.txt"]})
+                    :in-scope         ["InScope.txt"]
+                    :out-of-scope     ["OutOfScope.txt"]
+                    :parameters       ["Parameters.txt"]
+                    :deployments      ["Deployments.txt"]                    
+                    :demand-trends    ["DemandTrends.txt"]})
 
 
 
@@ -138,6 +138,21 @@
    the file extension." 
   (fn [proj destination & options]
     (project-dispatch destination)))
+
+(defmulti derive-project 
+  "Method for building a new project from an existing project.  At the most 
+   basic level, it's a simple cloning process.  Primary impetus is to
+   facilitate cloning legacy projects and making data migration easier."
+  (fn [proj destination & options]
+    [(project-dispatch proj) (project-dispatch destination)]))
+
+(defmulti migrate-project 
+  "Method for migrating data in an existing project to another, possibly new 
+   project.  At the most basic level, it's a simple cloning process.  Primary 
+   impetus is to facilitate cloning legacy projects and making data migration 
+   easier."
+  (fn [proj destination & options]
+    [(project-dispatch proj) (project-dispatch destination)]))
 
 (defmethod save-project "clj" [proj destination & {:keys [expanded?] 
                                                    :or {expanded? false}}]

@@ -98,9 +98,9 @@
         src-lookup (tbl/make-lookup-table "SRC" src-definitions)
         titles (->> (tbl/map-field "DemandType"
                        (fn [src] (get-in src-lookup [src "OITitle"]))
-                           deploy-table)
-                      (tbl/get-field "DemandType")
-                      (tbl/field-vals))]
+                       deploy-table)
+                   (tbl/get-field "DemandType")
+                   (tbl/field-vals))]
     (tbl/conj-fields {"DwellYears" dwell-years
                       "OITitle" titles} deploy-table)))                                           
 
@@ -156,8 +156,7 @@
                      (get-path prj :demand-trends)))]       
     ;join fields from the SRC definition table....
     (->> (get-table prj :src-definitions)
-         (tbl/join-on ["SRC"] 
-                      hw-table)
+         (tbl/join-on ["SRC"] hw-table)
          (tbl/records->table)
          (tbl/order-by [["t" :ascending]                         
                         ["DemandName" :ascending]])
@@ -180,6 +179,13 @@
          (clean-project)
          (add-highwater)
          (final-func))))      
+
+;;it'd be nice to have a set of functions to copy a project...
+;;One current problem with the legacy stuff is that we have a ton of things to 
+;;copy between workbooks.
+;;So if we want to migrate projects to and from, it can get a bit hairy...
+;(defn modify-marathon-project [path tables]
+  
 
 ;a sample of compiling an audit trail from a marathon run.
 (comment
