@@ -99,6 +99,7 @@
     "Save-Project-As" "Saves a currently-loaded project into path."
     "Convert-Project" "Convert a project from one format to another."
     "Derive-Project"  "Allows one to derive multiple projects from the current."
+    "Migrate-Project" "Port data from a legacy version of marathon to a new one."
     "Audit-Project"   "Audits the current project."
     "Audit-Projects"  "Audits multiple projects"})
 

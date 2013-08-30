@@ -4,7 +4,7 @@
 ;;Processes the deployment records from a Marathon project and projects them 
 ;;onto one or more Incanter scatter plots.  Consistent with the legacy 
 ;;deployment dot plots from Excel, but more flexible and interactive.
-(ns marathon.processing.deployments
+(ns marathon.project.views.deployments
   (:require [spork.util [io :as io]])
   (:use [spork.util.table]
         [spork.incanter.extensions]
@@ -25,9 +25,9 @@
   [tbl f]
   (let [newtable (merge empty-table {:fields (get-fields tbl)} )]
     (loop [subtables {}
-           xs (record-seq tbl)]
+           xs        (record-seq tbl)]
       (if (seq xs)
-        (let [y (f (first xs))
+        (let [y   (f (first xs))
               acc (as soc subtables y
                       (let
                         [subtable (get subtables y newtable)]
@@ -38,7 +38,7 @@
           (recur acc (rest xs)))
         subtables))))
 
-(defn get-src [rec]   (get rec "UnitType"))
+(defn get-src   [rec]   (get rec "UnitType"))
 (defn get-compo [rec] (get rec "Component"))
 (defn deploytable->srctables
   "Converts a deployments table to a map of sub tables, grouped by the SRC

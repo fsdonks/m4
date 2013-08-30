@@ -1,3 +1,5 @@
+;;__DEPRECATED__
+
 (ns marathon.sampleproj
   (:require [clojure [string :as strlib] [set :as setlib]]
             [clojure.contrib [json :as json]]
