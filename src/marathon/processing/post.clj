@@ -155,8 +155,8 @@
                    (highwater/file->highwater-table 
                      (get-path prj :demand-trends)))]       
     ;join fields from the SRC definition table....
-    (->> (get-table prj :src-definitions)
-         (tbl/join-on ["SRC"] hw-table)
+    (->> (get-table prj  :src-definitions)
+         (tbl/join-on    ["SRC"] hw-table)
          (tbl/records->table)
          (tbl/order-by [["t" :ascending]                         
                         ["DemandName" :ascending]])

@@ -1,3 +1,6 @@
+;;Note -> Since we don't have an Incanter dependency, this isn't currently 
+;;working.  I want to only pull in the stuff I actually need from incanter...
+
 ;;Processes the deployment records from a Marathon project and projects them 
 ;;onto one or more Incanter scatter plots.  Consistent with the legacy 
 ;;deployment dot plots from Excel, but more flexible and interactive.
@@ -35,7 +38,7 @@
           (recur acc (rest xs)))
         subtables))))
 
-(defn get-src [rec] (get rec "UnitType"))
+(defn get-src [rec]   (get rec "UnitType"))
 (defn get-compo [rec] (get rec "Component"))
 (defn deploytable->srctables
   "Converts a deployments table to a map of sub tables, grouped by the SRC
