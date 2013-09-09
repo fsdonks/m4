@@ -185,7 +185,7 @@
 ;;to and from the graph encoding in the legacy implementation.
 
 ;;Standard labels for defining source and sink rules.  Maybe memoize these.
-(defn sink-label   [x] [x :sink])   
+(defn sink-label   [x] [x :sink]  )   
 (defn source-label [x] [x :source]) 
 
 ;;Refactor -> we don't need a separate rule here really, just wrapping 
@@ -481,7 +481,7 @@
         candidates  (find-supply fillfunc supplystore ;1)
                       (derive-supply-rule demand fillstore category))
         demand-name (:name demand)]
-    (loop [d demand           
+    (loop [d  demand           
            xs candidates 
            fill-status :unfilled
            current-ctx ctx]
