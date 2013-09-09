@@ -30,13 +30,25 @@
 
 ;;Selecting Units
 ;;===============
+;;SelectionRequest->Unit
+(defprotocol IEntitySelector 
+  (select-entity [selector entity-order]))
 
+(defn select-all [supplystore]
+  (get supplystore [:unitmap]))
 
+;;We need different ways of comparing units. 
+;;That's pretty fundamental to unit selection and ordering.
+
+(defn compare-unit [x y] 
+  (
+
+;;EntityRequest->SpawnUnit
 
 ;;Generating Unit Entities
 ;;========================
 (defprotocol IEntityGenerator
-  (generate-entity [gen order])
+  (generate-entity [gen entity-order])
   (capacity        [gen]))
 
 ;;We specify how to generate entities in a generic fashion.  A nice way to do

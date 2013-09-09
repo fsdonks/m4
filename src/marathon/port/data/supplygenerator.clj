@@ -40,9 +40,9 @@
 
 (defprotocol ISupplyGenerator
   (load-supply [g frombucket supplyset & [followoncode demandname phase]])
-  (capacity [g]) ;analagous to count
+  (capacity    [g]) ;analagous to count
   (next-entity [g])
-  (take-next [g]))
+  (take-next   [g]))
 
 (defn empty-generator? [g] (zero? (capacity g)))
 (def  supply-remaining? empty-generator?) ;alias
