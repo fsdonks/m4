@@ -1,55 +1,38 @@
+;;TOM HACK 24 july 2012->
+;;Putting a bunch of extra logic in here to handle things...
+;;A -> policy matters.
+;;  For Future Force Generation....
+;;  Units in the Mission pool are highest priority to fill demands relative to their demandgroup.
+;;       Depending on the study, Mission Pool units may simply be off limits.
+;;       Set this by their demand profile.
+;;  Units in the Rotational pool are distributed uniformly, relative to their normalized cycle times.
+;;       For each unit;;s cycle, we project it onto a normalized space.
+;;           In the case of cycles with infinite length....we just use the dwell time.
+;;           In the case of all other policies, we represent the unit;;s policy coordinate as
+;;             the percentage completion of its current policy.
+;;             This eliminates differences between AC and RC policies, and uniformly distributes
+;;             relative readiness, rather than draining on a pool by pool basis.
+;;  Units in the Operational and Sustainment Pool
+;;       O&S units have a late deployability.  They are evaluated at 3/5 of their actual cycle completion.
+
 (ns marathon.port.data.unitcomparers
-  (:require [spork.util [general :as gen]]))
+  (:require [spork.util [general :as gen]
+                        [tags    :as tags]]))
 
-0:   2/27/2013 5:13:35 PM
-   1:  'TOM HACK 24 july 2012->
-   2:  'Putting a bunch of extra logic in here to handle things...
-   3:  'A -> policy matters.
-   4:  '  For Future Force Generation....
-   5:  '  Units in the Mission pool are highest priority to fill demands relative to their demandgroup.
-   6:  '       Depending on the study, Mission Pool units may simply be off limits.
-   7:  '       Set this by their demand profile.
-   8:  '  Units in the Rotational pool are distributed uniformly, relative to their normalized cycle times.
-   9:  '       For each unit's cycle, we project it onto a normalized space.
-  10:  '           In the case of cycles with infinite length....we just use the dwell time.
-  11:  '           In the case of all other policies, we represent the unit's policy coordinate as
-  12:  '             the percentage completion of its current policy.
-  13:  '             This eliminates differences between AC and RC policies, and uniformly distributes
-  14:  '             relative readiness, rather than draining on a pool by pool basis.
-  15:  '  Units in the Operational and Sustainment Pool
-  16:  '       O&S units have a late deployability.  They are evaluated at 3/5 of their actual cycle completion.
-  17:  
-  18:  
-  19:  'All other policies are identical.  In fact, we leave previous policies intact.  So that we can reproduce
-  20:  'older study results.
-  21:  
-  22:   Option Explicit
-  23:   Public Enum UnitCriteria
-  24:       followon = 1
-  25:       cyclelength = 2
-  26:       relativeCyclelength = 3
-  27:       bogbudget = 6
-  28:       dwell = 5
-  29:       AC = 3
-  30:       RC = 4
-  31:   End Enum
-  32:  
-  33:   Public UniformPreference As Boolean
-  34:  
-  35:  'this is a hack, just to get stuff working.
-  36:   Public RCpresurgePreference As Boolean
-  37:  
-  38:   Public sortingCriteria As Collection'Dictates the criteria by which units will be compared.
-  39:  
-  40:  
-  41:   Private demandname As String
-  42:   Private followoncode As String
-  43:   Private period As String
-  44:   Private tags As GenericTags
-  45:  
-  46:   Implements IComparator
+;;All other policies are identical.  In fact, we leave previous policies intact.  
+;;So that we can reproduce older study results.
 
+;;Simple and stupid.  For now, we just have a context that can be bound.
+;;Some comparison functions want a context, or extra stuff, so if they do, 
+;;the caller has to provide a binding, or use a with-comparison-context 
+;;macro.
+(def ^:dynamic *comparison-context*)
 
+;;Interface to allow comparison functions to uniformly fetch stuff from the 
+;;comparison context aether...(the dynamic binding).
+(defn get-compare-ctx [k] (get *comparison-context* k))
+
+;;Helper functions for common comparisons.
 (defn unit-dwell [unit] (-> (:currentcycle unit) :dwell)) 
 ;;obe
 (defn sort-key-ac [unit] 
@@ -64,37 +47,59 @@
     (unit-dwell unit)
     (/ (unit-dwell unit) 3.0)))
 
- 104:   Public Sub sortWith(dname As String, fcode As String, period As String, Optional supplytags As GenericTags)
- 105:   demandname = dname
- 106:   followoncode = fcode
- 107:   period = period
- 108:   Set tags = supplytags
- 109:   End Sub
- 110:  
- 111:  'A uniform sort key allows us to order units by their relative time in cycle, which smoothes out
- 112:  'differences between cycle lengths.
+(defn sort-key-followon [unit] (* (-> unit (:currentcycle :bogbudget)) 1000))
 
+(defn sequential-comparer
+  "Threads a comparison context through a series of comparisons, xs, in a 
+   serial, fail-first fashion. xs are funcs that map [l r] -> comparison.
+   Some functions have read access to the comparison context, using 
+   get-comparison-context, and can have dynamic behavior if a context is 
+   provided."
+  ([ctx xs]
+    (binding [*comparison-context* ctx]
+      (fn [l r]       
+        (loop [remaining xs
+               acc 0]
+          (if-let [f (first remaining)]
+            (let  [res (f ctx l r)]
+              (if  (not= res 0) res
+                (recur (rest xs) 
+                       acc)))
+            acc)))))
+  ([xs] (sequential-comparer {} xs))) 
+
+;;(defcomparer [l r]     )    -> context independent
+;;(defcomparer [ctx l r] )    -> context dependent
+
+;;comparers ALL take a context...
+;;or comparers ALL take 
 ;;Uniform progress in a unit's life cycle.
 (defn uniform-sort-key [unit]
   (let [c (:currentcycle unit)]
     (/ (cycletime unit) (:durationexpected c))))
 
 ;;figure out how to merge this later. 
-(defn opsus-sort-key [unit]  (* (uniform-sort-key unit) (/ 3.0 5.0)))
+(defn opsus-sort-key [unit] (* (uniform-sort-key unit) (/ 3.0 5.0)))
 
 ;;need a defcomparer....we have something like this in util.table, and util.record.
 (defmacro defcomparer
-  "Defines unit comparison functions.  May be overkill."
-  [name key-funcs]
-  (let [cs (if (coll? key-funcs) key-funcs [key-funcs])]
-    `(let [sc# (~'gen/serial-comparer ~cs)]
-       (~'defn ~'name  [~'l ~'r] (sc# l r)))))
+  "Defines unit comparison functions.  Creates a sequential comparer out of the 
+   key functions provided.  For now, only sequential comparison is supported.
+   Optionally, user may supply an argument for a context."
+  ([name key-funcs]
+    (let [cs (if (coll? key-funcs) key-funcs [key-funcs])]
+      `(let [sc# (~'gen/serial-comparer ~cs)]
+         (~'defn ~'name  [~'l ~'r] (sc# l r)))))
+  ([name args key-funcs]
+    (let [cs (if (coll? key-funcs) key-funcs [key-funcs])]
+      `(let [sc# (~'gen/serial-comparer ~cs)]
+         (~'defn ~'name  [~'l ~'r] (sc# l r))))))
 
 ;;Uses uniform-compare 
-(defcomparer uniform-compare  [uniform-sort-key])
-(defcomparer ac-first         [sort-key-ac])
-(defcomparer rc-first         [sort-key-rc])
-(defcomparer followon-compare [(fn [l r] (if-let [l ]))])
+(defcomparer uniform-compare   [uniform-sort-key])
+(defcomparer ac-first          [sort-key-ac])
+(defcomparer rc-first          [sort-key-rc])
+(defcomparer followon-compare  [(fn [l r] (if-let [l ]))])
 
  167:   Private Function FencedCompare(u1 As TimeStep_UnitData, u2 As TimeStep_UnitData) As Comparison
  168:   Dim l As Boolean, r As Boolean
@@ -111,12 +116,39 @@
  179:   End If
  180:  
  181:   End Function
+
+ 189:  'TOM Change 27 SEp 2012 -> allow fencing of supply via tags...We pass information to the comparer
+ 190:  'if the unit is fenced to the relative demand or demand group.  If a unit is fenced to a different
+ 191:  'demand or group, we return false.
+
+;;Determines if the unit is tagged with compatible information for either the 
+;;demand name, of the general class of followoncode.  This is a more general 
+;;concept that we need to abstract out, but for now it's ported as-is.
+(defn inside-fence? [uic demandname followoncode tags]
+  (let [unit-name (:name uic)]
+    (or (tags/has-tag? tags unitname followoncode)
+        (tags/has-tag? tags unitname demandname))))
+ 
+;;Determines if the unit is outside of any fencing.  We use a general tagging 
+;;mechanism to partition this possible, and serve as a quick first check.
+;;Units not explicitly tagged as :fenced are possible matches to the demandname
+;;or followoncode criteria.  So feasible fenced units must be both fenced and 
+;;fenced to a particular demand.
+(defn outside-fence? [uic demandname followoncode tags]
+  (when (tags/has-tag? tags :fenced (:name uic))
+    (inside-fence? uic demandname followoncode tags)))
+ 
+ 
 (defcomparer fenced-compare 
   (fn ))                                    
 
 (defn invert [f] (fn [l r] (f r l))) 
 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
+
+;;followon compare only matters if we have a followon code.
+;;can we generalize? 
+;;pass in some comparison context as an optional third arg.
 
  153:   Private Function followOnCompare(u1 As TimeStep_UnitData, u2 As TimeStep_UnitData) As Comparison
  154:   If followoncode    = vbNullString Then ;This is off.  We used to have state..
@@ -133,6 +165,9 @@
  165:   End If
  166:   End Function
 
+ (defn followon-comparer [l r]
+   (
+   
 
 
 

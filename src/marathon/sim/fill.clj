@@ -55,6 +55,27 @@
         (ghost-followed! unit ctx) 
         (ghost-deployed! unit ctx))))
 
+
+;;Temporarily located here, amenable to refactoring.
+;;================================================== 
+
+;;Determines if the unit is tagged with compatible information for either the 
+;;demand name, of the general class of followoncode.  This is a more general 
+;;concept that we need to abstract out, but for now it's ported as-is.
+(defn inside-fence? [uic demandname followoncode tags]
+  (let [unit-name (:name uic)]
+    (or (tags/has-tag? tags unitname followoncode)
+        (tags/has-tag? tags unitname demandname))))
+ 
+;;Determines if the unit is outside of any fencing.  We use a general tagging 
+;;mechanism to partition this possible, and serve as a quick first check.
+;;Units not explicitly tagged as :fenced are possible matches to the demandname
+;;or followoncode criteria.  So feasible fenced units must be both fenced and 
+;;fenced to a particular demand.
+(defn outside-fence? [uic demandname followoncode tags]
+  (when (tags/has-tag? tags :fenced (:name uic))
+    (inside-fence? uic demandname followoncode tags)))
+
 ;##Decomposing the Fill Process....
 ;Sourcing a demand is really the composition of three simpler tasks: 
 ;find-supply, take n items from the supply, fill the demand with the n items.
@@ -506,4 +527,6 @@
 
 ;;Implement defquery or defgenerator, to allow easy composition of fill 
 ;;functions.  This requires cljgraph.
+
+
 
