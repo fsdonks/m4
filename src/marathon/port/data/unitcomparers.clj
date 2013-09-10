@@ -42,6 +42,8 @@
      "AC" (unit-dwell unit)
      (/ (unit-dwell unit) 3.0)))
 
+(defn invert [f] (fn [l r] (f r l))) 
+
 ;;Needs to be generalized.  It's a partial application of a bias function.
 ;;this is really a bias toward "non-AC" units.
 (defn sort-key-rc [unit]
@@ -82,20 +84,30 @@
 
 ;;figure out how to merge this later. 
 (defn opsus-sort-key [unit] (* (uniform-sort-key unit) (/ 3.0 5.0)))
+(defn comparer-type [x]
+  (cond (map? x) :spec 
+        (fn? x)  :key-function))
+
+(defn comparer? [m] (contains? m :comparer))
+
+;;broke!
+;(defn spec->comparer [m]  
+;  (let [res (get m :comparer
+;                 
+;        (contains? m :key (let [f (get m :key)]
+;                            (fn [l r] (compare (f l) (f r)))))
+    
+        
 
 ;;need a defcomparer....we have something like this in util.table, and util.record.
 (defmacro defcomparer
   "Defines unit comparison functions.  Creates a sequential comparer out of the 
    key functions provided.  For now, only sequential comparison is supported.
    Optionally, user may supply an argument for a context."
-  ([name key-funcs]
+  [name key-funcs]
     (let [cs (if (coll? key-funcs) key-funcs [key-funcs])]
       `(let [sc# (~'gen/serial-comparer ~cs)]
          (~'defn ~'name  [~'l ~'r] (sc# l r)))))
-  ([name args key-funcs]
-    (let [cs (if (coll? key-funcs) key-funcs [key-funcs])]
-      `(let [sc# (~'gen/serial-comparer ~cs)]
-         (~'defn ~'name  [~'l ~'r] (sc# l r))))))
 
 ;;Uses uniform-compare 
 (defcomparer uniform-compare   [{:key uniform-sort-key}])
@@ -108,44 +120,24 @@
   [{:key #(if-let [followoncode (get-compare-ctx :followoncode)]
                   (sort-key-followon %)  0)}])
 
- 167:   Private Function FencedCompare(u1 As TimeStep_UnitData, u2 As TimeStep_UnitData) As Comparison
- 168:   Dim l As Boolean, r As Boolean
- 169:   l = MarathonOpFill.isInsideFence(u1, demandname, followoncode, tags)
- 170:   r = MarathonOpFill.isInsideFence(u2, demandname, followoncode, tags)
- 171:   If l And r Then
- 172:       FencedCompare = equal
- 173:   Else
- 174:       If l And (Not r) Then
- 175:           FencedCompare = greaterthan
- 176:       ElseIf (Not l) And r Then
- 177:           FencedCompare = lessthan
- 178:       End If
- 179:   End If
- 180:  
- 181:   End Function
-
- 189:  'TOM Change 27 SEp 2012 -> allow fencing of supply via tags...We pass information to the comparer
- 190:  'if the unit is fenced to the relative demand or demand group.  If a unit is fenced to a different
- 191:  'demand or group, we return false.
-
 ;;Getting bad vibes from shoveling too much context around...Ah well.
 (defn fenced-key [uic]
   (if (not (context?))  0 ;only matters when we have context, i.e. tags, demandname, etc. 
     (let [{:keys [demandname followoncode tags]} *comparison-context*]
       (fill/inside-fence? uic))))
 
+;;A comparer that uses fencing information, supplied by the dynamic binding to 
+;;the comparison context, to prefer units that are fenced to a relative demand.
 (defcomparer fenced-compare 
-  {:comparer (fn [l r]   )))})                                    
-
-(defn invert [f] (fn [l r] (f r l))) 
+  [{:comparer (fn [l r] 
+                (let [fenced-left?  (fenced-key l)
+                      fenced-right? (fenced-key r)]
+                  (cond (and fenced-left? (not fenced-right?)) 1 
+                        (and (not fenced-left?) fenced-right?) -1
+                    0)))}])                                    
 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
-
-
-
- 
-
-                
+               
 
  190:   res = FencedCompare(u1, u2)
  191:   If res = equal Then res = followOnCompare(u1, u2)
