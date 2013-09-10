@@ -59,6 +59,8 @@
 ;;Temporarily located here, amenable to refactoring.
 ;;================================================== 
 
+;;Tag-related queries for filling:  
+
 ;;Determines if the unit is tagged with compatible information for either the 
 ;;demand name, of the general class of followoncode.  This is a more general 
 ;;concept that we need to abstract out, but for now it's ported as-is.

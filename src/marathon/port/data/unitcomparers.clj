@@ -17,7 +17,8 @@
 
 (ns marathon.port.data.unitcomparers
   (:require [spork.util [general :as gen]
-                        [tags    :as tags]]))
+                        [tags    :as tags]]
+            [marathon.sim [fill :as fill]]))
 
 ;;All other policies are identical.  In fact, we leave previous policies intact.  
 ;;So that we can reproduce older study results.
@@ -31,9 +32,10 @@
 ;;Interface to allow comparison functions to uniformly fetch stuff from the 
 ;;comparison context aether...(the dynamic binding).
 (defn get-compare-ctx [k] (get *comparison-context* k))
+(defn context? [] (empty? *comparison-context*))
 
 ;;Helper functions for common comparisons.
-(defn unit-dwell [unit] (-> (:currentcycle unit) :dwell)) 
+(defn unit-dwell [unit]   (-> (:currentcycle unit) :dwell)) 
 ;;obe
 (defn sort-key-ac [unit] 
   (case (:component unit)
@@ -96,10 +98,15 @@
          (~'defn ~'name  [~'l ~'r] (sc# l r))))))
 
 ;;Uses uniform-compare 
-(defcomparer uniform-compare   [uniform-sort-key])
-(defcomparer ac-first          [sort-key-ac])
-(defcomparer rc-first          [sort-key-rc])
-(defcomparer followon-compare  [(fn [l r] (if-let [l ]))])
+(defcomparer uniform-compare   [{:key uniform-sort-key}])
+(defcomparer ac-first          [{:key sort-key-ac}])
+(defcomparer rc-first          [{:key sort-key-rc}])
+;;followon compare only matters if we have a followon code.
+;;can we generalize? 
+;;pass in some comparison context as an optional third arg.
+(defcomparer followon-compare
+  [{:key #(if-let [followoncode (get-compare-ctx :followoncode)]
+                  (sort-key-followon %)  0)}])
 
  167:   Private Function FencedCompare(u1 As TimeStep_UnitData, u2 As TimeStep_UnitData) As Comparison
  168:   Dim l As Boolean, r As Boolean
@@ -121,114 +128,27 @@
  190:  'if the unit is fenced to the relative demand or demand group.  If a unit is fenced to a different
  191:  'demand or group, we return false.
 
-;;Determines if the unit is tagged with compatible information for either the 
-;;demand name, of the general class of followoncode.  This is a more general 
-;;concept that we need to abstract out, but for now it's ported as-is.
-(defn inside-fence? [uic demandname followoncode tags]
-  (let [unit-name (:name uic)]
-    (or (tags/has-tag? tags unitname followoncode)
-        (tags/has-tag? tags unitname demandname))))
- 
-;;Determines if the unit is outside of any fencing.  We use a general tagging 
-;;mechanism to partition this possible, and serve as a quick first check.
-;;Units not explicitly tagged as :fenced are possible matches to the demandname
-;;or followoncode criteria.  So feasible fenced units must be both fenced and 
-;;fenced to a particular demand.
-(defn outside-fence? [uic demandname followoncode tags]
-  (when (tags/has-tag? tags :fenced (:name uic))
-    (inside-fence? uic demandname followoncode tags)))
- 
- 
+;;Getting bad vibes from shoveling too much context around...Ah well.
+(defn fenced-key [uic]
+  (if (not (context?))  0 ;only matters when we have context, i.e. tags, demandname, etc. 
+    (let [{:keys [demandname followoncode tags]} *comparison-context*]
+      (fill/inside-fence? uic))))
+
 (defcomparer fenced-compare 
-  (fn ))                                    
+  {:comparer (fn [l r]   )))})                                    
 
 (defn invert [f] (fn [l r] (f r l))) 
 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
 
-;;followon compare only matters if we have a followon code.
-;;can we generalize? 
-;;pass in some comparison context as an optional third arg.
-
- 153:   Private Function followOnCompare(u1 As TimeStep_UnitData, u2 As TimeStep_UnitData) As Comparison
- 154:   If followoncode    = vbNullString Then ;This is off.  We used to have state..
- 155:      followOnCompare = equal
- 156:   Else
- 157:       Select Case FollowOnSortKey(u1) - FollowOnSortKey(u2)
- 158:           Case Is > 0
- 159:               followOnCompare = greaterthan
- 160:           Case Is < 0
- 161:               followOnCompare = lessthan
- 162:           Case Is = 0
- 163:               followOnCompare = equal
- 164:       End Select
- 165:   End If
- 166:   End Function
-
- (defn followon-comparer [l r]
-   (
-   
 
 
+ 
 
+                
 
-
-
- 182:   Private Function IComparator_compare(lhs As Variant, RHS As Variant) As Comparison
- 183:   Dim u1 As TimeStep_UnitData
- 184:   Dim u2 As TimeStep_UnitData
- 185:   Set u1 = lhs
- 186:   Set u2 = RHS
- 187:  
- 188:   Dim res As Comparison
- 189:  
  190:   res = FencedCompare(u1, u2)
  191:   If res = equal Then res = followOnCompare(u1, u2)
  192:   If res = equal Then res = uniformCompare(u1, u2)
- 193:  
- 194:  'TOM Change 24 oct 2012
- 195:  'Was not returning res as the value for IComparator_compare, essentially making everything
- 196:  'look equal when in fact it wasn't....big bug, caught it early though.
- 197:  
- 198:   IComparator_compare = res
- 199:  
- 200:           
- 201:   End Function
-
-;TOM Change 27 SEp 2012 -> allow fencing of supply via tags...We pass 
-;information to the comparer if the unit is fenced to the relative demand or 
-;demand group.
-;Public Function isInsideFence(uic As TimeStep_UnitData, demandname As String, 
-;        followoncode As String, tags As GenericTags) As Boolean
-;
-;With tags
-;    isInsideFence = .hasTag(uic.name, followoncode) Or 
-;                    .hasTag(uic.name, demandname)
-;End With
-;
-;End Function
-
-(defn inside-fence? [uic demandname followoncode tags]
-  )
-
-;TOM Change 27 SEp 2012 -> allow fencing of supply via tags...We pass 
-;information to the comparer if the unit is fenced to the relative demand or 
-;demand group.  If a unit is fenced to a different demand or group, we return
-;false.
-;Public Function isOutsideFence(uic As TimeStep_UnitData, demandname As String, 
-;   followoncode As String, tags As GenericTags) As Boolean
-;
-;With tags
-;    If .hasTag("fenced", uic.name) Then
-;        isOutsideFence = Not isInsideFence(uic, demandname, followoncode, tags)
-;    Else
-;        'by default, units are included if they have no fencing rules.
-;        isOutsideFence = False 
-;    End If
-;End With
-;End Function
-
-(defn outside-fence? [uic demandname followoncode tags]
-  )
 
  
