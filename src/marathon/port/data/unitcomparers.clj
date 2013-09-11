@@ -16,8 +16,8 @@
 ;;       O&S units have a late deployability.  They are evaluated at 3/5 of their actual cycle completion.
 
 (ns marathon.port.data.unitcomparers
-  (:require [spork.util [general :as gen]
-                        [tags    :as tags]]
+  (:require [spork.util   [general :as gen]
+                          [tags    :as tag]]
             [marathon.sim [fill :as fill]]))
 
 ;;All other policies are identical.  In fact, we leave previous policies intact.  
@@ -53,25 +53,6 @@
 
 (defn sort-key-followon [unit] (* (-> unit (:currentcycle :bogbudget)) 1000))
 
-(defn sequential-comparer
-  "Threads a comparison context through a series of comparisons, xs, in a 
-   serial, fail-first fashion. xs are funcs that map [l r] -> comparison.
-   Some functions have read access to the comparison context, using 
-   get-comparison-context, and can have dynamic behavior if a context is 
-   provided."
-  ([ctx xs]
-    (binding [*comparison-context* ctx]
-      (fn [l r]       
-        (loop [remaining xs
-               acc 0]
-          (if-let [f (first remaining)]
-            (let  [res (f ctx l r)]
-              (if  (not= res 0) res
-                (recur (rest xs) 
-                       acc)))
-            acc)))))
-  ([xs] (sequential-comparer {} xs))) 
-
 ;;(defcomparer [l r]     )    -> context independent
 ;;(defcomparer [ctx l r] )    -> context dependent
 
@@ -80,7 +61,7 @@
 ;;Uniform progress in a unit's life cycle.
 (defn uniform-sort-key [unit]
   (let [c (:currentcycle unit)]
-    (/ (cycletime unit) (:durationexpected c))))
+    (/ (:cycletime unit) (:durationexpected c))))
 
 ;;figure out how to merge this later. 
 (defn opsus-sort-key [unit] (* (uniform-sort-key unit) (/ 3.0 5.0)))
@@ -100,8 +81,10 @@
 (defn comparison-type [x] 
   (cond (map? x) (cond (contains? x :key-fn)      :key-fn 
                        (contains? x :compare-fn)  :compare-fn)
-        (seq? x) :serial 
-        (fn?  x)  :fn))
+        (sequential? x)  :serial 
+        (fn?  x)  :fn
+        :otherwise (do (pprint x)
+                       (throw (Exception. "Unknown dispatch")))))
 
 ;;utility function to convert maps of {:function|:key v} into functions that 
 ;;can be used to compare two values.
@@ -115,18 +98,22 @@
 ;;unpack the comparer 
 (defmethod as-comparer :compare-fn [m] (get m :compare-fn))
 
+;;For nested rules, we traverse the rule set and compile them.  Just an 
+;;optimization step.
+
 (defn compile-rules 
   "Compiles a possibly nested comparer by walking the rules and evaluating 
    as-comparer in a depth-first fashion." 
   [rule]
   (case (comparison-type rule)
-    :serial (as-comparer (vec (map compile-comparer rule)))
+    :serial (as-comparer (vec (map compile-rules rule)))
     (as-comparer rule)))
 
 ;;allow composite comparer rules.  Given a (possibly nested) sequence of 
 ;;comparisons, it'll compile the comparers into a single rule.
-(defmethod as-comparer :serial     [xs]
-  (let [parsed-rules (compile-rules xs)]
+(defmethod as-comparer :serial  [xs]
+  (let [_ (println "hello!")
+        parsed-rules (compile-rules xs)]
     (gen/serial-comparer xs)))
   
 ;;utility to tag values as key-generators to be used when comparing.
@@ -135,13 +122,15 @@
 (defn ->compare [x] {:compare-fn x})
 
 ;;need a defcomparer....we have something like this in util.table, and util.record.
+;;You could do something really cool here, and actually provide a special 
+;;scripting language.  Maybe later.
 (defmacro defcomparer
   "Defines unit comparison functions.  Creates a sequential comparer out of the 
    key functions provided.  For now, only sequential comparison is supported.
    Optionally, user may supply an argument for a context."
   [name rule]
   `(let [sc# (~'as-comparer ~rule)]
-     (~'defn ~'name  [~'l ~'r] (sc# l r))))
+     (~'defn ~name  [~'l ~'r] (sc# ~'l ~'r))))
 
 ;;Uses uniform-compare 
 (defcomparer uniform-compare  (->key uniform-sort-key))
@@ -170,9 +159,7 @@
     (let [fenced-left?  (fenced-key l)
           fenced-right? (fenced-key r)]
       (cond (and fenced-left? (not fenced-right?)) 1 
-        (and (not fenced-left?) fenced-right?) -1
-        0))))                                    
+            (and (not fenced-left?) fenced-right?) -1
+            :otherwise 0))))                                    
 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
-
- 

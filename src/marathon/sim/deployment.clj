@@ -65,7 +65,7 @@
      (->> (sim/merge-updates {:demandstore (dem/add-demand demandstore demand)
                               :supplystore supplystore} ctx)
           (u/change-location! unit (:name demand)) ;unit -> str ->ctx -> ctx....
-          (supply/check-followon-deployer! 
+          (check-followon-deployer! 
             followon? supplystore unitname demand t)
           (u/deploy-unit unit t (supply/get-next-deploymentid supplystore))
           (check-first-deployer! supplystore unitname) ;THIS MAY BE OBVIATED.

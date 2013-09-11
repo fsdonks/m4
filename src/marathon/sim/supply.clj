@@ -41,6 +41,24 @@
 (def ghost-source-tag (source-key "Ghost"))
 
 ;;#Tag Operations
+
+;'TOM Change 27 Sep 2012
+;Adds meta data to the tags, to identify the unit as being a member of a fenced
+;group of supply.  Fenced groups of supply automatically provide a special set 
+;of supply that fill functions can utilize when making demand decisions.
+(defn tag-as-fenced [tags fencegroup unitname]
+  (-> (tag/tag-subject tags fencegroup unitname)
+      (tag/tag-subject unitname :fenced)))        
+
+;'TOM Change 27 Sep 2012 -> using tags to delineate fence states, including 
+;one-time fences, specifically for future force gen stuff.
+(defn drop-fence [tags unitname]
+  (if (and (tag/has-tag? tags :one-time-fence unitname) 
+           (tag/has-tag? tags :fenced unitname))
+    (-> (tag/untag-subject tags unitname :fenced)
+        (tag/tag-subject unitname :dropped-fence))
+    tags)) 
+
 ;default unit tags
 (defn default-tags [{:keys [src component behavior oi-title policy]}] 
   [(compo-key component) (behavior-key behavior) (title-key oi-title) 
@@ -74,37 +92,6 @@
 (defn untag-units [supplystore tag units]
   (reduce #(tag/untag-subject (:tags %1) %2 tag)) supplystore units)
 
-;'TOM Change 27 Sep 2012
-;Adds meta data to the tags, to identify the unit as being a member of a fenced
-;group of supply.  Fenced groups of supply automatically provide a special set 
-;of supply that fill functions can utilize when making demand decisions.
-(defn tag-as-fenced [tags fencegroup unitname]
-  (-> (tag/tag-subject tags fencegroup unitname)
-      (tag/tag-subject unitname :fenced)))        
-
-;'TOM Change 27 Sep 2012 -> using tags to delineate fence states, including 
-;one-time fences, specifically for future force gen stuff.
-(defn drop-fence [tags unitname]
-  (if (and (tag/has-tag? tags :one-time-fence unitname) 
-           (tag/has-tag? tags :fenced unitname))
-    (-> (tag/untag-subject tags unitname :fenced)
-        (tag/tag-subject unitname :dropped-fence))
-    tags))   
-
-;;#Tag-Related Supply Queries
-(defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
-(defn multiple-ghosts? [supplytags]
-  (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
-
-;procedure that allows us to, using the fillgraph, derive a set of tags whose 
-;associated units should be deactivated.  if removal is true, the units will be
-;removed from memory as well. in cases where there are a lot of units, this may 
-;be preferable.
-(defn scope-supply [supply disable-tags & [removal]]
-  (let [f (if removal remove-unit (fn [s u] s))]
-    (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
-          (reduce (fn [s u] (-> (core/disable s u) f u)) supply))))
-
 ;;#Supply Population Operations
 ;this might be suitable to keep in the supplymanager...
 (defn add-src [supply src] 
@@ -123,6 +110,21 @@
   (let [buckets (:deployable-buckets supply)]
     (if (contains? buckets bucket-name) supply 
       (assoc-in supply [:deployable-buckets bucket-name] {}))))
+
+;;#Tag-Related Supply Queries
+(defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
+(defn multiple-ghosts? [supplytags]
+  (> (count (tag/get-subjects supplytags ghost-source-tag)) 1))
+
+;procedure that allows us to, using the fillgraph, derive a set of tags whose 
+;associated units should be deactivated.  if removal is true, the units will be
+;removed from memory as well. in cases where there are a lot of units, this may 
+;be preferable.
+(defn scope-supply [supply disable-tags & [removal]]
+  (let [f (if removal remove-unit (fn [s u] s))]
+    (->>  (tag/and-tags (:tags supply) (set disable-tags)) 
+          (reduce (fn [s u] (-> (core/disable s u) f u)) supply))))
+
 
 ;----FOREIGN -> THESE SHOULD BE MOVED, THEY'RE MORE GENERAL.....
 (defn conj-policy [unit policy] (update-in unit [:policy-queue] conj policy))
@@ -345,17 +347,6 @@
     (register-unit supplystore behaviors (ghost? new-unit) ctx)))
                                            
 
-;This is an aux function that serves as a weak patch...probably unnecessary.
-;;__TODO__Remove the need for adjust-max-utilization!
-(defn adjust-max-utilization! [supply unit ctx] 
-  (if (and (check-max-utilization (core/get-parameters ctx))
-           (should-change-policy? unit))
-    (let [new-policy (get-near-max-policy (:policy unit) 
-                                          (core/get-policystore ctx))]
-      (sim/merge-updates 
-        {:supplystore (add-unit supply (conj-policy unit new-policy))} ctx))                                                  
-    ctx))
-
 
 ;;__TODO__ DEPRECATE
 ;NOTE -> replace this with a simple map lookup...
@@ -369,6 +360,17 @@
 (defn should-change-policy? [{:keys [component] :as unit}]
   (not= component :AC :Ghost))
 (defn check-max-utilization [params] (get params :TAA1519MaxUtilizationHack))
+
+;This is an aux function that serves as a weak patch...probably unnecessary.
+;;__TODO__Remove the need for adjust-max-utilization!
+(defn adjust-max-utilization! [supply unit ctx] 
+  (if (and (check-max-utilization (core/get-parameters ctx))
+           (should-change-policy? unit))
+    (let [new-policy (get-near-max-policy (:policy unit) 
+                                          (core/get-policystore ctx))]
+      (sim/merge-updates 
+        {:supplystore (add-unit supply (conj-policy unit new-policy))} ctx))                                                  
+    ctx))
 
 ;;#Tracking Follow-On Supply
 

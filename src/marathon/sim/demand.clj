@@ -7,13 +7,13 @@
 (ns marathon.sim.demand
   (:require  [marathon.demand [demanddata :as d]
                               [demandstore :as store]]
-             [marathon.sim [core :as core] 
-                           [supply :as supply] 
-                           [policy :as policy]
-                           [unit :as u]
-                           [fill :as fill]]           
-             [spork.sim    [simcontext :as sim]]
-             [spork.util   [tags :as tag]]))
+             [marathon.sim    [core :as core] 
+                              [supply :as supply] 
+                              [policy :as policy]
+                              [unit :as u]
+                              [fill :as fill]]           
+             [spork.sim       [simcontext :as sim]]
+             [spork.util      [tags :as tag]]))
 
 ;;##Primitive Demand and DemandStore Operations
 
@@ -99,18 +99,6 @@
 ;Simple api function to group active demands from the store by their src. 
 (defn demands-by-src [store src] (get-in store [:unfilledq src]))
  
-;procedure that allows us to process a set of tags indicating associated demands
-;that should be disabled.  if removal is true, the demands will be 
-;removed from memory as well. in cases where there are a lot of demands, this 
-;may be preferable.
-(defn scope-demand [demandstore disable-tags & {:keys [removal]}]
-  (let [tags    (:tags demandstore)
-        f       (if removal #(remove-demand %1 %2) (fn [m k] m))]     
-    (reduce (fn [store demand-name] 
-              (let [demands (:demand-map store)]
-                (if (contains? demands demand-name)
-                  (f (core/disable store demand-name) demand-name) store)))
-      demandstore (mapcat (partial tag/get-subjects tags) disable-tags))))
 
 ;1) Tom Note 20 May 2013 -> It would be nice to have a function or macro for 
 ;   defining nested updates like this, as it will probably happen quite a bit.
@@ -127,6 +115,20 @@
         (update-in [:deactivations]  
                    update-in deactivations [tfinal] dissoc dname)))
     demandstore)) 
+
+;procedure that allows us to process a set of tags indicating associated demands
+;that should be disabled.  if removal is true, the demands will be 
+;removed from memory as well. in cases where there are a lot of demands, this 
+;may be preferable.
+(defn scope-demand [demandstore disable-tags & {:keys [removal]}]
+  (let [tags    (:tags demandstore)
+        f       (if removal #(remove-demand %1 %2) (fn [m k] m))]     
+    (reduce (fn [store demand-name] 
+              (let [demands (:demand-map store)]
+                (if (contains? demands demand-name)
+                  (f (core/disable store demand-name) demand-name) store)))
+      demandstore (mapcat (partial tag/get-subjects tags) disable-tags))))
+
 
 ;Simple wrapper for demand update requests.  
 (defn request-demand-update! [t demandname ctx]
@@ -453,94 +455,6 @@
    to the store."
   [store category]
   ((category->demand-rule category) store))
-
-
-;Since we allowed descriptions of categories to be more robust, we now abstract
-;out the - potentially complex - category entirely.  This should allow us to 
-;fill using 99% of the same logic.
-;What we were doing using fill-followons and fill-demands is now done in 
-;fill-category. In this case, we supply a more robust description of the 
-;category of demand we're trying to fill. To restrict filling of demands that 
-;can take advantage of existing followon supply, we add the followon-keys to the 
-;category.  This ensures that find-eligible-demands will interpret the 
-;[category followon-keys] to mean that only demands a demand-group contained by 
-;followon-keys will work.  Note: we should extend this to arbitrary tags, since 
-;demandgroup is a hardcoded property of the demand data.  Not a big deal now, 
-;and easy to extend later.
-
-;For each independent set of prioritized demands (remember, we partition based 
-;on substitution/SRC keys) we can use this for both the original fill-followons 
-;and the fill-normal demands. The difference is the stop-early? parameter.  If 
-;it's true, the fill will be equivalent to the original normal hierarchical 
-;demand fill. If stop-early? is falsey, then we scan the entire set of demands, 
-;trying to fill from a set of supply.
-
-;1.  The result of trying to fill a demand should be a map with context
-;    we can be more flexible here, maybe pass info on the success of the fill.
-;2.  Incorporate fill results.
-;3.  If we fail to fill a demand, we have no feasible supply, thus we leave it 
-;    on the queue, and stop filling. Note, the demand is still on the queue, we
-;    only "tried" to fill it. No state changed .
-(defn fill-category [demandstore category ctx & {:keys [stop-early?] 
-                                                 :or   {stop-early? true}}]
-  ;We use our UnfilledQ to quickly find unfilled demands. 
-  (loop [pending   (find-eligible-demands demandstore category)   
-         ctx       (trying-to-fill! demandstore category ctx)]
-    (if (empty? pending) ctx ;no demands to fill!      
-      (let [demand      (val (first pending))                    
-            demandname  (:name demand)           ;try to fill the topmost demand
-            ctx         (request-fill! demandstore category ctx)
-            [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)                         
-            can-fill?   (= fill-status :filled) 
-            next-ctx    (if (= fill-status :unfilled) fill-ctx 
-                          (->> fill-ctx 
-                               (demand-fill-changed! demandstore demand) ;2)
-                               (sim/merge-updates               ;UGLY 
-                                 {:demandstore 
-                                  (register-change demandstore demandname)})))]
-        (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
-          next-ctx                                                           ;3)
-          ;otherwise, continue filling!
-          (recur (pop-priority-map pending) ;advance to the next unfilled demand
-                 (->> (sourced-demand! demandstore demand next-ctx);notification 
-                   (update-fill      demandstore demandname)  ;update unfilledQ.
-                   (can-fill-demand! demandstore demandname))))))));notification
-
-;NOTE...since categories are independent, we could use a parallel reducer here..
-;filling all unfilled demands can be phrased in terms of fill-category...
-
-;;#High Level Demand Fill
-
-;;Higher-order function for filling demands.
-(defn fill-demands-with [ctx f]
-  (reduce (fn [acc c] (f (core/get-demandstore acc) c acc))
-      ctx (unfilled-categories (core/get-demandstore ctx))))
-
-;;Implements the default hierarchal, stop-early fill scheme.
-(defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
-
-;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
-(defn fill-followons [ctx]
-  (if-let [groups (core/get-followon-keys ctx)] 
-    (->> (fn [store category ctx] 
-           (fill-category store [category groups] ctx :stop-early false))
-      (fill-demands-with ctx))))
-
-;Note -> we're just passing around a big fat map, we'll use destructuring in the 
-;signatures to pull the args out from it...the signature of each func is 
-;state->state
-
-;;TOM Note 20 May 2013 -> the t arg may not be necessary, since we can derive it
-;;from context.  
-(defn fill-demands
-  "Default fill order for demands.  Performs a prioritized fill of demands, 
-   hierarchically filling demands using followon supply, then using the rest of 
-   the supply."
-  [t ctx]
-  (->> ctx
-    (fill-followons ctx)
-    (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
-    (fill-hierarchically)))
 
 
 ;;##Demand Scheduling

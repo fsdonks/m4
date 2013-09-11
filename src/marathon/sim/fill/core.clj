@@ -10,7 +10,7 @@
 ;;benefit from refinement.  However, filling has proven to be a sensitive 
 ;;so the extra layer of commentary is still useful.
 
-(ns marathon.sim.fill
+(ns marathon.sim.fill.core
   (:require [marathon.data   [protocols :as protocols]]
             [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
@@ -65,9 +65,9 @@
 ;;demand name, of the general class of followoncode.  This is a more general 
 ;;concept that we need to abstract out, but for now it's ported as-is.
 (defn inside-fence? [uic demandname followoncode tags]
-  (let [unit-name (:name uic)]
-    (or (tags/has-tag? tags unitname followoncode)
-        (tags/has-tag? tags unitname demandname))))
+  (let [unitname (:name uic)]
+    (or (tag/has-tag? tags unitname followoncode)
+        (tag/has-tag? tags unitname demandname))))
  
 ;;Determines if the unit is outside of any fencing.  We use a general tagging 
 ;;mechanism to partition this possible, and serve as a quick first check.
@@ -75,7 +75,7 @@
 ;;or followoncode criteria.  So feasible fenced units must be both fenced and 
 ;;fenced to a particular demand.
 (defn outside-fence? [uic demandname followoncode tags]
-  (when (tags/has-tag? tags :fenced (:name uic))
+  (when (tag/has-tag? tags :fenced (:name uic))
     (inside-fence? uic demandname followoncode tags)))
 
 ;##Decomposing the Fill Process....

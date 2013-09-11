@@ -92,7 +92,7 @@
 (defn interval->date [t ctx]
   (let [[start-date time-scale] ((juxt [:start-date :time-scale])  
                                   (get-parameters ctx))] 
-    (inc start-date (* time-scale t))))
+    (+ start-date (* time-scale t))))
 
 ;;#Tag Related Functions#
 ;;Another useful bit of higher order, or meta data, is the notion of simple 
