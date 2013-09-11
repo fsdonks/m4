@@ -84,20 +84,50 @@
 
 ;;figure out how to merge this later. 
 (defn opsus-sort-key [unit] (* (uniform-sort-key unit) (/ 3.0 5.0)))
-(defn comparer-type [x]
-  (cond (map? x) :spec 
-        (fn? x)  :key-function))
 
-(defn comparer? [m] (contains? m :comparer))
+;;parsing comparison rules...
+;;at the end of the day, we want a simple sequence of comparisons to combine.
+;;not unlike parser combinators, or other little grammars.
 
-;;broke!
-;(defn spec->comparer [m]  
-;  (let [res (get m :comparer
-;                 
-;        (contains? m :key (let [f (get m :key)]
-;                            (fn [l r] (compare (f l) (f r)))))
-    
-        
+;;a comparison rule can be:
+;;|f:: a -> a -> comparison
+;;|{:key-fn f} :: map (a, (a->b))
+;;|{:compare-fn f}     :: map (a, (a->a->comparison))
+;;So we use comparison-type as a dispatch function for a multimethod.
+;;We'll read in "specs" to parse a comparer, and use this build our comparers 
+;;up from specs (functions, or maps of {:key-fn f}|{:compare-fn f}
+
+(defn comparison-type [x] 
+  (cond (map? x) (cond (contains? x :key-fn)      :key-fn 
+                       (contains? x :compare-fn)  :compare-fn)
+        (seq? x) :serial 
+        (fn?  x)  :fn))
+
+;;utility function to convert maps of {:function|:key v} into functions that 
+;;can be used to compare two values.
+(defmulti  as-comparer comparison-type) 
+;;return the comparison function directly.
+(defmethod as-comparer :fn     [f] f)
+;;create a comparer that uses the key-function  
+(defmethod as-comparer :key-fn [m] 
+  (let [keyf (get m :key-fn)] 
+    (fn [l r] (compare (keyf l) (keyf r)))))
+;;unpack the comparer 
+(defmethod as-comparer :compare-fn [m] (get m :compare-fn))
+
+;;allow composite comparer rules.  Given a (possibly nested) sequence of 
+;;comparisons, it'll compile the comparers into a single rule.
+(defmethod as-comparer :serial     [xs]
+  (let [parsed-rules (vec (map as-comparer xs))]
+    (fn [l r] (loop [fs  parsed-rules
+                     acc 0]
+                (if (or (empty? fs) (not= acc 0)) acc
+                    (let [f  (first fs)]
+                      (recur (rest fs) (f l r))))))))
+;;utility to tag values as key-generators to be used when comparing.
+(defn ->key-fn [x]     {:key-fn x})
+;;utility to tag values as direct comparison functions that can compare items.
+(defn ->compare-fn [x] {:compare-fn x})
 
 ;;need a defcomparer....we have something like this in util.table, and util.record.
 (defmacro defcomparer
