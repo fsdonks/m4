@@ -2,8 +2,7 @@
 ;;with the querying and selection of demands.
 
 (ns marathon.sim.fill.demand
-  (:require [marathon.sim.demand :refer all]
-            [marathon.sim    [core :as core] 
+  (:require [marathon.sim    [core :as core] 
                              [supply :as supply]
                              [demand :as dem]
                              [fill :as fill]]           
@@ -83,6 +82,12 @@
 ;Note -> we're just passing around a big fat map, we'll use destructuring in the 
 ;signatures to pull the args out from it...the signature of each func is 
 ;state->state
+
+;;__fill-demands__ is a high-level hook for the engine API that takes the 
+;;place of what used to be a demand-manager object, with an method of the same 
+;;name.  It exists here, due to the need to resolve cyclic dependencies, but 
+;;the organization is subpar.  We probably need to move it elsewhere, ideally 
+;;in a high-level, centralized protocol for "marathon".
 
 ;;TOM Note 20 May 2013 -> the t arg may not be necessary, since we can derive it
 ;;from context.  

@@ -10,7 +10,7 @@
 ;;benefit from refinement.  However, filling has proven to be a sensitive 
 ;;so the extra layer of commentary is still useful.
 
-(ns marathon.sim.fill.core
+(ns marathon.sim.fill
   (:require [marathon.data   [protocols :as protocols]]
             [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]

@@ -10,8 +10,7 @@
              [marathon.sim    [core :as core] 
                               [supply :as supply] 
                               [policy :as policy]
-                              [unit :as u]
-                              [fill :as fill]]           
+                              [unit :as u]]           
              [spork.sim       [simcontext :as sim]]
              [spork.util      [tags :as tag]]))
 
