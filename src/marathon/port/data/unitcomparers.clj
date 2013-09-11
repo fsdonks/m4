@@ -31,11 +31,11 @@
 
 ;;Interface to allow comparison functions to uniformly fetch stuff from the 
 ;;comparison context aether...(the dynamic binding).
-(defn get-compare-ctx! [k] (get *comparison-context* k))
+(defn get-in-compare-ctx! [k] (get *comparison-context* k))
 (defn context? [] (empty? *comparison-context*))
 
 ;;Helper functions for common comparisons.
-(defn unit-dwell [unit]   (-> (:currentcycle unit) :dwell)) 
+(defn unit-dwell [unit] (-> (:currentcycle unit) :dwell)) 
 ;;obe
 (defn sort-key-ac [unit] 
   (case (:component unit)
@@ -157,26 +157,28 @@
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "AC"
-(defcomparer ac-first         (->key sort-key-ac))
+(defcomparer ac-first         (fn [l r] (= (:component l) "AC")))
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "RC"
-(defcomparer rc-first         (->key sort-key-rc))
+(defcomparer rc-first         (fn [l r] (= (:component l) "RC")))
+
+(defn can-follow? [x] 
+  (when-let [followoncode (get-in-compare-ctx! :followoncode)]
+    (= followoncode x))) 
 
 ;;followon compare only matters if we have a followon code.
 ;;can we generalize? 
 ;;pass in some comparison context as an optional third arg.
-(defcomparer followon-compare
-  (->key #(if-let [followoncode (get-compare-ctx! :followoncode)]
-            (sort-key-followon %)  0)))
+(defcomparer followon-compare (->key can-follow?))
 
 ;;Getting bad vibes from shoveling too much context around...Ah well.
 ;;Generates a comparable key based on the whether the unit is fenced to a 
 ;;particular demand.
 (defn fenced-key [uic]
-  (if (not (context?))  0 ;only matters when context, i.e. tags, demandname, etc. 
-    (let [{:keys [demandname followoncode tags]} *comparison-context*]
-      (fill/inside-fence? uic))))
+  (when-let [ctx *comparison-context*] ;only matters when context, i.e. tags, demandname, etc. 
+    (let [{:keys [demandname followoncode tags]} ctx]
+      (fill/inside-fence? uic demandname followoncode tags))))
 
 ;;A comparer that uses fencing information, supplied by the dynamic binding to 
 ;;the comparison context, to prefer units that are fenced to a relative demand.
@@ -184,10 +186,8 @@
   (fn [l r] 
     (let [fenced-left?  (fenced-key l)
           fenced-right? (fenced-key r)]
-      (cond (and fenced-left? (not fenced-right?)) 1 
-            (and (not fenced-left?) fenced-right?) -1
-            :otherwise 0))))                                    
-
+      (and fenced-left? (not fenced-right?))))) 
+                                                
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
 
 ;;Testing 
@@ -196,10 +196,13 @@
   (defn ->cycle [durationexpected bogbudget dwell cycletime]
     {:durationexpected durationexpected :bogbudget bogbudget 
      :dwell dwell :cycletime cycletime})      
+  
   (defn ->unit [id compo cycletime cyc] 
     {:currentcycle cyc :id id :cycletime cycletime :component compo})
-  (def units [(->unit "ac-dwelling" "AC" 0 (->cycle 1095 365 0 0))
+  
+  (def units [(->unit "ac-dwelling" "AC" 0   (->cycle 1095 365 0 0))
               (->unit "rc-dwelling" "RC" 566 (->cycle 1825 270 566 566))
-              (->unit "ac-later" "AC" 1000 (->cycle 1095 365 1000 1000))]) 
+              (->unit "ac-later" "AC" 1000   (->cycle 1095 365 1000 1000))]) 
+
   
 )  
