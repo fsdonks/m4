@@ -115,15 +115,20 @@
 ;;unpack the comparer 
 (defmethod as-comparer :compare-fn [m] (get m :compare-fn))
 
+(defn compile-rules 
+  "Compiles a possibly nested comparer by walking the rules and evaluating 
+   as-comparer in a depth-first fashion." 
+  [rule]
+  (case (comparison-type rule)
+    :serial (as-comparer (vec (map compile-comparer rule)))
+    (as-comparer rule)))
+
 ;;allow composite comparer rules.  Given a (possibly nested) sequence of 
 ;;comparisons, it'll compile the comparers into a single rule.
 (defmethod as-comparer :serial     [xs]
-  (let [parsed-rules (vec (map as-comparer xs))] ;not complete.  Need more.
-    (fn [l r] (loop [fs  parsed-rules
-                     acc 0]
-                (if (or (empty? fs) (not= acc 0)) acc
-                    (let [f  (first fs)]
-                      (recur (rest fs) (f l r))))))))
+  (let [parsed-rules (compile-rules xs)]
+    (gen/serial-comparer xs)))
+  
 ;;utility to tag values as key-generators to be used when comparing.
 (defn ->key [x]     {:key-fn x})
 ;;utility to tag values as direct comparison functions that can compare items.
@@ -134,10 +139,9 @@
   "Defines unit comparison functions.  Creates a sequential comparer out of the 
    key functions provided.  For now, only sequential comparison is supported.
    Optionally, user may supply an argument for a context."
-  [name key-funcs]
-    (let [cs (if (coll? key-funcs) key-funcs [key-funcs])]
-      `(let [sc# (~'gen/serial-comparer ~cs)]
-         (~'defn ~'name  [~'l ~'r] (sc# l r)))))
+  [name rule]
+  `(let [sc# (~'as-comparer ~rule)]
+     (~'defn ~'name  [~'l ~'r] (sc# l r))))
 
 ;;Uses uniform-compare 
 (defcomparer uniform-compare  (->key uniform-sort-key))
@@ -155,7 +159,7 @@
 ;;Generates a comparable key based on the whether the unit is fenced to a 
 ;;particular demand.
 (defn fenced-key [uic]
-  (if (not (context?))  0 ;only matters when we have context, i.e. tags, demandname, etc. 
+  (if (not (context?))  0 ;only matters when context, i.e. tags, demandname, etc. 
     (let [{:keys [demandname followoncode tags]} *comparison-context*]
       (fill/inside-fence? uic))))
 
@@ -170,12 +174,5 @@
         0))))                                    
 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
-
-
-
-
- 190:   res = FencedCompare(u1, u2)
- 191:   If res = equal Then res = followOnCompare(u1, u2)
- 192:   If res = equal Then res = uniformCompare(u1, u2)
 
  
