@@ -118,16 +118,16 @@
 ;;allow composite comparer rules.  Given a (possibly nested) sequence of 
 ;;comparisons, it'll compile the comparers into a single rule.
 (defmethod as-comparer :serial     [xs]
-  (let [parsed-rules (vec (map as-comparer xs))]
+  (let [parsed-rules (vec (map as-comparer xs))] ;not complete.  Need more.
     (fn [l r] (loop [fs  parsed-rules
                      acc 0]
                 (if (or (empty? fs) (not= acc 0)) acc
                     (let [f  (first fs)]
                       (recur (rest fs) (f l r))))))))
 ;;utility to tag values as key-generators to be used when comparing.
-(defn ->key-fn [x]     {:key-fn x})
+(defn ->key [x]     {:key-fn x})
 ;;utility to tag values as direct comparison functions that can compare items.
-(defn ->compare-fn [x] {:compare-fn x})
+(defn ->compare [x] {:compare-fn x})
 
 ;;need a defcomparer....we have something like this in util.table, and util.record.
 (defmacro defcomparer
@@ -140,17 +140,20 @@
          (~'defn ~'name  [~'l ~'r] (sc# l r)))))
 
 ;;Uses uniform-compare 
-(defcomparer uniform-compare   [{:key uniform-sort-key}])
-(defcomparer ac-first          [{:key sort-key-ac}])
-(defcomparer rc-first          [{:key sort-key-rc}])
+(defcomparer uniform-compare  (->key uniform-sort-key))
+(defcomparer ac-first         (->key sort-key-ac))
+(defcomparer rc-first         (->key sort-key-rc))
+
 ;;followon compare only matters if we have a followon code.
 ;;can we generalize? 
 ;;pass in some comparison context as an optional third arg.
 (defcomparer followon-compare
-  [{:key #(if-let [followoncode (get-compare-ctx :followoncode)]
-                  (sort-key-followon %)  0)}])
+  (->key #(if-let [followoncode (get-compare-ctx :followoncode)]
+            (sort-key-followon %)  0)))
 
 ;;Getting bad vibes from shoveling too much context around...Ah well.
+;;Generates a comparable key based on the whether the unit is fenced to a 
+;;particular demand.
 (defn fenced-key [uic]
   (if (not (context?))  0 ;only matters when we have context, i.e. tags, demandname, etc. 
     (let [{:keys [demandname followoncode tags]} *comparison-context*]
@@ -159,15 +162,17 @@
 ;;A comparer that uses fencing information, supplied by the dynamic binding to 
 ;;the comparison context, to prefer units that are fenced to a relative demand.
 (defcomparer fenced-compare 
-  [{:comparer (fn [l r] 
-                (let [fenced-left?  (fenced-key l)
-                      fenced-right? (fenced-key r)]
-                  (cond (and fenced-left? (not fenced-right?)) 1 
-                        (and (not fenced-left?) fenced-right?) -1
-                    0)))}])                                    
+  (fn [l r] 
+    (let [fenced-left?  (fenced-key l)
+          fenced-right? (fenced-key r)]
+      (cond (and fenced-left? (not fenced-right?)) 1 
+        (and (not fenced-left?) fenced-right?) -1
+        0))))                                    
 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
-               
+
+
+
 
  190:   res = FencedCompare(u1, u2)
  191:   If res = equal Then res = followOnCompare(u1, u2)
