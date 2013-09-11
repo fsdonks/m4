@@ -23,11 +23,11 @@
 ;;of each logical subsystem. 
 (ns marathon.sim.engine
   (:require [marathon.sim.missing] 
-            [marathon.sim [core :refer now]           
-                          [supply [:refer [manage-supply manage-follow-ons]]]
-                          [demand [:refer [manage-demands manage-changed-demands]]]
-                          [fill.demand    [:refer [fill-demands]]]
-                          [policy [:refer [manage-policies]]]]
+            [marathon.sim.core :refer [now]]           
+            [marathon.sim.supply :refer [manage-supply manage-followons]]
+            [marathon.sim.demand :refer [manage-demands manage-changed-demands]]
+            [marathon.sim.fill.demand    :refer [fill-demands]]
+            [marathon.sim.policy :refer [manage-policies]]
             [spork.sim    [simcontext :as sim]]))
 
 ;##Simulation Initialization

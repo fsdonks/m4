@@ -31,7 +31,7 @@
 
 ;;Interface to allow comparison functions to uniformly fetch stuff from the 
 ;;comparison context aether...(the dynamic binding).
-(defn get-compare-ctx [k] (get *comparison-context* k))
+(defn get-compare-ctx! [k] (get *comparison-context* k))
 (defn context? [] (empty? *comparison-context*))
 
 ;;Helper functions for common comparisons.
@@ -83,7 +83,7 @@
                        (contains? x :compare-fn)  :compare-fn)
         (sequential? x)  :serial 
         (fn?  x)  :fn
-        :otherwise (do (pprint x)
+        :otherwise (do (println x)
                        (throw (Exception. "Unknown dispatch")))))
 
 ;;utility function to convert maps of {:function|:key v} into functions that 
@@ -106,14 +106,13 @@
    as-comparer in a depth-first fashion." 
   [rule]
   (case (comparison-type rule)
-    :serial (as-comparer (vec (map compile-rules rule)))
+    :serial (vec (map compile-rules rule))
     (as-comparer rule)))
 
 ;;allow composite comparer rules.  Given a (possibly nested) sequence of 
 ;;comparisons, it'll compile the comparers into a single rule.
 (defmethod as-comparer :serial  [xs]
-  (let [_ (println "hello!")
-        parsed-rules (compile-rules xs)]
+  (let [parsed-rules (compile-rules xs)]
     (gen/serial-comparer xs)))
   
 ;;utility to tag values as key-generators to be used when comparing.
@@ -129,19 +128,46 @@
    key functions provided.  For now, only sequential comparison is supported.
    Optionally, user may supply an argument for a context."
   [name rule]
-  `(let [sc# (~'as-comparer ~rule)]
-     (~'defn ~name  [~'l ~'r] (sc# ~'l ~'r))))
+  `(let [sc# (as-comparer ~rule)]
+     (defn ~name  [~'l ~'r] (sc# ~'l ~'r))))
 
-;;Uses uniform-compare 
+;;#Default Comparers 
+;;These are legacy comparison functions that were drawn from the version of 
+;;marathon immediately prior to porting.  Note -> by default, these comparers 
+;;will return a sorting in ascending order.  We typically frame the notion 
+;;of suitability as the "most" suitable, which manifests as a descending order.
+;;Since we're in clojure, we can sort (and reverse the order in O(1) time), or 
+;;flip the top-level comparison function.  There's a special function above, 
+;;__invert__, which does just that.  So a typical idiom is to define a 
+;;comparison, or a key function that will be used under assumably ascending 
+;;order conditions, then use invert if needed.  There will be cases where a 
+;;variety of sorting orders are required, and directionality/preference may 
+;;change along dimension.  We can still handle this using function composition,
+;;since the values returned by our comparison-builders ultimately yield 
+;;functions of the same signature.
+
+;;The following are ported more-or-less straight from the original source. 
+;;They will likely be replaced with more general operators, as we extend the 
+;;prioritization language to include more expressive operators.
+
+;;Uses uniform-compare to prefer units that have a higher "relative" time in 
+;;their expected lifecycle.  For unbounded lifecycles, the progress is defined 
+;;relative terms of the maximum machine precision float.
 (defcomparer uniform-compare  (->key uniform-sort-key))
+
+;;A comparison that examines units and prefers units with components equal
+;;to "AC"
 (defcomparer ac-first         (->key sort-key-ac))
+
+;;A comparison that examines units and prefers units with components equal
+;;to "RC"
 (defcomparer rc-first         (->key sort-key-rc))
 
 ;;followon compare only matters if we have a followon code.
 ;;can we generalize? 
 ;;pass in some comparison context as an optional third arg.
 (defcomparer followon-compare
-  (->key #(if-let [followoncode (get-compare-ctx :followoncode)]
+  (->key #(if-let [followoncode (get-compare-ctx! :followoncode)]
             (sort-key-followon %)  0)))
 
 ;;Getting bad vibes from shoveling too much context around...Ah well.
