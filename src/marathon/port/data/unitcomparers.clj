@@ -51,7 +51,7 @@
     (unit-dwell unit)
     (/ (unit-dwell unit) 3.0)))
 
-(defn sort-key-followon [unit] (* (-> unit (:currentcycle :bogbudget)) 1000))
+(defn sort-key-followon [unit] (* (-> unit :currentcycle :bogbudget) 1000))
 
 ;;(defcomparer [l r]     )    -> context independent
 ;;(defcomparer [ctx l r] )    -> context dependent
@@ -189,3 +189,17 @@
             :otherwise 0))))                                    
 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
+
+;;Testing 
+(comment
+;; a dummy cycle 
+  (defn ->cycle [durationexpected bogbudget dwell cycletime]
+    {:durationexpected durationexpected :bogbudget bogbudget 
+     :dwell dwell :cycletime cycletime})      
+  (defn ->unit [id compo cycletime cyc] 
+    {:currentcycle cyc :id id :cycletime cycletime :component compo})
+  (def units [(->unit "ac-dwelling" "AC" 0 (->cycle 1095 365 0 0))
+              (->unit "rc-dwelling" "RC" 566 (->cycle 1825 270 566 566))
+              (->unit "ac-later" "AC" 1000 (->cycle 1095 365 1000 1000))]) 
+  
+)  
