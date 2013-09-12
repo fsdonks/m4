@@ -16,12 +16,12 @@
 ;;       O&S units have a late deployability.  They are evaluated at 3/5 of their actual cycle completion.
 
 (ns marathon.port.data.unitcomparers
-  (:require [spork.util   [general :as gen]
-                          [tags    :as tag]]
+  (:require [spork.util   [tags       :as tag]]
+            [spork.util.comparison :refer :all]
             [marathon.sim [fill :as fill]]))
 
-;;All other policies are identical.  In fact, we leave previous policies intact.  
-;;So that we can reproduce older study results.
+;;Some comparers require context to make comparisons; rather than thread it 
+;;through as an explicit argument to each comparer, I'd 
 
 ;;Simple and stupid.  For now, we just have a context that can be bound.
 ;;Some comparison functions want a context, or extra stuff, so if they do, 
@@ -32,7 +32,10 @@
 ;;Interface to allow comparison functions to uniformly fetch stuff from the 
 ;;comparison context aether...(the dynamic binding).
 (defn get-in-compare-ctx! [k] (get *comparison-context* k))
-(defn context? [] (empty? *comparison-context*))
+(defn context? []             (empty? *comparison-context*))
+
+;;All other policies are identical.  In fact, we leave previous policies intact.  
+;;So that we can reproduce older study results.
 
 ;;Helper functions for common comparisons.
 (defn unit-dwell [unit] (-> (:currentcycle unit) :dwell)) 
@@ -41,8 +44,6 @@
   (case (:component unit)
      "AC" (unit-dwell unit)
      (/ (unit-dwell unit) 3.0)))
-
-(defn invert [f] (fn [l r] (f r l))) 
 
 ;;Needs to be generalized.  It's a partial application of a bias function.
 ;;this is really a bias toward "non-AC" units.
@@ -53,11 +54,6 @@
 
 (defn sort-key-followon [unit] (* (-> unit :currentcycle :bogbudget) 1000))
 
-;;(defcomparer [l r]     )    -> context independent
-;;(defcomparer [ctx l r] )    -> context dependent
-
-;;comparers ALL take a context...
-;;or comparers ALL take 
 ;;Uniform progress in a unit's life cycle.
 (defn uniform-sort-key [unit]
   (let [c (:currentcycle unit)]
@@ -65,81 +61,6 @@
 
 ;;figure out how to merge this later. 
 (defn opsus-sort-key [unit] (* (uniform-sort-key unit) (/ 3.0 5.0)))
-
-;;parsing comparison rules...
-;;at the end of the day, we want a simple sequence of comparisons to combine.
-;;not unlike parser combinators, or other little grammars.
-
-;;a comparison rule can be:
-;;|f:: a -> a -> comparison
-;;|{:key-fn f} :: map (a, (a->b))
-;;|{:compare-fn f}     :: map (a, (a->a->comparison))
-;;So we use comparison-type as a dispatch function for a multimethod.
-;;We'll read in "specs" to parse a comparer, and use this build our comparers 
-;;up from specs (functions, or maps of {:key-fn f}|{:compare-fn f}
-
-(defn comparison-type [x] 
-  (cond (map? x) (cond (contains? x :key-fn)      :key-fn 
-                       (contains? x :compare-fn)  :compare-fn
-                       :else (throw (Exception. (str "Invalid dispatch map " x))))
-        (sequential? x)  :serial 
-        (fn?  x)         :fn
-        (keyword? x)     :keyword
-        :else (throw (Exception. (str "Invalid dispatch input " x)))))
-
-;;Might be too much cruft here? 
-
-;;utility function to convert maps of {:function|:key v} into functions that 
-;;can be used to compare two values.
-(defmulti  as-comparer (fn [x] (comparison-type x))) 
-;;return the comparison function directly.
-(defmethod as-comparer :fn  [f] f)
-(defmethod as-comparer :keyword [k] 
-  (fn [l r] (compare (k l) (k r))))
-;;unpack the comparer 
-(defmethod as-comparer :compare-fn [m] (get m :compare-fn))
-
-;;For nested rules, we traverse the rule set and compile them.  Just an 
-;;optimization step.
-
-(defn compile-rules 
-  "Compiles a possibly nested comparer by walking the rules and evaluating 
-   as-comparer in a depth-first fashion." 
-  [rule]
-  (case (comparison-type rule)
-    :serial (vec (map compile-rules rule))
-    (as-comparer rule)))
-
-;;allow composite comparer rules.  Given a (possibly nested) sequence of 
-;;comparisons, it'll compile the comparers into a single rule.
-(defmethod as-comparer :serial  [xs]
-  (gen/serial-comparer (compile-rules xs)))
-  
-;;utility to tag values as direct comparison functions that can compare items.
-(defn compare-by [x]    {:compare-fn x})
-
-;;utility to tag values as key-generators to be used when comparing.
-(defn with-key [f]      {:compare-fn (fn [l r] (f l) (f r))})
-(defn with-pred [f res] {:compare-fn (fn [l r] (= (f l r) res))})
-
-;;Flip the comparison direction, to go from ascending to descending.
-(defn flip  [f]         {:compare-fn (fn [l r] (f r l))}) 
-
-;;Alternate formulation....dunno, will relook the api later.
-;(defn ->compare [& {:keys [key pred]}]
-;  (if key {:key-fn key}
-;      {:compare-fn pred}))
-
-;;need a defcomparer....we have something like this in util.table, and util.record.
-;;You could do something really cool here, and actually provide a special 
-;;scripting language.  Maybe later.
-(defmacro defcomparer
-  "Defines unit comparison functions.  Creates a sequential comparer out of the 
-   key functions provided.  For now, only sequential comparison is supported.
-   Optionally, user may supply an argument for a context."
-  [name rule]
-  `(let [sc# (as-comparer ~rule)]
-     (defn ~name  [~'l ~'r] (sc# ~'l ~'r))))
 
 ;;#Default Comparers 
 ;;These are legacy comparison functions that were drawn from the version of 
@@ -163,15 +84,15 @@
 ;;Uses uniform-compare to prefer units that have a higher "relative" time in 
 ;;their expected lifecycle.  For unbounded lifecycles, the progress is defined 
 ;;relative terms of the maximum machine precision float.
-(defcomparer uniform-compare  (with-key uniform-sort-key))
+(defcomparer uniform-compare  (->key uniform-sort-key))
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "AC"
-(defcomparer ac-first         (fn [l r] (= (:component l) "AC")))
+(defcomparer ac-first         (->eq :component "AC"))
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "RC"
-(defcomparer rc-first         (fn [l r] (= (:component l) "RC")))
+(defcomparer rc-first         (->eq :component "RC"))
 
 (defn can-follow? [x] 
   (when-let [followoncode (get-in-compare-ctx! :followoncode)]
@@ -200,8 +121,11 @@
                                                 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
 
-(defn prioritize [xs])  
-
+(defn order-units 
+  ([xs]       (sort default-compare xs))
+  ([ctx xs]   (binding [*comparison-context* ctx] 
+                 (sort default-compare xs)))
+  ([ctx f xs] ())) 
 
 ;;Testing 
 (comment
