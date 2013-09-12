@@ -1,0 +1,40 @@
+TimeStamp	Type	Time Interval	PolicyName	Template	MaxDwell	MinDwell	MaxBOG	StartDeployable	StopDeployable	Overlap 	Recovery	BOGBudget	Deltas	Remarks
+4/23/2012 18:52	PolicyRecord	Day	AC12Strict	AC12	1095	730	365	730	731	45	0	Auto	{}	AC12 policy, with 1 day of availability
+4/23/2012 18:52	PolicyRecord	Day	AC12	AC12	1095	730	365	550	910	45	0	Auto	{}	AC12 policy, with +/- 6 months of availability
+4/23/2012 18:52	PolicyRecord	Day	AC12Loose	AC12	1095	365	365	365	1095	45	0	Auto	{}	AC12 policy, able to deploy out of ready, up to end of available
+4/23/2012 18:52	PolicyRecord	Day	AC13Strict	AC13	1095	825	270	825	826	45	0	Auto	{}	AC13 policy, with 1 day of availability
+4/23/2012 18:52	PolicyRecord	Day	AC13	AC13	1095	825	270	645	1005	45	0	Auto	{}	AC13 policy, with +/- 6 months of availability
+4/23/2012 18:52	PolicyRecord	Day	AC13Loose	AC13	1095	365	270	365	1095	45	0	Auto	{}	AC13 policy, able to deploy out of ready, up to end of available
+4/23/2012 18:52	PolicyRecord	Day	AC11	AC11	730	365	365	365	730	0	0	Auto	{}	AC11 policy, 1 year unavailable, 1 year available
+4/23/2012 18:52	PolicyRecord	Day	RC14Strict	RC14	1825	730	270	1460	1461	45	0	Auto	{}	RC14 policy, with 1 day of availability
+4/23/2012 18:52	PolicyRecord	Day	RC14	RC14	1825	730	270	1280	1640	45	0	Auto	{}	RC14 policy, with +/- 6 months of availability
+4/23/2012 18:52	PolicyRecord	Day	RC14Loose	RC14	1825	730	270	730	1735	45	0	Auto	{}	RC14 policy, able to deploy out of ready, up to end of available
+4/23/2012 18:52	PolicyRecord	Day	RC15Strict	RC15	2190	1095	270	1825	1826	45	0	Auto	{}	RC15 policy, with 1 day of availability
+4/23/2012 18:52	PolicyRecord	Day	RC15	RC15	2190	1095	270	1645	2005	45	0	Auto	{}	RC15 policy, with +/- 6 months of availability
+4/23/2012 18:52	PolicyRecord	Day	RC15Loose	RC15	2190	1095	270	1735	1915	45	0	Auto	{}	RC15 policy, able to deploy out of ready, up to end of available
+4/23/2012 18:52	PolicyRecord	Day	RC12	RC12	1095	365	270	730	1005	0	0	Auto	{}	RC 12 policy, 2 years unavailable, 1 available.
+4/23/2012 18:52	PolicyRecord	Day	GhostPermanent12	AC12	1095	730	365	550	910	45	0	Auto	{}	Ghost policy.  Unused.
+4/23/2012 18:52	PolicyRecord	Day	GhostPermanent13	AC13	1095	825	270	645	1005	45	0	Auto	{}	Ghost policy.  Unused.
+4/23/2012 18:52	PolicyRecord	Day	Ghost365_45	Ghost	999999999	0	365	0	999999999	45	0	Auto	{}	Ghost policy for 1 year deployments.
+4/23/2012 18:52	PolicyRecord	Day	Ghost270_45	Ghost	999999999	0	270	0	999999999	45	0	Auto	{}	Ghost policy for 9 month deployments.
+4/23/2012 18:52	PolicyRecord	Day	BOGForever	Ghost	999999999	0	999999999	0	999999999	0	0	Auto	{}	Policy that sends a unit into BOG state forever.
+4/23/2012 18:52	PolicyRecord	Day	AC13_Enabler	AC13	1095	825	270	645	1005	30	0	Auto	{}	AC13 with 30 day overlap.
+4/23/2012 18:52	PolicyRecord	Day	AC12Loose_Enabler	AC12	1095	365	365	365	1095	30	0	Auto	{}	AC12Loose with 30 day overlap
+4/23/2012 18:52	PolicyRecord	Day	RC15_Enabler	RC15	2190	1095	270	1645	2005	30	0	Auto	{}	RC15 with 30 day overlap
+4/23/2012 18:52	PolicyRecord	Day	RC14Loose_Enabler	RC14	1825	730	270	730	1735	30	0	Auto	{}	RC14Loose with 30 day overlap
+4/23/2012 18:52	PolicyRecord	Day	Ghost365_30	Ghost	Auto	0	365	0	9999999	30	0	Auto	{}	Ghost with 30 day overlap
+4/23/2012 18:52	PolicyRecord	Day	RC14Loose_3Year	RC14	2190	730	270	730	2100	45	0	Auto	#JSON{"Available":365}	Added for Trudy
+4/23/2012 18:52	PolicyRecord	Day	RC14ReMob	RC14ReMob	2555	730	270	730	2465	45	365	540	#JSON{"Available":730}	Added for Trudy
+4/23/2012 18:52	PolicyRecord	Day	RC14Loose_3Year_Enabler	RC14	2190	730	270	730	2100	45	0	Auto	#JSON{"Available":365}	Added for Trudy
+4/23/2012 18:52	PolicyRecord	Day	RC14ReMob_Enabler	RC14ReMob	2555	730	270	730	2465	45	365	540	#JSON{"Available":730}	Added for Trudy
+7/24/2012 11:11	PolicyRecord	Day	MaxUtilization	MaxUtilization	999999999	0	365	0	999999999	45	0	Auto	{}	Unconstrained Policy for AC
+7/24/2012 11:11	PolicyRecord	Day	MaxUtilization_Enabler	MaxUtilization	999999999	0	365	0	999999999	30	0	Auto	{}	Unconstrained Policy for AC Enablers
+7/24/2012 11:11	PolicyRecord	Day	NearMaxUtilization	NearMaxUtilization	999999999	730	270	730	999999999	45	0	Auto	{}	Unconstrained Policy for RC, injects some minimum dwell
+7/24/2012 11:11	PolicyRecord	Day	NearMaxUtilization_Enabler	NearMaxUtilization	999999999	730	270	730	999999999	30	0	Auto	{}	Unconstrained Policy for RC Enablers, injects some minimum dwell
+7/24/2012 11:11	PolicyRecord	Day	FFGACRoto	ACFFG	730	730	270	182	730	45	0	Auto	{"Deployed" -95}	FFG policy for AC
+7/24/2012 11:11	PolicyRecord	Day	FFGACRoto_Enabler	ACFFG	730	730	270	182	730	30	0	Auto	{"Deployed" -95}	FFG policy for AC Enablers
+7/24/2012 11:11	PolicyRecord	Day	FFGRCRoto	RCFFG	1825	730	270	730	1735	45	0	Auto	{}	RC14 policy, able to deploy out of ready, up to end of available
+7/24/2012 11:11	PolicyRecord	Day	FFGRCRoto_Enabler	RCFFG	1825	730	270	730	1735	30	0	Auto	{}	RC14 policy, able to deploy out of ready, up to end of available
+7/24/2012 11:11	PolicyRecord	Day	FFGMission	FFGMission	999999999	999999999	365	0	999999999	45	0	Auto	{}	Mission Pool Policy for Mission Units.  Keeps them from deployable supply.
+7/24/2012 11:11	PolicyRecord	Day	FFGMission_Enabler	FFGMission	999999999	999999999	365	0	999999999	30	0	Auto	{}	Mission Pool Policy for Mission Units.  Keeps them from deployable supply.
+7/24/2012 11:11	PolicyRecord	Day	RCOpSus	RCOpSus	1825	730	270	1216	1735	45	0	Auto	{}	FFG Operational Sustainment Policy.

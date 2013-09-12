@@ -1,0 +1,5 @@
+Type	Name	FromDay	ToDay
+PeriodRecord	Initialization	0	0
+PeriodRecord	PreSurge	1	450
+PeriodRecord	Surge	451	991
+PeriodRecord	PostSurge	992	inf

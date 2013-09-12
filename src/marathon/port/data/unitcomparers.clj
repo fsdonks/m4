@@ -86,6 +86,8 @@
         :otherwise (do (println x)
                        (throw (Exception. "Unknown dispatch")))))
 
+;;Might be too much cruft here? 
+
 ;;utility function to convert maps of {:function|:key v} into functions that 
 ;;can be used to compare two values.
 (defmulti  as-comparer comparison-type) 
@@ -119,6 +121,11 @@
 (defn ->key [x]     {:key-fn x})
 ;;utility to tag values as direct comparison functions that can compare items.
 (defn ->compare [x] {:compare-fn x})
+
+;;Alternate formulation....dunno, will relook the api later.
+;(defn ->compare [& {:keys [key pred]}]
+;  (if key {:key-fn key}
+;      {:compare-fn pred}))
 
 ;;need a defcomparer....we have something like this in util.table, and util.record.
 ;;You could do something really cool here, and actually provide a special 

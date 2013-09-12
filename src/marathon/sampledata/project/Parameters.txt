@@ -1,0 +1,21 @@
+ParameterName	Value
+LastDay	0
+LastDayDefault	2550
+Interval Length	365
+Number of Intervals	0
+ApplyAdjustments	TRUE
+StartDate	9/12/2013 10:55
+DefaultACPolicy	ACEnablerExcursion
+DefaultRCPolicy	RCEnablerExcursion
+DefaultNGPolicy	RCEnablerExcursion
+DefaultGhostPolicy	Ghost365_30
+ProjectPath	Default
+SpecialACPolicy	ACExcursion
+SpecialRCPolicy	RCExcursion
+SpecialNGPolicy	RCExcursion
+SpecialGhostPolicy	Ghost365_45
+DefaultSupplyPriority	Uniform
+DefaultRecoveryTime	0
+TAA1519MaxUtilizationHack	FALSE
+DefaultPromotionPolicy	Auto 
+DefaultDemotionPolicy	Auto 

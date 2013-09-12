@@ -1,0 +1,72 @@
+Type	Enabled	Priority 	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category
+DemandRecord	TRUE	1	1	46	901	1080	45	SRC1	AC	Small		OP21	Foundation
+DemandRecord	TRUE	1	1	46	541	90	45	SRC1	AC		A1	OP1	Foundation
+DemandRecord	TRUE	1	1	46	721	180	45	SRC1	AC		A2	OP2	Foundation
+DemandRecord	TRUE	1	1	46	1081	1440	45	SRC1	AC		A3	OP3	Foundation
+DemandRecord	TRUE	1	1	46	1261	270	45	SRC1	AC		A4	OP4	Foundation
+DemandRecord	TRUE	1	1	46	1261	1260	45	SRC1	AC		A5	OP5	Foundation
+DemandRecord	TRUE	1	1	46	1441	1080	45	SRC1	AC		A6	OP6	Foundation
+DemandRecord	TRUE	1	1	46	1711	810	45	SRC1	AC		A7	OP7	Foundation
+DemandRecord	TRUE	1	1	46	451	16	45	SRC1	AC	XL		OP8	Surge
+DemandRecord	TRUE	1	3	46	467	56	45	SRC1	AC	XL		OP9	Surge
+DemandRecord	TRUE	1	4	46	523	40	45	SRC1	AC	XL		OP10	Surge
+DemandRecord	TRUE	1	4	46	563	32	45	SRC1	AC	XL		OP11	Surge
+DemandRecord	TRUE	1	4	46	595	368	45	SRC1	AC	XL		OP12	Surge
+DemandRecord	TRUE	1	3	46	963	88	45	SRC1	AC	XL		OP13	Surge
+DemandRecord	TRUE	1	1	46	1051	279	45	SRC1	AC	XL		OP14	Surge
+DemandRecord	TRUE	1	1	46	481	73	45	SRC1	AC	Large		OP15	Surge
+DemandRecord	TRUE	1	1	46	554	64	45	SRC1	AC	Large		OP16	Surge
+DemandRecord	TRUE	1	1	46	618	48	45	SRC1	AC	Large		OP17	Surge
+DemandRecord	TRUE	1	1	46	666	112	45	SRC1	AC	Large		OP18	Surge
+DemandRecord	TRUE	1	1	46	811	90	45	SRC1	AC	Medium		OP19	Foundation
+DemandRecord	TRUE	1	1	46	901	720	45	SRC1	AC	Medium		OP20	Foundation
+DemandRecord	TRUE	1	3	46	91	90	45	SRC2	AC		A1	O1	Foundational
+DemandRecord	TRUE	1	3	46	631	90	45	SRC2	AC		A2	O2	Foundational
+DemandRecord	TRUE	1	1	46	2341	180	45	SRC2	AC		A3	O3	Foundational
+DemandRecord	TRUE	1	2	46	451	16	45	SRC2	AC	Large	A4	O4	Surge
+DemandRecord	TRUE	1	2	46	467	56	45	SRC2	AC	Large	A5	O5	Surge
+DemandRecord	TRUE	1	2	46	523	40	45	SRC2	AC	Large	A6	O6	Surge
+DemandRecord	TRUE	1	2	46	563	32	45	SRC2	AC	Large	A7	O7	Surge
+DemandRecord	TRUE	1	2	46	595	368	45	SRC2	AC	Large	A8	O8	Surge
+DemandRecord	TRUE	1	2	46	963	88	45	SRC2	AC	Large	A9	O9	Surge
+DemandRecord	TRUE	1	2	46	1051	279	45	SRC2	AC	Large	A10	O10	Surge
+DemandRecord	TRUE	1	2	46	481	73	45	SRC2	AC	Small	A11	O11	Surge
+DemandRecord	TRUE	1	2	46	554	64	45	SRC2	AC	Small	A12	O12	Surge
+DemandRecord	TRUE	1	2	46	618	48	45	SRC2	AC	Small	A13	O13	Surge
+DemandRecord	TRUE	1	2	46	666	112	45	SRC2	AC	Small	A14	O14	Surge
+DemandRecord	TRUE	2	2	46	1	90	45	SRC3	AC		R1	O1	Foundational
+DemandRecord	TRUE	2	1	46	1	2520	45	SRC3	AC		R2	O2	Foundational
+DemandRecord	TRUE	1	1	46	1	2520	45	SRC3	AC		R3	O3	Foundational
+DemandRecord	TRUE	1	3	46	271	90	45	SRC3	AC		R4	O4	Foundational
+DemandRecord	TRUE	1	1	46	361	2160	45	SRC3	AC		R5	O5	Foundational
+DemandRecord	TRUE	1	2	46	451	270	45	SRC3	AC		R6	O6	Foundational
+DemandRecord	TRUE	1	2	46	721	180	45	SRC3	AC		R7	O7	Foundational
+DemandRecord	TRUE	1	1	46	721	180	45	SRC3	AC		R8	O8	Foundational
+DemandRecord	TRUE	1	1	46	991	1530	45	SRC3	AC		R9	O9	Foundational
+DemandRecord	TRUE	1	2	46	1081	1440	45	SRC3	AC		R10	O10	Foundational
+DemandRecord	TRUE	1	1	46	1261	180	45	SRC3	AC		R11	O11	Foundational
+DemandRecord	TRUE	1	11	46	1261	90	45	SRC3	AC		R12	O12	Foundational
+DemandRecord	TRUE	1	3	46	1261	1260	45	SRC3	AC		R13	O13	Foundational
+DemandRecord	TRUE	1	3	46	1441	1080	45	SRC3	AC		R14	O14	Foundational
+DemandRecord	TRUE	1	1	46	1711	810	45	SRC3	AC		R15	O15	Foundational
+DemandRecord	TRUE	1	2	46	2071	450	45	SRC3	AC		R16	O16	Foundational
+DemandRecord	TRUE	1	17	46	451	16	45	SRC3	AC	Large	R17	O17	Surge
+DemandRecord	TRUE	1	47	46	467	56	45	SRC3	AC	Large	R18	O18	Surge
+DemandRecord	TRUE	1	62	46	523	40	45	SRC3	AC	Large	R19	O19	Surge
+DemandRecord	TRUE	1	67	46	563	32	45	SRC3	AC	Large	R20	O20	Surge
+DemandRecord	TRUE	1	88	46	595	368	45	SRC3	AC	Large	R21	O21	Surge
+DemandRecord	TRUE	1	64	46	963	88	45	SRC3	AC	Large	R22	O22	Surge
+DemandRecord	TRUE	1	36	46	1051	279	45	SRC3	AC	Large	R23	O23	Surge
+DemandRecord	TRUE	1	1	46	1330	765	45	SRC3	AC	Large	R24	O24	Surge
+DemandRecord	TRUE	1	2	46	1	540	45	SRC3	AC	V1	R25	O25	Foundational
+DemandRecord	TRUE	1	2	46	541	900	45	SRC3	AC	V1	R26	O26	Foundational
+DemandRecord	TRUE	1	3	46	451	270	45	SRC3	AC	V2	R27	O27	Foundational
+DemandRecord	TRUE	1	10	46	451	270	45	SRC3	AC	V2	R28	O28	Foundational
+DemandRecord	TRUE	1	28	46	481	73	45	SRC3	AC	Small	R29	O29	Surge
+DemandRecord	TRUE	1	28	46	554	64	45	SRC3	AC	Small	R30	O30	Surge
+DemandRecord	TRUE	1	33	46	618	48	45	SRC3	AC	Small	R31	O31	Surge
+DemandRecord	TRUE	1	25	46	666	112	45	SRC3	AC	Small	R32	O32	Surge
+DemandRecord	TRUE	1	1	46	778	270	45	SRC3	AC	Small	R33	O33	Surge
+DemandRecord	TRUE	1	1	46	901	900	45	SRC3	AC	V3	R34	O34	Foundational
+DemandRecord	TRUE	1	7	46	811	90	45	SRC3	AC	V4	R35	O35	Foundational
+DemandRecord	TRUE	1	8	46	901	1080	45	SRC3	AC	V4	R36	O36	Foundational

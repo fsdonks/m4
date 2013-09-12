@@ -1,0 +1,7 @@
+TimeStamp	SRC	Reason
+1/15/2013 15:14	SRC1	Demand
+1/15/2013 15:14	SRC1	Supply
+1/15/2013 15:14	SRC3	Supply
+1/15/2013 15:14	SRC3	Demand
+1/15/2013 15:14	SRC2	Demand
+1/15/2013 15:14	SRC2	Supply

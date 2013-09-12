@@ -1,0 +1,48 @@
+CompositeName	Composition
+ACSchedule	{PreSurge AC13 Surge AC11 PostSurge AC12}
+RCSchedule	{PreSurge RC15 Surge RC12 PostSurge RC14}
+ACScheduleLoose	{PreSurge AC13Loose Surge AC11 PostSurge AC12Loose} 
+RCScheduleLoose	{PreSurge AC13Loose Surge AC11 PostSurge AC12Loose} 
+ACBinary	{PreSurge AC13 Surge AC11}
+RCScheduleMyles	{PreSurge RC15 Surge AC11 PostSurge RC14}
+ScheduleBuster	{First AC13 Second AC12 Third AC11 Fourth AC12Loose Fifth AC13Loose}
+ACTAA	{PreSurge AC13 Surge AC11 PostSurge AC12Loose}
+RCTAA	{PreSurge RC15  Surge RC12 PostSurge RC14Loose}
+ACEnablerTAA	{PreSurge AC13_Enabler,
+ Surge AC11,
+ PostSurge AC12Loose_Enabler}
+RCEnablerTAA	{PreSurge RC15_Enabler,
+ Surge RC12,
+ PostSurge RC14Loose_Enabler}
+RCTAA_Floating3Year	{PreSurge RC15,
+ Surge RC12,
+ PostSurge RC14Loose_3Year}
+RCTAA_Floating3Year_Enabler	{PreSurge RC15_Enabler,
+ Surge RC12,
+ PostSurge RC14Loose_3Year_Enabler}
+RCTAA_ReMob	{PreSurge RC15,
+ Surge RC12,
+ PostSurge RC14ReMob}
+RCTAA_ReMob_Enabler	{PreSurge RC15_Enabler,
+ Surge RC12,
+ PostSurge RC14ReMob_Enabler}
+ACTAA1519	{PreSurge FFGACRoto,
+ Surge MaxUtilization}
+ACTAA1519_Enabler	{PreSurge FFGACRoto_Enabler,
+ Surge MaxUtilization_Enabler}
+RCTAA1519	{PreSurge FFGRCRoto,
+ Surge NearMaxUtilization}
+RCTAA1519_Enabler	{PreSurge FFGRCRoto_Enabler,
+ Surge NearMaxUtilization_Enabler}
+MissionPoolTAA1519	{PreSurge FFGMission,
+ Surge MaxUtilization}
+MissionPoolTAA1519_Enabler	{PreSurge FFGMission_Enabler,
+ Surge FFGMission_Enabler}
+OpSustainmentPoolTAA1519	{PreSurge RCOpSus,
+ Surge NearMaxUtilization}
+ACUnconstrained	[MaxUtilization]
+RCUnconstrained	[MaxUtilization, NearMaxUtilization]
+ACUnconstrained_Enabler	[MaxUtilization_Enabler]
+RCUnconstrained_Enabler	[MaxUtilization_Enabler, NearMaxUtilization_Enabler]
+ACMission-Rotational	[FFGMission, FFGACRoto]
+RCMission-Rotational	[FFGMission, FFGRCRoto]

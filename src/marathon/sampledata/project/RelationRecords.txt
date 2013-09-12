@@ -1,0 +1,8 @@
+Type	Relation	Donor	Recepient	Cost	Enabled
+RelationRecord	sub	Ghost	Ghostable	4	TRUE
+RelationRecord	sub	SRC3	SRC1	1	TRUE
+RelationRecord	sub	SRC3	SRC2	1	FALSE
+RelationRecord	sub	SRC1	SRC2	1	FALSE
+RelationRecord	sub	SRC1	SRC3	1	TRUE
+RelationRecord	sub	SRC2	SRC1	1	FALSE
+RelationRecord	sub	SRC2	SRC3	1	FALSE
