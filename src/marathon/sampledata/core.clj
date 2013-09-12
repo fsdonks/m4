@@ -15,15 +15,20 @@
         (throw (Exception. "dunno how to get resources in jar yet"))
         path)))
   
-(def datasets {:supply  "\\marathon\\sampledata\\supply.txt"
-               :demand  "\\marathon\\sampledata\\demand.txt"
-               :policy  "\\marathon\\sampledata\\policy.txt"               
-               :rules   "\\marathon\\sampledata\\supply.txt"})
-        
+(def datasets 
+  {:supply  "\\marathon\\sampledata\\project\\SupplyRecords.txt"
+   :demand  "\\marathon\\sampledata\\project\\DemandRecords.txt"
+   :policy  "\\marathon\\sampledata\\project\\PolicyRecords.txt"               
+   :deployments "\\marathon\\sampledata\\project\\Deployments.txt"
+   :relations  "\\marathon\\sampledata\\project\\RelationRecords.txt"
+   :periods  "\\marathon\\sampledata\\project\\PeriodRecords.txt"
+   :composites "\\marathon\\sampledata\\project\\CompositePolicyRecords.txt"})
+
 (defn get-dataset
   "Fetches a keyed dataset of embedded sample data.  Returns a string of the 
    encoded data.  Cleaning and formatting is up to the caller!."
   [datakey & {:keys [datapath]
-                              :or   {datapath (find-spork-data)}}]
+                              :or   {datapath (find-marathon-data)}}]
   (if-let [path (get datasets datakey)]
     (slurp (str datapath path))))
+

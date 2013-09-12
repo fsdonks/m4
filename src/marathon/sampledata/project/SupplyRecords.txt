@@ -1,0 +1,8 @@
+Type	Enabled	Quantity	SRC	Component	OITitle	Name	Behavior	CycleTime	Policy	Tags	SpawnTime	Location	Position	Original
+SupplyRecord	FALSE	1	Ghost	Ghost	Anything	Auto	Ghost365_45	0	Ghost365_45	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	12	SRC1	NG	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	10	SRC1	AC	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	20	SRC2	NG	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	10	SRC2	AC	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	50	SRC3	NG	Generated_SRC1	Auto	Auto	0	RCOpSus	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	50	SRC3	AC	Generated_SRC1	Auto	Auto	0	FFGACRoto	Auto	0	Auto	Auto	FALSE
