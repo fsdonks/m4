@@ -190,6 +190,9 @@
                                                 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
 
+(defn prioritize [xs])  
+
+
 ;;Testing 
 (comment
 ;; a dummy cycle 
