@@ -94,10 +94,6 @@
 (defmulti  as-comparer (fn [x] (comparison-type x))) 
 ;;return the comparison function directly.
 (defmethod as-comparer :fn  [f] f)
-;;create a comparer that uses the key-function  
-(defmethod as-comparer :key-fn [m] 
-  (let [keyf (get m :key-fn)] 
-    (fn [l r] (compare (keyf l) (keyf r)))))
 (defmethod as-comparer :keyword [k] 
   (fn [l r] (compare (k l) (k r))))
 ;;unpack the comparer 
@@ -119,10 +115,15 @@
 (defmethod as-comparer :serial  [xs]
   (gen/serial-comparer (compile-rules xs)))
   
-;;utility to tag values as key-generators to be used when comparing.
-(defn ->key [x]     {:key-fn x})
 ;;utility to tag values as direct comparison functions that can compare items.
-(defn ->compare [x] {:compare-fn x})
+(defn compare-by [x]    {:compare-fn x})
+
+;;utility to tag values as key-generators to be used when comparing.
+(defn with-key [f]      {:compare-fn (fn [l r] (f l) (f r))})
+(defn with-pred [f res] {:compare-fn (fn [l r] (= (f l r) res))})
+
+;;Flip the comparison direction, to go from ascending to descending.
+(defn flip  [f]         {:compare-fn (fn [l r] (f r l))}) 
 
 ;;Alternate formulation....dunno, will relook the api later.
 ;(defn ->compare [& {:keys [key pred]}]
@@ -162,7 +163,7 @@
 ;;Uses uniform-compare to prefer units that have a higher "relative" time in 
 ;;their expected lifecycle.  For unbounded lifecycles, the progress is defined 
 ;;relative terms of the maximum machine precision float.
-(defcomparer uniform-compare  (->key uniform-sort-key))
+(defcomparer uniform-compare  (with-key uniform-sort-key))
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "AC"
