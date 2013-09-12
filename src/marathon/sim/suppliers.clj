@@ -40,8 +40,8 @@
 ;;We need different ways of comparing units. 
 ;;That's pretty fundamental to unit selection and ordering.
 
-(defn compare-unit [x y] 
-  (
+(defn compare-unit [x y]) 
+  
 
 ;;EntityRequest->SpawnUnit
 

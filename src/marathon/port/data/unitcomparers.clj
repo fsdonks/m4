@@ -88,11 +88,11 @@
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "AC"
-(defcomparer ac-first         (->eq :component "AC"))
+(defcomparer ac-first         (->where :component "AC"))
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "RC"
-(defcomparer rc-first         (->eq :component "RC"))
+(defcomparer rc-first         (->where :component "RC"))
 
 (defn can-follow? [x] 
   (when-let [followoncode (get-in-compare-ctx! :followoncode)]
@@ -121,11 +121,10 @@
                                                 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
 
-(defn order-units 
-  ([xs]       (sort default-compare xs))
-  ([ctx xs]   (binding [*comparison-context* ctx] 
-                 (sort default-compare xs)))
-  ([ctx f xs] ())) 
+(defn order-units
+  [xs & {:keys [ctx comparer] :or {ctx nil comparer default-compare}}]
+  (binding [*comparison-context* ctx]
+    (sort comparer xs)))   
 
 ;;Testing 
 (comment
@@ -137,9 +136,10 @@
   (defn ->unit [id compo cycletime cyc] 
     {:currentcycle cyc :id id :cycletime cycletime :component compo})
   
-  (def units [(->unit "ac-dwelling" "AC" 0   (->cycle 1095 365 0 0))
-              (->unit "rc-dwelling" "RC" 566 (->cycle 1825 270 566 566))
-              (->unit "ac-later" "AC" 1000   (->cycle 1095 365 1000 1000))]) 
+  (def units [(->unit "ac-dwelling" "AC" 0      (->cycle 1095 365 0 0))
+              (->unit "rc-dwelling" "RC" 566    (->cycle 1825 270 566 566))
+              (->unit "ac-later"    "AC" 1000   (->cycle 1095 365 1000 1000))
+              (->unit "ng-dwelling" "NG" 3      (->cycle 1825 270 3 3))]) 
 
   
 )  
