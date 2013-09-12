@@ -31,4 +31,3 @@
                               :or   {datapath (find-marathon-data)}}]
   (if-let [path (get datasets datakey)]
     (slurp (str datapath path))))
-

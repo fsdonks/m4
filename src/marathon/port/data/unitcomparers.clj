@@ -80,23 +80,26 @@
 
 (defn comparison-type [x] 
   (cond (map? x) (cond (contains? x :key-fn)      :key-fn 
-                       (contains? x :compare-fn)  :compare-fn)
+                       (contains? x :compare-fn)  :compare-fn
+                       :else (throw (Exception. (str "Invalid dispatch map " x))))
         (sequential? x)  :serial 
-        (fn?  x)  :fn
-        :otherwise (do (println x)
-                       (throw (Exception. "Unknown dispatch")))))
+        (fn?  x)         :fn
+        (keyword? x)     :keyword
+        :else (throw (Exception. (str "Invalid dispatch input " x)))))
 
 ;;Might be too much cruft here? 
 
 ;;utility function to convert maps of {:function|:key v} into functions that 
 ;;can be used to compare two values.
-(defmulti  as-comparer comparison-type) 
+(defmulti  as-comparer (fn [x] (comparison-type x))) 
 ;;return the comparison function directly.
-(defmethod as-comparer :fn     [f] f)
+(defmethod as-comparer :fn  [f] f)
 ;;create a comparer that uses the key-function  
 (defmethod as-comparer :key-fn [m] 
   (let [keyf (get m :key-fn)] 
     (fn [l r] (compare (keyf l) (keyf r)))))
+(defmethod as-comparer :keyword [k] 
+  (fn [l r] (compare (k l) (k r))))
 ;;unpack the comparer 
 (defmethod as-comparer :compare-fn [m] (get m :compare-fn))
 
@@ -114,8 +117,7 @@
 ;;allow composite comparer rules.  Given a (possibly nested) sequence of 
 ;;comparisons, it'll compile the comparers into a single rule.
 (defmethod as-comparer :serial  [xs]
-  (let [parsed-rules (compile-rules xs)]
-    (gen/serial-comparer xs)))
+  (gen/serial-comparer (compile-rules xs)))
   
 ;;utility to tag values as key-generators to be used when comparing.
 (defn ->key [x]     {:key-fn x})
