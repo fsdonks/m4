@@ -88,11 +88,11 @@
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "AC"
-(defcomparer ac-first         (->where :component "AC"))
+(defcomparer ac-first         (->where-key :component "AC"))
 
 ;;A comparison that examines units and prefers units with components equal
 ;;to "RC"
-(defcomparer rc-first         (->where :component "RC"))
+(defcomparer rc-first         (->where-key :component "RC"))
 
 (defn can-follow? [x] 
   (when-let [followoncode (get-in-compare-ctx! :followoncode)]
@@ -117,7 +117,11 @@
   (fn [l r] 
     (let [fenced-left?  (fenced-key l)
           fenced-right? (fenced-key r)]
-      (and fenced-left? (not fenced-right?))))) 
+      (cond (and fenced-left? (not fenced-right?)) 1
+            (and (not fenced-left?) fenced-right?) -1
+            :else 0))))
+          
+             
                                                 
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
 
