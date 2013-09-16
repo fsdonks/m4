@@ -120,12 +120,16 @@
       (cond (and fenced-left? (not fenced-right?)) 1
             (and (not fenced-left?) fenced-right?) -1
             :else 0))))
-          
-             
-                                                
+
+;;The default comparison function.  We prefer units that are fenced, then units 
+;;that are grouped with a similar followon code, then by the relative cycle 
+;;time of each unit.
 (defcomparer default-compare [fenced-compare followon-compare uniform-compare])
 
 (defn order-units
+  "Given a sequence of units, xs, orders the units according to an optional 
+   comparer and an optional comparison context.  Defaults to using the canonical
+   comparison"
   [xs & {:keys [ctx comparer] :or {ctx nil comparer default-compare}}]
   (binding [*comparison-context* ctx]
     (sort comparer xs)))   
