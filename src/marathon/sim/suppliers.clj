@@ -146,12 +146,13 @@
 (defrecord entity-generator [remaining generate]
   IEntityGenerator 
   (generate-entity  [gen order] (generate order gen))
-  (capacity  [gen] remaining))
+  (capacity         [gen] remaining))
 
 ;;Weak description.
 ;;creates an entity generator with defaults.
 (defn ->basic-generator [& {:keys [remaining generate] 
-                             :or {remaining 0 constrained-gen}}]
+                             :or {remaining 0 
+                                  generate constrained-gen}}]
   (->entity-generator remaining generate))
 
 ;;Creates an entity generator that composes multiple entity generators, and 
@@ -214,8 +215,8 @@
 
 
 
-(def ac 
-(generate-unit Generate-AC 
+;;(def ac 
+;;(generate-unit Generate-AC 
 
 ;;(defsupplyier Generate-RCAD :constraint 
 
