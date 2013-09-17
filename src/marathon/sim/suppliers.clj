@@ -125,9 +125,9 @@
 
 (defn order-cost [m] (get m :cost 0))
 
-;;Given an order for an entity,
+
 (defn constrained-gen [order gen]
-  (if (>= (capacity gen) (:cost order))   
+  (if (>= (capacity gen) (order-cost order))   
     [(create-new-unit (new-id))
      (if-let [cost (order-cost order)]
        (update-in gen [:remaining] - (order-cost order))
@@ -136,24 +136,6 @@
 
 ;;Stub....
 (defn recognizes? [g order])
-
-(defn can-generate? [order g]
-  (and (>= (capacity g) (order-cost order))
-       (recognizes? g order)))
-
-;;The spec supplied to the generator is responsible for communicating the cost 
-;;information. 
-(defrecord entity-generator [remaining generate]
-  IEntityGenerator 
-  (generate-entity  [gen order] (generate order gen))
-  (capacity         [gen] remaining))
-
-;;Weak description.
-;;creates an entity generator with defaults.
-(defn ->basic-generator [& {:keys [remaining generate] 
-                             :or {remaining 0 
-                                  generate constrained-gen}}]
-  (->entity-generator remaining generate))
 
 ;;Creates an entity generator that composes multiple entity generators, and 
 ;;provides a shared resource between them.  When trying to generate entities, 
@@ -174,9 +156,97 @@
                                    gnext)))))
     (capacity [gen] remaining)))
 
+
+
+
+;;(def ac 
+;;(generate-unit Generate-AC 
+
+;;(defsupplyier Generate-RCAD :constraint 
+
+;;(defsupplier jit-initial-supply 
+;;   :supplies [Generate-AC 
+;;              Generate-RCAD
+
+;;=================
+
+;;From my mockups...
+;;If we want to represent the supply-side process of filling an order it 
+;;looks like this: 
+;;the order - {:SRC 2 :Quantity 10} ---> The Supplier ---> [[Entity1 & Actions] 
+;;                                                          [Entity2 & Actions]
+;;                                                          [Entity3 & Actions]]
+
+;;This isn't too far from the goal-based behavior that Norvig uses in Paip.
+;;Given a goal - fill the order {:SRC 2 :Quantity 10}, return a sequence of 
+;;states that get us to the goal using available knowledge. 
+;;In this case, the supplier is believed to contain information necessary to 
+;;process such a query, and return a sequence of entities and maybe actions 
+;;required to generate each entity.  
+
+;;We'll implement the supplier via a composite design, in that individual
+;;suppliers can be combined to form other types of suppliers.  The typical 
+;;supplier will be a hierarchical supplier, which basically moves over a 
+;;pre-defined sequence of suppliers to try to fill orders.  The order of 
+;;the suppliers implies a preference, so that the filling of orders corresponds
+;;to some optimum fill, represented by a hierarchical objective function .
+;;If each supplier is filling the order optimally, and we have a sequence of 
+;;suppliers that are ordered from "best" to "worst", then we optimally fill 
+;;the whole order by visiting each supplier in order.  Easy.  
+
+;;This design lets us create other types of suppliers.  The order that we visit
+;;suppliers may be determined by any function, and it could be arbitrary.  We
+;;may wish to balance the filling of orders across different elements of supply.
+;;Many suppliers may share a resource that constraints the total amount of 
+;;things supplied.  There may be preferences assigned to specific types of 
+;;orders for specific supply, which changes the order in which suppliers are 
+;;visited.  On and on...
+
+;;Just having a simple hierarchical fill, and an atomic supplier will be 
+;;enough to get us significant traction for now. 
+
+;;So, given an order, a supplier should be able to produce a sequence of 
+;;entities.  We will want to communicate extra contextual information, such 
+;;as the need to possibly create a new entity.  I refer to this context as the
+;;actions required to fulfill the supply.
+
+;;At a later stage, something "else" will consume the entity name, and any 
+;;actions required, and will reify that into a "promise" for the supply that 
+;;can be provided to our fill routine.
+
+;;Selection vs. Generation 
+;;========================
+
+;;From the order-filling point of view, the result of processing an order 
+;;is just a sequence of [entity action] pairs.  
+;;From the supplier view, the actions required to supply an entity may be 
+;;significant, or they may be nonexistent.  For instance, if we have pre-existing
+;;supply, then the simplest supplier just applies some ordering to the supply 
+;;and tries to fill the order, drawing from best-to-worst.  The result is just a 
+;;simple entity list.
+
+;;Entity Selector
+;;===============
+
+;;We'll call this simple guy an entity-selector, since all he's doing is 
+;;imposing some ordering an a set of pre-existing entities, and there are 
+;;no actions required (specifically no entity creation).  It's almost like a 
+;;SQL Select query is being executed, albeit with some potentially complicated
+;;ordering rules applied.
+(defn entity-selector [comparison rules] 
+  (fn [order ctx] (order-units (get-units order ctx) :comparer comparison)))
+
+
+;;Entity Generator
+;;================
+
 ;;Just like unit selection rules, we also have unit generation rules...
 ;;The ability to generate entities, and to define high-level, possibly 
 ;;constrained entity generation semantics, is REALLY important for flexibility.
+
+;;Queries that may result in [entity action] pairs, where the actions contain 
+;;some additional cost or pre-condition that must be satisifed, are 
+;;entity-generators.
 
 ;;The default semantics are that, if an entity order has no associated cost, 
 ;;then it costs nothing to generate, and capacity is effectively unlimited 
@@ -187,10 +257,44 @@
 ;;the entity (like pax), which allows us to directly represent the complex 
 ;;rules in portfolio analyses.
 
-;;We can view pre-existing supply as a unit-cost entity generator.
-;;As entities are generated, they are decremented from the generatable supply.
-;;If every entity is consumed, we have no capacity, and the generator returns 
-;;nil.
+;;If we wanted to unify selection and generation, we could view the 
+;;entity-selector as an entity-generator, with a capacity identical to the 
+;;number of units in the total supply of entities being queried, and unit-cost 
+;;action associated with each entity generated.  The implication is that each 
+;;entity generated reduces the capacity of the generator by 1.
+
+(defn can-generate? [order g]
+  (or (= (capacity g) :infinite) 
+      (and (>= (capacity g) (order-cost order))
+           (recognizes? g order))))
+
+;;The spec supplied to the generator is responsible for communicating the cost 
+;;information.
+;;Generated is the cumulative number of entities generated from here.
+;;Remaining is the capacity remaining, in whatever unit of measure we decide.
+;;Remaining may actually be a composite data type, or more typically, a number.
+;;order->entity is a function that maps orders for entities, with the a value 
+;;for the generator, and produces a pair of [[entity & actions] new-gen], where
+;;new-gen is a generator representing the effect (like a decrease in capacity) 
+;;of generating an entity.
+(defrecord entity-generator [name generated remaining order->entity]
+  IEntityGenerator 
+  (generate-entity  [gen order] (order->entity order gen))
+  (capacity         [gen] remaining))
+
+;;Weak description.
+;;creates an entity generator with defaults.
+(defn ->basic-generator [& {:keys [name generated remaining order->entity] 
+                             :or {name (gensym "_Generator")
+                                  generated 0
+                                  remaining 0 
+                                  order->entity constrained-gen}}]
+  (->entity-generator remaining generate))
+
+(defn ->infinite-generator [order->entity] 
+  (->basic-generator :remaining :infinite                     
+                     :order->entity order->entity))
+
 
 ;;Then, we can compose complex entity generators from simpler entity generators,
 ;;and simply have a means of matching on a rule.
@@ -212,19 +316,4 @@
 
 ;;The naive view is that there is a single generator, that sits atop the 
 ;;deployable supply in the supplystore.  
-
-
-
-;;(def ac 
-;;(generate-unit Generate-AC 
-
-;;(defsupplyier Generate-RCAD :constraint 
-
-;;(defsupplier jit-initial-supply 
-;;   :supplies [Generate-AC 
-;;              Generate-RCAD
-
-
-
-
 
