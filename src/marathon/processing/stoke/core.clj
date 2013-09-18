@@ -3,8 +3,8 @@
 ;;for analyzing static demand signals, and quickly generating
 ;;end-strength constrained portfolios.
 (ns marathon.processing.stoke.core
-  (:require [spork.opt [core :as opt]
-                       [representation :as rep]]
+  (:require [spork.opt [core :as opt]]
+            [spork.opt.representation :refer [defsolution]]
             [spork.util [combinatoric :as c]
                         [generators :as gen]]))
 
@@ -92,10 +92,8 @@
 ;;Implementation
 ;;==============
 
-;;Our representation of supply. 
-
-;;An arbitrary upper bound on what would be a ludicrious amount of supply.
-(def ludicrous-amount 999999999)
+;;Shared Data
+;;===========
 
 ;;Some possible values for a notional supply.
 ;;We have two capabilities:  
@@ -110,6 +108,9 @@
 
 (def notional-srcs   (keys (:src-strengths notional-stats)))
 (def notional-compos (:compos notional-stats))
+
+;;Demand Generation and Manipulation
+;;==================================
 
 (defn random-demand [srcs] 
   {:Start (rand-int 4000) :Duration (rand-int 200) :SRC (rand-nth srcs)})
@@ -129,16 +130,16 @@
    {:Start 815,  :Duration 4,   :SRC :MeatEaters}
    {:Start 2045, :Duration 167, :SRC :ButterChurners}])
 
-(def small-demands (take 2 some-demands))
-
-
 ;;given a sorted sequence of demands, of a identical SRC, we need a way 
 ;;to walk the timeline, and accumulate a list of active demands.  The 
 ;;only time the active demands change is when a new demand activates, 
 ;;or an existing demand deactivates. We just sweep the demands in order 
 ;;recording their start and stop times, and accumulate a sequence of 
 ;;active demands by time. This will help us compute peaks easily later.
-(defn temporal-profile [xs] 
+(defn temporal-profile
+  "From a sequence of records with keys for :Start :Duration, extracts an 
+   event-driven profile of the concurrent records over time."
+  [xs] 
   (let [add-demand  (fn [t x] {:t t :type :add  :data x})
         drop-demand (fn [t x] {:t t :type :drop :data x})
         resample    (fn [t]   {:t t :type :resampling :data nil})
@@ -162,7 +163,12 @@
               [initial-events #{} :init])))
 
 ;;Pretty general function.
-(defn activity-profile [xs]
+(defn activity-profile
+  "Given a sequence of records, xs, with :Start and :Duration keys, computes 
+   a sorted map of {t {:actives #{...} :count n}} for each discrete time in 
+   the records.  Each sample will have the records that were concurrently 
+   active at the sample time, and a count of the records."
+  [xs]
   (->> (temporal-profile xs)
        (map (fn [[es actives s]] {:t (:t (first es)) :actives actives :s s}))
        (partition-by :t)
@@ -171,9 +177,12 @@
        (map (fn [x] [(:t x) (-> x (dissoc :t) 
                                   (dissoc :s)
                                   (assoc  :count (count (:actives x))))]))
-       (into (sorted-map)))) ;;sorted map may be gratuitous       
+       (into (sorted-map)))) ;;sorted map may be gratuitous         
 
-(defn peak-demands [xs]
+(defn peak-activities
+  "Computes peak concurrent activities, as per activity-profile, for a sequence 
+   of temporal records xs.  Returns the top N active days."
+  [xs]
   (let [active-count (fn [r] (:count r))
         sorted  (->> (sort-by :Start xs)
                   (activity-profile)
@@ -183,29 +192,65 @@
     (take-while (fn [[t r]] (= (active-count r) peak))
                 sorted))) 
 
-;;given a sequence of demands, we need a way to compute peak demand.
-(defn get-peak-demands [xs] 
-  (for [[src recs] (group-by :SRC xs)]
-    (sort-by :Start recs) 
+;;given a sequence of demands, we need a way to compute peak demand for 
+;;each src.
+(defn peaks-by [f xs]
+  (into {} 
+    (for [[k recs] (group-by f xs)]
+      [k (first (peak-activities recs))])))
+
+;;A little hackish.
+(defn src-peak-table
+  "Computes a single table of {src peak-quantity} for each 
+   src in the demand."
+  [xs] 
+  (let [peaks (peaks-by :SRC xs)]
+    (reduce (fn [m k] (assoc m k (:count (second (get m k)))))
+             peaks (keys peaks))))
+
+;;Generating Supply
+;;=================
+
+;;An arbitrary upper bound on what would be a ludicrious amount of supply.
+(def ludicrous-amount 4000)
 
 ;;We'll derive the srcs from the actual demand later. 
 (defn ->supply [srcs compos end-strength]
   {:solution (into {} (map vector (map vector srcs compos) (repeat 0)))
    :end-strength end-strength})
-  
+
+(defn unkey [k] 
+  (if (keyword? k)
+    (subs (str k) 1)
+    k))
+
 (defn supply-spec [srcs compos]
   (let [combos (for [s srcs
-                     c compos] [s c])] 
+                     c compos] (symbol (str (unkey s) "_"  (unkey c))))] 
     (reduce conj {}  
-       (for [[s c] combos]
-         [[s c] [0 ludicrous-amount]]))))
+       (for [k combos]
+         [k [0 ludicrous-amount]]))))
 
-(defmacro supply-solution [srcs compos]
-  (let [spec (supply-spec (eval srcs) (eval compos))]   
-    `(~'rep/defsolution ~'supply ~spec)))
+(defn supply-solution [srcs compos]
+  (let [spec (supply-spec srcs compos)]   
+    (eval `(defsolution ~'supply ~spec))))
   
+;;Evaluating Supply
+;;=================
+;;To evaluate a supply against a demand signal, we just do an accounting drill
+;;and compare the total supply, by src, against the peak demand.  We convert 
+;;the delta into a percentage unfilled.  This is an intentionally weak value
+;;function.
+(defn evaluate-supply [supply-map peak-map]
+  (->> (reduce (fn [[tot-required tot-missed] [src required]]
+                (let [supplied (get supply-map src 0)]
+                  [(+ tot-required required) 
+                   (+ tot-missed (max (- required supplied) 0))]))
+               [0.0 0.0] 
+               (seq peak-map))
+       (apply /)))
 
-
-
+;(defn solution-cost [supply-solution demand]
+;  (let [supply-map (:solution 
 
 
