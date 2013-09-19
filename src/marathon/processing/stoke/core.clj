@@ -99,13 +99,16 @@
 ;;We have two capabilities:  
 ;;MeatEaters, who can inflict violence with extreme prejudice.  
 ;;ButterChurners, who perform a lot of labor intensive butter churning.  
-;;We also have to general classes, or components: the lifers, dudes that are 
-;;employed full-time in either profession, and part-timers or WeekendWarriors. 
+;;We also have two general classes, or components: the lifers, dudes that are 
+;;employed full-time in either profession, and part-timers or WeekendWarriors.
+;;MeatEaters are mustered in 20-person elements, while ButterChurners are built
+;;of 50-person teams.
 (def notional-stats 
   {:src-strengths {:MeatEaters 20
                    :ButterChurners 50} 
    :compos [:Lifers :WeekendWarriors]})
 
+;;Useful aliases 
 (def notional-srcs   (keys (:src-strengths notional-stats)))
 (def notional-compos (:compos notional-stats))
 
@@ -117,7 +120,7 @@
 
 ;(def random-demands (take 10 (repeatedly #(random-demand notional-srcs)))) 
 
-;;A generation of random-demands.
+;;A sample of random-demands.
 (def some-demands
   [{:Start 6,    :Duration 165, :SRC :ButterChurners}
    {:Start 3080, :Duration 46,  :SRC :MeatEaters}
@@ -201,7 +204,7 @@
 
 ;;A little hackish.
 (defn src-peak-table
-  "Computes a single table of {src peak-quantity} for each 
+  "Computes a map of {src peak-quantity} for each 
    src in the demand."
   [xs] 
   (let [peaks (peaks-by :SRC xs)]
@@ -234,6 +237,7 @@
 (defn supply-solution [srcs compos]
   (let [spec (supply-spec srcs compos)]   
     (eval `(defsolution ~'supply ~spec))))
+
   
 ;;Evaluating Supply
 ;;=================
