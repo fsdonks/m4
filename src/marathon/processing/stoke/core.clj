@@ -217,6 +217,8 @@
 ;;An arbitrary upper bound on what would be a ludicrious amount of supply.
 (def ludicrous-amount 4000)
 
+
+  
 ;;We'll derive the srcs from the actual demand later. 
 (defn ->supply [srcs compos end-strength]
   {:solution (into {} (map vector (map vector srcs compos) (repeat 0)))
@@ -238,7 +240,6 @@
   (let [spec (supply-spec srcs compos)]   
     (eval `(defsolution ~'supply ~spec))))
 
-  
 ;;Evaluating Supply
 ;;=================
 ;;To evaluate a supply against a demand signal, we just do an accounting drill
@@ -254,7 +255,9 @@
                (seq peak-map))
        (apply /)))
 
-;(defn solution-cost [supply-solution demand]
-;  (let [supply-map (:solution 
+(defn solution-cost [supply-solution demand]
+  (let [supply-map (:solution 
+
+;;generating supply is fairly easy.
 
 
