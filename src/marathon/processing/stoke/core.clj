@@ -5,8 +5,8 @@
 (ns marathon.processing.stoke.core
   (:require [spork.opt [core :as opt]]
             [spork.opt.representation :refer [defsolution]]
-            [spork.util [combinatoric :as c]
-                        [generators :as gen]]))
+            [spork.opt  [dumbanneal :as ann]]
+            [spork.util [combinatoric :as c] [generators :as gen]]))
 
 
 ;;The task we face in Stoke is to try to provide a fast approximation of a 
@@ -216,9 +216,7 @@
 
 ;;An arbitrary upper bound on what would be a ludicrious amount of supply.
 (def ludicrous-amount 4000)
-
-
-  
+ 
 ;;We'll derive the srcs from the actual demand later. 
 (defn ->supply [srcs compos end-strength]
   {:solution (into {} (map vector (map vector srcs compos) (repeat 0)))
