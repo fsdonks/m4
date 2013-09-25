@@ -125,18 +125,28 @@
 ;;__temporal/peaks-by__ traverses the demand records, using the :SRC key as an 
 ;;aggregate key, and finds the peak time intervals across the entire profile.
 
-;;__TODO__ Revisit our peak computation.  We need to account for quantity, 
-;;which is not included in the data set.  Right now, peaks are the times with
-;;the most active records, but we really want to weight the records 
-;;(by quantity and possibly priority).
 
-(defn future->src-peaks
-  "Computes a map of {src peak-quantity} for each src in the demand."
+(defn total-quantity-demanded
+  "A custom peak function to determine which samples in the demand activity 
+   profile are considered highest."
+  [activity-record]
+  (reduce + (map :Quantity (:actives activity-record))))
+  
+
+(defn future->src-records
+  "Computes a map of {src peak-records} for each src in the demand."
   [xs] 
-  (let [peaks (temporal/peaks-by :SRC xs  
-                     :start-func :Start  :duration-func :Duration)]
-    (reduce (fn [m k] (assoc m k (:count (second (get m k))))) 
-            peaks (keys peaks))))
+  (temporal/peaks-by :SRC xs  
+                     :start-func :Start  :duration-func :Duration
+                     :peak-function total-quantity-demanded))
+
+(defn src-records->src-peaks
+  "Reduces a map of {src peak-records}, to a map of {src peak-quantity}.  
+   Used for simplified supply evaluation."
+  [xs]
+  (into {} 
+    (for [[src peak-records] xs]     
+      [src (reduce + (map :Quantity peak-records))])))
 
 ;;Generating Supply
 ;;=================
