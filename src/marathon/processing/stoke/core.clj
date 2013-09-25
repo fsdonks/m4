@@ -6,7 +6,8 @@
   (:require [spork.opt [core :as opt]]
             [spork.opt.representation :refer [defsolution]]
             [spork.opt  [dumbanneal :as ann]]
-            [spork.util [combinatoric :as c] [generators :as gen]]))
+            [spork.util [combinatoric :as c] 
+                        [temporal :as temporal]]))
 
 
 ;;The task we face in Stoke is to try to provide a fast approximation of a 
@@ -22,8 +23,6 @@
 ;;dependent effects on the system, and to account for high fidelity simulation
 ;;state.  In other words, Stoke is an intentionally limited subset of the 
 ;;capabilities in Marathon.  
-
-
 
 ;;Generating Force Structure
 ;;==========================
@@ -76,7 +75,7 @@
 ;;=======================
 
 ;;The value of any supply, relative to a demand, is the percentage of unfilled 
-;;peak demand.  To compensate for "larger" units typically having more import, 
+;;peak demand.   To compensate for "larger" units typically having more import, 
 ;;we will weight the demand fill by the str/unit (identical to our supply 
 ;;constraint).  Additional weights may be added later.  So the end result is 
 ;;the percentage of unfilled str.  
@@ -112,104 +111,73 @@
 (def notional-srcs   (keys (:src-strengths notional-stats)))
 (def notional-compos (:compos notional-stats))
 
+;;Evaluating Supply
+;;=================
+;;To evaluate a supply against a demand signal, we just do an accounting drill
+;;and compare the total supply, by src, against the peak demand.  We convert 
+;;the delta into a percentage unfilled.  This is an intentionally weak value
+;;function.  
+
+(defn evaluate-supply
+  "Given a map of [src supply] and [src peak-demand], computes the percentage 
+   of peak demand that can be met."
+  [supply-map peak-map]
+  (->> (seq peak-map)  
+       (reduce (fn [[tot-required tot-missed] [src required]]
+                (let [supplied (get supply-map src 0)]
+                  [(+ tot-required required) 
+                   (+ tot-missed (max (- required supplied) 0))]))
+               [0.0 0.0])
+       (apply /)))
+
 ;;Demand Generation and Manipulation
 ;;==================================
 
+;;In practice, we'll be pulling in a set of demands from either an on-demand 
+;;stream of stochastic futures, or a pre-generated dataset.  In either case, 
+;;each data set will at least have records that contain fields associated with 
+;;a start time, a duration, an SRC or capability type, and a quantity. Standard
+;;demand records already codify this, and provide additional meta data (for more
+;;robust value functions) if desired.
+
+;;For testing purposes, we generate a set of random demands.
 (defn random-demand [srcs] 
   {:Start (rand-int 4000) :Duration (rand-int 200) :SRC (rand-nth srcs)})
 
 ;(def random-demands (take 10 (repeatedly #(random-demand notional-srcs)))) 
 
 ;;A sample of random-demands.
-(def some-demands
-  [{:Start 6,    :Duration 165, :SRC :ButterChurners}
-   {:Start 3080, :Duration 46,  :SRC :MeatEaters}
-   {:Start 2135, :Duration 40,  :SRC :ButterChurners}
-   {:Start 2997, :Duration 152, :SRC :ButterChurners}
-   {:Start 2705, :Duration 170, :SRC :MeatEaters}
-   {:Start 3365, :Duration 170, :SRC :MeatEaters}
-   {:Start 1230, :Duration 193, :SRC :ButterChurners}
-   {:Start 347,  :Duration 178, :SRC :MeatEaters}
-   {:Start 815,  :Duration 4,   :SRC :MeatEaters}
-   {:Start 2045, :Duration 167, :SRC :ButterChurners}])
+(def demand-future
+  [{:Start 6,    :Duration 165, :SRC :ButterChurners, :Priority 1}
+   {:Start 3080, :Duration 46,  :SRC :MeatEaters, :Priority 1}
+   {:Start 2135, :Duration 40,  :SRC :ButterChurners, :Priority 1}
+   {:Start 2997, :Duration 152, :SRC :ButterChurners, :Priority 1}
+   {:Start 2705, :Duration 170, :SRC :MeatEaters, :Priority 1}
+   {:Start 3365, :Duration 170, :SRC :MeatEaters, :Priority 1}
+   {:Start 1230, :Duration 193, :SRC :ButterChurners, :Priority 1}
+   {:Start 347,  :Duration 178, :SRC :MeatEaters, :Priority 1}
+   {:Start 815,  :Duration 4,   :SRC :MeatEaters, :Priority 1}
+   {:Start 2045, :Duration 167, :SRC :ButterChurners, :Priority 1}])
 
-;;given a sorted sequence of demands, of a identical SRC, we need a way 
+;;given a sorted sequence of demands, of an identical SRC, we need a way 
 ;;to walk the timeline, and accumulate a list of active demands.  The 
 ;;only time the active demands change is when a new demand activates, 
 ;;or an existing demand deactivates. We just sweep the demands in order 
 ;;recording their start and stop times, and accumulate a sequence of 
 ;;active demands by time. This will help us compute peaks easily later.
-(defn temporal-profile
-  "From a sequence of records with keys for :Start :Duration, extracts an 
-   event-driven profile of the concurrent records over time."
+
+;;I actually built a couple of functions for this, and realized they were 
+;;really generic.  So I pushed them into spork.util.temporal .  The function
+;;__temporal/peaks-by__ traverses the demand records, using the :SRC key as an 
+;;aggregate key, and finds the peak time intervals across the entire profile.
+
+(defn future->src-peaks
+  "Computes a map of {src peak-quantity} for each src in the demand."
   [xs] 
-  (let [add-demand  (fn [t x] {:t t :type :add  :data x})
-        drop-demand (fn [t x] {:t t :type :drop :data x})
-        resample    (fn [t]   {:t t :type :resampling :data nil})
-        earliest    (fn [l r] (compare (:t l) (:t r)))
-        handle (fn [{:keys [t type data]} [es actives state]]
-                  (case type
-                    :resampling [es actives :changed]
-                    :add [(-> es (conj (drop-demand (+ t (:Duration data)) data))
-                                 (conj (resample t)))
-                          (conj actives data)
-                          :added]
-                    :drop [es (disj actives data) :dropped]))
-        initial-events (into (sorted-set-by earliest) 
-                             (map (fn [x] (add-demand (:Start x) x)) xs))]
-  (gen/unfold (fn [[es _ _]]  (empty? es))  ;halt when no more events.            
-              (fn [[es actives s]]                
-                (let [event               (first es)
-                      remaining-events    (disj es event)
-                      current-time        (:t event)]
-                  (handle event [remaining-events actives s]))) 
-              [initial-events #{} :init])))
-
-;;Pretty general function.
-(defn activity-profile
-  "Given a sequence of records, xs, with :Start and :Duration keys, computes 
-   a sorted map of {t {:actives #{...} :count n}} for each discrete time in 
-   the records.  Each sample will have the records that were concurrently 
-   active at the sample time, and a count of the records."
-  [xs]
-  (->> (temporal-profile xs)
-       (map (fn [[es actives s]] {:t (:t (first es)) :actives actives :s s}))
-       (partition-by :t)
-       (map last)
-       (concat)
-       (map (fn [x] [(:t x) (-> x (dissoc :t) 
-                                  (dissoc :s)
-                                  (assoc  :count (count (:actives x))))]))
-       (into (sorted-map)))) ;;sorted map may be gratuitous         
-
-(defn peak-activities
-  "Computes peak concurrent activities, as per activity-profile, for a sequence 
-   of temporal records xs.  Returns the top N active days."
-  [xs]
-  (let [active-count (fn [r] (:count r))
-        sorted  (->> (sort-by :Start xs)
-                  (activity-profile)
-                  (sort-by (fn [[t r]] (active-count r))) 
-                  (reverse))
-        peak (active-count (second (first sorted)))]
-    (take-while (fn [[t r]] (= (active-count r) peak))
-                sorted))) 
-
-;;given a sequence of demands, we need a way to compute peak demand for 
-;;each src.
-(defn peaks-by [f xs]
-  (into {} 
-    (for [[k recs] (group-by f xs)]
-      [k (first (peak-activities recs))])))
-
-;;A little hackish.
-(defn src-peak-table
-  "Computes a map of {src peak-quantity} for each 
-   src in the demand."
-  [xs] 
-  (let [peaks (peaks-by :SRC xs)]
-    (reduce (fn [m k] (assoc m k (:count (second (get m k)))))
-             peaks (keys peaks))))
+  (let [peaks (temporal/peaks-by :SRC xs  
+                     :start-func :Start  :duration-func :Duration)]
+    (reduce (fn [m k] (assoc m k (:count (second (get m k))))) 
+            peaks (keys peaks))))
 
 ;;Generating Supply
 ;;=================
@@ -218,10 +186,139 @@
 (def ludicrous-amount 4000)
  
 ;;We'll derive the srcs from the actual demand later. 
-(defn ->supply [srcs compos end-strength]
-  {:solution (into {} (map vector (map vector srcs compos) (repeat 0)))
-   :end-strength end-strength})
+(defn ->supply-solution
+  "A supply solution is a map [[src compo] quantity], and an end-strength 
+   constraint.  Given a set of srcs and compos, we can enumerate an empty 
+   supply.  We also pack along a mapping of src to strength."
+  [srcs compos max-end-strength src->strength]
+  {:srcs srcs 
+   :compos compos
+   :supply         (zipmap (map vector srcs compos) (repeat 0))
+   :src->strength   src-strength
+   :total-strength   0
+   :max-end-strength max-end-strength})
 
+(defn add-supply [s src compo qty & [strength]]
+  (-> s 
+    (update-in [:supply [src compo]] + qty)
+    (update-in [:total-strength] + (or strength 
+                                       (* qty (:src->strength s) src)))))
+(defn surplus-strength [s] 
+  (- (:max-end-strength s) (:total-strength s)))
+
+
+;;One way to generate a supply is to naively hierarchically fill relative to  
+;;a demand future.  We can sort the demands by priority, then strength.
+;;We then traverse the demands in order, filling each demand with the preferred
+;;component, until we run out of end-strength.  This is a decent approximation 
+;;for an initial feasible solution, or a fast replacement for optimization.
+
+(defn hierarchically-fill-supply 
+  [supply demand-records & {:keys [demand->compo demand->priority ordered?] 
+                            :or   {demand->compo (fn [_] 1)
+                                   demand->priority #(or (:Priority %) 
+                                                         (:priority %) 1)}}]
+  (let [{:keys [src->strength max-end-strength]} supply
+        ordered-demands     (if ordered? 
+                              demand-records
+                              (sort-by (fn [r] [(:priority r) 
+                                                (src->strength (:SRC r))])
+                                       demand-records))
+        try-fill (fn [src qty] (let [cost (src->strength src)
+                                     feasible-strength (min (* cost qty)
+                                                            (surplus-strength))
+                                     filled (quot feasible-strength cost)
+                                     spent  (* cost filled)]
+                                 [filled spent]))]
+    (loop [acc supply           
+           xs  ordered-demands]
+      (if (or (= 0 (surplus-strength acc)) (empty? xs))
+        acc
+        (let [demand (first xs)
+              compo  (demand->compo demand)
+              {:keys [SRC Priority Quantity]} demand
+              [filled spent] (try-fill SRC Quantity)]
+          (if (= 0 filled)
+            (recur acc (rest xs))
+            (recur (add-supply acc src compo filled spent) (rest xs))))))))
+
+(defn sum [xs] (reduce + xs))     
+(defn weighted-sum [key-vals key->weight]
+  (reduce (fn [acc [k v]] (+ acc (* v (key->weight k)))) 0 key-vals))
+  
+(defn sum-keys-by
+  "Given a map of {k quantity}, where quantity is a number, sums the map using 
+   a custom key function.  Used to aggregate maps."
+  [keyf m]
+  (->> (seq m)
+       (reduce (fn [acc [k qty]] (assoc! acc (+ (get acc (keyf k) 0) qty))) 
+               (transient {}))
+       (persistent!)))
+
+;;Generating supply is fairly straightfoward.  Since we're using clojure's data
+;;structure, we can share a lot of data instead of having to put it into array 
+;;based structures and shovel indices around.  
+
+;;We formulate a simple optimization, Given:      
+;;srcs   - a set of srcs,  
+;;compos - a set of components,  
+;;peaks  - a map of {src demand},  
+;;compo-pref - a map of {demand compo},
+;;priority   - a positive real number
+;;demand-priority - a map of {demand priority}
+;;src-strength - a map of {src strength},  
+;;max-end-strength - the maximum size of the supply, 
+
+;;with the following decision variables: 
+;;  
+;;The quantity of supply assigned by demand, component, and src:  
+;;supplied =  {[demand compo src] quantity}  
+;;total-fill = {src (sum (supplied [demand compo src])}
+;;size-of-supply =     
+;;  (sum (for [[src qty] total-fill] (* (src-strength src) qty))) 
+       
+;;with the following constraints:  
+;;  size-of-supply <= max-end-strength   
+;;  We'll implement this constraint via a severe penality on the objective 
+;   function for solutions that are over-strength. 
+;;  
+;;the following weight functions:  
+;;  (fill-weight qty src) = (* qty (src-strength src) (demand-priority src))  
+;;  (compo-weight demand compo) = (if (= (get compo-pref demand) compo) 1 0.5)
+;;and the following objectives:  
+;;  (weighted-fill supplied) = 
+;;       (sum (for [[[demand compo src] qty] supplied] 
+;;                (+ (fill-weight qty src) (compo-weight demand compo))))
+;;maximize (* (weighted-fill supplied) (strength-penalty supplied))
+
+;;Translated (directly) into a value function:
+(defn ->value-function
+  "We maximize the weighted fill of the supply, relative to the demand, demand 
+   preferences, and strengths, and penalize solutions that are over-strength 
+   by dividing the weighted-fill by the amount over strength.  Solutions that 
+   are within strength bounds suffer no penalty."
+  [max-end-strength compo->pref demand->priority src->strength]
+  (let [total-fill (fn [supplied] (sum-keys-by (fn [[_ _ src]] src)  supplied))
+        size-of-supply (fn [tot-fill] (weighted-sum tot-fill src->strength))
+        fill-weight    (fn [qty src] (* qty (src->strength src) 
+                                            (demand->priority src)))
+        compo-weight   (fn [demand compo] 
+                         (if (= (compo->pref demand) compo) 1 0.5))        
+        weighted-fill  (fn [supplied] 
+                         (sum (for [[[demand compo src] qty] supplied] 
+                                (+ (fill-weight qty src) 
+                                   (compo-weight demand compo)))))
+        strength-penality (fn [size] (/ 1.0 (min (- size max-end-strength) 1.0)))]
+    (fn [supplied] (* (weighted-fill supplied) 
+                      (strength-penality (size-of-supply supplied))))))
+
+;;We wrap everything up into a nice function that lets us build the optimization
+;;en toto.  Given a demand future, and an empty supply, we construct a 
+;;specification for an optimization problem that will generate a supply.
+
+;;(defn ->optimization [supply demand-future]
+
+(comment 
 (defn unkey [k] 
   (if (keyword? k)
     (subs (str k) 1)
@@ -236,26 +333,5 @@
 
 (defn supply-solution [srcs compos]
   (let [spec (supply-spec srcs compos)]   
-    (eval `(defsolution ~'supply ~spec))))
-
-;;Evaluating Supply
-;;=================
-;;To evaluate a supply against a demand signal, we just do an accounting drill
-;;and compare the total supply, by src, against the peak demand.  We convert 
-;;the delta into a percentage unfilled.  This is an intentionally weak value
-;;function.
-(defn evaluate-supply [supply-map peak-map]
-  (->> (reduce (fn [[tot-required tot-missed] [src required]]
-                (let [supplied (get supply-map src 0)]
-                  [(+ tot-required required) 
-                   (+ tot-missed (max (- required supplied) 0))]))
-               [0.0 0.0] 
-               (seq peak-map))
-       (apply /)))
-
-(defn solution-cost [supply-solution demand]
-  (let [supply-map (:solution 
-
-;;generating supply is fairly easy.
-
-
+    (eval `(defsolution ~'supply ~spec))))  
+)
