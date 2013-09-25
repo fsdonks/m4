@@ -91,25 +91,6 @@
 ;;Implementation
 ;;==============
 
-;;Shared Data
-;;===========
-
-;;Some possible values for a notional supply.
-;;We have two capabilities:  
-;;MeatEaters, who can inflict violence with extreme prejudice.  
-;;ButterChurners, who perform a lot of labor intensive butter churning.  
-;;We also have two general classes, or components: the lifers, dudes that are 
-;;employed full-time in either profession, and part-timers or WeekendWarriors.
-;;MeatEaters are mustered in 20-person elements, while ButterChurners are built
-;;of 50-person teams.
-(def notional-stats 
-  {:src-strengths {:MeatEaters 20
-                   :ButterChurners 50} 
-   :compos [:Lifers :WeekendWarriors]})
-
-;;Useful aliases 
-(def notional-srcs   (keys (:src-strengths notional-stats)))
-(def notional-compos (:compos notional-stats))
 
 ;;Evaluating Supply
 ;;=================
@@ -129,35 +110,6 @@
                    (+ tot-missed (max (- required supplied) 0))]))
                [0.0 0.0])
        (apply /)))
-
-;;Demand Generation and Manipulation
-;;==================================
-
-;;In practice, we'll be pulling in a set of demands from either an on-demand 
-;;stream of stochastic futures, or a pre-generated dataset.  In either case, 
-;;each data set will at least have records that contain fields associated with 
-;;a start time, a duration, an SRC or capability type, and a quantity. Standard
-;;demand records already codify this, and provide additional meta data (for more
-;;robust value functions) if desired.
-
-;;For testing purposes, we generate a set of random demands.
-(defn random-demand [srcs] 
-  {:Start (rand-int 4000) :Duration (rand-int 200) :SRC (rand-nth srcs)})
-
-;(def random-demands (take 10 (repeatedly #(random-demand notional-srcs)))) 
-
-;;A sample of random-demands.
-(def demand-future
-  [{:Start 6,    :Duration 165, :SRC :ButterChurners, :Priority 1}
-   {:Start 3080, :Duration 46,  :SRC :MeatEaters, :Priority 1}
-   {:Start 2135, :Duration 40,  :SRC :ButterChurners, :Priority 1}
-   {:Start 2997, :Duration 152, :SRC :ButterChurners, :Priority 1}
-   {:Start 2705, :Duration 170, :SRC :MeatEaters, :Priority 1}
-   {:Start 3365, :Duration 170, :SRC :MeatEaters, :Priority 1}
-   {:Start 1230, :Duration 193, :SRC :ButterChurners, :Priority 1}
-   {:Start 347,  :Duration 178, :SRC :MeatEaters, :Priority 1}
-   {:Start 815,  :Duration 4,   :SRC :MeatEaters, :Priority 1}
-   {:Start 2045, :Duration 167, :SRC :ButterChurners, :Priority 1}])
 
 ;;Scraping Peak Demand
 ;;====================
@@ -188,9 +140,6 @@
 
 ;;Generating Supply
 ;;=================
-
-;;An arbitrary upper bound on what would be a ludicrious amount of supply.
-(def ludicrous-amount 4000)
  
 ;;We'll derive the srcs from the actual demand later. 
 (defn ->supply-solution
@@ -200,7 +149,8 @@
   [srcs compos max-end-strength src->strength]
   {:srcs srcs 
    :compos compos
-   :supply         (zipmap (map vector srcs compos) (repeat 0))
+   :supply         (zipmap (for [s srcs
+                                 c compos]  [s c])  (repeat 0))
    :src->strength   src->strength
    :total-strength   0
    :max-end-strength max-end-strength})
@@ -217,21 +167,18 @@
 ;;a demand future.  We can sort the demands by priority, then strength.
 ;;We then traverse the demands in order, filling each demand with the preferred
 ;;component, until we run out of end-strength.  This is a decent approximation 
-;;for an initial feasible solution, or a fast replacement for optimization.
+;;for an initial feasible solution, or a simple replacement for optimization.
 (defn hierarchically-fill-supply 
   [supply demand-records 
-   & {:keys [demand->compo demand->priority demand->src rollover? ordered?] 
-      :or   {demand->compo (fn [_] 1)
-             demand->priority #(or (:Priority %) 
-                                   (:priority %) 1)
-             demand->src #(or (:SRC %) (:src %) nil)}}]
+   & {:keys [demand->compo demand->priority demand->src rollover?] 
+      :or   {demand->compo    (fn [_] 1)
+             demand->priority #(or (:Priority %) 1)
+             demand->src      :SRC}}]
   (let [{:keys [src->strength max-end-strength]} supply
         ;sort demands by [priority strength]
-        ordered-demands     (if ordered? 
-                              demand-records
-                              (sort-by (fn [r] [(demand->priority r) 
-                                                (src->strength (demand->src r))])
-                                       demand-records))
+        ordered-demands  (sort-by (fn [r] [(demand->priority r) 
+                                           (src->strength (demand->src r))])
+                                  demand-records)
         ;attempt to fill a demand, with a given strength surplus.
         try-fill (fn [surplus src qty] 
                    (let [cost   (src->strength src)
@@ -245,34 +192,46 @@
                                          (conj (get acc strength #{})  src)))
                                 (sorted-map-by >)  src->strength)                                                                                      
         ;prune keys, finding a new minimum strength break
-        advance-breaks (fn [new-minimum breaks] 
+        advance-breaks (fn [new-minimum breaks drops] 
                          (loop [acc breaks
-                                dropped #{}]
+                                dropped drops]
                            (if-let [[min-break src-set] (first (keys acc))]
                              (recur (dissoc breaks min-break)
                                     (clojure.set/union dropped src-set))
                              [acc dropped])))
         ;prune the feasible demand, to the largest strength we can fill.
         filter-feasibles (fn [dropped demands] 
-                           (filter #(not (dropped (demand->src %))) demands))]                                                         
+                           (filter #(not (dropped (demand->src %))) demands))]                                                       
     (loop [acc supply           
            xs  ordered-demands
-           breaks strength-breaks]
-      (if (or (= 0 (surplus-strength acc)) (empty? xs) (empty? breaks))
-        acc
-        (let [min-feasible-strength (first (keys breaks)) 
-              demand (first xs)
-              compo  (demand->compo demand)
-              {:keys [SRC Priority Quantity]} demand
-              [filled spent] (try-fill SRC Quantity)
-              next-min-feasible (- (surplus-strength supply) spent)]
-          (if (or (< filled Quantity) 
-                  (< next-min-feasible min-feasible-strength))
-            ;lower the threshold, screen out demands that are now infeasible.
-            (let [[new-breaks new-drops] (advance-breaks next-min-feasible breaks)] 
-              (recur acc (filter-feasibles new-drops (rest xs)) new-breaks))
-            ;add supply and continue filling.
-            (recur (add-supply acc SRC compo filled spent) (rest xs))))))))
+           breaks strength-breaks
+           dropped #{}
+           feasibles []]
+      (cond (or (= 0 (surplus-strength acc)) (empty? breaks)
+                (and (empty? xs) 
+                     (empty? feasibles)))  
+               acc ;yield the result.
+            ;distribute surplus supply based on things we successfully filled.
+            (and (empty? xs) (seq feasibles)) 
+               (recur acc feasibles breaks dropped []) 
+            :else 
+              (let [min-feasible-strength (first (keys breaks)) 
+                    demand (first xs)                    
+                    compo  (demand->compo demand)     
+                    surplus (surplus-strength supply)
+                    {:keys [SRC Priority Quantity]} demand
+                    _ (println [min-feasible-strength SRC Priority Quantity compo surplus])                    
+                    [filled spent] (try-fill SRC Quantity surplus)
+                    next-min-feasible (- surplus spent)]
+                (if (or (< filled Quantity) 
+                        (< next-min-feasible min-feasible-strength))
+                  ;lower the threshold, screen out demands that are now infeasible.
+                  (let [[new-breaks new-dropped] (advance-breaks next-min-feasible breaks)] 
+                    (recur acc (filter-feasibles new-dropped (rest xs)) 
+                           new-breaks new-dropped feasibles))
+                  ;add supply and continue filling.
+                  (recur (add-supply acc SRC compo filled spent) (rest xs) 
+                         breaks dropped (conj demand feasibles))))))))
 
 ;;Filling Approximately Optimally
 ;;===============================
@@ -371,3 +330,78 @@
   (let [spec (supply-spec srcs compos)]   
     (eval `(defsolution ~'supply ~spec))))  
 )
+
+;;Testing
+;;=======
+
+ 
+;;Shared Data
+;;===========
+
+;;Some possible values for a notional supply.
+;;We have two capabilities:  
+;;MeatEaters, who can inflict violence with extreme prejudice.  
+;;ButterChurners, who perform a lot of labor intensive butter churning.  
+;;We also have two general classes, or components: the lifers, dudes that are 
+;;employed full-time in either profession, and part-timers or WeekendWarriors.
+;;MeatEaters are mustered in 20-person elements, while ButterChurners are built
+;;of 50-person teams.
+
+(def notional-stats 
+  {:src-strengths {:MeatEaters 20 :ButterChurners 50} 
+   :compos [:Lifers :WeekendWarriors]})
+
+;;Useful aliases 
+(def notional-srcs   (keys (:src-strengths notional-stats)))
+(def notional-compos (:compos notional-stats))
+
+
+;;Demand Generation and Manipulation
+;;==================================
+
+;;In practice, we'll be pulling in a set of demands from either an on-demand 
+;;stream of stochastic futures, or a pre-generated dataset.  In either case, 
+;;each data set will at least have records that contain fields associated with 
+;;a start time, a duration, an SRC or capability type, and a quantity. Standard
+;;demand records already codify this, and provide additional meta data (for more
+;;robust value functions) if desired.
+
+;;For testing purposes, we generate a set of random demands.
+(defn random-demand [srcs] 
+  {:Start (rand-int 4000) :Duration (rand-int 200) :SRC (rand-nth srcs)
+   :Quantity (rand-int 100)
+   :Priority (rand-int 2)})
+
+;(def random-demands (take 10 (repeatedly #(random-demand notional-srcs)))) 
+
+;;A sample of random-demands.
+(def demand-future
+  [{:Start 2419, :Duration 70, :SRC :MeatEaters, :Quantity 65, :Priority 0} 
+   {:Start 3891, :Duration 170, :SRC :MeatEaters, :Quantity 2, :Priority 0} 
+   {:Start 1471, :Duration 72, :SRC :MeatEaters, :Quantity 41, :Priority 0} 
+   {:Start 3351, :Duration 132, :SRC :ButterChurners, :Quantity 36, :Priority 0} 
+   {:Start 317, :Duration 92, :SRC :ButterChurners, :Quantity 37, :Priority 1} 
+   {:Start 2885, :Duration 165, :SRC :MeatEaters, :Quantity 75, :Priority 0} 
+   {:Start 2966, :Duration 158, :SRC :MeatEaters, :Quantity 89, :Priority 1} 
+   {:Start 2374, :Duration 1, :SRC :ButterChurners, :Quantity 60, :Priority 0} 
+   {:Start 801, :Duration 60, :SRC :MeatEaters, :Quantity 44, :Priority 0} 
+   {:Start 858, :Duration 95, :SRC :ButterChurners, :Quantity 33, :Priority 1}])
+
+(let [lookup   {:MeatEaters      :Lifers
+                :ButterChurners  :WeekendWarriors}]
+  (defn compo-preference [r]
+    (get lookup (:SRC r) :Lifers)))     
+   
+(comment  
+;;An arbitrary upper bound on what would be a ludicrious amount of supply.
+(def ludicrous-amount 4000)
+
+(def empty-supply 
+  (->supply-solution notional-srcs notional-compos 
+                     490000 (:src-strengths notional-stats)))
+(def filled-supply 
+  (hierarchically-fill-supply empty-supply demand-future)) 
+
+)
+                                     
+                                     
