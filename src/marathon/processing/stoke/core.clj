@@ -156,6 +156,8 @@
    :max-end-strength max-end-strength})
 
 (defn add-supply [s src compo qty & [strength]]
+  (assert (contains? (:supply s) [src compo]) 
+          (str "Unknown supply key" [src compo]))
   (-> s 
     (update-in [:supply [src compo]] + qty)
     (update-in [:total-strength] + (or strength 
@@ -171,7 +173,7 @@
 (defn hierarchically-fill-supply 
   [supply demand-records 
    & {:keys [demand->compo demand->priority demand->src rollover?] 
-      :or   {demand->compo    (fn [_] 1)
+      :or   {demand->compo    :Component
              demand->priority #(or (:Priority %) 1)
              demand->src      :SRC}}]
   (let [{:keys [src->strength max-end-strength]} supply
@@ -181,7 +183,7 @@
                                   demand-records)
         ;attempt to fill a demand, with a given strength surplus.
         try-fill (fn [surplus src qty] 
-                   (let [cost   (src->strength src)
+                   (let [cost   (src->strength src)                         
                          feasible-strength (min (* cost qty) surplus)
                          filled (quot feasible-strength cost)
                          spent  (* cost filled)]
@@ -195,9 +197,12 @@
         advance-breaks (fn [new-minimum breaks drops] 
                          (loop [acc breaks
                                 dropped drops]
-                           (if-let [[min-break src-set] (first (keys acc))]
-                             (recur (dissoc breaks min-break)
-                                    (clojure.set/union dropped src-set))
+                           (if (seq acc)
+                             (let [[min-break src-set] (first  acc)]
+                               (if (> min-break new-minimum)
+                                   (recur (dissoc acc min-break)
+                                          (clojure.set/union dropped src-set))
+                                   [acc dropped]))
                              [acc dropped])))
         ;prune the feasible demand, to the largest strength we can fill.
         filter-feasibles (fn [dropped demands] 
@@ -212,26 +217,33 @@
                      (empty? feasibles)))  
                acc ;yield the result.
             ;distribute surplus supply based on things we successfully filled.
-            (and (empty? xs) (seq feasibles)) 
+            (and (empty? xs) (seq feasibles))               
                (recur acc feasibles breaks dropped []) 
-            :else 
-              (let [min-feasible-strength (first (keys breaks)) 
+            (empty? xs) acc 
+            :else              
+              (let [min-feasible-strength (first (keys breaks))
                     demand (first xs)                    
                     compo  (demand->compo demand)     
-                    surplus (surplus-strength supply)
+                    surplus (surplus-strength acc)
                     {:keys [SRC Priority Quantity]} demand
-                    _ (println [min-feasible-strength SRC Priority Quantity compo surplus])                    
-                    [filled spent] (try-fill SRC Quantity surplus)
+;                    _ (println {:mfs min-feasible-strength
+;                                :surplus surplus
+;                                :src SRC :pri Priority :qty Quantity                                
+;                                }) 
+                    [filled spent] (try-fill surplus SRC Quantity)                   
+                    new-supply (if (> filled 0)
+                                 (add-supply acc SRC compo filled spent)
+                                 acc)
                     next-min-feasible (- surplus spent)]
-                (if (or (< filled Quantity) 
-                        (< next-min-feasible min-feasible-strength))
+                (if (< next-min-feasible min-feasible-strength)
                   ;lower the threshold, screen out demands that are now infeasible.
-                  (let [[new-breaks new-dropped] (advance-breaks next-min-feasible breaks)] 
-                    (recur acc (filter-feasibles new-dropped (rest xs)) 
+                  (let [[new-breaks new-dropped] 
+                          (advance-breaks next-min-feasible breaks dropped)] 
+                    (recur new-supply (filter-feasibles new-dropped (rest xs)) 
                            new-breaks new-dropped feasibles))
                   ;add supply and continue filling.
-                  (recur (add-supply acc SRC compo filled spent) (rest xs) 
-                         breaks dropped (conj demand feasibles))))))))
+                  (recur new-supply (rest xs) breaks dropped 
+                         (conj feasibles demand))))))))
 
 ;;Filling Approximately Optimally
 ;;===============================
@@ -348,7 +360,7 @@
 ;;of 50-person teams.
 
 (def notional-stats 
-  {:src-strengths {:MeatEaters 20 :ButterChurners 50} 
+  {:src-strengths {:MeatEaters 23 :ButterChurners 55} 
    :compos [:Lifers :WeekendWarriors]})
 
 ;;Useful aliases 
@@ -366,31 +378,34 @@
 ;;demand records already codify this, and provide additional meta data (for more
 ;;robust value functions) if desired.
 
+
+(def compo-pref {:MeatEaters      :Lifers
+                 :ButterChurners  :WeekendWarriors})
+(defn compo-preference [src] (get compo-pref src :Lifers))
+
 ;;For testing purposes, we generate a set of random demands.
 (defn random-demand [srcs] 
-  {:Start (rand-int 4000) :Duration (rand-int 200) :SRC (rand-nth srcs)
-   :Quantity (rand-int 100)
-   :Priority (rand-int 2)})
+  (let [src (rand-nth srcs)]
+    {:Start (rand-int 4000) :Duration (rand-int 200) 
+     :SRC src  
+     :Quantity (rand-int 100)
+     :Priority (rand-int 2)
+     :Component (compo-pref src)}))
 
 ;(def random-demands (take 10 (repeatedly #(random-demand notional-srcs)))) 
 
 ;;A sample of random-demands.
 (def demand-future
-  [{:Start 2419, :Duration 70, :SRC :MeatEaters, :Quantity 65, :Priority 0} 
-   {:Start 3891, :Duration 170, :SRC :MeatEaters, :Quantity 2, :Priority 0} 
-   {:Start 1471, :Duration 72, :SRC :MeatEaters, :Quantity 41, :Priority 0} 
-   {:Start 3351, :Duration 132, :SRC :ButterChurners, :Quantity 36, :Priority 0} 
-   {:Start 317, :Duration 92, :SRC :ButterChurners, :Quantity 37, :Priority 1} 
-   {:Start 2885, :Duration 165, :SRC :MeatEaters, :Quantity 75, :Priority 0} 
-   {:Start 2966, :Duration 158, :SRC :MeatEaters, :Quantity 89, :Priority 1} 
-   {:Start 2374, :Duration 1, :SRC :ButterChurners, :Quantity 60, :Priority 0} 
-   {:Start 801, :Duration 60, :SRC :MeatEaters, :Quantity 44, :Priority 0} 
-   {:Start 858, :Duration 95, :SRC :ButterChurners, :Quantity 33, :Priority 1}])
-
-(let [lookup   {:MeatEaters      :Lifers
-                :ButterChurners  :WeekendWarriors}]
-  (defn compo-preference [r]
-    (get lookup (:SRC r) :Lifers)))     
+  [{:Start 388,  :Duration 49,  :SRC :MeatEaters, :Quantity 31, :Priority 0, :Component :Lifers}
+   {:Start 3569, :Duration 174, :SRC :ButterChurners, :Quantity 67, :Priority 0, :Component :WeekendWarriors}
+   {:Start 3656, :Duration 49,  :SRC :MeatEaters,  :Quantity 94,  :Priority 0,  :Component :Lifers}
+   {:Start 1885, :Duration 149, :SRC :MeatEaters,  :Quantity 6,  :Priority 0,  :Component :Lifers}
+   {:Start 526,  :Duration 16,  :SRC :ButterChurners,  :Quantity 98,  :Priority 1,  :Component :WeekendWarriors}
+   {:Start 1996, :Duration 24,  :SRC :ButterChurners,  :Quantity 89,  :Priority 0,  :Component :WeekendWarriors}
+   {:Start 2572, :Duration 154, :SRC :MeatEaters,  :Quantity 47,  :Priority 1,  :Component :Lifers}
+   {:Start 30,   :Duration 49,  :SRC :MeatEaters,  :Quantity 34,  :Priority 1,  :Component :Lifers}
+   {:Start 1891, :Duration 70,  :SRC :MeatEaters,  :Quantity 6,  :Priority 0,  :Component :Lifers}
+   {:Start 3030, :Duration 172, :SRC :MeatEaters,  :Quantity 95,  :Priority 1,  :Component :Lifers}])
    
 (comment  
 ;;An arbitrary upper bound on what would be a ludicrious amount of supply.
