@@ -253,7 +253,6 @@
 ;;Testing
 ;;=======
 
-
 ;;Some possible values for a notional supply.
 ;;We have two capabilities:  
 ;;MeatEaters, who can inflict violence with extreme prejudice.  
@@ -287,15 +286,18 @@
 (defn compo-preference [src] (get compo-pref src :Lifers))
 
 ;;For testing purposes, we generate a set of random demands.
-(defn random-demand [srcs] 
+(defn random-demand [srcs src->compo] 
   (let [src (rand-nth srcs)]
     {:Start (rand-int 4000) :Duration (rand-int 200) 
      :SRC src  
      :Quantity (rand-int 100)
      :Priority (rand-int 2)
-     :Component (compo-pref src)}))
+     :Component (src->compo src)}))
 
-;(def random-demands (take 10 (repeatedly #(random-demand notional-srcs)))) 
+(defn demand-batch [n srcs] 
+  (take 10 (take 10 (repeatedly #(random-demand srcs compo-preference)))))
+
+;(def random-demands (demand-batch 10 notional-srcs)) 
 
 ;;A sample of random-demands.
 (def demand-future
@@ -321,7 +323,6 @@
   (hierarchically-fill-supply empty-supply demand-future)) 
 
 
-
 )
 
 ;;High Level API 
@@ -334,11 +335,13 @@
 (defn supply->portfolio
   "Generates a portfolio of n force structures, evaluated against k 
    demand futures, drawn from a demand generation function."
-  [initial-supply & {:keys [n supply-gen demand-gen] 
-                     :or   {n 10
-                            supply-gen hierarchically-fill-supply
-                            demand-gen random-demands}}]
-  'currently-implementing)
+  [initial-supply 
+   & {:keys [n supply-gen demand-gen] 
+      :or   {n 10  supply-gen hierarchically-fill-supply
+                   demand-gen #(future->src-records 
+                                 (demand-batch 10 (:srcs initial-supply)))}}]
+  
+  (map (fn [idx] (supply-gen initial-supply demand-gen)) (range n)))
 
 (defn portfolio->performance 
   "Given a portfolio of x supplies and a sample size, generates k 
