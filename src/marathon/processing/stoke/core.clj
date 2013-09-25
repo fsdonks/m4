@@ -218,34 +218,60 @@
 ;;We then traverse the demands in order, filling each demand with the preferred
 ;;component, until we run out of end-strength.  This is a decent approximation 
 ;;for an initial feasible solution, or a fast replacement for optimization.
-
 (defn hierarchically-fill-supply 
-  [supply demand-records & {:keys [demand->compo demand->priority ordered?] 
-                            :or   {demand->compo (fn [_] 1)
-                                   demand->priority #(or (:Priority %) 
-                                                         (:priority %) 1)}}]
+  [supply demand-records 
+   & {:keys [demand->compo demand->priority demand->src rollover? ordered?] 
+      :or   {demand->compo (fn [_] 1)
+             demand->priority #(or (:Priority %) 
+                                   (:priority %) 1)
+             demand->src #(or (:SRC %) (:src %) nil)}}]
   (let [{:keys [src->strength max-end-strength]} supply
+        ;sort demands by [priority strength]
         ordered-demands     (if ordered? 
                               demand-records
-                              (sort-by (fn [r] [(:priority r) 
-                                                (src->strength (:SRC r))])
+                              (sort-by (fn [r] [(demand->priority r) 
+                                                (src->strength (demand->src r))])
                                        demand-records))
-        try-fill (fn [src qty] (let [cost (src->strength src)
-                                     feasible-strength (min (* cost qty)
-                                                            (surplus-strength))
-                                     filled (quot feasible-strength cost)
-                                     spent  (* cost filled)]
-                                 [filled spent]))]
+        ;attempt to fill a demand, with a given strength surplus.
+        try-fill (fn [surplus src qty] 
+                   (let [cost   (src->strength src)
+                         feasible-strength (min (* cost qty) surplus)
+                         filled (quot feasible-strength cost)
+                         spent  (* cost filled)]
+                     [filled spent]))
+        ;thresholds for minimum unit strengths.
+        strength-breaks (reduce (fn [acc [src strength]]
+                                  (assoc acc strength
+                                         (conj (get acc strength #{})  src)))
+                                (sorted-map-by >)  src->strength)                                                                                      
+        ;prune keys, finding a new minimum strength break
+        advance-breaks (fn [new-minimum breaks] 
+                         (loop [acc breaks
+                                dropped #{}]
+                           (if-let [[min-break src-set] (first (keys acc))]
+                             (recur (dissoc breaks min-break)
+                                    (clojure.set/union dropped src-set))
+                             [acc dropped])))
+        ;prune the feasible demand, to the largest strength we can fill.
+        filter-feasibles (fn [dropped demands] 
+                           (filter #(not (dropped (demand->src %))) demands))]                                                         
     (loop [acc supply           
-           xs  ordered-demands]
-      (if (or (= 0 (surplus-strength acc)) (empty? xs))
+           xs  ordered-demands
+           breaks strength-breaks]
+      (if (or (= 0 (surplus-strength acc)) (empty? xs) (empty? breaks))
         acc
-        (let [demand (first xs)
+        (let [min-feasible-strength (first (keys breaks)) 
+              demand (first xs)
               compo  (demand->compo demand)
               {:keys [SRC Priority Quantity]} demand
-              [filled spent] (try-fill SRC Quantity)]
-          (if (= 0 filled)
-            (recur acc (rest xs))
+              [filled spent] (try-fill SRC Quantity)
+              next-min-feasible (- (surplus-strength supply) spent)]
+          (if (or (< filled Quantity) 
+                  (< next-min-feasible min-feasible-strength))
+            ;lower the threshold, screen out demands that are now infeasible.
+            (let [[new-breaks new-drops] (advance-breaks next-min-feasible breaks)] 
+              (recur acc (filter-feasibles new-drops (rest xs)) new-breaks))
+            ;add supply and continue filling.
             (recur (add-supply acc SRC compo filled spent) (rest xs))))))))
 
 ;;Filling Approximately Optimally
