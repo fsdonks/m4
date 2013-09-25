@@ -159,7 +159,9 @@
    {:Start 815,  :Duration 4,   :SRC :MeatEaters, :Priority 1}
    {:Start 2045, :Duration 167, :SRC :ButterChurners, :Priority 1}])
 
-;;given a sorted sequence of demands, of an identical SRC, we need a way 
+;;Scraping Peak Demand
+;;====================
+;;Given a sorted sequence of demands, of an identical SRC, we need a way 
 ;;to walk the timeline, and accumulate a list of active demands.  The 
 ;;only time the active demands change is when a new demand activates, 
 ;;or an existing demand deactivates. We just sweep the demands in order 
@@ -170,6 +172,11 @@
 ;;really generic.  So I pushed them into spork.util.temporal .  The function
 ;;__temporal/peaks-by__ traverses the demand records, using the :SRC key as an 
 ;;aggregate key, and finds the peak time intervals across the entire profile.
+
+;;__TODO__ Revisit our peak computation.  We need to account for quantity, 
+;;which is not included in the data set.  Right now, peaks are the times with
+;;the most active records, but we really want to weight the records 
+;;(by quantity and possibly priority).
 
 (defn future->src-peaks
   "Computes a map of {src peak-quantity} for each src in the demand."
@@ -206,7 +213,6 @@
 (defn surplus-strength [s] 
   (- (:max-end-strength s) (:total-strength s)))
 
-
 ;;One way to generate a supply is to naively hierarchically fill relative to  
 ;;a demand future.  We can sort the demands by priority, then strength.
 ;;We then traverse the demands in order, filling each demand with the preferred
@@ -242,6 +248,10 @@
             (recur acc (rest xs))
             (recur (add-supply acc src compo filled spent) (rest xs))))))))
 
+;;Filling Approximately Optimally
+;;===============================
+
+;;Useful functions for optimizing
 (defn sum [xs] (reduce + xs))     
 (defn weighted-sum [key-vals key->weight]
   (reduce (fn [acc [k v]] (+ acc (* v (key->weight k)))) 0 key-vals))
