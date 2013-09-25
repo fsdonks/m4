@@ -201,7 +201,7 @@
   {:srcs srcs 
    :compos compos
    :supply         (zipmap (map vector srcs compos) (repeat 0))
-   :src->strength   src-strength
+   :src->strength   src->strength
    :total-strength   0
    :max-end-strength max-end-strength})
 
@@ -246,7 +246,7 @@
               [filled spent] (try-fill SRC Quantity)]
           (if (= 0 filled)
             (recur acc (rest xs))
-            (recur (add-supply acc src compo filled spent) (rest xs))))))))
+            (recur (add-supply acc SRC compo filled spent) (rest xs))))))))
 
 ;;Filling Approximately Optimally
 ;;===============================
