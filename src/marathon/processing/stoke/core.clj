@@ -350,10 +350,10 @@
 
 ;;tested with 5000 records, still works great.
 (def demand-stream 
-  (repeatedly #(data/demand-batch 10 data/notional-srcs)))
+  (repeatedly #(data/demand-batch 100 data/notional-srcs)))
 
 (def empty-supply 
-  (->supply-solution data/empty-supply 2000  data/notional-src->strength))
+  (->supply-solution data/empty-supply 5000  data/notional-src->strength))
 
 (def processed-demand (process-future  (first demand-stream)))
 
