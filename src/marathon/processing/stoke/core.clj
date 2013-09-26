@@ -7,7 +7,8 @@
             [spork.opt.representation :refer [defsolution]]
             [spork.opt  [dumbanneal :as ann]]
             [spork.util [combinatoric :as c] 
-                        [temporal :as temporal]]))
+                        [temporal :as temporal]
+                        [stats :as stats]]))
 
 ;;The task we face in Stoke is to try to provide a fast approximation of a 
 ;;supply portfolio.  Basically, we want to generate a structure portfolio, 
@@ -341,32 +342,33 @@
   ([srcs compos max-end-strength src->strength n k futures] 
     (stoke (->supply-solution srcs compos max-end-strength src->strength)
            n k futures)))
-
-(def even-samples [3, 6, 7, 8, 8, 10, 13, 15, 16, 20])
-(def odd-samples (conj even-samples 22))
-
-(defn quantiles [q xs]
-  (let [xs (vec (sort xs))
-        n  (count xs)
-        rank (fn [k] (long (Math/ceil (+ (* n (/ k q)) 0.5))))]
-    (map #(get xs (dec %)) 
-         (take-while #(<= % n) (map rank (iterate inc 1))))))
-    
-(def median      (partial quantiles 2))
-(def quartiles   (partial quantiles 4))
-(def deciles     (partial quantiles 10))
-(def percentiles (partial quantiles 100))
-
-;;a slow mean computation.
-(defn mean [xs] 
-  (apply / (reduce (fn [[tot n] k] [(+ tot k) (inc n)]) [0 0] xs)))
   
 ;;Scraping output from our experiments.
 (defn stoked->stats [results] 
   (let [force-performance (for [[f recs] (group-by :force (:performance results))]
-                            {:force f :mean-value (mean (map :value recs))})]
+                            {:force f :mean-value (stats/mean (map :value recs))})]
     (sort-by #(- (:mean-value %)) force-performance)))
 
+(defn top-n
+  "Yields the top n force structures from a stoked result set."
+  [n stoke-results] 
+   (map :force (take n (stoked->stats res))))
+
+(defn summarize-stoke-results
+  "Computes a database of summary results, including the n-best force 
+   structures, the best force, and the range of values exhibited by the best 
+   force structures for each src/compo."
+  ([n stoke-results]
+    (let [force-keys  (top-n n stoke-results)
+          best        (first force-keys)        
+          ranges      (for [[k supplies]  
+                            (compare-supplies 
+                              (vals (select-keys (:forces res)  force-keys)))]
+                        [k (stats/deciles supplies)])]
+      {:best             best
+       :top-performers   force-keys 
+       :supply-ranges    ranges}))
+  ([stoke-results] (summarize-stoke-results 10 stoke-results)))
 
 ;;testing 
 (comment 
@@ -400,14 +402,14 @@
 ;;=> (surplus-strength test-supply)
 ;;7
 (def n 5)
-(def test-portfolio (supply->portfolio empty-supply demand-stream :n n))
+(def test-portfolio   (supply->portfolio empty-supply demand-stream :n n))
 (def test-performance (portfolio->performance test-portfolio (drop n demand-stream)))
 
 
 ;;Some simple analysis
 (def res (stoke empty-supply 25 1000   (rand-demand-stream)))
 ;;=>(pprint (into {} (for [[k xs]  (compare-supplies (vals (:forces res)))]
-;;                      [k (deciles xs)])))
+;;                      [k (stats/deciles xs)])))
 ;{[:ButterChurners :WeekendWarriors] (0 0 0 0 9 22 31 50 73),
 ; [:MeatEaters :Lifers]              (28 41 79 95 97 115 126 160 185),
 ; [:ButterChurners :Lifers]          (0 0 0 0 0 0 0 0 0),
@@ -457,7 +459,8 @@
 ;       (for [[k supplies]  (compare-supplies 
 ;                             (vals (select-keys (:forces res)
 ;                                                top-ten)))]
-;         [k (deciles supplies)])))
+;         [k (stats/deciles supplies)])))
+
 ;([[:ButterChurners :WeekendWarriors] (0 0 0 0 0 0 9 22 24)]
 ; [[:MeatEaters :Lifers]              (115 126 145 147 160 163 185 190 202)]
 ; [[:ButterChurners :Lifers]          (0 0 0 0 0 0 0 0 0)]
@@ -466,6 +469,17 @@
 ; [[:MeatEaters :WeekendWarriors]     (0 0 0 0 0 0 0 0 0)])
 
 )  
-  
 
+
+(comment
+  (time (doseq [s (->>  (rand-demand-stream)
+                    (map-indexed   
+                      (fn [idx d] 
+                        [idx (hierarchically-fill-supply empty-supply d)]))
+                    (map first)
+                    (take 100))]
+          (println s)
+          :done))
+  
+)
                                      
