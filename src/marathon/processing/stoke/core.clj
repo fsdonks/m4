@@ -211,8 +211,7 @@
         ks (reduce clojure.set/union (map (comp set keys) supplies))        
         quantities (fn [k] (vec (map (fn [m] (get m k 0)) supplies)))] 
     (reduce (fn [m k] (assoc m k (quantities k))) {} ks))) 
-
-  
+ 
 
 ;;__Note__ __hierarchically-fill-supply__ is currently a bottleneck, and could
 ;;benefit from some lower-level optimization.  It takes about 3 seconds to 
@@ -319,7 +318,6 @@
   (let [indexed-supply  (map-indexed vector xs)
         indexed-src-supply (map-indexed (fn [idx s] [idx (supply-by-src s)]) xs)        
         indexed-futures (->>  (map process-future futures)
-                              (take (count xs))
                               (map-indexed vector))
         results (for [[i supply] indexed-src-supply
                       [j {:keys [src-peaks]}] indexed-futures]
@@ -338,19 +336,47 @@
     futures     {0 future0, 1 future1,...k futurek}}"
   ([init-supply n k futures]
     (portfolio->performance 
-      (supply->portfolio init-supply (take k futures) :n n)
-      (drop k futures)))
+      (supply->portfolio init-supply (take n futures) :n n)
+      (take k (drop n futures))))
   ([srcs compos max-end-strength src->strength n k futures] 
     (stoke (->supply-solution srcs compos max-end-strength src->strength)
            n k futures)))
+
+(def even-samples [3, 6, 7, 8, 8, 10, 13, 15, 16, 20])
+(def odd-samples (conj even-samples 22))
+
+(defn quantiles [q xs]
+  (let [xs (vec (sort xs))
+        n  (count xs)
+        rank (fn [k] (long (Math/ceil (+ (* n (/ k q)) 0.5))))]
+    (map #(get xs (dec %)) 
+         (take-while #(<= % n) (map rank (iterate inc 1))))))
+    
+(def median      (partial quantiles 2))
+(def quartiles   (partial quantiles 4))
+(def deciles     (partial quantiles 10))
+(def percentiles (partial quantiles 100))
+
+;;a slow mean computation.
+(defn mean [xs] 
+  (apply / (reduce (fn [[tot n] k] [(+ tot k) (inc n)]) [0 0] xs)))
+  
+;;Scraping output from our experiments.
+(defn stoked->stats [results] 
+  (let [force-performance (for [[f recs] (group-by :force (:performance results))]
+                            {:force f :mean-value (mean (map :value recs))})]
+    (sort-by #(- (:mean-value %)) force-performance)))
+
 
 ;;testing 
 (comment 
 (require '[marathon.processing.stoke [testdata :as data]])
 
-;;tested with 5000 records, still works great.
-(def demand-stream 
+(defn rand-demand-stream []
   (repeatedly #(data/demand-batch 100 data/notional-srcs)))
+
+;;tested with 5000 records, still works great.
+(def demand-stream (rand-demand-stream))
 
 (def empty-supply 
   (->supply-solution data/empty-supply 5000  data/notional-src->strength))
