@@ -359,15 +359,20 @@
    structures, the best force, and the range of values exhibited by the best 
    force structures for each src/compo."
   ([n stoke-results]
-    (let [force-keys  (top-n n stoke-results)
-          best        (first force-keys)        
-          ranges      (for [[k supplies]  
-                            (compare-supplies 
-                              (vals (select-keys (:forces res)  force-keys)))]
-                        [k (stats/deciles supplies)])]
+    (let [force-keys    (top-n n stoke-results)
+          best          (first force-keys)
+          best-force    (get-in res [:forces best])
+          best-supply   (get best-force :supply)
+          src->strength (get best-force :src->strength)
+          supply-ranges  (for [[[src compo] supplies]  
+                               (compare-supplies 
+                                 (vals (select-keys (:forces res)  force-keys)))]
+                           {:src src :compo compo :strength (src->strength src) 
+                            :best (get best-supply [src compo])
+                            :ranges (stats/deciles supplies)})]
       {:best             best
        :top-performers   force-keys 
-       :supply-ranges    ranges}))
+       :supply-ranges    supply-ranges}))
   ([stoke-results] (summarize-stoke-results 10 stoke-results)))
 
 ;;testing 
