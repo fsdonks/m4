@@ -1,4 +1,4 @@
-;;Stoke is a simple tool for stochastic optimization.
+;;Stoke is a simple tool for stochastic optimization/exploration.
 ;;I basically created as a one-off, quick approximation tool 
 ;;for analyzing static demand signals, and quickly generating
 ;;end-strength constrained portfolios.
@@ -8,7 +8,6 @@
             [spork.opt  [dumbanneal :as ann]]
             [spork.util [combinatoric :as c] 
                         [temporal :as temporal]]))
-
 
 ;;The task we face in Stoke is to try to provide a fast approximation of a 
 ;;supply portfolio.  Basically, we want to generate a structure portfolio, 
@@ -91,7 +90,6 @@
 ;;Implementation
 ;;==============
 
-
 ;;Evaluating Supply
 ;;=================
 ;;To evaluate a supply against a demand signal, we just do an accounting drill
@@ -104,10 +102,10 @@
    of peak demand that can be met."
   [supply-map peak-map]
   (->> (seq peak-map)  
-       (reduce (fn [[tot-required tot-missed] [src required]]
+       (reduce (fn [[tot-supplied tot-required] [src required]]
                 (let [supplied (get supply-map src 0)]
-                  [(+ tot-required required) 
-                   (+ tot-missed (max (- required supplied) 0))]))
+                  [(+ tot-supplied supplied)
+                   (+ tot-required required)]))
                [0.0 0.0])
        (apply /)))
 
@@ -125,28 +123,43 @@
 ;;__temporal/peaks-by__ traverses the demand records, using the :SRC key as an 
 ;;aggregate key, and finds the peak time intervals across the entire profile.
 
-
 (defn total-quantity-demanded
   "A custom peak function to determine which samples in the demand activity 
    profile are considered highest."
-  [activity-record]
-  (reduce + (map :Quantity (:actives activity-record))))
-  
+  [{:keys [actives] :as activity-record}]
+  (reduce + (map :Quantity actives)))  
 
-(defn future->src-records
+(defn future->src-activity-records
   "Computes a map of {src peak-records} for each src in the demand."
   [xs] 
   (temporal/peaks-by :SRC xs  
                      :start-func :Start  :duration-func :Duration
                      :peak-function total-quantity-demanded))
 
-(defn src-records->src-peaks
+(defn src-activity-records->src-peaks
   "Reduces a map of {src peak-records}, to a map of {src peak-quantity}.  
    Used for simplified supply evaluation."
   [xs]
   (into {} 
-    (for [[src peak-records] xs]     
-      [src (reduce + (map :Quantity peak-records))])))
+    (for [[src {:keys [actives]}] xs]     
+      [src (reduce + (map :Quantity actives))])))
+
+(defn src-activity-records->demand-records 
+  "Flattens peak src records into a vector of demand records."
+  [xs]
+  (->> (for [[src {:keys [actives]}] xs] actives)
+       (reduce (fn [acc xs] (into acc xs)) [])))
+
+;;We might want to turn this into a more general demand-summary or something.
+;;There are probably a set of statistics it would be nice to gather.
+
+(defn process-future
+  "Converts a future into a set of peak demand records, and a table of 
+   {src peak-quantity}"
+  [xs] 
+  (let [arecs (future->src-activity-records xs)]
+    {:src-peaks      (src-activity-records->src-peaks arecs)
+     :demand-records (src-activity-records->demand-records arecs)}))
 
 ;;Generating Supply
 ;;=================
@@ -156,14 +169,25 @@
   "A supply solution is a map [[src compo] quantity], and an end-strength 
    constraint.  Given a set of srcs and compos, we can enumerate an empty 
    supply.  We also pack along a mapping of src to strength."
-  [srcs compos max-end-strength src->strength]
-  {:srcs srcs 
-   :compos compos
-   :supply         (zipmap (for [s srcs
-                                 c compos]  [s c])  (repeat 0))
-   :src->strength   src->strength
-   :total-strength   0
-   :max-end-strength max-end-strength})
+  ([supply max-end-strength src->strength]
+    (let [[srcs compos] (reduce (fn [[srcs compos] [s c]]
+                                  [(conj srcs s) (conj compos c)])
+                                [#{} #{}] (keys supply))]
+      {:srcs srcs 
+       :compos compos 
+       :supply supply 
+       :src->strength   src->strength
+       :total-strength   (reduce + (for [[[src compo] qty] supply]
+                                     (* (src->strength src) qty)))
+       :max-end-strength max-end-strength}))
+  ([srcs compos max-end-strength src->strength]
+    {:srcs srcs 
+     :compos compos
+     :supply         (zipmap (for [s srcs
+                                   c compos]  [s c])  (repeat 0))
+     :src->strength   src->strength
+     :total-strength   0
+     :max-end-strength max-end-strength}))
 
 (defn add-supply [s src compo qty & [strength]]
   (assert (contains? (:supply s) [src compo]) 
@@ -175,11 +199,31 @@
 (defn surplus-strength [s] 
   (- (:max-end-strength s) (:total-strength s)))
 
+(defn supply-by-src [s]
+  (let [supply (:supply s)]
+    (reduce (fn [acc [src compo]] 
+              (assoc acc src (+ (get acc src 0) (get supply [src compo]))))
+            {}
+            (keys supply)))) 
+
+(defn compare-supplies [xs]
+  (let [supplies (map :supply xs)
+        ks (reduce clojure.set/union (map (comp set keys) supplies))        
+        quantities (fn [k] (vec (map (fn [m] (get m k 0)) supplies)))] 
+    (reduce (fn [m k] (assoc m k (quantities k))) {} ks))) 
+
+  
+
+;;__Note__ __hierarchically-fill-supply__ is currently a bottleneck, and could
+;;benefit from some lower-level optimization.  It takes about 3 seconds to 
+;;generate 100 forces; this should be an order of magnitude faster.
+
 ;;One way to generate a supply is to naively hierarchically fill relative to  
 ;;a demand future.  We can sort the demands by priority, then strength.
 ;;We then traverse the demands in order, filling each demand with the preferred
 ;;component, until we run out of end-strength.  This is a decent approximation 
 ;;for an initial feasible solution, or a simple replacement for optimization.
+;;__This is a hideously long function, and needs to be broken up__
 (defn hierarchically-fill-supply 
   [supply demand-records 
    & {:keys [demand->compo demand->priority demand->src rollover?] 
@@ -249,124 +293,90 @@
                            new-breaks new-dropped feasibles))
                   ;continue filling, recording a successful fill.
                   (recur new-supply (rest xs) breaks dropped 
-                         (conj feasibles demand))))))))
-;;Testing
-;;=======
-
-;;Some possible values for a notional supply.
-;;We have two capabilities:  
-;;MeatEaters, who can inflict violence with extreme prejudice.  
-;;ButterChurners, who perform a lot of labor intensive butter churning.  
-;;We also have two general classes, or components: the lifers, dudes that are 
-;;employed full-time in either profession, and part-timers or WeekendWarriors.
-;;MeatEaters are mustered in 20-person elements, while ButterChurners are built
-;;of 50-person teams.
-
-(def notional-stats 
-  {:src-strengths {:MeatEaters 23 :ButterChurners 55} 
-   :compos        [:Lifers :WeekendWarriors]})
-
-;;Useful aliases 
-(def notional-srcs   (keys (:src-strengths notional-stats)))
-(def notional-compos (:compos notional-stats))
-
-
-;;Demand Generation and Manipulation
-;;==================================
-
-;;In practice, we'll be pulling in a set of demands from either an on-demand 
-;;stream of stochastic futures, or a pre-generated dataset.  In either case, 
-;;each data set will at least have records that contain fields associated with 
-;;a start time, a duration, an SRC or capability type, and a quantity. Standard
-;;demand records already codify this, and provide additional meta data (for more
-;;robust value functions) if desired.
-
-(def compo-pref {:MeatEaters      :Lifers
-                 :ButterChurners  :WeekendWarriors})
-(defn compo-preference [src] (get compo-pref src :Lifers))
-
-;;For testing purposes, we generate a set of random demands.
-(defn random-demand [srcs src->compo] 
-  (let [src (rand-nth srcs)]
-    {:Start (rand-int 4000) :Duration (rand-int 200) 
-     :SRC src  
-     :Quantity (rand-int 100)
-     :Priority (rand-int 2)
-     :Component (src->compo src)}))
-
-(defn demand-batch [n srcs] 
-  (take 10 (take 10 (repeatedly #(random-demand srcs compo-preference)))))
-
-;(def random-demands (demand-batch 10 notional-srcs)) 
-
-;;A sample of random-demands.
-(def demand-future
-  [{:Start 388,  :Duration 49,  :SRC :MeatEaters, :Quantity 31, :Priority 0, :Component :Lifers}
-   {:Start 3569, :Duration 174, :SRC :ButterChurners, :Quantity 67, :Priority 0, :Component :WeekendWarriors}
-   {:Start 3656, :Duration 49,  :SRC :MeatEaters,  :Quantity 94,  :Priority 0,  :Component :Lifers}
-   {:Start 1885, :Duration 149, :SRC :MeatEaters,  :Quantity 6,  :Priority 0,  :Component :Lifers}
-   {:Start 526,  :Duration 16,  :SRC :ButterChurners,  :Quantity 98,  :Priority 1,  :Component :WeekendWarriors}
-   {:Start 1996, :Duration 24,  :SRC :ButterChurners,  :Quantity 89,  :Priority 0,  :Component :WeekendWarriors}
-   {:Start 2572, :Duration 154, :SRC :MeatEaters,  :Quantity 47,  :Priority 1,  :Component :Lifers}
-   {:Start 30,   :Duration 49,  :SRC :MeatEaters,  :Quantity 34,  :Priority 1,  :Component :Lifers}
-   {:Start 1891, :Duration 70,  :SRC :MeatEaters,  :Quantity 6,  :Priority 0,  :Component :Lifers}
-   {:Start 3030, :Duration 172, :SRC :MeatEaters,  :Quantity 95,  :Priority 1,  :Component :Lifers}])
-   
-(comment  
-;;An arbitrary upper bound on what would be a ludicrious amount of supply.
-(def ludicrous-amount 4000)
-
-(def empty-supply 
-  (->supply-solution notional-srcs notional-compos 
-                     490000 (:src-strengths notional-stats)))
-(def filled-supply 
-  (hierarchically-fill-supply empty-supply demand-future)) 
-
-
-)
+                         (conj feasibles demand))))))))  
 
 ;;High Level API 
 ;;==============
 ;;We'll wrap this up in a nice package...
-
 
 ;;I am currently wrapping the glue code here to tie in the  value function.  
 
 (defn supply->portfolio
   "Generates a portfolio of n force structures, evaluated against k 
    demand futures, drawn from a demand generation function."
-  [initial-supply 
-   & {:keys [n supply-gen demand-gen] 
-      :or   {n 10  supply-gen hierarchically-fill-supply
-                   demand-gen #(future->src-records 
-                                 (demand-batch 10 (:srcs initial-supply)))}}]
+  [initial-supply futures
+   & {:keys [n supply-gen] 
+      :or   {n 10  supply-gen hierarchically-fill-supply}}]
   
-  (map (fn [idx] (supply-gen initial-supply demand-gen)) (range n)))
+  (->> futures
+       (take n)
+       (map #(supply-gen initial-supply %))))
 
 (defn portfolio->performance 
   "Given a portfolio of x supplies and a sample size, generates k 
    demand futures, and evaluates each supply against them."
   [xs futures & {:keys [value-func]  :or {value-func evaluate-supply}}]
   (let [indexed-supply  (map-indexed vector xs)
-        indexed-futures (map-indexed vector futures)                           
-        results     (for [[i supply] indexed-supply
-                          [j demand] indexed-futures]
-                      {:force i :future j :value (value-func supply demand)})]
-    {:forces (into {} indexed-supply)
-     :futures (into {} indexed-futures)
-     :performance results}))
+        indexed-src-supply (map-indexed (fn [idx s] [idx (supply-by-src s)]) xs)        
+        indexed-futures (->>  (map process-future futures)
+                              (take (count xs))
+                              (map-indexed vector))
+        results (for [[i supply] indexed-src-supply
+                      [j {:keys [src-peaks]}] indexed-futures]
+                {:force i :future j :value (value-func supply src-peaks)})]
+    {:performance (vec results)
+     :peaks (into {} (for [[idx d] indexed-futures]  [idx (:src-peaks d)]))
+     :forces (into {} indexed-supply)
+     :futures (into {} indexed-futures)}))
 
 (defn stoke
   "Given an initial supply, a supply portfolio width, n, and an evaluation 
    sample size, k, and a sequence of demand futures, generates a map of  
   
-   {forces  {0 supply1, 1 supply2,...n supplyn}
-    futures {0 future0, 1 future1,...k futurek}
-    results {{[0...n] [0...k] value}}"
-  ([init-supply n k futures] 
-    (supply->portfolio init-supply (take k futures) :n n))
-  ([srcs compos max-end-strength src->strength k futures] 
-    (stoke (->supply-solution srcs compos max-end-strength src->strength))))
-       
+   {performance {{[0...n] [0...k] value}
+    forces      {0 supply1, 1 supply2,...n supplyn}
+    futures     {0 future0, 1 future1,...k futurek}}"
+  ([init-supply n k futures]
+    (portfolio->performance 
+      (supply->portfolio init-supply (take k futures) :n n)
+      (drop k futures)))
+  ([srcs compos max-end-strength src->strength n k futures] 
+    (stoke (->supply-solution srcs compos max-end-strength src->strength)
+           n k futures)))
+
+;;testing 
+(comment 
+(require '[marathon.processing.stoke [testdata :as data]])
+
+;;tested with 5000 records, still works great.
+(def demand-stream 
+  (repeatedly #(data/demand-batch 10 data/notional-srcs)))
+
+(def empty-supply 
+  (->supply-solution data/empty-supply 2000  data/notional-src->strength))
+
+(def processed-demand (process-future  (first demand-stream)))
+
+(def test-supply 
+  (hierarchically-fill-supply empty-supply (:demand-records processed-demand)))
+;;=> (:supply test-supply)
+;;{[:BurgerFlippers :Lifers] 0, 
+;; [:BurgerFlippers :WeekendWarriors] 5977, 
+;; [:MeatEaters :Lifers] 2256, 
+;; [:MeatEaters :WeekendWarriors] 0, 
+;; [:ButterChurners :Lifers] 0, 
+;; [:ButterChurners :WeekendWarriors] 4162}
+
+(def supply-score (evaluate-supply test-supply (:src-peaks processed-demand)))
+;;=> supply-score
+;;1.0
+;;=> (surplus-strength test-supply)
+;;7
+(def n 5)
+(def test-portfolio (supply->portfolio empty-supply demand-stream :n n))
+(def test-performance (portfolio->performance test-portfolio (drop n demand-stream)))
+
+)  
+  
 
                                      

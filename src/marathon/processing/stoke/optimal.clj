@@ -80,7 +80,8 @@
 ;;specification for an optimization problem that will generate a supply.
 
 
-
+;;An arbitrary upper bound on what would be a ludicrious amount of supply.
+(def ludicrous-amount 4000)
 
 (comment 
 (defn unkey [k] 
