@@ -385,6 +385,7 @@
 
 (def test-supply 
   (hierarchically-fill-supply empty-supply (:demand-records processed-demand)))
+
 ;;=> (:supply test-supply)
 ;;{[:BurgerFlippers :Lifers] 0, 
 ;; [:BurgerFlippers :WeekendWarriors] 5977, 
@@ -401,6 +402,68 @@
 (def n 5)
 (def test-portfolio (supply->portfolio empty-supply demand-stream :n n))
 (def test-performance (portfolio->performance test-portfolio (drop n demand-stream)))
+
+
+;;Some simple analysis
+(def res (stoke empty-supply 25 1000   (rand-demand-stream)))
+;;=>(pprint (into {} (for [[k xs]  (compare-supplies (vals (:forces res)))]
+;;                      [k (deciles xs)])))
+;{[:ButterChurners :WeekendWarriors] (0 0 0 0 9 22 31 50 73),
+; [:MeatEaters :Lifers]              (28 41 79 95 97 115 126 160 185),
+; [:ButterChurners :Lifers]          (0 0 0 0 0 0 0 0 0),
+; [:BurgerFlippers :WeekendWarriors] (0 3 11 24 46 67 68 75 80),
+; [:BurgerFlippers :Lifers]          (0 0 0 0 0 0 0 0 0),
+; [:MeatEaters :WeekendWarriors]     (0 0 0 0 0 0 0 0 0)}
+
+;(pprint (stoked->stats res))
+;=>({:force 18, :mean-value 0.7364415776187464}
+;   {:force 14, :mean-value 0.7226026394863088}
+;   {:force 8, :mean-value 0.7156763089993542}
+;   {:force 11, :mean-value 0.6706928986481988}
+;   {:force 21, :mean-value 0.6495811320773506}
+;   {:force 19, :mean-value 0.6464747569164331}
+;   {:force 15, :mean-value 0.64562547478374}
+;   {:force 24, :mean-value 0.6386312933130006}
+;   {:force 7, :mean-value 0.6326289573632613}
+;   {:force 22, :mean-value 0.6291692228301519}
+;   {:force 9, :mean-value 0.6187900192308236}
+;   {:force 23, :mean-value 0.6149090743417369}
+;   {:force 5, :mean-value 0.6118705501646068}
+;   {:force 2, :mean-value 0.6084039542107609}
+;   {:force 13, :mean-value 0.6014913465652778}
+;   {:force 17, :mean-value 0.5664251425448432}
+;   {:force 3, :mean-value 0.5288163371077762}
+;   {:force 16, :mean-value 0.5096288884551696}
+;   {:force 20, :mean-value 0.49229629029773}
+;   {:force 4, :mean-value 0.4826440080932078}
+;   {:force 6, :mean-value 0.46522297468977303}
+;   {:force 12, :mean-value 0.4363424569200143}
+;   {:force 0, :mean-value 0.3735575897220755}
+;   {:force 1, :mean-value 0.35645599019893937}
+;   {:force 10, :mean-value 0.3177398399237201})
+
+;=> (let [top-ten (map :force (take 10 (stoked->stats res)))]      
+;     (pprint (compare-supplies (vals (select-keys (:forces res)
+;                                                  top-ten)))))
+;{[:ButterChurners :WeekendWarriors] [0 0 0 0 22 0 0 9 0 24],
+; [:MeatEaters :Lifers] [115 185 147 190 163 202 126 145 112 160],
+; [:ButterChurners :Lifers] [0 0 0 0 0 0 0 0 0 0],
+; [:BurgerFlippers :WeekendWarriors] [67 21 46 18 1 10 60 33 69 0],
+; [:BurgerFlippers :Lifers] [0 0 0 0 0 0 0 0 0 0],
+; [:MeatEaters :WeekendWarriors] [0 0 0 0 0 0 0 0 0 0]}
+
+;=> (pprint 
+;     (let [top-ten (map :force (take 10 (stoked->stats res)))]      
+;       (for [[k supplies]  (compare-supplies 
+;                             (vals (select-keys (:forces res)
+;                                                top-ten)))]
+;         [k (deciles supplies)])))
+;([[:ButterChurners :WeekendWarriors] (0 0 0 0 0 0 9 22 24)]
+; [[:MeatEaters :Lifers]              (115 126 145 147 160 163 185 190 202)]
+; [[:ButterChurners :Lifers]          (0 0 0 0 0 0 0 0 0)]
+; [[:BurgerFlippers :WeekendWarriors] (1 10 18 21 33 46 60 67 69)]
+; [[:BurgerFlippers :Lifers]          (0 0 0 0 0 0 0 0 0)]
+; [[:MeatEaters :WeekendWarriors]     (0 0 0 0 0 0 0 0 0)])
 
 )  
   
