@@ -207,6 +207,26 @@
             {}
             (keys supply)))) 
 
+(defn get-supply [s] (:supply s))
+(defn supply-vector [s] (map second (get-supply s)))
+
+(defn supply-distance
+  "Computes the piecewise differences between two supply solutions.
+   Distance is computed by measuring the sum of absolute values of each 
+   element in the supply, i.e. the deviation of the supply."
+  [s1 s2] 
+  (reduce + (map (fn [l r] (Math/abs (- l r)))
+                 (supply-vector s1) 
+                 (supply-vector s2))))
+
+(defn population-distance [xs]
+  (let [xs (vec xs)
+        idx (range (count xs))]
+    (reduce + (for [i idx  
+                    j (butlast (map inc idx))
+                    :when (< i j)]
+                (supply-distance (get xs i) (get xs j))))))
+
 (defn compare-supplies [xs]
   (let [supplies (map :supply xs)
         ks (reduce clojure.set/union (map (comp set keys) supplies))        
@@ -374,6 +394,9 @@
        :top-performers   force-keys 
        :supply-ranges    supply-ranges}))
   ([stoke-results] (summarize-stoke-results 10 stoke-results)))
+
+(defn performance-tables [summarized-results]
+  )
 
 ;;testing 
 (comment 
