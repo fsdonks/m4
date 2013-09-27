@@ -1,6 +1,6 @@
 ;;helmet is a tool the parses sample-queries relative to 
 ;;a set of records, validation rules, and sample-rules, 
-;;and then samples from the records accordig to the sample-rules, 
+;;and then samples from the records according to the sample-rules, 
 ;;validates the resultant set of sample records, and allows 
 ;;replications of the process.
 (ns marathon.processing.helmet.core
