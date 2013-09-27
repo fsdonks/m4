@@ -1,8 +1,8 @@
-;helmet is a tool the parses sample-queries relative to 
-;a set of records, validation rules, and sample-rules, 
-;and then samples from the records accordig to the sample-rules, 
-;validates the resultant set of sample records, and allows 
-;replications of the process.
+;;helmet is a tool the parses sample-queries relative to 
+;;a set of records, validation rules, and sample-rules, 
+;;and then samples from the records accordig to the sample-rules, 
+;;validates the resultant set of sample records, and allows 
+;;replications of the process.
 (ns marathon.processing.helmet.core
   (:require [spork.cljgui.components [swing :as gui]]
             [spork.util [general :as gen]
@@ -13,7 +13,169 @@
             [spork.util.excel [core :as xl]]
             [marathon.processing.helmet [split :as split] 
                                         [collision :as collision]]))
-;utility-functions                        
+
+;;Overview
+;;========
+
+;;Helmet is a re-write of a stochastic demand sampling.  The legacy version 
+;;was an unnamed tool, built in excel, that used a worksheet interface, and 
+;;a VBA backend.  The VBA implementation parsed data from a set of tables that
+;;encoded sampling rules, primarily mappings of distributions and data 
+;;transformations to subsets of a corpus of data records.  The sponsor extended
+;;the requirements after the tool had been built, and the original developer 
+;;was no longer around.  Unfortunately, the implementation precluded simple 
+;;extension to handle the non-trivial cases that the requirements change 
+;;introduced.  Additionally, there were previously unknown errors in the 
+;;implementation that surfaced during early attempts to capitalize on the 
+;;previous effort and extend it.  
+;;After roughly 3 weeks of wasted effort, I made the decision to implement the 
+;;sampling language in spork.util.sampling to support sampling rules of 
+;;arbitrary complexity.  That language now serves as the basis for the 
+;;stochastic demand rule engine.  To support legacy users, I wrapped the 
+;;legacy interface (with some improvements) that existed in Excel.  The new 
+;;application, dubbed Helmet, is a wrapper around the sampling rules and "cases"
+;;encoded in the legacy Excel format.  One should note: the sampling is a 
+;;general purpose clojure library.  Helmet is merely a wrapper and a specialized
+;;Excel data-munging tool to accomodate legacy users.  Callers may use Helmet 
+;;from the standard Marathon GUI, or may use the library programatically.  
+
+;;Differences from the Legacy Version
+;;===================================
+
+;;Helmet capitalizes on the fact that Clojure has a really powerful reader.  As
+;;such, much of the "data" in the casebook (an Excel workbook with some required
+;;tables) is actually a native clojure data structure (like a map or a vector).
+;;I was able to simplify much of the case definition, and provide the ability 
+;;to compose sampling rules to eliminate much of the redundancy in the previous
+;;spec.  Legacy users seemed to like the new format.  There is a detailed 
+;;description of new data fields and rule expression semantics, available on 
+;;request.  Later versions may ignore Excel entirely, preferring simple clojure
+;;scripts and database connections for portability.  
+
+;;Typical Process
+;;===============
+;;When invoked as an application from the main Marathon GUI, the user is 
+;;presented with a file selection dialogue asking for a casebook.  The 
+;;path of the casebook is fed to the __xlsx->futures__ function, with default
+;;arguments.  Assuming the casebook is well-formed, a set of stochastically 
+;;generated demand futures, as defined by the demand data, the sampling rules, 
+;;and the case data from the casebook, will be generated in the same working 
+;;folder.  These futures are standard tables of tab-delimited txt, and can be
+;;easily read or modified.  Alternative formats are feasible, but currently not
+;;in demand.  
+
+;;If a user wishes to perform the same process from the clojure REPL, one can
+;;do so via invoking (xlsx->futures ...) on an appropriate workbook path.  Check
+;;the __xlsx->futures__ docstring for more options for output configuration.
+
+;;Required Data
+;;=============
+
+
+;;Cases
+;;=====
+
+;;The "Cases" table defines the name and global characteristics of active cases
+;;to be sampled from.  Global characteristics include the number of futures to
+;;generate, the random number seed to use, and constraints on duration and 
+;;end-times.  Each enabled case in the "Cases" table must have a corresponding 
+;;table (or worksheet) that defines the sampling rules for the case.  
+
+;;Case Sampling Rules
+;;===================
+;;Each case has a table of sampling rules that define a sampling context, ala 
+;;__spork.util.sampling__.  The rows or records of the case table contribute 
+;;a sampling rule to the sampling corpus, so all of the records for a case are
+;;parsed into a composite sampling rule for the entire case.  When a case is 
+;;sampled according to these rules, the result of each rule - a sequence of 
+;;demand records -- are concatenated into a single "future".  Each case will 
+;;have n futures, as defined by the information in the Cases table.  Each future
+;;will ultimately reside in a unique tab-delimited file (when default processing
+;;is used).  If a caller desires to, they can use the library functions directly
+;;and keep case information in-memory as spork.util.table structures, rather 
+;;than emitting files.  This may be useful for later experimental processes, or 
+;;search processes such as __marathon.processing.stoke__.  
+
+;;The sampling rules are encoded in a tabular format, where each rule has a name, 
+;;a frequency, a distribution to transform the "start" field of sampled records 
+;;by, a distribution to transform the "duration" field of sampled records by, 
+;;and a pool of rules to draw from.  Both the start and distribution fields have
+;;accompying values of "S1, S2, S3", and "D1, D2, D3" .  These are remnants of 
+;;the legacy incoding, and imply the paramters to be sent to the distribution 
+;;named in the associated "... Distribution" field.  This encoding only covers
+;;the cases needed for Helmet, but is sufficient and conforms to the legacy 
+;;design.
+
+;;Encoding Pools of Choices
+;;=========================
+
+;;The pool of rules is either a clojure vector or a clojure map.  Clojure 
+;;vectors, denoted by [...] imply a random choice with even probability amongst 
+;;every rule in the sequence.  Users may enter multiple identical values for a 
+;;vector pool, in which case the result is akin to an empirical distribution.  
+;;Users may also prepend the vector sequence with the :every keyword,  
+;;[:every ...]  to imply that, rather than a uniform choice, every rule in the 
+;;pool is to be sampled and concatenated.  
+
+;;Clojure maps, denoted by {rule1 n1, rule2 n2, ...} imply a weighted choice, 
+;;with probability denoted by the numerical values associated with each rule.  
+;;While a preferred convention, numerical values need not sum to 1.0 - they will
+;;be normalized by default.  One may encode an empirical distribution by 
+;;weighting the rules in the map with the number of observations.
+
+;;Validation Rules : Dependency Classes and Prioritization
+;;========================================================
+;;Validation covers two depenendent phenomena: prioritzation of demands, and 
+;;the desire to resolve "collisions" between classes of prioritized demands.  
+;;The "ValidationRules" table contains a dependency class, a priority, and a 
+;;minimum time rule.  Dependency classes, when present, encode a prioritization 
+;;between concurrent demands, if and only, the concurrent demands also have 
+;;a dependency class.  Concurrent dependent demands, or collisions, are then 
+;;resolved based on the rules in __marathon.processing.helmet.collision__ .  In
+;;general, demands are either merged or split, depending on priority, to resolve
+;;collisions.  Demands with no associated dependency class are left untouched.  
+
+;;Demand Splitting
+;;================
+;;One orthogonal requirement that emerged was the ability to split a group of 
+;;demands according to context-specific rule-sets, where the "splitting" 
+;;operation implied bifurcating demand records based on some notion of 
+;;cumulative time relative to the group of demand records.  I decided to split
+;;this into a final processing step, separate from the sampling rules.  Once 
+;;samples are determing, if any splitting needs to be done - to identify "early"
+;;demands in a logical group of demands [presumably for special policies] - 
+;;then we split the demand records according to information in the DemandSplit 
+;;table.  Where demand records map to a DemandSplit rule, the rule will detail
+;;when a set of demands should be "split."  Splitting occurs relative to the 
+;;earliest demand in the group of demand records sharing the split rule.  If 
+;;the split-day, the day since the start of the earlist demand in the group, 
+;;occurs during any demands, then the intersecting demands are bifurcated.  
+;;Birfurcation creates two records, one defined up to the split, where the 
+;;data is identical except for the duration.  Any records occuring after the 
+;;split have - currently - "-Rotational" appened to their "SourceFirst" fields,
+;;as dictated by the legacy methodology.
+
+;;Demand Records
+;;==============
+;;The "DemandRecords" table is effectively the sampling corpus for the entire 
+;;set of sampling rules, across all cases.  Upon initialization, a sampling 
+;;context is defined, where demand records are grouped into sampling rules by 
+;;their "Group" field.  These rules are therefore available for use in composing
+;;the rules found in the __Case Sampling Rules__ and the pools.  The other field
+;;of consequence is the "DemandSplit" field, which is used for the final 
+;;processing step.
+
+
+
+;;Implementation
+;;==============
+
+;;Most of the following implementation concerns reading data from the casebook, 
+;;and parsing tabular data into so-called "Cases" which describe the set of 
+;;active cases to sample.  The casebook is read into a spork.util.table 
+;;structure, acting as a lightweight database simulacrum of the casebook.    
+
+;;utility-functions                        
 (defn collapse-fields [fields r]
   (reduce (fn [acc [from-field to-field]]
             (-> (assoc acc to-field (get acc from-field))
@@ -447,21 +609,3 @@
 ;                                               :S-Foo-FootLbs]}]}}}
 
 )
-
-;This is unnecessary....by convention, we already have the data and are 
-;just transforming it by merging values into the record...so affecting a 
-;from-data distribution is identical to doing nothing....
-;(defn derive-data-distribution
-;  "Given a distribution type, in the form a string value, parses the 
-;   type to return a function that simply reads a value from a record field
-;   to create the distribution."
-;  [dist-type & {:keys [type-fields] 
-;                :or {type-fields {:start    "StartDay"
-;                                  :duration "Duration"}}}]
-;  (let [v (clojure.string/lower-case dist-type)]
-;    (cond (re-matches #"start.*" v) #(get % (:start type-fields))
-;          (re-matches #"duration.*" v) #(get % (:duration type-fields)))))
-
-;not used anywhere
-;(defn parse-legacy-fields [xs] 
-;  (vec (map parse-legacy-field xs)))
