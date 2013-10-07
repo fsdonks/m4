@@ -498,7 +498,7 @@
 
 
 (defn validate-splitmap [m]
-  (assert (not= (keys splitmap) (list nil))
+  (assert (not= (keys m) (list nil))
           "Splitting information appears to be invalid, ensure that you 
             have a DemandSplit field in the DemandRecords table, and a 
             DemandSplit field in the DemandSplit table.")

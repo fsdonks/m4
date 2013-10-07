@@ -8,7 +8,8 @@
             [spork.opt  [dumbanneal :as ann]]
             [spork.util [combinatoric :as c] 
                         [temporal :as temporal]
-                        [stats :as stats]]))
+                        [stats :as stats]
+                        [table :as tbl]]))
 
 ;;The task we face in Stoke is to try to provide a fast approximation of a 
 ;;supply portfolio.  Basically, we want to generate a structure portfolio, 
@@ -396,8 +397,19 @@
        :supply-ranges    supply-ranges}))
   ([stoke-results] (summarize-stoke-results 10 stoke-results)))
 
-(defn performance-tables [summarized-results]
-  )
+;{:src :ButterChurners,
+; :compo :WeekendWarriors,
+; :strength 55,
+; :best 0,
+; :ranges (0 0 0 0 0 0 0 0 21)}
+
+(defn performance-table [summarized-results]
+  (let [as-percentile (memoize 
+                       (fn [n] (keyword (str (* (inc n) 10) "th_Percentile"))))
+        expand-record (fn [rec] 
+                        (reduce (fn [acc [idx v]] (assoc acc (as-percentile idx) v))))]                                    
+    (tbl/re)
+)))
 
 ;;testing 
 (comment 
