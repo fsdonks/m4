@@ -406,10 +406,14 @@
 (defn performance-table [summarized-results]
   (let [as-percentile (memoize 
                        (fn [n] (keyword (str (* (inc n) 10) "th_Percentile"))))
-        expand-record (fn [rec] 
-                        (reduce (fn [acc [idx v]] (assoc acc (as-percentile idx) v))))]                                    
-    (tbl/re)
-)))
+        ordered-fields (into [:src :compo :strength :best] 
+                             (map as-percentile  (range 9)))
+        _ (println ordered-fields)
+        expand-record (fn [rec] (->> (:ranges rec)                        
+                                     (map-indexed (fn [idx v] [(as-percentile idx) v]))
+                                     (into (dissoc rec :ranges))))]
+     (->> (tbl/records->table (map expand-record (:supply-ranges summarized-results)))
+          (tbl/select-fields ordered-fields))))
 
 ;;testing 
 (comment 
