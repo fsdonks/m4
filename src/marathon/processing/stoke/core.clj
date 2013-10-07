@@ -372,7 +372,7 @@
 (defn top-n
   "Yields the top n force structures from a stoked result set."
   [n stoke-results] 
-   (map :force (take n (stoked->stats res))))
+   (map :force (take n (stoked->stats stoke-results))))
 
 (defn summarize-stoke-results
   "Computes a database of summary results, including the n-best force 
@@ -381,12 +381,13 @@
   ([n stoke-results]
     (let [force-keys    (top-n n stoke-results)
           best          (first force-keys)
-          best-force    (get-in res [:forces best])
+          best-force    (get-in stoke-results [:forces best])
           best-supply   (get best-force :supply)
           src->strength (get best-force :src->strength)
           supply-ranges  (for [[[src compo] supplies]  
                                (compare-supplies 
-                                 (vals (select-keys (:forces res)  force-keys)))]
+                                 (vals (select-keys (:forces stoke-results)  
+                                                    force-keys)))]
                            {:src src :compo compo :strength (src->strength src) 
                             :best (get best-supply [src compo])
                             :ranges (stats/deciles supplies)})]
