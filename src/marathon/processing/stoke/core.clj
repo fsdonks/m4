@@ -432,13 +432,12 @@
 ;;7
 (def n 5)
 (def test-portfolio   (supply->portfolio empty-supply demand-stream :n n))
-(def test-performance (portfolio->performance test-portfolio (drop n demand-stream)))
+;;Note -> in this case, demand-stream is an infinite list.  I had to
+;;add a take in there to ensure that it actually evaluates.
+(def test-performance (portfolio->performance test-portfolio (take 5 (drop n demand-stream))))
 
-
-;;Some simple analysis
-(def res (stoke empty-supply 25 1000   (rand-demand-stream)))
-;;=>(pprint (into {} (for [[k xs]  (compare-supplies (vals (:forces res)))]
-;;                      [k (stats/deciles xs)])))
+;=>(pprint (into {} (for [[k xs]  (compare-supplies (vals (:forces res)))]
+;                      [k (stats/deciles xs)])))
 ;{[:ButterChurners :WeekendWarriors] (0 0 0 0 9 22 31 50 73),
 ; [:MeatEaters :Lifers]              (28 41 79 95 97 115 126 160 185),
 ; [:ButterChurners :Lifers]          (0 0 0 0 0 0 0 0 0),
@@ -446,7 +445,13 @@
 ; [:BurgerFlippers :Lifers]          (0 0 0 0 0 0 0 0 0),
 ; [:MeatEaters :WeekendWarriors]     (0 0 0 0 0 0 0 0 0)}
 
-;(pprint (stoked->stats res))
+;;We stoke a result set, generating 25 supplies, and then testing them 
+;;against a 1000 random futures:  
+(def results (stoke empty-supply 25 1000   (rand-demand-stream)))
+
+
+;;The statistics - in this case the means - of the stoke:  
+;(pprint (stoked->stats results))
 ;=>({:force 18, :mean-value 0.7364415776187464}
 ;   {:force 14, :mean-value 0.7226026394863088}
 ;   {:force 8, :mean-value 0.7156763089993542}
@@ -473,8 +478,9 @@
 ;   {:force 1, :mean-value 0.35645599019893937}
 ;   {:force 10, :mean-value 0.3177398399237201})
 
-;=> (let [top-ten (map :force (take 10 (stoked->stats res)))]      
-;     (pprint (compare-supplies (vals (select-keys (:forces res)
+;;The ten best forces from the sample, orded by mean fill:  
+;=> (let [top-ten (map :force (take 10 (stoked->stats results)))]      
+;     (pprint (compare-supplies (vals (select-keys (:forces results)
 ;                                                  top-ten)))))
 ;{[:ButterChurners :WeekendWarriors] [0 0 0 0 22 0 0 9 0 24],
 ; [:MeatEaters :Lifers] [115 185 147 190 163 202 126 145 112 160],
@@ -484,7 +490,7 @@
 ; [:MeatEaters :WeekendWarriors] [0 0 0 0 0 0 0 0 0 0]}
 
 ;=> (pprint 
-;     (let [top-ten (map :force (take 10 (stoked->stats res)))]      
+;     (let [top-ten (map :force (take 10 (stoked->stats results)))]      
 ;       (for [[k supplies]  (compare-supplies 
 ;                             (vals (select-keys (:forces res)
 ;                                                top-ten)))]
@@ -497,9 +503,48 @@
 ; [[:BurgerFlippers :Lifers]          (0 0 0 0 0 0 0 0 0)]
 ; [[:MeatEaters :WeekendWarriors]     (0 0 0 0 0 0 0 0 0)])
 
-)  
+;;We collect the results for th 10 best structures, and compute their 
+;;supply ranges (deciles).  This is the underlying data for our
+;;standard portfolio variance output:  
+
+;=> (pprint (summarize-stoke-results results))
+; {:best 16,
+;  :top-performers (16 5 24 4 2 21 23 13 19 22),
+;  :supply-ranges
+;  ({:src :ButterChurners,
+;    :compo :WeekendWarriors,
+;    :strength 55,
+;    :best 0,
+;    :ranges (0 0 0 0 0 0 0 0 21)}
+;   {:src :MeatEaters,
+;    :compo :Lifers,
+;    :strength 23,
+;    :best 217,
+;    :ranges (91 91 100 112 155 167 173 209 217)}
+;   {:src :ButterChurners,
+;    :compo :Lifers,
+;    :strength 55,
+;    :best 0,
+;    :ranges (0 0 0 0 0 0 0 0 0)}
+;   {:src :BurgerFlippers,
+;    :compo :WeekendWarriors,
+;    :strength 35,
+;    :best 0,
+;    :ranges (0 5 29 41 69 77 83 83 85)}
+;   {:src :BurgerFlippers,
+;    :compo :Lifers,
+;    :strength 35,
+;    :best 0,
+;    :ranges (0 0 0 0 0 0 0 0 0)}
+;   {:src :MeatEaters,
+;    :compo :WeekendWarriors,
+;    :strength 23,
+;    :best 0,
+;    :ranges (0 0 0 0 0 0 0 0 0)})}
+) 
 
 
+;;stess testing
 (comment
   (time (doseq [s (->>  (rand-demand-stream)
                     (map-indexed   
