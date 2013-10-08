@@ -397,13 +397,10 @@
        :supply-ranges    supply-ranges}))
   ([stoke-results] (summarize-stoke-results 10 stoke-results)))
 
-;{:src :ButterChurners,
-; :compo :WeekendWarriors,
-; :strength 55,
-; :best 0,
-; :ranges (0 0 0 0 0 0 0 0 21)}
-
-(defn performance-table [summarized-results]
+(defn performance-table 
+  "Given a set of summarized stoke results, generates a spork.util.table, for easy output to
+   excel, text, or for visualization."
+  [summarized-results]
   (let [as-percentile (memoize 
                        (fn [n] (keyword (str (* (inc n) 10) "th_Percentile"))))
         ordered-fields (into [:src :compo :strength :best] 
@@ -415,9 +412,12 @@
      (->> (tbl/records->table (map expand-record (:supply-ranges summarized-results)))
           (tbl/select-fields ordered-fields))))
 
+
 ;;testing 
 (comment 
+
 (require '[marathon.processing.stoke [testdata :as data]])
+(require '[spork.cljgui.components   [swing :as gui]])
 
 (defn rand-demand-stream []
   (repeatedly #(data/demand-batch 100 data/notional-srcs)))
@@ -464,7 +464,8 @@
 ;;We stoke a result set, generating 25 supplies, and then testing them 
 ;;against a 1000 random futures:  
 (def results (stoke empty-supply 25 1000   (rand-demand-stream)))
-
+(def summarized-results (summarize-stoke-results results))
+(def the-table (performance-table summarized-results))
 
 ;;The statistics - in this case the means - of the stoke:  
 ;(pprint (stoked->stats results))

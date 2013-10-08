@@ -160,7 +160,7 @@
                         (apply str (interleave (butlast (io/list-path wbpath))
                                                (repeat "\\")))
                         ;(select-folder))
-          _ (print (str "dumping to " dump-folder))]      
+          _ (gui/alert (str "dumping to " dump-folder))]      
       (spit-tables cases dump-folder))))
 
 (defn clean-demand-dialogue []
@@ -220,8 +220,7 @@
                               audit))
       {:menu-events menu-events})))
 
-(defn -main [& args] 
-  (hub :exit? true))
+(defn -main [& args] (hub :exit? true))
 
 ;       :add-table   
 ;       :clear-project     
