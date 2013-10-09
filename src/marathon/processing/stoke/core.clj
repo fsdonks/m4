@@ -349,11 +349,26 @@
      :forces (into {} indexed-supply)
      :futures (into {} indexed-futures)}))
 
+
+(defn peaks->demand-ranges
+  "Distills a sequence of sampled demand futures into a map of 
+  {src demand-deciles}"
+  [indexed-peaks & {:keys [range-func] :or {range-func stats/deciles}}]
+  (let [add-sample (fn [m [src qty]] 
+                     (assoc m src (conj (get m src []) qty)))
+        src-peaks (->> (seq indexed-peaks)
+                       (mapcat second)
+                       (reduce add-sample {}))]
+    (->>  (for [[src peak-quantities] src-peaks]
+            [src (range-func peak-quantities)])
+          (into {}))))       
+
 (defn stoke
   "Given an initial supply, a supply portfolio width, n, and an evaluation 
    sample size, k, and a sequence of demand futures, generates a map of  
   
    {performance {{[0...n] [0...k] value}
+    peaks       {0 {[src compo] peak ...}}
     forces      {0 supply1, 1 supply2,...n supplyn}
     futures     {0 future0, 1 future1,...k futurek}}"
   ([init-supply n k futures]
@@ -385,13 +400,15 @@
           best-force    (get-in stoke-results [:forces best])
           best-supply   (get best-force :supply)
           src->strength (get best-force :src->strength)
+          demand-ranges (peaks->demand-ranges (:peaks stoke-results))
           supply-ranges  (for [[[src compo] supplies]  
                                (compare-supplies 
                                  (vals (select-keys (:forces stoke-results)  
                                                     force-keys)))]
                            {:src src :compo compo :strength (src->strength src) 
                             :best (get best-supply [src compo])
-                            :ranges (stats/deciles supplies)})]
+                            ;:ranges (stats/deciles supplies)
+                            :ranges (get demand-ranges src)})]
       {:best             best
        :top-performers   force-keys 
        :supply-ranges    supply-ranges}))
@@ -405,13 +422,12 @@
                        (fn [n] (keyword (str (* (inc n) 10) "th_Percentile"))))
         ordered-fields (into [:src :compo :strength :best] 
                              (map as-percentile  (range 9)))
-        _ (println ordered-fields)
         expand-record (fn [rec] (->> (:ranges rec)                        
                                      (map-indexed (fn [idx v] [(as-percentile idx) v]))
                                      (into (dissoc rec :ranges))))]
      (->> (tbl/records->table (map expand-record (:supply-ranges summarized-results)))
+          (tbl/order-by [:src :compo])
           (tbl/select-fields ordered-fields))))
-
 
 ;;testing 
 (comment 
