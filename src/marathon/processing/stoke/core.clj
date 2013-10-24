@@ -197,7 +197,7 @@
   (-> s 
     (update-in [:supply [src compo]] + qty)
     (update-in [:total-strength] + (or strength 
-                                       (* qty (:src->strength s) src)))))
+                                       (* qty (get (:src->strength s) src))))))
 (defn surplus-strength [s] 
   (- (:max-end-strength s) (:total-strength s)))
 
@@ -206,8 +206,9 @@
     (reduce (fn [acc [src compo]] 
               (assoc acc src (+ (get acc src 0) (get supply [src compo]))))
             {}
-            (keys supply)))) 
+            (keys supply))))
 
+(defn active-supply [s] (into {} (filter )fn [[k v]] (> v 0)) (:supply s))
 (defn get-supply [s] (:supply s))
 (defn supply-vector [s] (map second (get-supply s)))
 
