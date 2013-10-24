@@ -248,7 +248,7 @@
 (defn hierarchically-fill-supply 
   [supply demand-records 
    & {:keys [demand->compo demand->priority demand->src rollover?] 
-      :or   {demand->compo    :Component
+      :or   {demand->compo    :Com3ponent
              demand->priority #(or (:Priority %) 1)
              demand->src      :SRC}}]
   (let [{:keys [src->strength max-end-strength]} supply
