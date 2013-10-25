@@ -153,15 +153,14 @@
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
   (request-path [wbpath "Please select the location of valid case-book."]
-    (let [cases       (helm/futures->tables 
-                        (helm/xlsx->futures wbpath :ignore-dates? true))
-          ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
+    (let [;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
           dump-folder ;(if dump-same?
                         (apply str (interleave (butlast (io/list-path wbpath))
                                                (repeat "\\")))
                         ;(select-folder))
           _ (gui/alert (str "dumping to " dump-folder))]      
-      (spit-tables cases dump-folder))))
+      (spit-tables (helm/futures->tables 
+                        (helm/xlsx->futures wbpath :ignore-dates? true :log? false)) dump-folder))))
 
 (defn clean-demand-dialogue []
   (request-path [wbpath "Please select the location of valid case-files."]
