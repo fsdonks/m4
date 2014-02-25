@@ -2,6 +2,9 @@
   (:require [spork.util [table :as tbl]
                         [io :as io]]
             [marathon.processing.helmet [core :as helm]]
+            [marathon.processing.stoke [core :as stoke]
+                                       [io :as stokeio]
+                                       [scraper :as scraper]]
             [clojure       [pprint :as pprint]]
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
@@ -107,10 +110,11 @@
   {"Clean"              "Cleans a run"
    "High-Water"         "Computes HighWater trails"
    "Deployment-Vectors" "Analyzes deployments"
-   "Charts"             "Generate plots."
+;;   "Charts"             "Generate plots."
    "Stochastic-Demand"  "Generate stochastic demand files from a casebook."   
-   "Custom"             "Run a custom script on the project"
-   "Eval"               "Evaluate an expression in the context"})
+;;   "Custom"             "Run a custom script on the project"
+;;   "Eval"               "Evaluate an expression in the context"
+   })
 
 (def scripting-menu-spec
   {"Load-Script" "Load a clojure script into the environment."
@@ -150,17 +154,24 @@
   `(when-let [~bind (with-alert ~alert (~'select-file))]
      ~body))
 
+(defn compute-peaks-dialogue []
+  (request-path [the-path "Please select a file co-located in a folder with demand case files."]
+     (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
+                                              (repeat "\\")))
+           target (str dump-folder "peaks\\")
+           _      (gui/alert (str "dumping peaks files to " target))]
+       (stokeio/compute-peaks dump-folder target))))
+
+
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
   (request-path [wbpath "Please select the location of valid case-book."]
-    (let [;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
-          dump-folder ;(if dump-same?
-                        (apply str (interleave (butlast (io/list-path wbpath))
-                                               (repeat "\\")))
-                        ;(select-folder))
+    (let [dump-folder (apply str (interleave (butlast (io/list-path wbpath))
+                                             (repeat "\\")))
           _ (gui/alert (str "dumping to " dump-folder))]      
-      (spit-tables (helm/futures->tables 
-                        (helm/xlsx->futures wbpath :ignore-dates? true :log? false)) dump-folder))))
+      (spit-tables 
+       (helm/futures->tables 
+        (helm/xlsx->futures wbpath :ignore-dates? true :log? false)) dump-folder))))
 
 (defn clean-demand-dialogue []
   (request-path [wbpath "Please select the location of valid case-files."]
@@ -207,7 +218,10 @@
                             (obs/subscribe  #(gui/change-label textlog %)))
         _                 (->> menu-events 
                             (obs/filter-obs #(= % :stochastic-demand))
-                            (obs/subscribe (fn [_] (stoch-demand-dialogue))))]
+                            (obs/subscribe (fn [_] (stoch-demand-dialogue))))
+        _                 (->> menu-events 
+                            (obs/filter-obs #(= % :compute-peaks))
+                            (obs/subscribe (fn [_] (compute-peaks-dialogue))))]
     (mvc/make-modelview 
       (agent {:state (if project {:current-project project} {})
               :routes (merge default-routes project-routes)})       
@@ -229,6 +243,14 @@
 ;       :view-table   
 ;       :add-table})))
                   
+;;just some mucking around with parallel mapping stuff.
+;;Didn't see a boost.  Need to tweak this guy.
+;;(defn chunked-pmap [f size coll]
+;;  (->> coll
+;;       (partition-all size)
+;;       (pmap (comp doall 
+;;                   (partial map f)))
+;;       (apply concat)))
 
 
 
