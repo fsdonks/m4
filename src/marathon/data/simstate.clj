@@ -9,6 +9,25 @@
         [marathon.fill.fillstore])
   (:require  [spork.sim [simcontext :as sim]]))
 
+
+;;Pending Modifications:
+;;=====================
+
+;;It would be "really" nice to wrap the functions 
+;;in spork.sim.simcontext in a protocol, and 
+;;have simstate implement said protocol.  That'd 
+;;make it much cleaner to operate on simstate...
+;;The other, probably easier option, is to embed 
+;;the simulation state into a simcontext, as 
+;;we have already defined operations that work 
+;;seamlessly on simcontext records.  All we 
+;;do then is strip out the :context from the 
+;;simstate, and just leave the state as pure data.
+;;Then we modify function signatures (slightly) 
+;;to unpack the state inside the simcontext.
+
+;;Description
+;;===========
 ;simstate is a consolidation of all the simulation state required for Marathon 
 ;to do its thing.  Each of these bits used to be part of a hierarchical object 
 ;model with parent-child relationships, where each child manager could get at 
@@ -27,6 +46,7 @@
 ;sequence libraries to access and modify our state, rather than having to deal
 ;with a special set of one-off functions.
 
+
 (defrecord+ simstate 
   [[supplystore empty-supplystore];Chunk of state for unit entity data.
    [demandstore empty-demandstore];Chunk of state for demand entity data.
@@ -36,7 +56,7 @@
    behaviormanager ;Possibly deprecated.  Repository for unit behaviors.
    [fillstore empty-fillstore];Chunk of state for managing Fill Rules, Fill Graph,
              ;Fill Functions, etc.
-   [context sim/empty-context];Bread and butter for any simulation.  Contains even stream, 
+  ; [context sim/empty-context];Bread and butter for any simulation.  Contains even stream, 
            ;scheduler, and update manager. Analagous to a message-dispatch, 
            ;scheduler, and thread-manager.
    ;imported parameters from timestep_engine, to be deprecated.   
@@ -83,7 +103,7 @@
 	   :behaviormanager {} ;Possibly deprecated.  Repository for unit behaviors.
 	   :fillstore {} ;Chunk of state for managing Fill Rules, Fill Graph,
 	             ;Fill Functions, etc.
-	   :context {} ;Bread and butter for any simulation.  Contains even stream, 
+	  ; :context {} ;Bread and butter for any simulation.  Contains even stream, 
 	           ;scheduler, and update manager. Analagous to a message-dispatch, 
 	           ;scheduler, and thread-manager.
 	   ;imported parameters from timestep_engine, to be deprecated.   
@@ -111,3 +131,6 @@
 	                     ;requirements analysis only....    
 	   :found-truncation false]) ;flag the indicates a reason to truncate.
  )
+
+
+

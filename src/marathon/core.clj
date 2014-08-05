@@ -5,8 +5,8 @@
             [marathon.processing.stoke  [core :as stoke]
                                         [io :as stokeio]
                                         [scraper :as scraper]]
-            [clojure       [pprint :as pprint]]
-            [spork.cljgui.components [swing :as gui]]
+            [clojure                    [pprint :as pprint]]
+            [spork.cljgui.components    [swing :as gui]]
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
                            [native :as swing-events]])
