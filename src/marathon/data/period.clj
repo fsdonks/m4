@@ -50,12 +50,18 @@
         (and (= tstart :inf-negative) (= tfinal :inf)) true
         :else (and (>= t tstart) (<= t tfinal))))  
 ;Determines if time t intersects the period p
-(defn intersects-period? [t p] (intersect-1d (:from-day p) (:to-day p)))
+(defn intersects-period? [t p] (intersect-1d t (:from-day p) (:to-day p)))
 
 ;(Type    Name    FromDay ToDay)
 (defn record->period [r]
   (->> (named-period (:Name r))
        (period-across (parse-inf (:FromDay r)) (parse-inf (:ToDay r)))))
+
+
+(def ^:constant +default-period+
+  (->> (period-across 0 0)
+       (named-period "Initialization")))
+
 ;----------OBSOLETE--------?
 (defn make-temporal-period [& [start-day end-day period-name & rest]]
   (let [name (or period-name :Default)] (->period name start-day end-day)))

@@ -201,12 +201,19 @@
 (defn schedule-periods [policystore ctx] "Schedule multiple periods."
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
 
-(defn find-period
+(defn find-periods
   "Finds all periods in the policy store that intersect time t."
   [t policystore]
-  (->> (get-periods policystore)
-       (take-while #(<= t (:to-day %)))
-       (some #(period/intersects-period? t  %))))
+  (reduce-kv (fn [p pname per]
+               (if (period/intersects-period? t per)
+                 (conj p per)
+                 p))
+             []
+             (get-periods policystore)))
+(defn find-period 
+  "Finds the first arbitrary period in the policy store that intersects time t."
+  [t policystore]
+  (first (find-periods t policystore))) 
 
 ;Returns the the period currently active in the policy store.  This may change 
 ;when I introduce multiple timelines....
@@ -278,11 +285,19 @@
      (str "Period change from " fromname 
           " to "  toname " caused all units to update.") toname ctx))
 
+
+;;Acquisition means we have to find a value, or else we throw an
+;;exception. We expect there to be a period associated. 
+(defn acquire-period [policystore toname]
+  (if-let [res (get-period policystore toname)]
+    res
+    (throw (Exception. (str "Period " toname " does not exist in the policystore!")))))
+
 ;;Swaps out the active period.  If the new period is the final period, then caps
 ;;the final period to the current day.
 (defn update-period [day toname policystore]
   (->> (if (= toname :final) (period/->period :final day day) 
-                             (get-period policystore toname))
+                             (acquire-period policystore toname))
        (assoc policystore :activeperiod)))
 
 ;wrapper for any tasks we need to perform in the final period.

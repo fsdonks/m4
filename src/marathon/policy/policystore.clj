@@ -18,13 +18,13 @@
    ;VESTIGIAL
    [locations #{}] ;set of all known locations, superset of positions.
    [policies {}] ;Kvp mapping of policy names to policy data
-   [periods {}] ;Set of simulation periods...probably need to re-think this guy.
+   [periods {"Initialization" p/+default-period+}] ;Set of simulation periods...probably need to re-think this guy.
 ;   [highest {}] ;deprecated 
    policytraffic  
 ;   rules ;not sure we need this....fillgraph handles everything  
 ;   rulegraph 
 ;   ruledelim 
-   activeperiod ;the current period 
+   [activeperiod p/+default-period+] ;the current period 
    [periodchanges {}] ;the set of scheduled period changes....re-think this.
    schedules ;no idea....deprecate.
    [composites {}]]) ;set of composite policies....only really mattered for resetting.
