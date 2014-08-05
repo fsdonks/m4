@@ -3,4 +3,5 @@
   :dependencies [[org.clojure/clojure "1.5.0"]
                  [org.clojure.contrib/standalone "1.3.0-alpha4"]
                  [spork "0.1.7.9-SNAPSHOT"]]
-  :main marathon.core)
+  ;:main marathon.core
+  )
