@@ -173,13 +173,13 @@
    terminated.  Such notification is particularly important for observers that 
    may be stewarding resources."
   [t ctx]
-  (let [final-ctx  (-> (manage-policies ctx :final t) ;;this just captures
+  (let [final-ctx  (-> (manage-policies t ctx :final) ;;this just captures
                        ;;the final period in a period-driven update.
                        ;;really triggers an update-all-units action,
                        ;;relative to the final period.
                        (assoc-in [:state :parameters :work-state] :terminating) ;useless?
                        (assoc-in [:state :time-finish] (now)))]
-    (sim/trigger-event :terminate :Engine :Engine "Simulation OVER!" final-ctx)))
+    (sim/trigger-event :Terminate :Engine :Engine "Simulation OVER!" nil final-ctx)))
 
 ;##Begin Day Logic
 ;Prior to starting a new time inteval (currently a day), we typically want to 

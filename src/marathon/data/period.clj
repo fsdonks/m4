@@ -60,7 +60,7 @@
 
 (def ^:constant +default-period+
   (->> (period-across 0 0)
-       (named-period "Initialization")))
+       (named-period :Initialization)))
 
 ;----------OBSOLETE--------?
 (defn make-temporal-period [& [start-day end-day period-name & rest]]

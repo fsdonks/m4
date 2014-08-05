@@ -210,6 +210,7 @@
                  p))
              []
              (get-periods policystore)))
+
 (defn find-period 
   "Finds the first arbitrary period in the policy store that intersects time t."
   [t policystore]
@@ -381,12 +382,13 @@
   "High level system that propogates policy changes all the way down to entities 
    that participate in the affected policies.  Typically called in response to 
    period changes."
-  [current-period new-period policystore ctx]  
-  (if (= current-period :Initialization) ctx ;short-circuit 
-      (->> (get-changed-policies current-period new-period
-                                 (:composites policystore))
-           (reduce #(change-policy current-period new-period %2 
-                                   (core/get-policystore %1) %1) ctx))))
+  [current-period new-period ctx]  
+  (let [policystore (core/get-policystore ctx)]
+    (if (= current-period :Initialization) ctx ;short-circuit 
+        (->> (get-changed-policies current-period new-period
+                                   (:composites policystore))
+             (reduce #(change-policy current-period new-period %2 
+                                     (core/get-policystore %1) %1) ctx)))))
   
 (defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
 
