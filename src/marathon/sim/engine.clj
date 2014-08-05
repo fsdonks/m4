@@ -39,34 +39,35 @@
 ;;Auxillary functions from the old simstate module
 ;;==================================================
 (defn guess-last-day 
-  ([state lastday]
+  ([ctx lastday]
      (if-let [first-non-zero
               (first (filter #(and (not (nil? %)) (pos? %))
                              [lastday 
-                              (-> state :parameters :last-day)
-                              (-> state :parameters :last-day-default)]))]
+                              (-> ctx :state :parameters :last-day)
+                              (-> ctx :state :parameters :last-day-default)]))]
        first-non-zero
        0))
-  ([state] (guess-last-day state 0)))
+  ([ctx] (guess-last-day ctx 0)))
 
 ;;Predicate to determine if we continue drawing time from the stream, i . e . simulating.
 ;;If an endtime is specified, we use that in our conditional logic, else we keep working until
 ;;no more eventful days are upon us.
 
 ;;THis is a pretty weak port....
-(defn keep-simulating? [state]
-  (if (:truncat-time state)
-    (let [tlastdemand (-> state :demandstore :tlastdeactivation)]        
-      (if (>= (sim/get-time (:context state)) tlastdemand)
-        (if (neg? tlastdemand) 
-          (throw (Error. "No demands scheduled.  Latest deactivation never initialized!"))
-          (do (sim/trigger-event :Terminate (:name state) (:name state) 
-                                 (str "Time " (sim/current-time (:context state)) "is past the last deactivation: "
-                                      tlastdemand " in a truncated simulation, terminating!") nil (:context state))
-              false))
-        true))
-    (sim/has-time-remaining? (:context state))))
-
+(defn keep-simulating? [ctx]
+  (let [state (:state ctx)]
+    (if (-> state :truncat-time)
+      (let [tlastdemand (-> state :demandstore :tlastdeactivation)]        
+        (if (>= (sim/get-time ctx) tlastdemand)
+          (if (neg? tlastdemand) 
+            (throw (Error. "No demands scheduled.  Latest deactivation never initialized!"))
+            (do (sim/trigger-event :Terminate (:name state) (:name state) 
+                                   (str "Time " (sim/current-time ctx) "is past the last deactivation: "
+                                        tlastdemand " in a truncated simulation, terminating!") nil ctx)
+                false))
+          true))
+      (sim/has-time-remaining? ctx))))
+  
  ;;When we simulate, starting from a GUI, we usually want to tell the user if there are any anomolies in
  ;;the data.  Specifically, if there is no supply or no demand, we inform the user, requiring verification
  ;;before simulating.
@@ -87,7 +88,7 @@
     (->> ctx 
         (sim/trigger-event :WatchDemand simname simname "" (:demandstore state))
         (sim/trigger-event :WatchSupply simname simname "" (:supplystore state))
-        (sim/trigger-event :WatchTime simname simname "" (-> ctx :context :scheduler))
+        (sim/trigger-event :WatchTime simname simname ""   (:scheduler ctx))
         (sim/trigger-event :WatchPolicy simname simname "" (:policystore state))
         (sim/trigger-event :WatchParameters simname simname "" (:parameters state))
         (sim/trigger-event :WatchFill simname simname "" (:fillstore state)))))
@@ -101,7 +102,7 @@
   "Initialize the start and stop time of the simulation context, based on 
    last-day."
   [ctx last-day]  
- (sim/set-time-horizon 1 (guess-last-day (:state ctx) last-day) ctx))
+ (sim/set-time-horizon 1 (guess-last-day ctx last-day) ctx))
 
 ;This is just a handler that gets added, it was "placed" in the engine object
 ;in the legacy VBA version.  __TODO__ Relocate or eliminate engine-handler.
@@ -117,7 +118,7 @@
    after an :update-all-units event."
   [ctx]
   (sim/add-listener :Engine 
-      (fn [ctx edata name] (engine-handler ctx edata)) [:update-all-units]) ctx )
+      (fn [ctx edata name] (engine-handler ctx edata)) [:update-all-units] ctx))
 
 ;#Initialization
 ;Initialization consists of 3 tasks:    
@@ -131,8 +132,6 @@
 ;   to it as needed. Observers/watchers will need to be expanded on, since 
 ;   watches will involve effects.  
 
-
-
 ;;Temporary Stubs
 ;;===============
 ;;Used to be entityfactory.start-state supplymanager
@@ -140,11 +139,6 @@
 ;;particularly moving unit entities to where they need to be.
 (defn start-state [ctx]
   (do (println "start-state is a stub.  Should be setting entities to their starting states.")
-      ctx))
-
-;;Notify observers of simstate.
-(defn initialize-control [ctx] 
-  (do (println "initialize-control is a stub.  Intended to add hooks for UI and other controllers.")
       ctx))
 
 (defn initialize-sim
@@ -167,20 +161,22 @@
 ;The default mechanism for this is to propogate some events through the context
 ;and let interested parties handle themselves appropriately.
 
+
+;;Look into using ->as here.
 (defn finalize
   "Shifts the simulation period into a final period.  Forces sampling and any
    other cleanup actions, like computing final statistics, truncating unit 
    lifecycles, etc. Notify any other listeners that the simulation has 
    terminated.  Such notification is particularly important for observers that 
    may be stewarding resources."
-  [t state]
-  (let [ctx (:context state)
-        s   (-> (manage-policies :final t state)   
-              (assoc-in [:parameters :work-state] :outputing)
-              (log-status "Processing Output")
-              (assoc-in [:parameters :work-state] :terminating)
-              (assoc  :time-finish (now)))]
-    (sim/trigger-event :terminate :Engine :Engine "Simulation OVER!" s)))
+  [t ctx]
+  (let [final-ctx  (-> (manage-policies :final t ctx)   
+;                       (assoc-in [:state :parameters :work-state] :outputing) ;useless?
+                       ;;(log-status "Processing Output") ;vestigial,
+                       ;;only necessary for excel.
+                       (assoc-in [:state :parameters :work-state] :terminating) ;useless?
+                       (assoc-in [:state :time-finish] (now)))]
+    (sim/trigger-event :terminate :Engine :Engine "Simulation OVER!" final-ctx)))
 
 ;##Begin Day Logic
 ;Prior to starting a new time inteval (currently a day), we typically want to 
@@ -190,12 +186,12 @@
 (defn check-pause
   "In an interactive simulation, like the legacy sim, this hook lets us check 
    for user intervention each active day.  DEPRECATED."
-  [state] 
-  (if (:pause state)
+  [ctx] 
+  (if (-> ctx :state :pause)
      (sim/trigger-event :pause-simulation :Engine :Engine 
-                  "Simulation Paused" [(sim/get-time (:context state)) 
-                                       (sim/get-next-time (:context state))] (:context state))
-     state)) 
+                  "Simulation Paused" [(sim/get-time ctx) 
+                                       (sim/get-next-time ctx)] ctx)
+     ctx))
 
 ;_Note_: in _begin-day_, check-pause is incidental to the ui, not the repl. 
 ;The call should be yanked.
@@ -203,8 +199,8 @@
   "Update Logic for beginning a day.  Broadcasts the beginning of the current 
    day on the simulation context's event stream.  Also, if a GUI is involved, 
    notifies listeners whether a user has paused the simulation."
-  [day state]
-  (->> state 
+  [day ctx]
+  (->> ctx
     (sim/trigger-event :begin-day :Engine :Engine
                        (day-msg "Begin" day) [day (sim/get-next-time state)])
     (check-pause)))  
@@ -214,12 +210,12 @@
    cut short.  Typically, we take the minimum time of 
    [latest-demand-end-time  simulation-end-time], but there are other phenomena
    that may cause us to advance the end time of the simulation."
-  [state] 
-  (if (and (:truncate-time state) (:found-truncation state))
+  [ctx] 
+  (if (and (-> ctx :truncate-time :state) (-> ctx :state :found-truncation))
     (-> (sim/trigger :all :Engine :Engine 
            (str "Truncated the simulation on day " day ", tfinal is now : " 
-                (sim/get-final-time state)) state) 
-      (assoc :found-truncation true))))
+                (sim/get-final-time state)) ctx) 
+      (assoc-in [:state] :found-truncation true))))
 
 ;##End Day Logic
 ;At the end of each "day" or discrete time step, we typically mark the passage 
@@ -232,8 +228,8 @@
   "Logs the passing of the day, notifies listeners of a need to generate samples
    for the day, and possibly truncates the simulation early if criteria have 
    been met."
-  [day state last-day]
-  (->> state 
+  [day ctx  last-day]
+  (->> ctx 
     (log-status (str "Processed day " day " of " lastday " of Simulation"))
     (sim/trigger :sample :Engine :Engine "Sampling" nil)
     (check-truncation)
@@ -249,13 +245,14 @@
    need to sample all units in the supply.  This typically happens when a period 
    change occurs, or some other sweeping event requires a synchronization of 
    all the units."
-  [t state quarterly units]    
-  (->> (if (and quarterly (zero? (quot (- t 1) 90))
-           (sim/add-time (inc t 90) state))
-        state)
-    (update-all-supply state)
-    (sim/trigger-event :get-cycle-samples :Engine :Engine
-       "Sample all UIC Cycles.  This is a hack." {:t t :uics units})))           
+  [t ctx quarterly units]    
+  (->> (if (and quarterly (zero? (quot (- t 1) 90)))
+           (sim/add-time (inc t 90) ctx)
+           ctx)
+       (update-all-supply ctx)
+       (sim/trigger-event :get-cycle-samples :Engine :Engine
+                          "Sample all UIC Cycles.  This is a hack." 
+                          {:t t :uics units})))
 
 ;##Primary Simulation Logic
 ;We enter the main engine of the Marathon simulation, which implements a 
@@ -297,8 +294,8 @@
    high-level state transfers for supply, policy, demand, filling, and more. 
    Computes the resulting state - either the final state, or the initial state
    for the next step."
-  [day state]
-  (->> state 
+  [day ctx]
+  (->> ctx 
     (begin-day day)         ;Trigger beginning-of-day logic and notifications.
     (manage-supply day)     ;Update unit positions and policies.
     (manage-policies day)   ;Apply policy changes, possibly affecting supply.
@@ -310,26 +307,25 @@
 
 ;#Simulation Interface
 ;sim.engine/event-step-marathon is the entry point for Marathon.
-
 (defn event-step-marathon
   "Higher order simulation handling function.  Given an initial state and an 
    upper bound on simulated time, computes the resulting simulation context via
    a state transfer function, typically sim.engine/sim-step."
-  [lastday state] 
-  (let [init-state (initialize-sim (initialize-output state) last-day)]
-    (assert (can-simulate? init-state) 
+  [lastday ctx] 
+  (let [init-ctx (initialize-sim (initialize-output ctx) last-day)]
+    (assert (can-simulate? init-ctx) 
             "There's nothing to simulate. Check Supply, Demand, and Relations!")
     (loop [day    0
-           state init-state]
-      (if (not (keep-simulating? state))
-          (finalize day state) ;base case, return the final state and clean up.
-          (let [next-day   (sim/advance-time (:context state)) ;WRONG
-                next-state (sim-step next-day state)] ;Transition to next state.
-            (recur next-day next-state))))))
+           ctx init-ctx]
+      (if (not (keep-simulating? ctx))
+          (finalize day ctx) ;base case, return the final state and clean up.
+          (let [next-day   (sim/advance-time ctx) ;WRONG
+                next-ctx (sim-step next-day ctx)] ;Transition to next state.
+            (recur next-day next-ctx))))))
 
 
 
 ;;testing 
 (comment 
-(keep-simulating? (update-in emptysim [:context]  #(sim/add-time  22 %)))
+(keep-simulating? (sim/add-time  22 emptysim))
 )
