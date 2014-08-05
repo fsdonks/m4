@@ -1,6 +1,10 @@
 ;;Storage for domain specific data used by the policy system.
 (ns marathon.policy.policystore
+  (:require [marathon.data [period :as p]])
   (:use [spork.util.record :only [defrecord+]]))
+
+
+;;activePeriod.default 0, , "Initialization"
 
 ;This is for centralizing control over rotational policy, as well as substition 
 ;policy. 

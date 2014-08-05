@@ -27,7 +27,7 @@
             [marathon.sim.supply :as supply :refer [manage-supply manage-followons update-all]]
             [marathon.sim.demand :refer [manage-demands manage-changed-demands]]
             [marathon.sim.fill.demand    :refer [fill-demands]]
-            [marathon.sim.policy :refer [manage-policies]]
+            [marathon.sim.policy :as policy :refer [manage-policies]]
             [marathon.data [simstate :as simstate]]
             [spork.sim    [simcontext :as sim]]))
 
@@ -163,6 +163,9 @@
 
 
 ;;Look into using ->as here.
+
+;;Note-> I bolted on manage-policies before.  I think we can just move
+;;that to a handler...manage-policies enters units into the final period.
 (defn finalize
   "Shifts the simulation period into a final period.  Forces sampling and any
    other cleanup actions, like computing final statistics, truncating unit 
@@ -170,10 +173,10 @@
    terminated.  Such notification is particularly important for observers that 
    may be stewarding resources."
   [t ctx]
-  (let [final-ctx  (-> (manage-policies :final t ctx)   
-;                       (assoc-in [:state :parameters :work-state] :outputing) ;useless?
-                       ;;(log-status "Processing Output") ;vestigial,
-                       ;;only necessary for excel.
+  (let [final-ctx  (-> (manage-policies ctx :final t) ;;this just captures
+                       ;;the final period in a period-driven update.
+                       ;;really triggers an update-all-units action,
+                       ;;relative to the final period.
                        (assoc-in [:state :parameters :work-state] :terminating) ;useless?
                        (assoc-in [:state :time-finish] (now)))]
     (sim/trigger-event :terminate :Engine :Engine "Simulation OVER!" final-ctx)))

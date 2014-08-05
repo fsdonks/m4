@@ -366,13 +366,13 @@
   "High level system that propogates policy changes all the way down to entities 
    that participate in the affected policies.  Typically called in response to 
    period changes."
-  [current-period new-period policystore ctx]
+  [current-period new-period policystore ctx]  
   (if (= current-period :Initialization) ctx ;short-circuit 
       (->> (get-changed-policies current-period new-period
                                  (:composites policystore))
            (reduce #(change-policy current-period new-period %2 
                                    (core/get-policystore %1) %1) ctx))))
-
+  
 (defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
 
 ;;#Managing Policies and Periods
@@ -389,17 +389,17 @@
   "The policy system checks to see if we entered a new period, and changes 
    the governing policies to fit the new period.  High level entry point, 
    typically called by the simulation engine."
-  [day state & [toname]]
-  (let [ctx (:context state)
-        policystore (core/get-policystore state)
-        period   (:activeperiod policystore)
-        fromname (:name period)
-        toname   (or toname (find-period day policystore))]
-    (if (= fromname toname) ctx
-        (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
-             (sim/merge-updates {:policystore (update-period day toname)})
-             (period-change! fromname toname)
-             (change-policies fromname toname)))))
+  ([day ctx toname]
+     (let [policystore (core/get-policystore ctx)
+           period      (:activeperiod policystore)
+           fromname (:name period)]
+       (if (= fromname toname) ctx
+           (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
+                (sim/merge-updates {:policystore (update-period day toname policystore)})
+                (period-change! fromname toname)
+                (change-policies fromname toname)))))
+  ([day ctx] (manage-policies day ctx 
+                 (find-period day (core/get-policystore  ctx)))))
 
 ;Fetches a policy, by name, from the policystore.
 ;TODO -> add in a policy does not exist exception...
