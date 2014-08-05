@@ -1,4 +1,4 @@
-(ns marathon.processing.scraper
+(ns marathon.processing.stoke.scraper
   (:require [spork.util [io :as io]
                         [table :as tbl]
                         [temporal :as temporal]]
@@ -58,10 +58,10 @@
 (defn workbook->stoke-project [path] (xl/wb->tables (xl/as-workbook path)))
 ;;
 
-;; (defn get-srcs [stoke-project]
-;;   (->> (get "InitialSupply" stoke-project)
-;;        (reduce (fn [[supply srcs compos] r]
-;;                   (let [src (get "SRC" r)
-;;                         compo (get "Compo" r)]
-;;                     [(conj supply [(get "SRC" r) (get "Compo")
+(defn get-srcs [stoke-project]
+  (->> (get "InitialSupply" stoke-project)
+       (reduce (fn [[supply srcs compos] r]
+                  (let [src (get "SRC" r)
+                        compo (get "Compo" r)]
+                    [(conj supply [(get "SRC" r) (get "Compo")
                         
