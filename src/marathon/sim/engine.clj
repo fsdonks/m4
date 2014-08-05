@@ -155,6 +155,16 @@
         (notify-watches) 
         (initialize-control)))
 
+(defn initialize-output 
+  "Sets the output path for output streams in the outputstore.
+   Currently a stub...We can let an event handler deal with 
+   setting up the outputstore.  There are probably other 
+   entities interested in knowing about output setup 
+   prior to a run."
+  [ctx]
+  (do (println "initialize-output is currently a stub.")
+      (sim/trigger-event :initialize-output :Engine :Engine nil nil ctx)))
+
 ;##Simulation Termination Logic
 ;When we exit the simulation, we typically want to perform some final tasks.
 ;For instance, any resources (for logging, display, etc.) may need to be freed.
@@ -214,11 +224,12 @@
    [latest-demand-end-time  simulation-end-time], but there are other phenomena
    that may cause us to advance the end time of the simulation."
   [ctx] 
-  (if (and (-> ctx :truncate-time :state) (-> ctx :state :found-truncation))
-    (-> (sim/trigger :all :Engine :Engine 
-           (str "Truncated the simulation on day " day ", tfinal is now : " 
-                (sim/get-final-time state)) ctx) 
-      (assoc-in [:state] :found-truncation true))))
+  (if (and (-> ctx :state :truncate-time ) (-> ctx :state :found-truncation))
+    (-> (sim/trigger-event :all :Engine :Engine 
+           (str "Truncated the simulation on day " (sim/get-time ctx) ", tfinal is now : " 
+                (sim/get-final-time ctx)) nil ctx) 
+        (assoc-in [:state :found-truncation] true))
+    ctx))
 
 ;##End Day Logic
 ;At the end of each "day" or discrete time step, we typically mark the passage 
@@ -231,12 +242,13 @@
   "Logs the passing of the day, notifies listeners of a need to generate samples
    for the day, and possibly truncates the simulation early if criteria have 
    been met."
-  [day ctx  last-day]
+  [day ctx]
   (->> ctx 
-    (log-status (str "Processed day " day " of " lastday " of Simulation"))
-    (sim/trigger :sample :Engine :Engine "Sampling" nil)
+    (sim/trigger-event :log-status :Engine :Engine 
+       (str "Processed day " day " of " (sim/get-final-time ctx) " of Simulation") nil)
+    (sim/trigger-event :sample :Engine :Engine "Sampling" nil)
     (check-truncation)
-    (sim/trigger :end-of-day :Engine :Engine (day-msg "End" day))))
+    (sim/trigger-event :end-of-day :Engine :Engine (day-msg "End" day) nil)))
 
 ;For dwell stats, we typically report a proxy record for units 
 ;not utilized during a simulation period.  To do this, we have to sample the 
@@ -250,12 +262,23 @@
    all the units."
   [t ctx quarterly units]    
   (->> (if (and quarterly (zero? (quot (- t 1) 90)))
-           (sim/add-time (inc t 90) ctx)
+           (sim/add-time (+ t 90) ctx)
            ctx)
-       (update-all-supply ctx)
+       (supply/update-all)
        (sim/trigger-event :get-cycle-samples :Engine :Engine
                           "Sample all UIC Cycles.  This is a hack." 
                           {:t t :uics units})))
+
+(defn can-simulate? 
+  "Simple predicate to ensure we have supply and demand in 
+   the simulation state.  If we don't, we currently toss an 
+   error."
+  [ctx] 
+  (let [dem  (marathon.sim.core/get-demandstore ctx)
+        supp (marathon.sim.core/get-supplystore ctx)]
+    (and 
+     (pos? (count (:demand-map dem)))
+     (pos? (count (:unitmap supp))))))
 
 ;##Primary Simulation Logic
 ;We enter the main engine of the Marathon simulation, which implements a 
@@ -304,8 +327,8 @@
     (manage-policies day)   ;Apply policy changes, possibly affecting supply.
     (manage-demands day)    ;Activate/DeActiveate demands, handle affected units.      
     (fill-demands day)      ;Try to fill unfilled demands in priority order. 
-    (manage-follow-ons day) ;Resets unused units from follow-on status. 
-    (end-day day last-day)  ;End of day logic and notifications.
+    (manage-followons day)  ;Resets unused units from follow-on status. 
+    (end-day day)           ;End of day logic and notifications.
     (manage-changed-demands day)));Clear set of changed demands in demandstore.
 
 ;#Simulation Interface
@@ -314,7 +337,7 @@
   "Higher order simulation handling function.  Given an initial state and an 
    upper bound on simulated time, computes the resulting simulation context via
    a state transfer function, typically sim.engine/sim-step."
-  [lastday ctx] 
+  [last-day ctx] 
   (let [init-ctx (initialize-sim (initialize-output ctx) last-day)]
     (assert (can-simulate? init-ctx) 
             "There's nothing to simulate. Check Supply, Demand, and Relations!")
