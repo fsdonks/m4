@@ -25,11 +25,11 @@
   (:require [marathon.sim.missing] 
             [marathon.sim.core   :refer [now]]           
             [marathon.sim.supply :as supply :refer [manage-supply manage-followons update-all]]
-            [marathon.sim.demand :refer [manage-demands manage-changed-demands]]
+            [marathon.sim.demand :as demand :refer [manage-demands manage-changed-demands]]
             [marathon.sim.fill.demand    :refer [fill-demands]]
             [marathon.sim.policy :as policy :refer [manage-policies]]
             [marathon.data [simstate :as simstate]]
-            [spork.sim    [simcontext :as sim]]))
+            [spork.sim     [simcontext :as sim]]))
 
 (def emptystate (simstate/make-simstate))
 (def emptysim   (sim/make-context :state emptystate))
@@ -215,7 +215,7 @@
   [day ctx]
   (->> ctx
     (sim/trigger-event :begin-day :Engine :Engine
-                       (day-msg "Begin" day) [day (sim/get-next-time state)])
+                       (day-msg "Begin" day) [day (sim/get-next-time ctx)])
     (check-pause)))  
 
 (defn check-truncation
@@ -277,8 +277,8 @@
   (let [dem  (marathon.sim.core/get-demandstore ctx)
         supp (marathon.sim.core/get-supplystore ctx)]
     (and 
-     (pos? (count (:demand-map dem)))
-     (pos? (count (:unitmap supp))))))
+     (supply/can-simulate? supp)
+     (demand/can-simulate? dem))))
 
 ;##Primary Simulation Logic
 ;We enter the main engine of the Marathon simulation, which implements a 
