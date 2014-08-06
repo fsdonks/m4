@@ -47,11 +47,14 @@
   (let [s    (sim/get-state ctx)
         msgs (get-in s [:state :messages] [])]
     (->> (assoc-in s [:state :messages] (conj msgs [name edata]))
-         (sim/set-state ctx))))
+        (assoc ctx :state))))
 
-(def listener-ctx (sim/make-debug-context :debug-handler push-message!))
-
+(def listener-ctx (assoc emptysim :propogator 
+                     (:propogator (sim/make-debug-context :debug-handler push-message!))))
 (deftest event-propogation-testing
+  (is (= (:messages (sim/get-state (sim/trigger-event :hello :dee :dumb "test!" nil listener-ctx)))
+         [[:debugger #spork.sim.simcontext.packet{:t nil, :type :hello, :from :dee, :to :dumb, :msg "test!", :data nil}]])
+      "Should have one message logged."))
   
   
       
