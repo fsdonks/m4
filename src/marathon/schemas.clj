@@ -1,6 +1,7 @@
 ;;Collection of common schemas for Marathon data.
 (ns marathon.schemas
-  (:require [spork.util [parsing :as p]]))
+  (:require [spork.util [parsing :as p]
+                        [table :as tbl]]))
 
 (defn schema [name field-defs]
   {(keyword name)
@@ -14,6 +15,10 @@
   (reduce merge (for [[n fields] xs] 
                   (schema n fields))))
             
+
+;;Various schemas for representing marathon related input data.
+;;We'll add output here as well.
+;;Where field types are not annotated, the inferred type is :text .
 
 (def marathon-schemas    
    {:PolicyTemplates 
@@ -59,7 +64,7 @@
      [:Composition :clojure]]
    :SupplyRecords 
     [:Type
-     :Enabled
+     [:Enabled :boolean]
      [:Quantity :int]
      :SRC
      :Component
@@ -69,7 +74,7 @@
      [:CycleTime :int]
      :Policy
      [:Tags :clojure]
-     [:SpawnTime int]
+     [:SpawnTime :int]
      :Location
      :Position
      [:Original :boolean]]
@@ -111,5 +116,18 @@
                (merge acc  (schema name fields)))
              {}
              marathon-schemas))
-             
+
+(defn get-schema [nm] 
+  (get known-schemas nm))
+
+;;Allows us to quickly read tab-delimited txt files 
+;;using a named schema.
+(defn read-schema  
+  "Given a known schema, looks up the schema and uses it 
+   to read txt.  Currently reads tab-delimited text files, 
+   returning a table parsed via the appropriate schema."
+  [name txt]
+  (if-let [schm (get-schema name)]
+    (tbl/tabdelimited->table txt :schema schm)
+    (throw (Exception. (str "Unknown schema " name)))))
     

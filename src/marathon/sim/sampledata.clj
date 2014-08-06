@@ -1,5 +1,6 @@
 (ns marathon.sim.sampledata
-  (:require [spork.util [table :as tbl]]))
+  (:require [spork.util [table :as tbl]]
+            [marathon [schemas :as s]]))
 
 (def policy-templates
 "TemplateName	Template
