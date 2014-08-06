@@ -56,6 +56,7 @@
          [[:debugger #spork.sim.simcontext.packet{:t nil, :type :hello, :from :dee, :to :dumb, :msg "test!", :data nil}]])
       "Should have one message logged."))
   
+
   
       
  
