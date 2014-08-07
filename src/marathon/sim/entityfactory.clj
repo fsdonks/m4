@@ -12,14 +12,43 @@
 ;;functionality.
 (ns marathon.sim.entityfactory
   (:require [marathon   [schemas :as r]]
+            [marathon.sim.engine :as engine]
+            [marathon.sim.core :as core]
             [spork.util [table :as tbl]]))
 
+(def null-context engine/emptysim)
+;;For now, we're using dynamic scope...
+(def ^:dynamic *ctx* null-context)
 
 ;;I think we may want to make the entityfactory functions operate 
 ;;on a dynamic var.  That should make the calling code clearer...
 ;;There are events where we trigger notifications and such, for 
 ;;logging purposes.  Maybe we we only check if the context is 
 ;;actually bound, and then do something.
+
+
+;;The original procedure actually mutated the context 
+;;as demand records were parsed.  We can decouple this step by 
+;;creating a sequence of entity creation actions, i.e. entity 
+;;orders, that can be processed into state changes.
+
+;;For instance: 
+
+(defn partition-dupes 
+  "Returns a pair of [uniques, dupes] based on the key function"
+  [keyfn xs]
+  (let [known (atom #{})]
+    (reduce (fn [[uniques dupes] x]
+              (let [k (keyfn x)]
+                (if (contains? @known k)
+                  [uniques (assoc dupes k (conj (get k dupes []) x))]
+                  (do (swap! known conj k)
+                      [(conj uniques x) dupes]))))
+            [[] {}] xs)))
+
+(defn demands-from-records [recs demandmanager]
+  
+
 
 ;; 48:   Public Sub DemandsFromRecords(records As Dictionary, DemandManager As TimeStep_ManagerOfDemand)
 ;;  549:  

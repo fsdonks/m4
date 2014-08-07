@@ -50,7 +50,7 @@
      [:StopDeployable :int]
      [:Overlap :int]
      [:Recovery :int]
-     [:BOGBudget :int]
+     :BOGBudget
      :Deltas
      :Remarks]
    :CompositePolicyRecords 

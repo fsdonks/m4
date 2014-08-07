@@ -1451,4 +1451,8 @@ DefaultDemotionPolicy	Auto
    :RelationRecords relation-records
    :Parameters      parameters})
 
-
+;; (def sample-tables 
+;;   (reduce-kv (fn [acc name data]
+;;                (assoc acc name 
+;;                       (s/read-schema name data)))
+;;              {} raw-sample-project))

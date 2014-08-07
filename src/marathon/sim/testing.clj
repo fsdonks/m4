@@ -10,9 +10,6 @@
             [spork.sim     [simcontext :as sim]]
             [clojure.test :refer :all]))
 
-
-
-
 ;;Testing for the core Engine Infrastructure
 ;;==========================================
 
