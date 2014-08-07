@@ -59,16 +59,15 @@
 ;;Returns a set of updates to the context, including 
 ;;the addition of new demands, and 
 (defn demands-from-records [recs demandmanager]  
-  (let [params (core/get-parameters *ctx*)
+  (let [params (core/get-parameters *ctx*)]
         (let [[uniques dupes]  (->> recs 
                                     (r/filter valid-record?)
                                     (r/map #(assoc % :DemandName (demand-name %)))
                                     (partition-dupes :DemandName))]
-        (reduce (fn [acc r] 
-                  (let [vig (:Vignette  r)
-                        op  (:Operation r)
-                        pri (:Priority  r)
-                        nm  (str op "_" vig  "_"  pri )] ;demands have unique names
+          {:register-demands uniques
+           :report-duplicates dupes})))
+
+(defn load-demand
                         
 
 ;;  574:                   If demandmap.exists(nm) Then
