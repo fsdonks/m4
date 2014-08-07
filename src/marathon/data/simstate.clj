@@ -52,7 +52,8 @@
    [demandstore empty-demandstore];Chunk of state for demand entity data.
    [policystore empty-policystore];Chunk of state for rotational policy, and policy periods.
    [outputstore empty-outputstore];Chunk of state for output streams, file I/O.
-   [parameters  {}];Chunk of state for simulation parameters, as key/val pairs.
+   [parameters  {:SRCs-In-Scope     {}
+                 :SRCs-Out-Of-Scope {}}];Chunk of state for simulation parameters, as key/val pairs.
    behaviormanager ;Possibly deprecated.  Repository for unit behaviors.
    [fillstore empty-fillstore];Chunk of state for managing Fill Rules, Fill Graph,
              ;Fill Functions, etc.

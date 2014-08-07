@@ -17,9 +17,8 @@
             [spork.util [table :as tbl]]
             [clojure.core [reducers :as r]]))
 
-(def null-context engine/emptysim)
 ;;For now, we're using dynamic scope...
-(def ^:dynamic *ctx* null-context)
+(def ^:dynamic *ctx* engine/emptysim)
 
 ;;I think we may want to make the entityfactory functions operate 
 ;;on a dynamic var.  That should make the calling code clearer...
@@ -48,7 +47,12 @@
             [[] {}]
             xs)))
 
-(defn valid-record? [r] (and (:Enabled r) (in-scope (:SRC r))))
+(defn valid-record? 
+  ([r params] 
+     (and (:Enabled r) 
+          (core/in-scope? (:SRC r) params)))
+  ([r] (valid-record? r (core/get-parameters *ctx*))))
+
 (defn demand-name [{:keys [Vignette Operation Priority]}]
    (str Operation "_" Vignette  "_"  Priority))
 
@@ -57,14 +61,13 @@
 (defn demands-from-records [recs demandmanager]  
   (let [params (core/get-parameters *ctx*)
         (let [[uniques dupes]  (->> recs 
-                                    (filter valid-record?)
-                                    (map #(assoc % :DemandName (demand-name %)))
-                                    (partition-dupes :DemandName)
-                                    (map record->demand))]
+                                    (r/filter valid-record?)
+                                    (r/map #(assoc % :DemandName (demand-name %)))
+                                    (partition-dupes :DemandName))]
         (reduce (fn [acc r] 
-                  (let [vig (:Vignette r)
+                  (let [vig (:Vignette  r)
                         op  (:Operation r)
-                        pri (:Priority r)
+                        pri (:Priority  r)
                         nm  (str op "_" vig  "_"  pri )] ;demands have unique names
                         
 

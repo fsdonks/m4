@@ -94,6 +94,10 @@
                                   (get-parameters ctx))] 
     (+ start-date (* time-scale t))))
 
+(defn in-scope? [params src]
+  (and (not (get-in params [:SRCs-Out-of-Scope src]))
+       (get-in params [:SRCs-In-Scope src])))
+
 ;;#Tag Related Functions#
 ;;Another useful bit of higher order, or meta data, is the notion of simple 
 ;;tags.  We use tags as a simple mechanism to track all kinds of effects and 
