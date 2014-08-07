@@ -11,10 +11,11 @@
 ;;opportunities arise, we may be able to abastract out 
 ;;functionality.
 (ns marathon.sim.entityfactory
-  (:require [marathon   [schemas :as r]]
+  (:require [marathon   [schemas :as s]]
             [marathon.sim.engine :as engine]
             [marathon.sim.core :as core]
-            [spork.util [table :as tbl]]))
+            [spork.util [table :as tbl]]
+            [clojure.core [reducers :as r]]))
 
 (def null-context engine/emptysim)
 ;;For now, we're using dynamic scope...
@@ -44,11 +45,41 @@
                   [uniques (assoc dupes k (conj (get k dupes []) x))]
                   (do (swap! known conj k)
                       [(conj uniques x) dupes]))))
-            [[] {}] xs)))
+            [[] {}]
+            xs)))
 
-(defn demands-from-records [recs demandmanager]
-  
+(defn valid-record? [r] (and (:Enabled r) (in-scope (:SRC r))))
+(defn demand-name [{:keys [Vignette Operation Priority]}]
+   (str Operation "_" Vignette  "_"  Priority))
 
+;;Returns a set of updates to the context, including 
+;;the addition of new demands, and 
+(defn demands-from-records [recs demandmanager]  
+  (let [params (core/get-parameters *ctx*)
+        (let [[uniques dupes]  (->> recs 
+                                    (filter valid-record?)
+                                    (map #(assoc % :DemandName (demand-name %)))
+                                    (partition-dupes :DemandName)
+                                    (map record->demand))]
+        (reduce (fn [acc r] 
+                  (let [vig (:Vignette r)
+                        op  (:Operation r)
+                        pri (:Priority r)
+                        nm  (str op "_" vig  "_"  pri )] ;demands have unique names
+                        
+
+;;  574:                   If demandmap.exists(nm) Then
+;;  575:                       If dupes.exists(nm) Then
+;;  576:                           dupes(nm) = dupes(nm) + 1
+;;  577:                       Else
+;;  578:                           dupes.add nm, 1
+;;  579:                       End If
+;;  580:                   Else'register the demand.
+;;  581:                       Set demand = associateDemand(recordToDemand(record), DemandManager)
+;;  582:                       msg = "Demand" & demand.name & " initialized"
+;;  583:                      'Decouple
+;;  584:                       SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
+;;  585:                   End If
 
 ;; 48:   Public Sub DemandsFromRecords(records As Dictionary, DemandManager As TimeStep_ManagerOfDemand)
 ;;  549:  
@@ -71,6 +102,8 @@
 ;;  566:        For Each rec In records
 ;;  567:           Set record = records(rec)
 ;;  568:           With record
+
+
 ;;  569:               If .fields("Enabled") = True And inScope(.fields("SRC")) Then
 ;;  570:                   vig = .fields("Vignette")
 ;;  571:                   op = .fields("Operation")

@@ -3,955 +3,742 @@
             [marathon [schemas :as s]]))
 
 (def policy-templates
-  '{AC11 {"class" "TimeStep_Policy", 
-         "name" "AC11", "cyclelength" 730, "MinDwell" 0,
-         "MaxDwell" 0,
-         "MaxBOG" 0,
-         "MaxMOB" 0,
-         "Recovery" 0,
-         "StartDeployable" 0,
-         "StopDeployable" 0,
-         "PositionGraph" 
-         {"class" "genericgraph",
-          "name" "",
-          "Arcs" {"Reset->Train" 182,
-                  "Train->Available" 183,
-                  "Available->Reset" 365,
-                  "Deployed->Overlapping" 365,
-                  "Overlapping->Reset" 0},
-          "nodes" 
-          {"Reset" "Dwelling",
-           "Train" "Dwelling",
-           "Available" "Dwelling",
-           "Deployed" "Bogging",
-           "Overlapping" "Overlapping"},
-          "neighbors" 
-          { "Reset" 
-            {"Train" "Reset->Train"},
-            "Train" 
-            {"Available" "Train->Available"},
-            "Available" 
-            {"Reset" "Available->Reset"},
-            "Deployed" 
-            {"Overlapping" "Deployed->Overlapping"},
-            "Overlapping" 
-            {"Reset" "Overlapping->Reset"}},
-          "sources" 
-          { "Reset" 
-            {"Available" 365,
-             "Overlapping" 0},
-            "Train" 
-            {"Reset" 182},
-            "Available" 
-            {"Train" 183},
-            "Deployed" 
-            {},
-            "Overlapping" 
-            {"Deployed" 365}},
-          "sinks" 
-          { "Reset" 
-            {"Train" 182},
-            "Train" 
-            {"Available" 183},
-            "Available" 
-            {"Reset" 365},
-            "Deployed" 
-            {"Overlapping" 365},
-            "Overlapping" 
-            {"Reset" 0}},
-          "delimiter" 0,
-          "currentDelimiter" "->",
-          "debugme" False,
-          "Disabled"   {},
-          "dotAble" False,
-          "directed" True,
-          "rendersubs" True,
-          "fontsize" 24},
-         "StartState" "Reset",
-         "EndState" "Available",
-         "EndIndex" 0,
-         "overlap" 0}
-   AC12	{"class" "TimeStep_Policy",
-         "name" "AC12",
-         "cyclelength" 1095,
-         "MinDwell" 0,
-         "MaxDwell" 0,
-         "MaxBOG" 0,
-         "MaxMOB" 0,
-         "Recovery" 0,
-         "StartDeployable" 0,
-         "StopDeployable" 0,
-         "PositionGraph" 
-         {"class" "genericgraph",
-          "name" "",
-          "Arcs" 
-          {"Reset->Train" 182,
-           "Train->Ready" 183,
-           "Ready->Available" 365,
-           "Available->Reset" 365,
-           "Deployed->Overlapping" 365,
-           "Overlapping->Reset" 0},
-          "nodes" 
-          {"Reset" "Dwelling",
-           "Train" "Dwelling",
-           "Ready" "Dwelling",
-           "Available" "Dwelling",
-           "Deployed" "Bogging",
-           "Overlapping" "Overlapping"},
-          "neighbors" 
-          { "Reset" 
-            {"Train" "Reset->Train"},
-            "Train" 
-            {"Ready" "Train->Ready"},
-            "Ready" 
-            {"Available" "Ready->Available"},
-            "Available" 
-            {"Reset" "Available->Reset"},
-            "Deployed" 
-            {"Overlapping" "Deployed->Overlapping"},
-            "Overlapping" 
-            {"Reset" "Overlapping->Reset"}},
-          "sources" 
-          { "Reset" 
-            {"Available" 365,
-             "Overlapping" 0},
-            "Train" 
-            {"Reset" 182},
-            "Ready" 
-            {"Train" 183},
-            "Available" 
-            {"Ready" 365},
-            "Deployed" 
-            {},
-            "Overlapping" 
-            {"Deployed" 365}},
-          "sinks" 
-          { "Reset" 
-            {"Train" 182},
-            "Train" 
-            {"Ready" 183},
-            "Ready" 
-            {"Available" 365},
-            "Available" 
-            {"Reset" 365},
-            "Deployed" 
-            {"Overlapping" 365},
-            "Overlapping" 
-            {"Reset" 0}},
-          "delimiter" 0,
-          "currentDelimiter" "->",
-          "debugme" False,
-          "Disabled" 
-          {},
-          "dotAble" False,
-          "directed" True,
-          "rendersubs" True,
-          "fontsize" 24},
-         "StartState" "Reset",
-         "EndState" "Available",
-         "EndIndex" 0,
-         "overlap" 0}
-   AC13	{"class" "TimeStep_Policy",
-         "name" "AC13",
-         "cyclelength" 1095,
-         "MinDwell" 0,
-         "MaxDwell" 0,
-         "MaxBOG" 0,
-         "MaxMOB" 0,
-         "Recovery" 0,
-         "StartDeployable" 0,
-         "StopDeployable" 0,
-         "PositionGraph" 
-         {"class" "genericgraph",
-          "name" "",
-          "Arcs" 
-          {"Reset->Train" 182,
-           "Train->Ready" 183,
-           "Ready->Available" 460,
-           "Available->Reset" 270,
-           "Deployed->Overlapping" 270,
-           "Overlapping->Reset" 0},
-          "nodes" 
-          {"Reset" "Dwelling",
-           "Train" "Dwelling",
-           "Ready" "Dwelling",
-           "Available" "Dwelling",
-           "Deployed" "Bogging",
-           "Overlapping" "Overlapping"},
-          "neighbors" 
-          { "Reset" 
-            {"Train" "Reset->Train"},
-            "Train" 
-            {"Ready" "Train->Ready"},
-            "Ready" 
-            {"Available" "Ready->Available"},
-            "Available" 
-            {"Reset" "Available->Reset"},
-            "Deployed" 
-            {"Overlapping" "Deployed->Overlapping"},
-            "Overlapping" 
-            {"Reset" "Overlapping->Reset"}},
-          "sources" 
-          { "Reset" 
-            {"Available" 270,
-             "Overlapping" 0},
-            "Train" 
-            {"Reset" 182},
-            "Ready" 
-            {"Train" 183},
-            "Available" 
-            {"Ready" 460},
-            "Deployed" 
-            {},
-            "Overlapping" 
-            {"Deployed" 270}},
-          "sinks" 
-          { "Reset" 
-            {"Train" 182},
-            "Train" 
-            {"Ready" 183},
-            "Ready" 
-            {"Available" 460},
-            "Available" 
-            {"Reset" 270},
-            "Deployed" 
-            {"Overlapping" 270},
-            "Overlapping" 
-            {"Reset" 0}},
-          "delimiter" 0,
-          "currentDelimiter" "->",
-          "debugme" False,
-          "Disabled" 
-          {},
-          "dotAble" False,
-          "directed" True,
-          "rendersubs" True,
-          "fontsize" 24},
-         "StartState" "Reset",
-         "EndState" "Available",
-         "EndIndex" 0,
-         "overlap" 0}   
-   ACFFG {"class" "TimeStep_Policy",
-          "name" "ACFFG",
-          "cyclelength" 730,
-          "MinDwell" 0,
-          "MaxDwell" 0,
-          "MaxBOG" 0,
-          "MaxMOB" 0,
-          "Recovery" 0,
-          "StartDeployable" 0,
-          "StopDeployable" 0,
-          "PositionGraph" 
-          {"class" "genericgraph",
-           "name" "",
-           "Arcs" 
-           {"Reset->Train" 91,
-            "Train->Ready" 91,
-            "Ready->Available" 183,
-            "Available->Reset" 365,
-            "Deployed->Overlapping" 365,
-            "Overlapping->Reset" 0},
-           "nodes" 
-           {"Reset" "Dwelling",
-            "Train" "Dwelling",
-            "Ready" "Dwelling",
-            "Available" "Dwelling",
-            "Deployed" "Bogging",
-            "Overlapping" "Overlapping"},
-           "neighbors" 
-           { "Reset" 
-             {"Train" "Reset->Train"},
-             "Train" 
-             {"Ready" "Train->Ready"},
-             "Ready" 
-             {"Available" "Ready->Available"},
-             "Available" 
-             {"Reset" "Available->Reset"},
-             "Deployed" 
-             {"Overlapping" "Deployed->Overlapping"},
-             "Overlapping" 
-             {"Reset" "Overlapping->Reset"}},
-           "sources" 
-           { "Reset" 
-             {"Available" 365,
-              "Overlapping" 0},
-             "Train" 
-             {"Reset" 91},
-             "Ready" 
-             {"Train" 91},
-             "Available" 
-             {"Ready" 183},
-             "Deployed" 
-             {},
-             "Overlapping" 
-             {"Deployed" 365}},
-           "sinks" 
-           { "Reset" 
-             {"Train" 91},
-             "Train" 
-             {"Ready" 91},
-             "Ready" 
-             {"Available" 183},
-             "Available" 
-             {"Reset" 365},
-             "Deployed" 
-             {"Overlapping" 365},
-             "Overlapping" 
-             {"Reset" 0}},
-           "delimiter" 0,
-           "currentDelimiter" "->",
-           "debugme" False,
-           "Disabled" 
-           {},
-           "dotAble" False,
-           "directed" True,
-           "rendersubs" True,
-           "fontsize" 24},
-          "StartState" "Reset",
-          "EndState" "Available",
-          "EndIndex" 0,
-          "overlap" 0}
-   Ghost {"class" "TimeStep_Policy",
-          "name" "Ghost",
-          "cyclelength" 1000000000,
-          "MinDwell" 0,
-          "MaxDwell" 0,
-          "MaxBOG" 0,
-          "MaxMOB" 0,
-          "Recovery" 0,
-          "StartDeployable" 0,
-          "StopDeployable" 0,
-          "PositionGraph" 
-          {"class" "genericgraph",
-           "name" "",
-           "Arcs" 
-           {"Spawning->Deployable" 0,
-            "Deployable->Waiting" 0,
-            "Waiting->Deploying" 1000000000,
-            "Deploying->NotDeployable" 0,
-            "NotDeployable->Deployed" 0,
-            "Deployed->Overlapping" 365,
-            "Overlapping->ReturnToDeployable" 0,
-            "ReturnToDeployable->Deployable" 0},
-           "nodes" 
-           {"Spawning" "Spawning",
-            "Deployable" "Deployable",
-            "Waiting" "Nothing",
-            "Deploying" "Deploying",
-            "NotDeployable" "NotDeployable",
-            "Deployed" "Bogging",
-            "Overlapping" "Overlapping",
-            "BehaviorChange" "BehaviorChange",
-            "ReturnToDeployable" "Nothing"},
-           "neighbors" 
-           { "Spawning" 
-             {"Deployable" "Spawning->Deployable"},
-             "Deployable" 
-             {"Waiting" "Deployable->Waiting"},
-             "Waiting" 
-             {"Deploying" "Waiting->Deploying"},
-             "Deploying" 
-             {"NotDeployable" "Deploying->NotDeployable"},
-             "NotDeployable" 
-             {"Deployed" "NotDeployable->Deployed"},
-             "Deployed" 
-             {"Overlapping" "Deployed->Overlapping"},
-             "Overlapping" 
-             {"ReturnToDeployable" "Overlapping->ReturnToDeployable"},
-             "ReturnToDeployable" 
-             {"Deployable" "ReturnToDeployable->Deployable"}},
-           "sources" 
-           { "Spawning" 
-             {},
-             "Deployable" 
-             {"Spawning" 0,
-              "ReturnToDeployable" 0},
-             "Waiting" 
-             {"Deployable" 0},
-             "Deploying" 
-             {"Waiting" 1000000000},
-             "NotDeployable" 
-             {"Deploying" 0},
-             "Deployed" 
-             {"NotDeployable" 0},
-             "Overlapping" 
-             {"Deployed" 365},
-             "BehaviorChange" 
-             {},
-             "ReturnToDeployable" 
-             {"Overlapping" 0}},
-           "sinks" 
-           { "Spawning" 
-             {"Deployable" 0},
-             "Deployable" 
-             {"Waiting" 0},
-             "Waiting" 
-             {"Deploying" 1000000000},
-             "Deploying" 
-             {"NotDeployable" 0},
-             "NotDeployable" 
-             {"Deployed" 0},
-             "Deployed" 
-             {"Overlapping" 365},
-             "Overlapping" 
-             {"ReturnToDeployable" 0},
-             "BehaviorChange" 
-             {},
-             "ReturnToDeployable" 
-             {"Deployable" 0}},
-           "delimiter" 0,
-           "currentDelimiter" "->",
-           "debugme" False,
-           "Disabled" 
-           {},
-           "dotAble" False,
-           "directed" True,
-           "rendersubs" True,
-           "fontsize" 24},
-          "StartState" "Deployable",
-          "EndState" "ReturnToDeployable",
-          "EndIndex" 0,
-          "overlap" 0}
-   RC12	{"class" "TimeStep_Policy",
-         "name" "RC12",
-         "cyclelength" 1095,
-         "MinDwell" 0,
-         "MaxDwell" 0,
-         "MaxBOG" 0,
-         "MaxMOB" 95,
-         "Recovery" 0,
-         "StartDeployable" 0,
-         "StopDeployable" 0,
-         "PositionGraph" 
-         {"class" "genericgraph",
-          "name" "",
-          "Arcs" 
-          {"Reset->Train" 365,
-           "Train->Available" 365,
-           "Available->Reset" 365,
-           "Deployed->Overlapping" 270,
-           "Overlapping->DeMobilization" 0,
-           "DeMobilization->Reset" 95},
-          "nodes" 
-          {"Reset" "Dwelling",
-           "Train" "Dwelling",
-           "Available" "Dwelling",
-           "Deployed" "Bogging",
-           "Overlapping" "Overlapping",
-           "DeMobilization" "DeMobilizing"},
-          "neighbors" 
-          { "Reset" 
-            {"Train" "Reset->Train"},
-            "Train" 
-            {"Available" "Train->Available"},
-            "Available" 
-            {"Reset" "Available->Reset"},
-            "Deployed" 
-            {"Overlapping" "Deployed->Overlapping"},
-            "Overlapping" 
-            {"DeMobilization" "Overlapping->DeMobilization"},
-            "DeMobilization" 
-            {"Reset" "DeMobilization->Reset"}},
-          "sources" 
-          { "Reset" 
-            {"Available" 365,
-             "DeMobilization" 95},
-            "Train" 
-            {"Reset" 365},
-            "Available" 
-            {"Train" 365},
-            "Deployed" 
-            {},
-            "Overlapping" 
-            {"Deployed" 270},
-            "DeMobilization" 
-            {"Overlapping" 0}},
-          "sinks" 
-          { "Reset" 
-            {"Train" 365},
-            "Train" 
-            {"Available" 365},
-            "Available" 
-            {"Reset" 365},
-            "Deployed" 
-            {"Overlapping" 270},
-            "Overlapping" 
-            {"DeMobilization" 0},
-            "DeMobilization" 
-            {"Reset" 95}},
-          "delimiter" 0,
-          "currentDelimiter" "->",
-          "debugme" False,
-          "Disabled" 
-          {},
-          "dotAble" False,
-          "directed" True,
-          "rendersubs" True,
-          "fontsize" 24},
-         "StartState" "Reset",
-         "EndState" "Available",
-         "EndIndex" 0,
-         "overlap" 0}
-   RC14	{"class" "TimeStep_Policy",
-         "name" "RC14",
-         "cyclelength" 1825,
-         "MinDwell" 0,
-         "MaxDwell" 0,
-         "MaxBOG" 0,
-         "MaxMOB" 95,
-         "Recovery" 0,
-         "StartDeployable" 0,
-         "StopDeployable" 0,
-         "PositionGraph" 
-         {"class" "genericgraph",
-          "name" "",
-          "Arcs" 
-          {"Reset->Train" 365,
-           "Train->Ready" 365,
-           "Ready->Available" 730,
-           "Available->Reset" 365,
-           "Deployed->Overlapping" 270,
-           "Overlapping->DeMobilization" 0,
-           "DeMobilization->Reset" 95},
-          "nodes" 
-          {"Reset" "Dwelling",
-           "Train" "Dwelling",
-           "Ready" "Dwelling",
-           "Available" "Dwelling",
-           "Deployed" "Bogging",
-           "Overlapping" "Overlapping",
-           "DeMobilization" "DeMobilizing"},
-          "neighbors" 
-          {"Reset" 
-           {"Train" "Reset->Train"},
-           "Train" 
-           {"Ready" "Train->Ready"},
-           "Ready" 
-           {"Available" "Ready->Available"},
-           "Available" 
-           {"Reset" "Available->Reset"},
-           "Deployed" 
-           {"Overlapping" "Deployed->Overlapping"},
-           "Overlapping" 
-           {"DeMobilization" "Overlapping->DeMobilization"},
-           "DeMobilization" 
-           {"Reset" "DeMobilization->Reset"}},
-          "sources" 
-          { "Reset" 
-            {"Available" 365,
-             "DeMobilization" 95},
-            "Train" 
-            {"Reset" 365},
-            "Ready" 
-            {"Train" 365},
-            "Available" 
-            {"Ready" 730},
-            "Deployed" 
-            {},
-            "Overlapping" 
-            {"Deployed" 270},
-            "DeMobilization" 
-            {"Overlapping" 0}},
-          "sinks" 
-          {"Reset" 
-           {"Train" 365},
-           "Train" 
-           {"Ready" 365},
-           "Ready" 
-           {"Available" 730},
-           "Available" 
-           {"Reset" 365},
-           "Deployed" 
-           {"Overlapping" 270},
-           "Overlapping" 
-           {"DeMobilization" 0},
-           "DeMobilization" 
-           {"Reset" 95}},
-          "delimiter" 0,
-          "currentDelimiter" "->",
-          "debugme" False,
-          "Disabled" 
-          {},
-          "dotAble" False,
-          "directed" True,
-          "rendersubs" True,
-          "fontsize" 24},
-         "StartState" "Reset",
-         "EndState" "Available",
-         "EndIndex" 0,
-         "overlap" 0}  
-   RC14ReMob {"class" "TimeStep_Policy",
-              "name" "RC14ReMob",
-              "cyclelength" 1825,
-              "MinDwell" 0,
-              "MaxDwell" 0,
-              "MaxBOG" 0,
-              "MaxMOB" 95,
-              "Recovery" 0,
-              "StartDeployable" 0,
-              "StopDeployable" 0,
-              "PositionGraph" 
-              {"class" "genericgraph",
-               "name" "",
-               "Arcs" 
-               {"Reset->Train" 365,
-                "Train->Ready" 365,
-                "Ready->Available" 730,
-                "Available->Reset" 365,
-                "Deployed->Overlapping" 270,
-                "Overlapping->Recovery" 0,
-                "Recovery->Recovered" 365,
-                "Recovered->DeMobilization" 95,
-                "DeMobilization->Reset" 0},
-               "nodes" 
-               {"Reset" "Dwelling",
-                "Train" "Dwelling",
-                "Ready" "Dwelling",
-                "Available" "Dwelling",
-                "Deployed" "Bogging",
-                "Overlapping" "Overlapping",
-                "DeMobilization" "DeMobilizing",
-                "Recovery" "Recovering",
-                "Recovered" "Recovered"},
-               "neighbors" 
-               { "Reset" 
-                 {"Train" "Reset->Train"},
-                 "Train" 
-                 {"Ready" "Train->Ready"},
-                 "Ready" 
-                 {"Available" "Ready->Available"},
-                 "Available" 
-                 {"Reset" "Available->Reset"},
-                 "Deployed" 
-                 {"Overlapping" "Deployed->Overlapping"},
-                 "Overlapping" 
-                 {"Recovery" "Overlapping->Recovery"},
-                 "Recovery" 
-                 {"Recovered" "Recovery->Recovered"},
-                 "Recovered" 
-                 {"DeMobilization" "Recovered->DeMobilization"},
-                 "DeMobilization" 
-                 {"Reset" "DeMobilization->Reset"}},
-               "sources" 
-               { "Reset" 
-                 {"Available" 365,
-                  "DeMobilization" 0},
-                 "Train" 
-                 {"Reset" 365},
-                 "Ready" 
-                 {"Train" 365},
-                 "Available" 
-                 {"Ready" 730},
-                 "Deployed" 
-                 {},
-                 "Overlapping" 
-                 {"Deployed" 270},
-                 "DeMobilization" 
-                 {"Recovered" 95},
-                 "Recovery" 
-                 {"Overlapping" 0},
-                 "Recovered" 
-                 {"Recovery" 365}},
-               "sinks" 
-               { "Reset" 
-                 {"Train" 365},
-                 "Train" 
-                 {"Ready" 365},
-                 "Ready" 
-                 {"Available" 730},
-                 "Available" 
-                 {"Reset" 365},
-                 "Deployed" 
-                 {"Overlapping" 270},
-                 "Overlapping" 
-                 {"Recovery" 0},
-                 "DeMobilization" 
-                 {"Reset" 0},
-                 "Recovery" 
-                 {"Recovered" 365},
-                 "Recovered" 
-                 {"DeMobilization" 95}},
-               "delimiter" 0,
-               "currentDelimiter" "->",
-               "debugme" False,
-               "Disabled" 
-               {},
-               "dotAble" False,
-               "directed" True,
-               "rendersubs" True,
-               "fontsize" 24},
-              "StartState" "Reset",
-              "EndState" "Available",
-              "EndIndex" 0,
-              "overlap" 0}
-   RC15	{"class" "TimeStep_Policy",
-         "name" "RC15",
-         "cyclelength" 2190,
-         "MinDwell" 0,
-         "MaxDwell" 0,
-         "MaxBOG" 0,
-         "MaxMOB" 95,
-         "Recovery" 0,
-         "StartDeployable" 0,
-         "StopDeployable" 0,
-         "PositionGraph" 
-         {"class" "genericgraph",
-          "name" "",
-          "Arcs" 
-          {"Reset->Train" 730,
-           "Train->Ready" 365,
-           "Ready->Available" 730,
-           "Available->Reset" 365,
-           "Deployed->Overlapping" 270,
-           "Overlapping->DeMobilization" 0,
-           "DeMobilization->Reset" 95},
-          "nodes" 
-          {"Reset" "Dwelling",
-           "Train" "Dwelling",
-           "Ready" "Dwelling",
-           "Available" "Dwelling",
-           "Deployed" "Bogging",
-           "Overlapping" "Overlapping",
-           "DeMobilization" "DeMobilizing"},
-          "neighbors" 
-          { "Reset" 
-            {"Train" "Reset->Train"},
-            "Train" 
-            {"Ready" "Train->Ready"},
-            "Ready" 
-            {"Available" "Ready->Available"},
-            "Available" 
-            {"Reset" "Available->Reset"},
-            "Deployed" 
-            {"Overlapping" "Deployed->Overlapping"},
-            "Overlapping" 
-            {"DeMobilization" "Overlapping->DeMobilization"},
-            "DeMobilization" 
-            {"Reset" "DeMobilization->Reset"}},
-          "sources" 
-          { "Reset" 
-            {"Available" 365,
-             "DeMobilization" 95},
-            "Train" 
-            {"Reset" 730},
-            "Ready" 
-            {"Train" 365},
-            "Available" 
-            {"Ready" 730},
-            "Deployed" 
-            {},
-            "Overlapping" 
-            {"Deployed" 270},
-            "DeMobilization" 
-            {"Overlapping" 0}},
-          "sinks" 
-          { "Reset" 
-            {"Train" 730},
-            "Train" 
-            {"Ready" 365},
-            "Ready" 
-            {"Available" 730},
-            "Available" 
-            {"Reset" 365},
-            "Deployed" 
-            {"Overlapping" 270},
-            "Overlapping" 
-            {"DeMobilization" 0},
-            "DeMobilization" 
-            {"Reset" 95}},
-          "delimiter" 0,
-          "currentDelimiter" "->",
-          "debugme" False,
-          "Disabled" 
-          {},
-          "dotAble" False,
-          "directed" True,
-          "rendersubs" True,
-          "fontsize" 24},
-         "StartState" "Reset",
-         "EndState" "Available",
-         "EndIndex" 0,
-         "overlap" 0}
-   RCFFG {"class" "TimeStep_Policy",
-          "name" "RCFFG",
-          "cyclelength" 1825,
-          "MinDwell" 0,
-          "MaxDwell" 0,
-          "MaxBOG" 0,
-          "MaxMOB" 95,
-          "Recovery" 0,
-          "StartDeployable" 0,
-          "StopDeployable" 0,
-          "PositionGraph" 
-          {"class" "genericgraph",
-           "name" "",
-           "Arcs" 
-           {"Reset->Train" 365,
-            "Train->Ready" 365,
-            "Ready->Available" 730,
-            "Available->Reset" 365,
-            "Deployed->Overlapping" 270,
-            "Overlapping->DeMobilization" 0,
-            "DeMobilization->Reset" 95},
-           "nodes" 
-           {"Reset" "Dwelling",
-            "Train" "Dwelling",
-            "Ready" "Dwelling",
-            "Available" "Dwelling",
-            "Deployed" "Bogging",
-            "Overlapping" "Overlapping",
-            "DeMobilization" "DeMobilizing"},
-           "neighbors" 
-           { "Reset" 
-             {"Train" "Reset->Train"},
-             "Train" 
-             {"Ready" "Train->Ready"},
-             "Ready" 
-             {"Available" "Ready->Available"},
-             "Available" 
-             {"Reset" "Available->Reset"},
-             "Deployed" 
-             {"Overlapping" "Deployed->Overlapping"},
-             "Overlapping" 
-             {"DeMobilization" "Overlapping->DeMobilization"},
-             "DeMobilization" 
-             {"Reset" "DeMobilization->Reset"}},
-           "sources" 
-           { "Reset" 
-             {"Available" 365,
-              "DeMobilization" 95},
-             "Train" 
-             {"Reset" 365},
-             "Ready" 
-             {"Train" 365},
-             "Available" 
-             {"Ready" 730},
-             "Deployed" 
-             {},
-             "Overlapping" 
-             {"Deployed" 270},
-             "DeMobilization" 
-             {"Overlapping" 0}},
-           "sinks" 
-           { "Reset" 
-             {"Train" 365},
-             "Train" 
-             {"Ready" 365},
-             "Ready" 
-             {"Available" 730},
-             "Available" 
-             {"Reset" 365},
-             "Deployed" 
-             {"Overlapping" 270},
-             "Overlapping" 
-             {"DeMobilization" 0},
-             "DeMobilization" 
-             {"Reset" 95}},
-           "delimiter" 0,
-           "currentDelimiter" "->",
-           "debugme" False,
-           "Disabled" 
-           {},
-           "dotAble" False,
-           "directed" True,
-           "rendersubs" True,
-           "fontsize" 24},
-          "StartState" "Reset",
-          "EndState" "Available",
-          "EndIndex" 0,
-          "overlap" 0}
-   RCOpSus {"class" "TimeStep_Policy",
-            "name" "RCOpSus",
-            "cyclelength" 1825,
-            "MinDwell" 0,
-            "MaxDwell" 0,
-            "MaxBOG" 0,
-            "MaxMOB" 95,
-            "Recovery" 0,
-            "StartDeployable" 0,
-            "StopDeployable" 0,
-            "PositionGraph" 
-            {"class" "genericgraph",
-             "name" "",
-             "Arcs" 
-             {"OS_Reset->OS_Train" 365,
-              "OS_Train->OS_Ready" 365,
-              "OS_Ready->OS_Available" 730,
-              "OS_Available->OS_Reset" 365,
-              "Deployed->Overlapping" 270,
-              "Overlapping->DeMobilization" 0,
-              "DeMobilization->Promotion" 95},
-             "nodes" 
-             {"OS_Reset" "Dwelling",
-              "OS_Train" "Dwelling",
-              "OS_Ready" "Dwelling",
-              "OS_Available" "Dwelling",
-              "Deployed" "Bogging",
-              "Overlapping" "Overlapping",
-              "DeMobilization" "DeMobilizing",
-              "Promotion" "PolicyChange"},
-             "neighbors" 
-             { "OS_Reset" 
-               {"OS_Train" "OS_Reset->OS_Train"},
-               "OS_Train" 
-               {"OS_Ready" "OS_Train->OS_Ready"},
-               "OS_Ready" 
-               {"OS_Available" "OS_Ready->OS_Available"},
-               "OS_Available" 
-               {"OS_Reset" "OS_Available->OS_Reset"},
-               "Deployed" 
-               {"Overlapping" "Deployed->Overlapping"},
-               "Overlapping" 
-               {"DeMobilization" "Overlapping->DeMobilization"},
-               "DeMobilization" 
-               {"Promotion" "DeMobilization->Promotion"}},
-             "sources" 
-             { "OS_Reset" 
-               {"OS_Available" 365},
-               "OS_Train" 
-               {"OS_Reset" 365},
-               "OS_Ready" 
-               {"OS_Train" 365},
-               "OS_Available" 
-               {"OS_Ready" 730},
-               "Deployed" 
-               {},
-               "Overlapping" 
-               {"Deployed" 270},
-               "DeMobilization" 
-               {"Overlapping" 0},
-               "Promotion" 
-               {"DeMobilization" 95}},
-             "sinks" 
-             { "OS_Reset" 
-               {"OS_Train" 365},
-               "OS_Train" 
-               {"OS_Ready" 365},
-               "OS_Ready" 
-               {"OS_Available" 730},
-               "OS_Available" 
-               {"OS_Reset" 365},
-               "Deployed" 
-               {"Overlapping" 270},
-               "Overlapping" 
-               {"DeMobilization" 0},
-               "DeMobilization" 
-               {"Promotion" 95},
-               "Promotion" 
-               {}},
-             "delimiter" 0,
-             "currentDelimiter" "->",
-             "debugme" False,
-             "Disabled" 
-             {},
-             "dotAble" False,
-             "directed" True,
-             "rendersubs" True,
-             "fontsize" 24},
-            "StartState" "OS_Reset",
-            "EndState" "OS_Available",
-            "EndIndex" 0,
-            "overlap" 0}})
+  {"AC11"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 182},
+    "Train" {"Available" 183},
+    "Available" {"Reset" 365},
+    "Deployed" {"Overlapping" 365},
+    "Overlapping" {"Reset" 0}},
+   "Arcs"
+   {"Reset->Train" 182,
+    "Train->Available" 183,
+    "Available->Reset" 365,
+    "Deployed->Overlapping" 365,
+    "Overlapping->Reset" 0},
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Available" "Train->Available"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"Reset" "Overlapping->Reset"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelling",
+    "Available" "Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping"},
+   "class" "genericgr
+aph",
+   "sources"
+   {"Reset" {"Available" 365, "Overlapping" 0},
+    "Train" {"Reset" 182},
+    "Available" {"Train" 183},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 365}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "AC11",
+  "cyclelength" 730,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 0},
+ "AC12"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 182},
+    "Train" {"Ready" 183},
+    "Ready" {"Available" 365},
+    "Available" {"Reset" 365},
+    "Deployed" {"Overlapping" 365},
+    "Overlapping" {"Reset" 0}},
+   "Arcs"
+   {"Reset->Train" 182,
+    "Train->Ready" 183,
+    "Ready->Available" 365,
+    "Available->Reset" 365,
+    "Deployed->Overlapping" 365,
+    "Overlapping->Reset" 0},
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Ready" "Train->Ready"},
+    "Ready" {"Available" 
+"Ready->Available"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"Reset" "Overlapping->Reset"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelling",
+    "Ready" "Dwelling",
+    "Available" "Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping"},
+   "class" "genericgraph",
+   "sources"
+   {"Reset" {"Available" 365, "Overlapping" 0},
+    "Train" {"Reset" 182},
+    "Ready" {"Train" 183},
+    "Available" {"Ready" 365},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 365}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "AC12",
+  "cyclelength" 1095,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 0},
+ "AC13"
+ {"MinDwell" 
+0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 182},
+    "Train" {"Ready" 183},
+    "Ready" {"Available" 460},
+    "Available" {"Reset" 270},
+    "Deployed" {"Overlapping" 270},
+    "Overlapping" {"Reset" 0}},
+   "Arcs"
+   {"Reset->Train" 182,
+    "Train->Ready" 183,
+    "Ready->Available" 460,
+    "Available->Reset" 270,
+    "Deployed->Overlapping" 270,
+    "Overlapping->Reset" 0},
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Ready" "Train->Ready"},
+    "Ready" {"Available" "Ready->Available"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"Reset" "Overlapping->Reset"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelling",
+    "Ready" "Dwelling",
+    "Available" "
+Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping"},
+   "class" "genericgraph",
+   "sources"
+   {"Reset" {"Available" 270, "Overlapping" 0},
+    "Train" {"Reset" 182},
+    "Ready" {"Train" 183},
+    "Available" {"Ready" 460},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 270}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "AC13",
+  "cyclelength" 1095,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 0},
+ "ACFFG"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 91},
+    "Train" {"Ready" 91},
+    "Ready" {"Available" 183},
+    "Available" {"Reset" 365},
+    "Deployed" {"Overlapping" 365},
+    "Overlapping" {"Reset" 0}},
+   "Arcs"
+   {"Reset->Train" 91,
+    "Train->Ready" 91,
+    "Ready->Available" 183,
+    "Available->Reset" 365,
+    "Deployed->Overlapping" 365,
+    "Overlapping->Reset" 0},
+
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Ready" "Train->Ready"},
+    "Ready" {"Available" "Ready->Available"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"Reset" "Overlapping->Reset"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelling",
+    "Ready" "Dwelling",
+    "Available" "Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping"},
+   "class" "genericgraph",
+   "sources"
+   {"Reset" {"Available" 365, "Overlapping" 0},
+    "Train" {"Reset" 91},
+    "Ready" {"Train" 91},
+    "Available" {"Ready" 183},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 365}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "ACFFG",
+  "cyclelength" 730,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndSt
+ate" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 0},
+ "Ghost"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Deployable" {"Waiting" 0},
+    "BehaviorChange" {},
+    "Deployed" {"Overlapping" 365},
+    "Spawning" {"Deployable" 0},
+    "ReturnToDeployable" {"Deployable" 0},
+    "Waiting" {"Deploying" 1000000000},
+    "NotDeployable" {"Deployed" 0},
+    "Overlapping" {"ReturnToDeployable" 0},
+    "Deploying" {"NotDeployable" 0}},
+   "Arcs"
+   {"Spawning->Deployable" 0,
+    "Deployable->Waiting" 0,
+    "Waiting->Deploying" 1000000000,
+    "Deploying->NotDeployable" 0,
+    "NotDeployable->Deployed" 0,
+    "Deployed->Overlapping" 365,
+    "Overlapping->ReturnToDeployable" 0,
+    "ReturnToDeployable->Deployable" 0},
+   "neighbors"
+   {"Spawning" {"Deployable" "Spawning->Deployable"},
+    "Deployable" {"Waiting" "Deployable->Waiting"},
+    "Waiting" {"Deploying" "Waiting->Deploying"},
+    "Deploying
+" {"NotDeployable" "Deploying->NotDeployable"},
+    "NotDeployable" {"Deployed" "NotDeployable->Deployed"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping"
+    {"ReturnToDeployable" "Overlapping->ReturnToDeployable"},
+    "ReturnToDeployable"
+    {"Deployable" "ReturnToDeployable->Deployable"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Deployable" "Deployable",
+    "BehaviorChange" "BehaviorChange",
+    "Deployed" "Bogging",
+    "Spawning" "Spawning",
+    "ReturnToDeployable" "Nothing",
+    "Waiting" "Nothing",
+    "NotDeployable" "NotDeployable",
+    "Overlapping" "Overlapping",
+    "Deploying" "Deploying"},
+   "class" "genericgraph",
+   "sources"
+   {"Deployable" {"Spawning" 0, "ReturnToDeployable" 0},
+    "BehaviorChange" {},
+    "Deployed" {"NotDeployable" 0},
+    "Spawning" {},
+    "ReturnToDeployable" {"Overlapping
+" 0},
+    "Waiting" {"Deployable" 0},
+    "NotDeployable" {"Deploying" 0},
+    "Overlapping" {"Deployed" 365},
+    "Deploying" {"Waiting" 1000000000}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "Ghost",
+  "cyclelength" 1000000000,
+  "MaxDwell" 0,
+  "StartState" "Deployable",
+  "Recovery" 0,
+  "EndState" "ReturnToDeployable",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 0},
+ "RC12"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 365},
+    "Train" {"Available" 365},
+    "Available" {"Reset" 365},
+    "Deployed" {"Overlapping" 270},
+    "Overlapping" {"DeMobilization" 0},
+    "DeMobilization" {"Reset" 95}},
+   "Arcs"
+   {"Reset->Train" 365,
+    "Train->Available" 365,
+    "Available->Reset" 365,
+    "Deployed->Overlapping" 270,
+    "Overlapping->DeMobilization" 0,
+    "DeMobilization->Reset" 95},
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Available" "Train->Availa
+ble"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"DeMobilization" "Overlapping->DeMobilization"},
+    "DeMobilization" {"Reset" "DeMobilization->Reset"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelling",
+    "Available" "Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping",
+    "DeMobilization" "DeMobilizing"},
+   "class" "genericgraph",
+   "sources"
+   {"Reset" {"Available" 365, "DeMobilization" 95},
+    "Train" {"Reset" 365},
+    "Available" {"Train" 365},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 270},
+    "DeMobilization" {"Overlapping" 0}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "RC12",
+  "cyclelength" 1095,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG
+" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 95},
+ "RC14"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 365},
+    "Train" {"Ready" 365},
+    "Ready" {"Available" 730},
+    "Available" {"Reset" 365},
+    "Deployed" {"Overlapping" 270},
+    "Overlapping" {"DeMobilization" 0},
+    "DeMobilization" {"Reset" 95}},
+   "Arcs"
+   {"Reset->Train" 365,
+    "Train->Ready" 365,
+    "Ready->Available" 730,
+    "Available->Reset" 365,
+    "Deployed->Overlapping" 270,
+    "Overlapping->DeMobilization" 0,
+    "DeMobilization->Reset" 95},
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Ready" "Train->Ready"},
+    "Ready" {"Available" "Ready->Available"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"DeMobilization" "Overlapping->DeMobilization"},
+    "DeMobilization" {"Reset" "DeMobilization->Reset"}},
+   "dotAble" false
+,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelling",
+    "Ready" "Dwelling",
+    "Available" "Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping",
+    "DeMobilization" "DeMobilizing"},
+   "class" "genericgraph",
+   "sources"
+   {"Reset" {"Available" 365, "DeMobilization" 95},
+    "Train" {"Reset" 365},
+    "Ready" {"Train" 365},
+    "Available" {"Ready" 730},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 270},
+    "DeMobilization" {"Overlapping" 0}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "RC14",
+  "cyclelength" 1825,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 95},
+ "RC15"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 730},
+    
+"Train" {"Ready" 365},
+    "Ready" {"Available" 730},
+    "Available" {"Reset" 365},
+    "Deployed" {"Overlapping" 270},
+    "Overlapping" {"DeMobilization" 0},
+    "DeMobilization" {"Reset" 95}},
+   "Arcs"
+   {"Reset->Train" 730,
+    "Train->Ready" 365,
+    "Ready->Available" 730,
+    "Available->Reset" 365,
+    "Deployed->Overlapping" 270,
+    "Overlapping->DeMobilization" 0,
+    "DeMobilization->Reset" 95},
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Ready" "Train->Ready"},
+    "Ready" {"Available" "Ready->Available"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"DeMobilization" "Overlapping->DeMobilization"},
+    "DeMobilization" {"Reset" "DeMobilization->Reset"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelli
+ng",
+    "Ready" "Dwelling",
+    "Available" "Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping",
+    "DeMobilization" "DeMobilizing"},
+   "class" "genericgraph",
+   "sources"
+   {"Reset" {"Available" 365, "DeMobilization" 95},
+    "Train" {"Reset" 730},
+    "Ready" {"Train" 365},
+    "Available" {"Ready" 730},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 270},
+    "DeMobilization" {"Overlapping" 0}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "RC15",
+  "cyclelength" 2190,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 95},
+ "RCFFG"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"Reset" {"Train" 365},
+    "Train" {"Ready" 365},
+    "Ready" {"Available" 730},
+    "Available" {"Reset" 365},
+    "Deployed" {"Overlapping" 270},
+    "Overlapping" {"DeMobilization" 0},
+    "DeMobilization" {"Reset" 95}},
+   "Arcs"
+   {"Reset->Train" 365,
+    "Train->Ready" 365,
+    "Ready->Available" 730,
+    "Available->Reset" 365,
+    "Deployed->Overlapping" 270,
+    "Overlapping->DeMobilization" 0,
+    "DeMobilization->Reset" 95},
+   "neighbors"
+   {"Reset" {"Train" "Reset->Train"},
+    "Train" {"Ready" "Train->Ready"},
+    "Ready" {"Available" "Ready->Available"},
+    "Available" {"Reset" "Available->Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"DeMobilization" "Overlapping->DeMobilization"},
+    "DeMobilization" {"Reset" "DeMobilization->Reset"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"Reset" "Dwelling",
+    "Train" "Dwelling",
+    "Ready" "Dwelling",
+    "Available" "Dwelling",
+    "Deployed" "Bogging",
+    "Overlapping" "Overlapping",
+    "DeMobilization" "DeMobilizing"},
+   "class" "genericgraph",
+   "sources"
+   
+{"Reset" {"Available" 365, "DeMobilization" 95},
+    "Train" {"Reset" 365},
+    "Ready" {"Train" 365},
+    "Available" {"Ready" 730},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 270},
+    "DeMobilization" {"Overlapping" 0}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "RCFFG",
+  "cyclelength" 1825,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 95},
+ "RC14ReMob"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"DeMobilization" {"Reset" 0},
+    "Recovered" {"DeMobilization" 95},
+    "Ready" {"Available" 730},
+    "Deployed" {"Overlapping" 270},
+    "Train" {"Ready" 365},
+    "Available" {"Reset" 365},
+    "Reset" {"Train" 365},
+    "Recovery" {"Recovered" 365},
+    "Overlapping" {"Recovery" 0}},
+   "Arcs"
+   {"Deployed->Overlapping" 270,
+    "Reset->Train" 365,
+    "Train->Ready" 365,
+    "Ready->Available" 730,
+    "Ava
+ilable->Reset" 365,
+    "Recovered->DeMobilization" 95,
+    "DeMobilization->Reset" 0,
+    "Recovery->Recovered" 365,
+    "Overlapping->Recovery" 0},
+   "neighbors"
+   {"DeMobilization" {"Reset" "DeMobilization->Reset"},
+    "Recovered" {"DeMobilization" "Recovered->DeMobilization"},
+    "Ready" {"Available" "Ready->Available"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Train" {"Ready" "Train->Ready"},
+    "Available" {"Reset" "Available->Reset"},
+    "Reset" {"Train" "Reset->Train"},
+    "Recovery" {"Recovered" "Recovery->Recovered"},
+    "Overlapping" {"Recovery" "Overlapping->Recovery"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"DeMobilization" "DeMobilizing",
+    "Recovered" "Recovered",
+    "Ready" "Dwelling",
+    "Deployed" "Bogging",
+    "Train" "Dwelling",
+    "Available" "Dwelling",
+    "Reset" "Dwelling",
+    "Recover
+y" "Recovering",
+    "Overlapping" "Overlapping"},
+   "class" "genericgraph",
+   "sources"
+   {"DeMobilization" {"Recovered" 95},
+    "Recovered" {"Recovery" 365},
+    "Ready" {"Train" 365},
+    "Deployed" {},
+    "Train" {"Reset" 365},
+    "Available" {"Ready" 730},
+    "Reset" {"Available" 365, "DeMobilization" 0},
+    "Recovery" {"Overlapping" 0},
+    "Overlapping" {"Deployed" 270}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "RC14ReMob",
+  "cyclelength" 1825,
+  "MaxDwell" 0,
+  "StartState" "Reset",
+  "Recovery" 0,
+  "EndState" "Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 95},
+ "RCOpSus"
+ {"MinDwell" 0,
+  "StopDeployable" 0,
+  "StartDeployable" 0,
+  "PositionGraph"
+  {"sinks"
+   {"OS_Reset" {"OS_Train" 365},
+    "OS_Train" {"OS_Ready" 365},
+    "OS_Ready" {"OS_Available" 730},
+    "OS_Available" {"OS_Reset" 365},
+    "Deployed" {"Overlapping" 270},
+    "Overlapping" {"DeMobilization" 0},
+    "DeMobilization" {"Promotion" 95},
+    "
+Promotion" {}},
+   "Arcs"
+   {"OS_Reset->OS_Train" 365,
+    "OS_Train->OS_Ready" 365,
+    "OS_Ready->OS_Available" 730,
+    "OS_Available->OS_Reset" 365,
+    "Deployed->Overlapping" 270,
+    "Overlapping->DeMobilization" 0,
+    "DeMobilization->Promotion" 95},
+   "neighbors"
+   {"OS_Reset" {"OS_Train" "OS_Reset->OS_Train"},
+    "OS_Train" {"OS_Ready" "OS_Train->OS_Ready"},
+    "OS_Ready" {"OS_Available" "OS_Ready->OS_Available"},
+    "OS_Available" {"OS_Reset" "OS_Available->OS_Reset"},
+    "Deployed" {"Overlapping" "Deployed->Overlapping"},
+    "Overlapping" {"DeMobilization" "Overlapping->DeMobilization"},
+    "DeMobilization" {"Promotion" "DeMobilization->Promotion"}},
+   "dotAble" false,
+   "delimiter" 0,
+   "directed" true,
+   "rendersubs" true,
+   "name" "",
+   "debugme" false,
+   "currentDelimiter" "->",
+   "fontsize" 24,
+   "nodes"
+   {"OS_Reset" "Dwelling",
+    "OS_Train" "Dwelling",
+    "OS_Ready" "Dwelling",
+    "OS_Available" "Dwelling",
+    "Deployed" "Bogging",    
+    "Overlapping" "Overlapping",
+    "DeMobilization" "DeMobilizing",
+    "Promotion" "PolicyChange"},
+   "class" "genericgraph",
+   "sources"
+   {"OS_Reset" {"OS_Available" 365},
+    "OS_Train" {"OS_Reset" 365},
+    "OS_Ready" {"OS_Train" 365},
+    "OS_Available" {"OS_Ready" 730},
+    "Deployed" {},
+    "Overlapping" {"Deployed" 270},
+    "DeMobilization" {"Overlapping" 0},
+    "Promotion" {"DeMobilization" 95}},
+   "Disabled" {}},
+  "overlap" 0,
+  "name" "RCOpSus",
+  "cyclelength" 1825,
+  "MaxDwell" 0,
+  "StartState" "OS_Reset",
+  "Recovery" 0,
+  "EndState" "OS_Available",
+  "MaxBOG" 0,
+  "EndIndex" 0,
+  "class" "TimeStep_Policy",
+  "MaxMOB" 95}})
 
 (def policy-records 
 "TimeStamp	Type	TimeInterval	PolicyName	Template	MaxDwell	MinDwell	MaxBOG	StartDeployable	StopDeployable	Overlap 	Recovery	BOGBudget	Deltas	Remarks
@@ -1205,7 +992,7 @@ DemandRecord	FALSE	1	8	46	901	1080	45	SRC3	AC	V4	R36	O36	Foundational
 PeriodRecord	Initialization	0	0
 PeriodRecord	PreSurge	1	450
 PeriodRecord	Surge	451	991
-PeriodRecord	PostSurge	992	inf
+PeriodRecord	PostSurge	992	999999999
 ")
 
 (def relation-records 
@@ -1246,7 +1033,8 @@ DefaultDemotionPolicy	Auto
 
 ;;A project is just a map of tables....
 (def raw-sample-project 
-  {:PolicyTemplates policy-templates 
+  {
+   ;:PolicyTemplates policy-templates 
    :PolicyRecords   policy-records
    :CompositePolicyRecords composite-policy-records
    :PolicyDefs      policy-defs
@@ -1257,8 +1045,18 @@ DefaultDemotionPolicy	Auto
    :RelationRecords relation-records
    :Parameters      parameters})
 
+(def non-tables #{:PolicyDefs})
+
 (def sample-tables 
   (reduce-kv (fn [acc name data]
                (assoc acc name 
                       (s/read-schema name data)))
-             {} raw-sample-project))
+             {:PolicyTemplates policy-templates} raw-sample-project))
+
+(defn get-sample-records [name]
+  (if (non-tables name) 
+    (get sample-tables name)
+    (tbl/record-seq (get sample-tables name))))
+    
+                        
+  
