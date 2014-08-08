@@ -11,11 +11,50 @@
 ;;opportunities arise, we may be able to abastract out 
 ;;functionality.
 (ns marathon.sim.entityfactory
-  (:require [marathon   [schemas :as s]]
+  (:require [marathon        [schemas :as s]]
+            [marathon.demand [demanddata :as d]]
+            [marathon.supply [unitdata :as u]]
             [marathon.sim.engine :as engine]
             [marathon.sim.core :as core]
-            [spork.util [table :as tbl]]
-            [clojure.core [reducers :as r]]))
+            [spork.util      [table :as tbl]]
+            [clojure.core    [reducers :as r]]))
+
+
+;;*Entity Orders
+;;The entity factory used to be an object that maintained 
+;;a reference to a parent simulation context.  This allowed 
+;;it to interpret data, like  a set of demand 
+;;records, into the act of creating demand entities, 
+;;notifying the simulation context that the a new demand had been
+;;registered, and registering the demand with the demandstore.
+;;Most of this was accomplished via side effects, so creating, 
+;;and loading entities, was fairly imperative and stateful.
+
+;;Going forward, we're going to break up the distiction between
+;;these responsibilities, and communicate the results via 
+;;EntityOrders.  An EntityOrder is merely a record that 
+;;the entity factory can intepret, given a context, to yield 
+;;a new context.  In this case, the context is our stock 
+;;simcontext.  Seen as an interpreter, our entityfactory 
+;;evalutates orders relative to the simulation context, returning 
+;;a new simulation context.  We define new kinds of EntityOrders 
+;;to allow for different types of entities to be built.
+
+;;In the scheme of our IO processes, this means we care about 
+;;a lower layer of functions that read raw data - typically 
+;;in the form of tab delimited text, and convert that data 
+;;into some kind of EntityOrder that our factory can recognize.
+
+;;Ideally, we end up with a simple interface for "Creating" entities
+;;in the simulation, where entity creation may involve an arbitrarily 
+;;complex sequence of updates.
+
+
+;;*Basic Functions
+;;Many of our functions are concerned with IO, that is, reading 
+;;tab-delimited text records, and creating entity orders from them.
+
+
 
 ;;For now, we're using dynamic scope...
 (def ^:dynamic *ctx* engine/emptysim)
@@ -53,17 +92,47 @@
           (core/in-scope? (:SRC r) params)))
   ([r] (valid-record? r (core/get-parameters *ctx*))))
 
-(defn demand-name [{:keys [Vignette Operation Priority]}]
-   (str Operation "_" Vignette  "_"  Priority))
+(defn demand-key [{:keys [SRC Vignette Operation Priority StartDay Duration]}]
+  (str Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"))
+  
+(defn record->demand 
+  "Basic io function for converting raw records to demanddata."
+  [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
+           SourceFirst Quantity  OITitle Vignette Operation  DemandGroup ] :as rec}]
+  (d/->demanddata 
+     (or DemandKey (demand-key rec)) ;unique name associated with the demand entity.
+     SRC ;demand-type, or other identifier of the capability demanded.
+     Priority ;numerical value representing the relative fill priority.
+     StartDay ;the day upon which the demand is activated and requiring fill.
+     Duration ;the total time the demand is activated.
+     Overlap  ;the demand-specific overlap requirement, if any
+     Category ;descriptor for deployed unit behavior over-rides.
+     SourceFirst  ;descriptor for supply preference. 
+     Quantity  ;the total amount of entities required to fill the demand.
+     OITitle   ;formerly OITitle.  Long-form description of the src capability.
+     Vignette  ;Descriptor of the force list that generated this demand entity.
+     Operation ;Fine-grained, unique description of the demand.
+     DemandGroup ;Ket that associates a demand with other linked demands.  
+     {} ;an ordered collection of all the fills recieved over time.                   
+     {} ;map of the units currently associated with the demand.
+     {} ;map of the units currently associated with this demand,
+        ;that are not actively contributing toward filling the
+        ;demand, due to a relief-in-place state.
+     ))
+
+(comment ;testing
+  (def demand-ctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+)
 
 ;;Returns a set of updates to the context, including 
 ;;the addition of new demands, and 
-(defn demands-from-records [recs demandmanager]  
+(defn demands-from-records [recs]  
   (let [params (core/get-parameters *ctx*)]
         (let [[uniques dupes]  (->> recs 
                                     (r/filter valid-record?)
-                                    (r/map #(assoc % :DemandName (demand-name %)))
-                                    (partition-dupes :DemandName))]
+                                    (r/map #(assoc % :DemandKey (demand-key %)))                                    
+                                    (partition-dupes :DemandKey)                                    
+                                    )]
           {:register-demands uniques
            :report-duplicates dupes})))
 
@@ -290,3 +359,35 @@
  ;; 749:       isUngrouped = UCase(grp) = UCase(UnGrouped)
  ;; 750:  
  ;; 751:   End Function
+
+
+
+ ;; 126:   Public Function recordToUnit(inrec As GenericRecord) As TimeStep_UnitData
+ ;; 127:  
+ ;; 128:   With inrec
+ ;; 129:       Set recordToUnit = createUnit(.fields("Name"), .fields("SRC"), .fields("OITitle"), _
+ ;; 130:                                     .fields("Component"), .fields("CycleTime"), .fields("Policy"))
+ ;; 131:   End With
+ ;; 132:  
+ ;; 133:   End Function
+ 
+
+
+ 667:   Public Function recordToDemand(inrec As GenericRecord) As TimeStep_DemandData
+ 668:   Dim nm As String
+ 669:  
+ 670:   With inrec
+ 671:       nm = DemandKey(inrec)   '.fields("Operation") & "_" & .fields("Vignette") & "_" & .fields("Priority")
+ 672:       Set recordToDemand = _
+ 673:           createDemand(nm, .fields("StartDay"), .fields("Duration"), .fields("Overlap"), _
+ 674:                       .fields("SRC"), .fields("Quantity"), .fields("Priority"), _
+ 675:                       0, .fields("Operation"), .fields("Vignette"), .fields("SourceFirst"), _
+ 676:                       .fields("DemandGroup"))
+ 677:   End With
+ 678:  
+ 679:   End Function
+
+
+
+
+(defn record->unitdata [])
