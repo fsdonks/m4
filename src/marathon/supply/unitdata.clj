@@ -27,7 +27,7 @@
 
 (def empty-unit
   (-> (make-unitdata)
-      (merge {:spawntime -1 :cycletime 0})))    
+      (merge {:spawntime -1 :cycletime 0 })))    
 
 ;pass a message to a unit, telling it to update itself.
 ;units pass themselves as state, along with some msg, to their referenced 

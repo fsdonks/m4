@@ -144,9 +144,8 @@
 )
 
 
-
-;;Returns a set of updates to the context, including 
-;;the addition of new demands, and 
+;;Returns a set of demand data, derived from recs, with 
+;;duplicate records attached as meta data.
 (defn demands-from-records [recs]  
   (let [params (core/get-parameters *ctx*)]
         (let [[uniques dupes]  (->> recs 
@@ -282,54 +281,10 @@
           (assoc :index new-idx)
           (demand/register-demand demandstore policystore ctx)))))
 
-(defn create-demand 
-  [name tstart duration overlap primaryunit quantity priority index operation vignette sourcefirst demandgroup]
-  (
-
- ;; 710:   Public Function createDemand(ByRef name As String, tstart As Single, duration As Single, overlap As Single, _
- ;; 711:                               primaryunit As String, quantity As Long, priority As Single, index As Long, _
- ;; 712:                                   Optional ByRef operation As String, Optional ByRef vignette As String, _
- ;; 713:                                       Optional ByRef sourcefirst As String, Optional ByRef demandgroup As String) As TimeStep_DemandData
- ;; 714:   Set createDemand = New TimeStep_DemandData
- ;; 715:  'TOM Change 6 Dec 2010 - formatting change, for readability
- ;; 716:   With createDemand
- ;; 717:       .name = name
- ;; 718:       .startday = tstart
- ;; 719:       .duration = duration
- ;; 720:       .overlap = overlap
- ;; 721:       .primaryunit = primaryunit
- ;; 722:       .src = .primaryunit
- ;; 723:       If quantity > 0 Then
- ;; 724:           .quantity = quantity
- ;; 725:       Else
- ;; 726:           .quantity = 1
- ;; 727:       End If
- ;; 728:       .priority = priority
- ;; 729:       .index = index
- ;; 730:       If operation = vbNullString Then operation = "Random_" & index
- ;; 731:       .operation = operation
- ;; 732:       If sourcefirst = vbNullString Then sourcefirst = "AC"
- ;; 733:       .sourcefirst = sourcefirst
- ;; 734:       If vignette = vbNullString Then vignette = "Random_" & index
- ;; 735:       .vignette = vignette
- ;; 736:      'Tom change 17 Aug 2012
- ;; 737:       If isUngrouped(demandgroup) Then
- ;; 738:           .demandgroup = UnGrouped
- ;; 739:       Else
- ;; 740:           .demandgroup = demandgroup
- ;; 741:       End If
- ;; 742:   End With
- ;; 743:  
- ;; 744:   End Function
-
-
- ;; 746:   Public Function isUngrouped(Optional grp As String) As Boolean
- ;; 747:   isUngrouped = grp = vbNullString
- ;; 748:   If Not isUngrouped Then _
- ;; 749:       isUngrouped = UCase(grp) = UCase(UnGrouped)
- ;; 750:  
- ;; 751:   End Function
-
+(defn ungrouped? [grp] 
+  (when grp 
+      (or (empty-string? grp) 
+          (= (clojure.string/upper-case grp) "UNGROUPED"))))
 
 
  ;; 126:   Public Function recordToUnit(inrec As GenericRecord) As TimeStep_UnitData
@@ -343,21 +298,52 @@
  
 
 
- 667:   Public Function recordToDemand(inrec As GenericRecord) As TimeStep_DemandData
- 668:   Dim nm As String
- 669:  
- 670:   With inrec
- 671:       nm = DemandKey(inrec)   '.fields("Operation") & "_" & .fields("Vignette") & "_" & .fields("Priority")
- 672:       Set recordToDemand = _
- 673:           createDemand(nm, .fields("StartDay"), .fields("Duration"), .fields("Overlap"), _
- 674:                       .fields("SRC"), .fields("Quantity"), .fields("Priority"), _
- 675:                       0, .fields("Operation"), .fields("Vignette"), .fields("SourceFirst"), _
- 676:                       .fields("DemandGroup"))
- 677:   End With
- 678:  
- 679:   End Function
-
-
-
-
 (defn record->unitdata [])
+
+
+;;create-unit provides a baseline, unattached unit derived from a set of data.
+;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
+;;nothing. parametrically create a new unit.
+
+(defn create-unit [name src oititle component cycletime policy behavior policyobj]
+  (u/->unitdata
+   name ;unit entity's unique name. corresponds to a UIC 
+   src ;unit entity's type, or capability it can supply.
+   component ;unit entity's membership in supply.
+   policy  ;the policy the entity is currently following.
+   [] ;a stack of any pending policy changes.
+   behavior ;the behavior the unit uses to interpret policy and messages.
+   statedata ;generic state data for the unit's finite state machine.
+   cycletime ;the unit's current coordinate in lifecycle space.
+   nil       ;description of the categories this unit serve as a followon to.
+   :spawning ;the current physical location of the unit.
+   :spawning ;the current position of the unit in its policy space.
+    ;the current cycle data structure for the unit.
+   [] ;an ordered collection of the cycles that the unit has completed.
+   -1 ;the time in which the unit spawned.
+   oititle ;the description of the unit.
+   [] ;list of all the locations visited.
+   0  ;dwell time before deployment
+   ))
+
+(defn assign-policy [unit policystore]
+  (assoc unit :policy 
+     (choose-policy (:policy unit) (:component unit) policystore (:src unit))))
+
+ 140:   Public Function createUnit(ByRef name As String, ByRef src As String, ByRef OITitle As String, ByRef component As String, _
+ 141:                               cycletime As Single, ByRef policy As String, Optional behavior As IUnitBehavior, Optional policyobj As IRotationPolicy) As TimeStep_UnitData
+ 142:   Set createUnit = New TimeStep_UnitData
+ 143:  
+ 144:   With createUnit
+ 145:       If Not (behavior Is Nothing) Then Set .behavior = behavior
+ 146:       .src = src
+ 147:       .OITitle = OITitle
+ 148:       .component = component
+ 149:       .name = name
+ 150:       .cycletime = cycletime
+ 151:      'Decouple
+ 152:       If policyobj Is Nothing Then Set policyobj = choosepolicy(policy, .component, state.policystore, src)
+ 153:       Set .policy = policyobj
+ 154:   End With
+ 155:  
+ 156:   End Function
