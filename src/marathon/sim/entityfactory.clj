@@ -97,18 +97,9 @@
 
 (defn demand-key 
   ([{:keys [SRC Vignette Operation Priority StartDay Duration]}]
-     (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"]))
+     (demand-key SRC Vignette Operation Priority StartDay Duration))
   ([SRC Vignette Operation Priority StartDay Duration] 
      (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"])))
-  
-(defn record->demand 
-  "Basic io function for converting raw records to demanddata."
-  [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
-           SourceFirst Quantity  OITitle Vignette Operation  DemandGroup ] :as rec}]
-  (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
-                 SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup))
-
-)
 
 ;;Could inline for speed, may be unnecessary...
 (defn create-demand   
@@ -140,6 +131,13 @@
                                         ;that are not actively contributing toward filling the
                                         ;demand, due to a relief-in-place state.
       )))
+
+(defn record->demand 
+  "Basic io function for converting raw records to demanddata."
+  [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
+           SourceFirst Quantity  OITitle Vignette Operation  DemandGroup ] :as rec}]
+  (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
+                 SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup))
 
 (comment ;testing
   (def demand-ctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
