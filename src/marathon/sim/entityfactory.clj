@@ -15,6 +15,7 @@
             [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as u]]
             [marathon.sim.engine :as engine]
+            [spork.sim.simcontext :as sim]
             [marathon.sim.core :as core]
             [spork.util      [table :as tbl]]
             [clojure.core    [reducers :as r]]))
@@ -76,24 +77,27 @@
 (defn partition-dupes 
   "Returns a pair of [uniques, dupes] based on the key function"
   [keyfn xs]
-  (let [known (atom #{})]
-    (reduce (fn [[uniques dupes] x]
-              (let [k (keyfn x)]
-                (if (contains? @known k)
-                  [uniques (assoc dupes k (conj (get k dupes []) x))]
-                  (do (swap! known conj k)
-                      [(conj uniques x) dupes]))))
-            [[] {}]
-            xs)))
+  (let [known (java.util.HashSet.)
+        res  (reduce (fn [acc x]              
+                       (let [uniques (first acc)
+                             dupes   (second acc)
+                             k (keyfn x)]
+                         (if (.contains known k)
+                           [uniques (assoc! dupes k (cons x (get dupes k nil)))]
+                           (do (.add known k)
+                               [(conj uniques x) dupes]))))
+                     [[]  (transient {})]
+                     xs)]
+    [(first res) (persistent! (second res))]))
 
 (defn valid-record? 
   ([r params] 
      (and (:Enabled r) 
-          (core/in-scope? (:SRC r) params)))
+          (core/in-scope? params (:SRC r))))
   ([r] (valid-record? r (core/get-parameters *ctx*))))
 
 (defn demand-key [{:keys [SRC Vignette Operation Priority StartDay Duration]}]
-  (str Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"))
+  (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"]))
   
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
@@ -124,19 +128,28 @@
   (def demand-ctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
 )
 
+
+
 ;;Returns a set of updates to the context, including 
 ;;the addition of new demands, and 
 (defn demands-from-records [recs]  
   (let [params (core/get-parameters *ctx*)]
         (let [[uniques dupes]  (->> recs 
                                     (r/filter valid-record?)
-                                    (r/map #(assoc % :DemandKey (demand-key %)))                                    
-                                    (partition-dupes :DemandKey)                                    
+                                    (partition-dupes demand)                                    
                                     )]
-          {:register-demands uniques
-           :report-duplicates dupes})))
+          (with-meta (mapv record->demand uniques)
+            {:duplicates dupes}))))
 
-(defn load-demand
+
+(defn notify-duplicate-demands! [dupes ctx]
+  (let [name (:name (core/get-demandstore *ctx*))]
+    (reduce (fn [ctx dup]
+              (sim/trigger-event :Initialize name name 
+                     (str "Demand " (:DemandKey dup) " had duplicates in source data.") nil ctx))
+            ctx
+            dupes)))
+
                         
 
 ;;  574:                   If demandmap.exists(nm) Then
@@ -152,54 +165,6 @@
 ;;  584:                       SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
 ;;  585:                   End If
 
-;; 48:   Public Sub DemandsFromRecords(records As Dictionary, DemandManager As TimeStep_ManagerOfDemand)
-;;  549:  
-;;  550:   Dim demand As TimeStep_DemandData
-;;  551:   Dim dupes As Dictionary
-;;  552:   Dim dup
-;;  553:   Dim demandmap As Dictionary
-;;  554:   Dim vig As String
-;;  555:   Dim nm As String
-;;  556:   Dim op As String
-;;  557:   Dim pri As Long
-;;  558:  
-;;  559:   Dim rec
-;;  560:   Set demandmap = DemandManager.demandmap
-;;  561:  
-;;  562:  
-;;  563:   Set dupes = New Dictionary
-;;  564:  'Decouple
-;;  565:   With state.parameters
-;;  566:        For Each rec In records
-;;  567:           Set record = records(rec)
-;;  568:           With record
-
-
-;;  569:               If .fields("Enabled") = True And inScope(.fields("SRC")) Then
-;;  570:                   vig = .fields("Vignette")
-;;  571:                   op = .fields("Operation")
-;;  572:                   pri = .fields("Priority")
-;;  573:                   nm = op & "_" & vig & "_" & pri'demands have unique names
-;;  574:                   If demandmap.exists(nm) Then
-;;  575:                       If dupes.exists(nm) Then
-;;  576:                           dupes(nm) = dupes(nm) + 1
-;;  577:                       Else
-;;  578:                           dupes.add nm, 1
-;;  579:                       End If
-;;  580:                   Else'register the demand.
-;;  581:                       Set demand = associateDemand(recordToDemand(record), DemandManager)
-;;  582:                       msg = "Demand" & demand.name & " initialized"
-;;  583:                      'Decouple
-;;  584:                       SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
-;;  585:                   End If
-;;  586:               Else
-;;  587:                   msg = "Demand at row" & CLng(rec) & " disabled."
-;;  588:                  'Decouple
-;;  589:                   SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
-;;  590:               End If
-;;  591:           End With
-;;  592:       Next rec
-;;  593:   End With
 ;;  594:  
 ;;  595:  'notify of data errors, specifically duplicate demands.
 ;;  596:   For Each dup In dupes

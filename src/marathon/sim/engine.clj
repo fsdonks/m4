@@ -33,7 +33,17 @@
 
 (def emptystate (simstate/make-simstate))
 (def emptysim   (sim/make-context :state emptystate))
-(def debugsim   (assoc (sim/make-debug-context) :state emptystate))
+;;A useful debugging context for us.  Prints out everything it sees.
+(def debugsim   
+  (-> (sim/make-debug-context 
+       :debug-handler  (fn [ctx edata name] 
+                         (do (println (sim/debug-msg ":debugger saw " 
+                         {:type (spork.sim.data/event-type  edata) 
+                          :from (spork.sim.data/event-from edata)
+                          :to (spork.sim.data/event-to edata)
+                          :msg (sim/packet-message edata)
+                          :data (spork.sim.data/event-data  edata)})) ctx))) 
+                 (assoc :state emptystate)))
 ;#Auxillary functions, and legacy functions
 
 ;;Auxillary functions from the old simstate module
