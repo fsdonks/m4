@@ -55,8 +55,6 @@
 ;;Many of our functions are concerned with IO, that is, reading 
 ;;tab-delimited text records, and creating entity orders from them.
 
-
-
 ;;For now, we're using dynamic scope...
 (def ^:dynamic *ctx* engine/emptysim)
 
@@ -141,7 +139,7 @@
           (with-meta (mapv record->demand uniques)
             {:duplicates dupes}))))
 
-
+;;Broadcast the fact that we have duplicates.
 (defn notify-duplicate-demands! [dupes ctx]
   (let [name (:name (core/get-demandstore *ctx*))]
     (reduce (fn [ctx dup]
@@ -149,8 +147,6 @@
                      (str "Demand " (:DemandKey dup) " had duplicates in source data.") nil ctx))
             ctx
             dupes)))
-
-                        
 
 ;;  574:                   If demandmap.exists(nm) Then
 ;;  575:                       If dupes.exists(nm) Then
@@ -235,33 +231,6 @@
  ;; 665:   End Sub
 
 
- ;; 667:   Public Function recordToDemand(inrec As GenericRecord) As TimeStep_DemandData
- ;; 668:   Dim nm As String
- ;; 669:  
- ;; 670:   With inrec
- ;; 671:       nm = DemandKey(inrec)   '.fields("Operation") & "_" & .fields("Vignette") & "_" & .fields("Priority")
- ;; 672:       Set recordToDemand = _
- ;; 673:           createDemand(nm, .fields("StartDay"), .fields("Duration"), .fields("Overlap"), _
- ;; 674:                       .fields("SRC"), .fields("Quantity"), .fields("Priority"), _
- ;; 675:                       0, .fields("Operation"), .fields("Vignette"), .fields("SourceFirst"), _
- ;; 676:                       .fields("DemandGroup"))
- ;; 677:   End With
- ;; 678:  
- ;; 679:   End Function
-
-
- ;; 681:   Private Function DemandKey(rec As GenericRecord) As String
- ;; 682:   Dim startday As Single
- ;; 683:   Dim dur As Single
- ;; 684:  
- ;; 685:   With rec
- ;; 686:       DemandKey = .fields("Priority") & "_" & .fields("Vignette") & "_" & .fields("SRC") & "_"
- ;; 687:       startday = CSng(.fields("StartDay"))
- ;; 688:       dur = CSng(.fields("Duration"))
- ;; 689:       DemandKey = DemandKey & "[" & startday & "..." & (startday + dur) & "]"
- ;; 690:   End With
- ;; 691:       
- ;; 692:   End Function
 
 
  ;; 693:   Public Function associateDemand(demand As TimeStep_DemandData, demandmgr As TimeStep_ManagerOfDemand) As TimeStep_DemandData
@@ -280,6 +249,21 @@
  ;; 706:   Set associateDemand = demand
  ;; 707:   End Function
 
+;;Updates the demand index according to the contents of 
+;;demandmanager, providing unique names for duplicate 
+;;demands.  Threads the demand through the context 
+;;and returns the resulting context.
+(defn associate-demand [demand ctx]
+  (core/with-simstate [[parameters demandstore policystore] ctx]    
+    (let [demands (:demandmap demandstore)
+          demand-count (count demands)
+          new-idx (+ (:demandstart parameters) demand-count)]
+      (-> (if (contains? demands (:name demand))
+            (assoc demand :name 
+                   (str (:name demand) "_" (inc demand-count)))
+            demand)                     
+          (assoc :index new-idx)
+          (demand/register-demand demandstore policystore ctx)))))
 
  ;; 710:   Public Function createDemand(ByRef name As String, tstart As Single, duration As Single, overlap As Single, _
  ;; 711:                               primaryunit As String, quantity As Long, priority As Single, index As Long, _

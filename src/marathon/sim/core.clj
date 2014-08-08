@@ -58,6 +58,29 @@
    get-fillstore     [:fillstore]
    get-fill-function [:fillstore :fillfunction]})
 
+(defmacro with-simstate 
+  "Given a destructuring of [[path1 path2...] the-simstate], paired
+   with an expression, evaluates the expression under a lexical context
+   where the path symbols are bound to corresponding get-path variants 
+   as defined for simstate."
+  [[path-symbs state]  & expr]
+  (let [symb->path {'parameters    get-parameters
+                    'supplystore   get-supplystore
+                    'demandstore   get-demandstore
+                    'policystore   get-policystore
+                    'fillstore     get-fillstore
+                    'fill-function get-fill-function}]
+    `(let [~@(reduce (fn [acc [p v]]
+                       (-> acc (conj p) (conj v)))
+                     []
+                     (for [p path-symbs]
+                       [p (if-let [res (get symb->path p)] 
+                            `(~res ~state)                                   
+                            (throw (Exception. (str "Unknown path " p))))]))]
+       ~@expr)))
+            
+ 
+  
 ;;#Shared Functions
 
 ;;These functions were extracted due to use across multiple domains.  I may 
