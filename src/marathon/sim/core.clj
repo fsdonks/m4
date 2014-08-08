@@ -190,6 +190,25 @@
 ;helper macro for defining key-building functions.
 (defmacro defkey [name base] `(def ~name (key-tag-maker ~base)))
 
+
+;;#Utils
+
+(def ^:constant +empty-string+ "")
+(definline empty-string? [x] `(identical? ~x +empty-string+))
+
+(let [idx (atom 0)]
+  (defn next-idx 
+    "Utility function for getting incrementing indices.  Used for 
+     naming entities.  Passing an argument resets the index to the arg,
+     and returns the arg.  Otherwise, a mutable counter is incremented 
+     and the result is returned."
+    ([] (let [i @idx]
+          (do (swap! idx unchecked-inc)
+              i)))
+    ([new-idx] (do (reset! idx new-idx)
+                   new-idx))))
+       
+
 ;;##Developer Notes
 
 ;;#Transitioning from Effectful Simulation and State Updating#

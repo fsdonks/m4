@@ -58,6 +58,7 @@
 ;;For now, we're using dynamic scope...
 (def ^:dynamic *ctx* engine/emptysim)
 
+
 ;;I think we may want to make the entityfactory functions operate 
 ;;on a dynamic var.  That should make the calling code clearer...
 ;;There are events where we trigger notifications and such, for 
@@ -94,15 +95,33 @@
           (core/in-scope? params (:SRC r))))
   ([r] (valid-record? r (core/get-parameters *ctx*))))
 
-(defn demand-key [{:keys [SRC Vignette Operation Priority StartDay Duration]}]
-  (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"]))
+(defn demand-key 
+  ([{:keys [SRC Vignette Operation Priority StartDay Duration]}]
+     (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"]))
+  ([SRC Vignette Operation Priority StartDay Duration] 
+     (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"])))
   
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
   [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
            SourceFirst Quantity  OITitle Vignette Operation  DemandGroup ] :as rec}]
-  (d/->demanddata 
-     (or DemandKey (demand-key rec)) ;unique name associated with the demand entity.
+  (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
+                 SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup))
+
+)
+
+;;Could inline for speed, may be unnecessary...
+(defn create-demand   
+  "Produces a validated demand from the inputs.  We enforce invariants about 
+   demanddata here to ensure that invalid values are caught and excepted."
+  [DemandKey SRC  Priority StartDay Duration Overlap Category 
+   SourceFirst Quantity  OITitle Vignette Operation  DemandGroup]  
+  (let [empty-op  (empty-string? Operation)
+        empty-vig (empty-string? Vignette)
+        idx (if (or empty-op empty-vig) (core/next-idx) 0)]
+
+    (d/->demanddata    ;unique name associated with the demand entity.
+     (or DemandKey (demand-key SRC Vignette Operation Priority StartDay Duration)) 
      SRC ;demand-type, or other identifier of the capability demanded.
      Priority ;numerical value representing the relative fill priority.
      StartDay ;the day upon which the demand is activated and requiring fill.
@@ -112,15 +131,15 @@
      SourceFirst  ;descriptor for supply preference. 
      Quantity  ;the total amount of entities required to fill the demand.
      OITitle   ;formerly OITitle.  Long-form description of the src capability.
-     Vignette  ;Descriptor of the force list that generated this demand entity.
-     Operation ;Fine-grained, unique description of the demand.
+     (if empty-vig (str "Anonymous" idx) Vignette)  ;Descriptor of the force list that generated this demand entity.
+     (if empty-op  (str "Anonymous" idx) Operation) ;Fine-grained, unique description of the demand.
      DemandGroup ;Ket that associates a demand with other linked demands.  
      {} ;an ordered collection of all the fills recieved over time.                   
      {} ;map of the units currently associated with the demand.
      {} ;map of the units currently associated with this demand,
-        ;that are not actively contributing toward filling the
-        ;demand, due to a relief-in-place state.
-     ))
+                                        ;that are not actively contributing toward filling the
+                                        ;demand, due to a relief-in-place state.
+      )))
 
 (comment ;testing
   (def demand-ctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
@@ -264,6 +283,10 @@
             demand)                     
           (assoc :index new-idx)
           (demand/register-demand demandstore policystore ctx)))))
+
+(defn create-demand 
+  [name tstart duration overlap primaryunit quantity priority index operation vignette sourcefirst demandgroup]
+  (
 
  ;; 710:   Public Function createDemand(ByRef name As String, tstart As Single, duration As Single, overlap As Single, _
  ;; 711:                               primaryunit As String, quantity As Long, priority As Single, index As Long, _
