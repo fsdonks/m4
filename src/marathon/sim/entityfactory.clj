@@ -346,9 +346,6 @@
 ;;Adds multiple units according to a template.
 (defn add-units [amount src oititle compo policy supply extratags ghost]
   
-  
-  
-
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
  ;; 436:                               compo As String, policy As IRotationPolicy, _
  ;; 437:                                       supply As TimeStep_ManagerOfSupply, _
@@ -446,14 +443,17 @@
    any movement via event triggers, returning the 
    new unit and a new policystore."
   [unit policy ghost ctx]
-  {:policystore (plcy/subscribe-unit unit policy policy-store)
-   :unit    (-> unit 
-                (assoc :policy policy)
-                (assoc :positionpolicy (if (not ghost) 
-                                         (pol/get-position policy (:cycletime unit))
-                                         "Spawning"))
-                (assoc :locationname "Spawning")  
-                (u/change-location newpos ctx))})
+  (-> unit 
+      (assoc :policy policy)
+      (assoc :positionpolicy (if (not ghost) 
+                               (pol/get-position policy (:cycletime unit))
+                               "Spawning"))
+      (assoc :locationname "Spawning")  
+      (u/change-location newpos ctx)))
+
+(defn initialize-policy 
+  [unit policystore]
+  (plcy/subscribe-unit unit policy policy-store))
 
 ;;consider changing these to keywords.
 ;;We can probably push this off to a policy default table.  It used
