@@ -27,6 +27,7 @@
    [activeperiod p/+default-period+] ;the current period 
    [periodchanges {}] ;the set of scheduled period changes....re-think this.
    schedules ;no idea....deprecate.
+   [subscriptions {}] ;;map of policy->#{client}
    [composites {}]]) ;set of composite policies....only really mattered for resetting.
 ;   [permanents {}] 
 ;   canghost ;eh...probably don't need to store this here.])

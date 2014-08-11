@@ -198,9 +198,9 @@
   (set-deployable       [p tstart tfinal])
   (set-deployable-start [p cycletime])
   (set-deployable-stop  [p cycletime])
-  (start-deployable [p])
-  (stop-deployable  [p])
-  (start-state      [p])
+  (start-deployable     [p])
+  (stop-deployable      [p])
+  (start-state          [p])
   (subscribe        [p unit]) ;EXCTRICATE 
   (get-subscribers  [p]) ;EXCTRICATE
   (set-subscribers  [p xs]) ;EXCTRICATE

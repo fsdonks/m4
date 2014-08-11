@@ -336,17 +336,58 @@
   (->> (map #(queue-policy-change %1 newpolicy period) subscribers) 
        (reduce #(sim/merge-updates %1 %2) ctx)))
 
+
+(defn policy-name [p] (if (keyword? p) p (:name p)))
+
+(defn get-subscribers [policy policystore] 
+  (-> policystore 
+      :subscriptions
+      (policy-name policy)))
+
+(defn update-subscribers 
+  "Applies f to the subscriptions associated with policy in policystore, then
+   stores the updated result, returning the policystore."
+  [f policy policystore]
+  (update-in policy-store [:subscriptions (policy-name policy)] f))
+  
 (defn change-policy
   "High level policy management.  For policies that are period-driven, enforces 
    a policy shift to the sub policy defined over the new period.  If the period
    is undefined, no change happens."
   [current-period new-period policy policystore ctx]
-  (let [subscribers (missing/get-subscribers policy policystore)
+  (let [subscribers (get-subscribers policy policystore)
         new-policy  (protocols/on-period-change policy new-period)]
         (->> (alter-unit-policies subscribers new-period policy ctx)
              (sim/merge-updates 
                {:policystore (update-policy policystore new-policy)}))))
 
+(defn subscribe-unit 
+  "Subscribes a unit to policy by establishing a relation with the policy in
+   the policy store.  Rather than storing subscriptions in the policy, we now
+   keep them in the policystore."
+  [unit policy policy-store]
+  (let [old-policy (policy-name (:policy unit))
+        new-policy (policy-name policy)
+        nm         (:name unit)
+        s          (:subscriptions policystore)
+        oldsubs    (disj (get s old-policy)  nm)
+        newsubs    (conj  (get s new-policy) nm)]
+    (->> (-> s
+             (assoc old-policy oldsubs)
+             (assoc new-policy newsubs))
+         (assoc policy-store :subscriptions))))
+
+(defn unsubscribe-unit 
+  "Subscribes a unit to policy by establishing a relation with the policy in
+   the policy store.  Rather than storing subscriptions in the policy, we now
+   keep them in the policystore."
+  [unit policy policy-store]
+  (let [old-policy (policy-name policy)
+        nm         (:name unit)
+        s          (:subscriptions policystore)
+        oldsubs    (disj (get s old-policy)  nm)]
+    (->> (-> s (assoc old-policy oldsubs))
+         (assoc policy-store :subscriptions))))
 
 ;We define change in a composite policy by the existence of both the new period 
 ;and the old period in the composite policy.  Atomic policies are defined across 

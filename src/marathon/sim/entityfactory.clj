@@ -421,6 +421,47 @@
 
 ;Given a unit, initialize it's currentcycle based on policy information
 
+;;Units maintain direct references to policies, but they do not
+;;actively subscribe directly to the policy.  Rather, the policy 
+;;store maintains a map of {policyname #{subscribers}}, we 
+;;can even do this via tags in the tagbase, but it's already 
+;;there in the policy store.  That way, when we invoke the 
+;;policy subscription service, we should have an couple of updates: 
+;;the unit now has a reference to the policy it subscribes to (
+;;to make unit querying and updating easier), and the policystore 
+;;has an association between the unit and the policy its 
+;;subscribed to.
+
+;;I think this guy should be elevated.
+;;This really needs to happen in the context of the full sim, since
+;;it's touching on several areas at once: policy, event-notification, supply.
+;;We need access to multiple spheres of influence.  We used to just
+;;mutate away and let the changes propgate via effects.  No mas.
+(defn initialize-cycle 
+  "Given a unit's policy, subscribes the unit with said policy, 
+   updates the unit's state to initial conditions, broadcasts 
+   any movement via event triggers, returning the 
+   new unit and a new policystore."
+  [unit policy ghost ctx]
+  (-> unit 
+      (assoc :policy (:name policy))
+      (assoc :positionpolicy (if (not ghost) 
+                               (pol/get-position policy (:cycletime unit))
+                               "Spawning"))
+      (assoc :locationname "Spawning")  
+      (u/change-location newpos ctx)
+      ))
+
+(defn subscribe-unit 
+  "Subscribes a unit to policy by establishing a relation with the policy in
+   the policy store.  Rather than storing subscriptions in the policy, we now
+   keep them in the policystore."
+  [unit policy policy-store]
+  (let [
+           
+      
+      
+        
  ;; 336:   Private Sub initialize_cycle(unit As TimeStep_UnitData, policy As IRotationPolicy, Optional ghost As Boolean)
  ;; 337:   Set unit.policy = policy
  ;; 338:   policy.subscribe unit
@@ -430,22 +471,22 @@
  ;; 342:           .PositionPolicy = policy.getPosition(.cycletime) 'TOM Change 20 May
  ;; 343:           .LocationName = "Spawning"
  ;; 344:           .changeLocation .PositionPolicy, state.context
- ;; 345:          '.LocationName = .PositionPolicy 'TOM Change 20 May
- ;; 346:          'Tom Change 17 June 2011 -> removed, vestigial, don't need supply manager anymore.
- ;; 347:          '.location = supply.parent.policymanager.locationID(.LocationName)
  ;; 348:       Else
  ;; 349:           .PositionPolicy = "Spawning"'TOM Change 20 May
  ;; 350:           .LocationName = "Spawning"
  ;; 351:           .changeLocation .PositionPolicy, state.context'TOM Change 20 May
- ;; 352:          'Tom Change 17 June 2011 -> removed, vestigial, don't need supply manager anymore.
- ;; 353:          '.location = supply.parent.policymanager.locationID(.LocationName)
  ;; 354:       End If
  ;; 355:   End With
  ;; 356:  
  ;; 357:   End Sub
 
 ;;consider changing these to keywords.
-;;We can probably push this off to a policy default table.
+;;We can probably push this off to a policy default table.  It used
+;;to mean that we had this interpreted into policy objects, all
+;;initialized in a singleton class at runtime initiaion.  Now that
+;;it's pulled out of the class, we can probably interpret it easier 
+;;and then use a policy parser to point at the correct policies in 
+;;the policystore.
 (def ^:constant +policy-defaults+ 
   {"Ghost" {:special "SpecialGhostPolicy"
             :default "DefaultGhostPolicy"}
@@ -454,84 +495,20 @@
    "RC"    {:special "SpecialRCPolicy"
             :default "DefaultRCPolicy"}})
 
+;;Note -> we're not mutating anything here.  We can pass in a 
+;;parameters.
 (defn choose-policy 
   "Tries to fetch an associated policy, and upon failing, selects a 
    default policy based on the component/src and whether the SRC is 
    tagged as being special."
-  [policyname component policystore src]
-  (core/with-simstate [[parameters] *ctx*]
-    (let [policy-type  (if (or (core/empty-string? src) 
-                               (not (core/special-src? (:tags parameters) src)))
-                          :default
-                          :special)]
-      (if-let [p (get-in policystore [:policies policyname])]
-        p 
-        (if-let [res (get-in +policy-defaults+ [component policy-type])]
-           res
-           (throw (Exception. (str "Default Policy is set at "  
-                                   policyname  " which does not exist!"))))))))
-
- ;; 181:   Public Function choosepolicy(ByRef policyname As String, ByRef component As String, _
- ;; 182:                                   policymanager As TimeStep_ManagerOfPolicy, Optional ByRef src As String) As IRotationPolicy
- ;; 183:  
- ;; 184:   Static nm As String
- ;; 185:  
- ;; 186:   Dim specialPolicy As Boolean
- ;; 187:  
- ;; 188:   If src = vbNullString Then
- ;; 189:       specialPolicy = False
- ;; 190:   Else
- ;; 191:      'Decouple
- ;; 192:       specialPolicy = state.parameters.SRCHasTag(src, "Special")
- ;; 193:   End If
- ;; 194:  
- ;; 195:       
- ;; 196:   With policymanager
- ;; 197:       If .policies.exists(policyname) Then
- ;; 198:           Set choosepolicy = .policies(policyname)
- ;; 199:       Else
- ;; 200:           If Not specialPolicy Then
- ;; 201:               If component = "Ghost" Then
- ;; 202:                  'Decouple
- ;; 203:                   nm = state.parameters.getKey("DefaultGhostPolicy")
- ;; 204:               ElseIf component = "AC" Then
- ;; 205:                  'Decouple
- ;; 206:                   nm = state.parameters.getKey("DefaultACPolicy")
- ;; 207:               Else
- ;; 208:                  'Decouple
- ;; 209:                   If state.parameters.getKey("TAA1519MaxUtilizationHack") Then
- ;; 210:                       nm = "MaxUtilization_Enabler"
- ;; 211:                   Else
- ;; 212:                       nm = state.parameters.getKey("DefaultRCPolicy")
- ;; 213:                   End If
- ;; 214:               End If
-
-
-
- ;; 215:           Else
- ;; 216:               If component = "Ghost" Then
- ;; 217:                  'Decouple
- ;; 218:                   nm = state.parameters.getKey("SpecialGhostPolicy")
- ;; 219:               ElseIf component = "AC" Then
- ;; 220:                  'Decouple
- ;; 221:                   nm = state.parameters.getKey("SpecialACPolicy")
- ;; 222:               Else
- ;; 223:                  'Decouple
- ;; 224:                   If state.parameters.getKey("TAA1519MaxUtilizationHack") Then
- ;; 225:                       nm = "MaxUtilization"
- ;; 226:                   Else
- ;; 227:                       nm = state.parameters.getKey("SpecialRCPolicy")
- ;; 228:                   End If
- ;; 229:               End If
- ;; 230:           End If
-
-
- ;; 232:           If .policies.exists(nm) Then
- ;; 233:               Set choosepolicy = .policies(nm)
- ;; 234:           Else
- ;; 235:               Err.Raise 101, , "Default Policy is set at " & policyname & " which does not exist!"
- ;; 236:           End If
- ;; 237:       End If
- ;; 238:   End With
- ;; 239:  
- ;; 240:   End Function
+  [policyname component policystore parameters src]
+  (let [policy-type  (if (or (core/empty-string? src) 
+                             (not (core/special-src? (:tags parameters) src)))
+                       :default
+                       :special)]
+    (if-let [p (get-in policystore [:policies policyname])]
+      p 
+      (if-let [res (get-in +policy-defaults+ [component policy-type])]
+        res
+        (throw (Exception. (str "Default Policy is set at "  
+                                policyname  " which does not exist!")))))))
