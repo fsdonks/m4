@@ -15,6 +15,7 @@
             [marathon.demand [demanddata :as d]]
             [marathon.sim.demand :as demand]
             [marathon.supply [unitdata :as u]]
+            [marathon.sim.policy :as plcy]
             [marathon.sim.engine :as engine]
             [spork.sim.simcontext :as sim]
             [marathon.sim.core :as core]
@@ -346,6 +347,7 @@
 (defn add-units [amount src oititle compo policy supply extratags ghost]
   
   
+  
 
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
  ;; 436:                               compo As String, policy As IRotationPolicy, _
@@ -419,7 +421,7 @@
  ;; 504:   End Function
 
 
-;Given a unit, initialize it's currentcycle based on policy information
+;;Given a unit, initialize it's currentcycle based on policy information
 
 ;;Units maintain direct references to policies, but they do not
 ;;actively subscribe directly to the policy.  Rather, the policy 
@@ -437,48 +439,21 @@
 ;;it's touching on several areas at once: policy, event-notification, supply.
 ;;We need access to multiple spheres of influence.  We used to just
 ;;mutate away and let the changes propgate via effects.  No mas.
+;;Returns a policystore update and a unit update.
 (defn initialize-cycle 
   "Given a unit's policy, subscribes the unit with said policy, 
    updates the unit's state to initial conditions, broadcasts 
    any movement via event triggers, returning the 
    new unit and a new policystore."
   [unit policy ghost ctx]
-  (-> unit 
-      (assoc :policy (:name policy))
-      (assoc :positionpolicy (if (not ghost) 
-                               (pol/get-position policy (:cycletime unit))
-                               "Spawning"))
-      (assoc :locationname "Spawning")  
-      (u/change-location newpos ctx)
-      ))
-
-(defn subscribe-unit 
-  "Subscribes a unit to policy by establishing a relation with the policy in
-   the policy store.  Rather than storing subscriptions in the policy, we now
-   keep them in the policystore."
-  [unit policy policy-store]
-  (let [
-           
-      
-      
-        
- ;; 336:   Private Sub initialize_cycle(unit As TimeStep_UnitData, policy As IRotationPolicy, Optional ghost As Boolean)
- ;; 337:   Set unit.policy = policy
- ;; 338:   policy.subscribe unit
- ;; 339:  
- ;; 340:   With unit
- ;; 341:       If ghost = False Then
- ;; 342:           .PositionPolicy = policy.getPosition(.cycletime) 'TOM Change 20 May
- ;; 343:           .LocationName = "Spawning"
- ;; 344:           .changeLocation .PositionPolicy, state.context
- ;; 348:       Else
- ;; 349:           .PositionPolicy = "Spawning"'TOM Change 20 May
- ;; 350:           .LocationName = "Spawning"
- ;; 351:           .changeLocation .PositionPolicy, state.context'TOM Change 20 May
- ;; 354:       End If
- ;; 355:   End With
- ;; 356:  
- ;; 357:   End Sub
+  {:policystore (plcy/subscribe-unit unit policy policy-store)
+   :unit    (-> unit 
+                (assoc :policy policy)
+                (assoc :positionpolicy (if (not ghost) 
+                                         (pol/get-position policy (:cycletime unit))
+                                         "Spawning"))
+                (assoc :locationname "Spawning")  
+                (u/change-location newpos ctx))})
 
 ;;consider changing these to keywords.
 ;;We can probably push this off to a policy default table.  It used
