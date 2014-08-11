@@ -390,7 +390,7 @@
              (reduce #(change-policy current-period new-period %2 
                                      (core/get-policystore %1) %1) ctx)))))
   
-(defn has-subscribers? [policy] (> (count (:subscribers policy)) 0))
+(defn has-subscribers? [policy] (pos? (count (:subscribers policy)))
 
 ;;#Managing Policies and Periods
 ;This is the primary routine to manage policies for a policy store, which are 

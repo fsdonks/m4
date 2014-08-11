@@ -137,6 +137,9 @@
   (update-in store [:tags] tag/tag-subject :enabled item))
 (defn disable [store item]
   (update-in store [:tags] tag/untag-subject :enabled item))
+(defn special-src? [tags src]  (tag/has-tag? tags src "Special"))
+  
+
 
 ;;#Fill Related Functions
 
@@ -204,19 +207,21 @@
 ;;arrayseqs). 
 
 
-;; (defmacro n-string-body [n] 
+;; (defn n-string-body [n] 
 ;;   (let [args (into (with-meta [] {:tag 'String}) (map (fn [_] (gensym "str")) (range n)))]
 ;;     `(~args
 ;;       (let [sb# (StringBuilder. (str ~(first args)))]
 ;;         (str 
 ;;          (doto sb#
-;;            ~@(for [a args]
+;;            ~@(for [a (rest args)]
 ;;                `(.append (str ~a)))))))))
 
 ;; (defn n-string-bodies [lower upper]
-;;   (for [n (range lower upper)]
-;;     (
-                      
+;;   `(~@(for [n (range lower upper)]
+;;         (n-string-body n))))   
+                     
+;; (defmacro defn-arities [name & bodies]
+;;   `(defn ~name ~(n-string-body 2)))
 
 ;; ;;Positional definitions of str, to eliminate arrayseq overhead due 
 ;; ;;to varargs version of str.
@@ -235,14 +240,13 @@
 ;;   (n-string-body 4)
 ;;   (n-string-body 5) 
 ;;   (n-string-body 6)
-;;   (n-string-body 7)
-  
-;;   (^String [x & ys]
-;;      ((fn [^StringBuilder sb more]
-;;           (if more
-;;             (recur (. sb  (append (str (first more)))) (next more))
-;;             (str sb)))
-;;       (new StringBuilder (str x)) ys)))
+;;   (n-string-body 7))  
+;;   ;; (^String [x & ys]
+;;   ;;    ((fn [^StringBuilder sb more]
+;;   ;;         (if more
+;;   ;;           (recur (. sb  (append (str (first more)))) (next more))
+;;   ;;           (str sb)))
+;;   ;;     (new StringBuilder (str x)) ys)))
 
 
 (let [idx (atom 0)]

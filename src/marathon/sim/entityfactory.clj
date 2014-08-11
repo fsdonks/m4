@@ -330,6 +330,23 @@
         (initialize-cycle (:policy unit) 
                           (core/ghost? unit)))))
 
+;;Note -  register-unit is the other primary thing here.  It currently 
+;;resides in marathon.sim.supply/register-unit 
+
+
+
+;;THis is just a stub.  We currently hardwire behaviors, 
+;;but will allow more extension in the future.  The legacy 
+;;behavior system required an inherited object model implementation, 
+;;but now we don't have to worry about that.  We'll probably just 
+;;have a map of functions, or types that can fulfill the unit behavior
+;;protocol.
+(defn get-default-behavior [supply] :default)
+;;Adds multiple units according to a template.
+(defn add-units [amount src oititle compo policy supply extratags ghost]
+  
+  
+
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
  ;; 436:                               compo As String, policy As IRotationPolicy, _
  ;; 437:                                       supply As TimeStep_ManagerOfSupply, _
@@ -427,7 +444,32 @@
  ;; 356:  
  ;; 357:   End Sub
 
+;;consider changing these to keywords.
+;;We can probably push this off to a policy default table.
+(def ^:constant +policy-defaults+ 
+  {"Ghost" {:special "SpecialGhostPolicy"
+            :default "DefaultGhostPolicy"}
+   "AC"    {:special "SpecialACPolicy"
+            :default "DefaultACPolicy"}          
+   "RC"    {:special "SpecialRCPolicy"
+            :default "DefaultRCPolicy"}})
 
+(defn choose-policy 
+  "Tries to fetch an associated policy, and upon failing, selects a 
+   default policy based on the component/src and whether the SRC is 
+   tagged as being special."
+  [policyname component policystore src]
+  (core/with-simstate [[parameters] *ctx*]
+    (let [policy-type  (if (or (core/empty-string? src) 
+                               (not (core/special-src? (:tags parameters) src)))
+                          :default
+                          :special)]
+      (if-let [p (get-in policystore [:policies policyname])]
+        p 
+        (if-let [res (get-in +policy-defaults+ [component policy-type])]
+           res
+           (throw (Exception. (str "Default Policy is set at "  
+                                   policyname  " which does not exist!"))))))))
 
  ;; 181:   Public Function choosepolicy(ByRef policyname As String, ByRef component As String, _
  ;; 182:                                   policymanager As TimeStep_ManagerOfPolicy, Optional ByRef src As String) As IRotationPolicy
@@ -463,6 +505,9 @@
  ;; 212:                       nm = state.parameters.getKey("DefaultRCPolicy")
  ;; 213:                   End If
  ;; 214:               End If
+
+
+
  ;; 215:           Else
  ;; 216:               If component = "Ghost" Then
  ;; 217:                  'Decouple
@@ -479,7 +524,8 @@
  ;; 228:                   End If
  ;; 229:               End If
  ;; 230:           End If
- ;; 231:           
+
+
  ;; 232:           If .policies.exists(nm) Then
  ;; 233:               Set choosepolicy = .policies(nm)
  ;; 234:           Else
