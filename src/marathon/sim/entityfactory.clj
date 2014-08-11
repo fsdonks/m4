@@ -13,6 +13,7 @@
 (ns marathon.sim.entityfactory
   (:require [marathon        [schemas :as s]]
             [marathon.demand [demanddata :as d]]
+            [marathon.sim.demand :as demand]
             [marathon.supply [unitdata :as u]]
             [marathon.sim.engine :as engine]
             [spork.sim.simcontext :as sim]
@@ -107,8 +108,8 @@
    demanddata here to ensure that invalid values are caught and excepted."
   [DemandKey SRC  Priority StartDay Duration Overlap Category 
    SourceFirst Quantity  OITitle Vignette Operation  DemandGroup]  
-  (let [empty-op  (empty-string? Operation)
-        empty-vig (empty-string? Vignette)
+  (let [empty-op  (core/empty-string? Operation)
+        empty-vig (core/empty-string? Vignette)
         idx (if (or empty-op empty-vig) (core/next-idx) 0)]
 
     (d/->demanddata    ;unique name associated with the demand entity.
@@ -164,112 +165,17 @@
             ctx
             dupes)))
 
-;;  574:                   If demandmap.exists(nm) Then
-;;  575:                       If dupes.exists(nm) Then
-;;  576:                           dupes(nm) = dupes(nm) + 1
-;;  577:                       Else
-;;  578:                           dupes.add nm, 1
-;;  579:                       End If
-;;  580:                   Else'register the demand.
-;;  581:                       Set demand = associateDemand(recordToDemand(record), DemandManager)
-;;  582:                       msg = "Demand" & demand.name & " initialized"
-;;  583:                      'Decouple
-;;  584:                       SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
-;;  585:                   End If
-
-;;  594:  
-;;  595:  'notify of data errors, specifically duplicate demands.
-;;  596:   For Each dup In dupes
-;;  597:       msg = "Demand" & CStr(dup) & " had " & dupes(dup) & " duplicates in source data."
-;;  598:      'Decouple
-;;  599:       SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
-;;  600:   Next dup
-;;  601:  
-;;  602:   End Sub
-
-
- ;; 609:   Public Sub DemandsFromTable(table As GenericTable, DemandManager As TimeStep_ManagerOfDemand)
- ;; 610:  
- ;; 611:   Dim demand As TimeStep_DemandData
- ;; 612:   Dim dupes As Dictionary
- ;; 613:   Dim dup
- ;; 614:   Dim demandmap As Dictionary
- ;; 615:   Dim vig As String
- ;; 616:   Dim nm As String
- ;; 617:   Dim op As String
- ;; 618:   Dim pri As Long
- ;; 619:  
- ;; 620:   Dim rec
- ;; 621:   Set demandmap = DemandManager.demandmap
- ;; 622:  
- ;; 623:  
- ;; 624:   Set dupes = New Dictionary
- ;; 625:  'Decouple
- ;; 626:   With state.parameters
- ;; 627:       table.moveFirst
- ;; 628:        While Not table.EOF
- ;; 629:           Set record = table.getGenericRecord
- ;; 630:           With record
- ;; 631:               If .fields("Enabled") = True And inScope(.fields("SRC")) Then
- ;; 632:                   vig = .fields("Vignette")
- ;; 633:                   op = .fields("Operation")
- ;; 634:                   pri = .fields("Priority")
- ;; 635:                   nm = op & "_" & vig & "_" & pri'demands have unique names
- ;; 636:                   If demandmap.exists(nm) Then
- ;; 637:                       If dupes.exists(nm) Then
- ;; 638:                           dupes(nm) = dupes(nm) + 1
- ;; 639:                       Else
- ;; 640:                           dupes.add nm, 1
- ;; 641:                       End If
- ;; 642:                   Else'register the demand.
- ;; 643:                       Set demand = associateDemand(recordToDemand(record), DemandManager)
- ;; 644:                       msg = "Demand" & demand.name & " initialized"
- ;; 645:                      'Decouple
- ;; 646:                       SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
- ;; 647:                   End If
- ;; 648:               Else
- ;; 649:                   msg = "Demand at row" & CLng(rec) & " disabled."
- ;; 650:                  'Decouple
- ;; 651:                   SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
- ;; 652:               End If
- ;; 653:           End With
- ;; 654:           table.moveNext
- ;; 655:       Wend
- ;; 656:   End With
- ;; 657:  
- ;; 658:  'notify of data errors, specifically duplicate demands.
- ;; 659:   For Each dup In dupes
- ;; 660:       msg = "Demand" & CStr(dup) & " had " & dupes(dup) & " duplicates in source data."
- ;; 661:      'Decouple
- ;; 662:       SimLib.triggerEvent Initialize, DemandManager.name, DemandManager.name, msg, , state.context'log demand initialization
- ;; 663:   Next dup
- ;; 664:  
- ;; 665:   End Sub
-
-
-
-
- ;; 693:   Public Function associateDemand(demand As TimeStep_DemandData, demandmgr As TimeStep_ManagerOfDemand) As TimeStep_DemandData
- ;; 694:  'Decouple
- ;; 695:   demand.index = state.parameters.demandstart + demandmgr.demandmap.count + 1
- ;; 696:  
- ;; 697:   If demandmgr.demandmap.exists(demand.name) Then
- ;; 698:       demand.name = demand.name & "_" & demandmgr.demandmap.count + 1
- ;; 699:   End If
- ;; 700:  
- ;; 701:  'Decouple from demandmanager
- ;; 702:   MarathonOpDemand.registerDemand demand, demandmgr, state.policystore, state.context
- ;; 703:  'demandmgr.registerDemand demand 'refactored....
- ;; 704:  
- ;; 705:  
- ;; 706:   Set associateDemand = demand
- ;; 707:   End Function
+;broadcast that a demand with initialized.
+(defn initialized-demand! [ctx d]
+  (let [msg (str (str "Demand" (:name d)) "Initialized")]
+    (sim/trigger-event :Intialize :DemandStore :DemandStore msg nil ctx)))
+  
 
 ;;Updates the demand index according to the contents of 
 ;;demandmanager, providing unique names for duplicate 
 ;;demands.  Threads the demand through the context 
 ;;and returns the resulting context.
-(defn associate-demand [demand ctx]
+(defn associate-demand [ctx demand]
   (core/with-simstate [[parameters demandstore policystore] ctx]    
     (let [demands (:demandmap demandstore)
           demand-count (count demands)
@@ -281,25 +187,28 @@
           (assoc :index new-idx)
           (demand/register-demand demandstore policystore ctx)))))
 
+;;Do we need the vestigial demandstore args, or can we assume it's 
+;;all in context?
+(defn demands-from-table 
+  "Read in multiple demand records from anything implementing a generic 
+   table protocol in spork.util.table"
+  [demand-table demandstore]
+  (let [rs (demands-from-records (tbl/record-seq demand-table))
+        dupes (get (meta rs) :duplicates)]
+    (binding [*ctx* (assoc-in *ctx* [:state :demandstore] demandstore)]
+      (->> (reduce (fn [ctx d] 
+                     (initialized-demand! (associate-demand *ctx* d) d))
+                   *ctx*
+                   rs)
+           (notify-duplicate-demands! dupes)))))
+
+
 (defn ungrouped? [grp] 
   (when grp 
-      (or (empty-string? grp) 
+      (or (core/empty-string? grp) 
           (= (clojure.string/upper-case grp) "UNGROUPED"))))
 
-
- ;; 126:   Public Function recordToUnit(inrec As GenericRecord) As TimeStep_UnitData
- ;; 127:  
- ;; 128:   With inrec
- ;; 129:       Set recordToUnit = createUnit(.fields("Name"), .fields("SRC"), .fields("OITitle"), _
- ;; 130:                                     .fields("Component"), .fields("CycleTime"), .fields("Policy"))
- ;; 131:   End With
- ;; 132:  
- ;; 133:   End Function
- 
-
-
 (defn record->unitdata [])
-
 
 ;;create-unit provides a baseline, unattached unit derived from a set of data.
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
@@ -313,7 +222,7 @@
    policy  ;the policy the entity is currently following.
    [] ;a stack of any pending policy changes.
    behavior ;the behavior the unit uses to interpret policy and messages.
-   statedata ;generic state data for the unit's finite state machine.
+   nil ;generic state data for the unit's finite state machine.
    cycletime ;the unit's current coordinate in lifecycle space.
    nil       ;description of the categories this unit serve as a followon to.
    :spawning ;the current physical location of the unit.
@@ -326,24 +235,77 @@
    0  ;dwell time before deployment
    ))
 
+(defn choose-policy [pol compo policystore src]
+  :default)
+
 (defn assign-policy [unit policystore]
   (assoc unit :policy 
      (choose-policy (:policy unit) (:component unit) policystore (:src unit))))
 
- 140:   Public Function createUnit(ByRef name As String, ByRef src As String, ByRef OITitle As String, ByRef component As String, _
- 141:                               cycletime As Single, ByRef policy As String, Optional behavior As IUnitBehavior, Optional policyobj As IRotationPolicy) As TimeStep_UnitData
- 142:   Set createUnit = New TimeStep_UnitData
- 143:  
- 144:   With createUnit
- 145:       If Not (behavior Is Nothing) Then Set .behavior = behavior
- 146:       .src = src
- 147:       .OITitle = OITitle
- 148:       .component = component
- 149:       .name = name
- 150:       .cycletime = cycletime
- 151:      'Decouple
- 152:       If policyobj Is Nothing Then Set policyobj = choosepolicy(policy, .component, state.policystore, src)
- 153:       Set .policy = policyobj
- 154:   End With
- 155:  
- 156:   End Function
+
+ ;;  92:   Public Sub unitsFromTable(table As GenericTable, supply As TimeStep_ManagerOfSupply)
+ ;;  93:  
+ ;;  94:   Dim rec
+ ;;  95:   Dim unit As TimeStep_UnitData
+ ;;  96:   Dim defbehavior As IUnitBehavior
+ ;;  97:   Dim count As Long, quantity As Long
+ ;;  98:   Dim policy As IRotationPolicy
+ ;;  99:  
+ ;; 100:   table.moveFirst
+ ;; 101:   While Not table.EOF
+ ;; 102:       Set record = table.getGenericRecord
+ ;; 103:       With record
+ ;; 104:           If .fields("Enabled") = True And inScope(.fields("SRC")) Then
+ ;; 105:               quantity = Fix(.fields("Quantity"))
+ ;; 106:              'Decouple
+ ;; 107:               Set policy = choosepolicy(.fields("Policy"), .fields("Component"), state.policystore, .fields("SRC"))
+ ;; 108:               If quantity > 1 Then
+ ;; 109:                   AddUnits quantity, .fields("SRC"), .fields("OITitle"), _
+ ;; 110:                               .fields("Component"), policy, supply
+ ;; 111:               ElseIf quantity = 1 Then'unique unit record
+ ;; 112:                  'Tom change 19 April 2012
+ ;; 113:  
+ ;; 114:                   Set unit = associateUnit(recordToUnit(record), supply)
+ ;; 115:                   supply.registerUnit unit, unit.src = "Ghost"'Tom change 1 April, this takes care of all the registration, refactored.
+ ;; 116:                   Set unit = Nothing
+ ;; 117:               End If
+ ;; 118:           End If
+ ;; 119:       End With
+ ;; 120:       
+ ;; 121:       table.moveNext
+ ;; 122:   Wend
+ ;; 123:   End Sub
+
+
+ ;; 126:   Public Function recordToUnit(inrec As GenericRecord) As TimeStep_UnitData
+ ;; 127:  
+ ;; 128:   With inrec
+ ;; 129:       Set recordToUnit = createUnit(.fields("Name"), .fields("SRC"), .fields("OITitle"), _
+ ;; 130:                                     .fields("Component"), .fields("CycleTime"), .fields("Policy"))
+ ;; 131:   End With
+ ;; 132:  
+ ;; 133:   End Function
+
+
+ ;; 159:   Public Function associateUnit(unit As TimeStep_UnitData, supply As TimeStep_ManagerOfSupply, Optional StrictName As Boolean) As TimeStep_UnitData
+ ;; 160:  
+ ;; 161:   Dim count As Long
+ ;; 162:   count = supply.unitmap.count + 1
+ ;; 163:  
+ ;; 164:  
+ ;; 165:   With unit
+ ;; 166:      'Decouple
+ ;; 167:       Set .parent = supply
+ ;; 168:       If .name = "Auto" Then
+ ;; 169:           .name = count & "_" & .src & "_" & .component
+ ;; 170:       ElseIf supply.unitmap.exists(.name) Then
+ ;; 171:           If StrictName Then Err.Raise 101, , "A unit already exists with the name " _
+ ;; 172:                               & .name & " in SupplyManager " & supply.name & "unit names must be unique"
+ ;; 173:           .name = .name & "_" & count
+ ;; 174:       End If
+ ;; 175:       .index = count
+ ;; 176:       initialize_cycle unit, .policy, .src = "Ghost"
+ ;; 177:   End With
+ ;; 178:  
+ ;; 179:   Set associateUnit = unit
+ ;; 180:   End Function
