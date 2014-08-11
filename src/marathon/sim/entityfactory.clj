@@ -290,35 +290,45 @@
          (r/map record->unitdata)
          (into []))))
 
- ;; 159:   Public Function associateUnit(unit As TimeStep_UnitData, supply As TimeStep_ManagerOfSupply, Optional StrictName As Boolean) As TimeStep_UnitData
- ;; 160:  
- ;; 161:   Dim count As Long
- ;; 162:   count = supply.unitmap.count + 1
- ;; 163:  
- ;; 164:  
- ;; 165:   With unit
- ;; 166:      'Decouple
- ;; 167:       Set .parent = supply
- ;; 168:       If .name = "Auto" Then
- ;; 169:           .name = count & "_" & .src & "_" & .component
- ;; 170:       ElseIf supply.unitmap.exists(.name) Then
- ;; 171:           If StrictName Then Err.Raise 101, , "A unit already exists with the name " _
- ;; 172:                               & .name & " in SupplyManager " & supply.name & "unit names must be unique"
- ;; 173:           .name = .name & "_" & count
- ;; 174:       End If
- ;; 175:       .index = count
- ;; 176:       initialize_cycle unit, .policy, .src = "Ghost"
- ;; 177:   End With
- ;; 178:  
- ;; 179:   Set associateUnit = unit
- ;; 180:   End Function
+(definline generate-name 
+  "Generates a conventional name for a unit, given an index."
+  [idx unit]
+  `(str ~idx "_" (:SRC ~unit) "_" (:component ~unit)))
 
-(defn associate-unit [unit supply strictname]
+(defn check-name 
+  "Ensures the unit is uniquely named, unless non-strictness rules are 
+   applied."
+  [name supply strictname]  
+    (if (supply/get-unit name supply)
+      (if strictname 
+        (throw (Error. (str  "A unit already exists with the name " 
+                             name " in SupplyManager " (:name supply)  
+                             ", unit names must be unique")))
+        (str name (count (:unit-map supply))))
+      name))
+        
+;;This does not actually attach the unit inside the supplystore, only 
+;;preps the unit's name.  It is associated, in the legacy sense that
+;;the unit would gain a "pointer" to the parent supply, as well as
+;;having its name preconditioned to ensure compatibility or catch 
+;;errors.  In the newer version, we may consider composing this with 
+;;marathon.sim.supply/register-unit , which actually attaches the 
+;;unit to the supply store.  Note: we could handle parent-child 
+;;assocation there as well...The unique functionality here is that 
+;;we are either generating or altering the name of the unit to ensure 
+;;it is unique in the supply.
+(defn associate-unit   
+  "Associate or attach a new unit to a particular supply. If the new unit's name is 
+  not unique, it will be changed to accomodate uniqueness requirement."
+  [unit supply strictname]
   (let [unit-count (count (:unitmap supply))
-        nm         (:name supply)]
-    (
-
-
+        nm         (if (= (clojure.string/upper-case nm) "AUTO")
+                     (generate-name unit-count unit)
+                     (check-name nm supply strictname))]
+    (-> unit (assoc :name nm) 
+        (assoc :index unit-count) 
+        (initialize-cycle (:policy unit) 
+                          (core/ghost? unit)))))
 
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
  ;; 436:                               compo As String, policy As IRotationPolicy, _
@@ -390,3 +400,92 @@
  ;; 502:   End If
  ;; 503:  
  ;; 504:   End Function
+
+
+;Given a unit, initialize it's currentcycle based on policy information
+
+ ;; 336:   Private Sub initialize_cycle(unit As TimeStep_UnitData, policy As IRotationPolicy, Optional ghost As Boolean)
+ ;; 337:   Set unit.policy = policy
+ ;; 338:   policy.subscribe unit
+ ;; 339:  
+ ;; 340:   With unit
+ ;; 341:       If ghost = False Then
+ ;; 342:           .PositionPolicy = policy.getPosition(.cycletime) 'TOM Change 20 May
+ ;; 343:           .LocationName = "Spawning"
+ ;; 344:           .changeLocation .PositionPolicy, state.context
+ ;; 345:          '.LocationName = .PositionPolicy 'TOM Change 20 May
+ ;; 346:          'Tom Change 17 June 2011 -> removed, vestigial, don't need supply manager anymore.
+ ;; 347:          '.location = supply.parent.policymanager.locationID(.LocationName)
+ ;; 348:       Else
+ ;; 349:           .PositionPolicy = "Spawning"'TOM Change 20 May
+ ;; 350:           .LocationName = "Spawning"
+ ;; 351:           .changeLocation .PositionPolicy, state.context'TOM Change 20 May
+ ;; 352:          'Tom Change 17 June 2011 -> removed, vestigial, don't need supply manager anymore.
+ ;; 353:          '.location = supply.parent.policymanager.locationID(.LocationName)
+ ;; 354:       End If
+ ;; 355:   End With
+ ;; 356:  
+ ;; 357:   End Sub
+
+
+
+ ;; 181:   Public Function choosepolicy(ByRef policyname As String, ByRef component As String, _
+ ;; 182:                                   policymanager As TimeStep_ManagerOfPolicy, Optional ByRef src As String) As IRotationPolicy
+ ;; 183:  
+ ;; 184:   Static nm As String
+ ;; 185:  
+ ;; 186:   Dim specialPolicy As Boolean
+ ;; 187:  
+ ;; 188:   If src = vbNullString Then
+ ;; 189:       specialPolicy = False
+ ;; 190:   Else
+ ;; 191:      'Decouple
+ ;; 192:       specialPolicy = state.parameters.SRCHasTag(src, "Special")
+ ;; 193:   End If
+ ;; 194:  
+ ;; 195:       
+ ;; 196:   With policymanager
+ ;; 197:       If .policies.exists(policyname) Then
+ ;; 198:           Set choosepolicy = .policies(policyname)
+ ;; 199:       Else
+ ;; 200:           If Not specialPolicy Then
+ ;; 201:               If component = "Ghost" Then
+ ;; 202:                  'Decouple
+ ;; 203:                   nm = state.parameters.getKey("DefaultGhostPolicy")
+ ;; 204:               ElseIf component = "AC" Then
+ ;; 205:                  'Decouple
+ ;; 206:                   nm = state.parameters.getKey("DefaultACPolicy")
+ ;; 207:               Else
+ ;; 208:                  'Decouple
+ ;; 209:                   If state.parameters.getKey("TAA1519MaxUtilizationHack") Then
+ ;; 210:                       nm = "MaxUtilization_Enabler"
+ ;; 211:                   Else
+ ;; 212:                       nm = state.parameters.getKey("DefaultRCPolicy")
+ ;; 213:                   End If
+ ;; 214:               End If
+ ;; 215:           Else
+ ;; 216:               If component = "Ghost" Then
+ ;; 217:                  'Decouple
+ ;; 218:                   nm = state.parameters.getKey("SpecialGhostPolicy")
+ ;; 219:               ElseIf component = "AC" Then
+ ;; 220:                  'Decouple
+ ;; 221:                   nm = state.parameters.getKey("SpecialACPolicy")
+ ;; 222:               Else
+ ;; 223:                  'Decouple
+ ;; 224:                   If state.parameters.getKey("TAA1519MaxUtilizationHack") Then
+ ;; 225:                       nm = "MaxUtilization"
+ ;; 226:                   Else
+ ;; 227:                       nm = state.parameters.getKey("SpecialRCPolicy")
+ ;; 228:                   End If
+ ;; 229:               End If
+ ;; 230:           End If
+ ;; 231:           
+ ;; 232:           If .policies.exists(nm) Then
+ ;; 233:               Set choosepolicy = .policies(nm)
+ ;; 234:           Else
+ ;; 235:               Err.Raise 101, , "Default Policy is set at " & policyname & " which does not exist!"
+ ;; 236:           End If
+ ;; 237:       End If
+ ;; 238:   End With
+ ;; 239:  
+ ;; 240:   End Function

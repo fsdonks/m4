@@ -108,7 +108,7 @@
   [u ctx]
   (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
 
-(defn ghost? [unit] (= (:src unit) "Ghost"))
+(defn ghost? [unit] (= (clojure.string/upper-case (:src unit)) "GHOST"))
 (defn followon? [u] (:followoncode u))
 (defn ghost-followon? [u] (and (ghost? u) (followon? u)))
 
