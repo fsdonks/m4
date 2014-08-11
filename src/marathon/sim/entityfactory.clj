@@ -233,6 +233,7 @@
    0  ;dwell time before deployment
    ))
 
+;;Temporary stub.
 (defn choose-policy [pol compo policystore src]
   :default)
 
@@ -311,6 +312,11 @@
  ;; 178:  
  ;; 179:   Set associateUnit = unit
  ;; 180:   End Function
+
+(defn associate-unit [unit supply strictname]
+  (let [unit-count (count (:unitmap supply))
+        nm         (:name supply)]
+    (
 
 
 

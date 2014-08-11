@@ -196,6 +196,55 @@
 (def ^:constant +empty-string+ "")
 (definline empty-string? [x] `(identical? ~x +empty-string+))
 
+
+;;Put on hold for now.  We're doing a lot of string building.  We can 
+;;probably find some gains by replacing calls to (str ...) with an 
+;;optimized variant that does multi-arity function dispatch, 
+;;rather than using varargs (varargs are slow since they create 
+;;arrayseqs). 
+
+
+;; (defmacro n-string-body [n] 
+;;   (let [args (into (with-meta [] {:tag 'String}) (map (fn [_] (gensym "str")) (range n)))]
+;;     `(~args
+;;       (let [sb# (StringBuilder. (str ~(first args)))]
+;;         (str 
+;;          (doto sb#
+;;            ~@(for [a args]
+;;                `(.append (str ~a)))))))))
+
+;; (defn n-string-bodies [lower upper]
+;;   (for [n (range lower upper)]
+;;     (
+                      
+
+;; ;;Positional definitions of str, to eliminate arrayseq overhead due 
+;; ;;to varargs version of str.
+;; (defn str!
+;;   "With no args, returns the empty string. With one arg x, returns
+;;   x.toString().  (str nil) returns the empty string. With more than
+;;   one arg, returns the concatenation of the str values of the args."
+;;   {:tag String
+;;    :added "1.0"
+;;    :static true}
+;;   (^String [] "")
+;;   (^String [^Object x]
+;;    (if (nil? x) "" (. x (toString))))
+;;   (n-string-body 2)
+;;   (n-string-body 3)
+;;   (n-string-body 4)
+;;   (n-string-body 5) 
+;;   (n-string-body 6)
+;;   (n-string-body 7)
+  
+;;   (^String [x & ys]
+;;      ((fn [^StringBuilder sb more]
+;;           (if more
+;;             (recur (. sb  (append (str (first more)))) (next more))
+;;             (str sb)))
+;;       (new StringBuilder (str x)) ys)))
+
+
 (let [idx (atom 0)]
   (defn next-idx 
     "Utility function for getting incrementing indices.  Used for 
