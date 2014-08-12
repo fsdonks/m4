@@ -210,11 +210,39 @@
       (or (core/empty-string? grp) 
           (= (clojure.string/upper-case grp) "UNGROUPED"))))
 
+
+;;#Unit Entity Creation
+;;Interpreting unit entities typically requires four steps:
+;;Create the basic information about the unit
+;;Assigning the unit a policy
+;;Associating the unit with a supply (ensuring name compatibility)
+;;Initializing the unit's cycle
+;;Registering the unit with supply (inserting the entity into a supply store)
+
+
+(defn prep-unit [unit supply strictname policystore params]
+ (-> unit       
+     (associate-unit supply strictname)
+     (assign-policy policystore params)      
+     (prep-cycle)))
+
+;;At the highest level, we have to thread a supply around 
+;;and modify it, as well as a policystore.
+(defn process-units [raw-units ctx]
+  (core/with-simstate [[parameters policystore supplystore] ctx]
+    (for [unit raw-units]
+      (process-unit parameters policystore supplystore);; =>
+      ;; {:supplystore (new unit stored here)
+      ;;  :policystore  (new subscriptions) } 
+      ;;  
+  
+  
+
 ;;create-unit provides a baseline, unattached unit derived from a set of data.
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
 ;;nothing. parametrically create a new unit.
 
-(defn create-unit [name src oititle component cycletime policy behavior policyobj]
+(defn create-unit [name src oititle component cycletime policy behavior]
   (u/->unitdata
    name ;unit entity's unique name. corresponds to a UIC 
    src ;unit entity's type, or capability it can supply.
@@ -268,21 +296,16 @@
         (throw (Exception. (str "Default Policy is set at "  
                                 policyname  " which does not exist!")))))))
 
-(defn assign-policy [unit policystore]
+(defn assign-policy [unit policystore params]
   (assoc unit :policy 
-     (choose-policy (:policy unit) (:component unit) policystore (:src unit))))
+     (choose-policy (:policy unit) (:component unit) policystore params (:src unit))))
 
 ;;Derives a default unit from a record that describes unitdata.
 ;;Vestigial policy objects and behavior fields are not defined.  We
 ;;may allow different behaviors in the future, but for now they are
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy]}]
-    (create-unit  Name SRC OITitle Component CycleTime Policy :default nil))
-
-(defn record->units [{:keys [Quantity Name SRC OITitle Component CycleTime Policy]}]
-  (if (> Quantity 1)
-    (create-units Quantity Name SRC OITitle Component CycleTime Policy)
-    (create-unit  Name SRC OITitle Component CycleTime Policy :default nil)))
+    (create-unit  Name SRC OITitle Component CycleTime Policy :default))
 
 
  ;;  92:   Public Sub unitsFromTable(table As GenericTable, supply As TimeStep_ManagerOfSupply)
@@ -321,13 +344,20 @@
 ;;Need to add filters to ensure integrality constraints on supply.
 ;;Also need to add 
 (defn units-from-records [recs supply]
-  (let [params (core/get-parameters *ctx*)]
+  (let [params (core/get-parameters *ctx*)
+;        supplyref (atom supply)
+        ]
     (->> recs 
-         (r/filter valid-record?)    
-         (r/map record->unitdata)
-         (r/map #(initialize-cycle % (:policy %) 
-                                     (core/ghost? %)))
-         (into []))))
+         (r/filter valid-record?)
+         (reduce (fn [acc r] 
+                   (if (> (:Quantity r) 1) 
+                       (into acc (create-units (:Quantity r) 
+                                               (:SRC r) 
+                                               (:OITitle r) 
+                                               (:Component r)  
+                                               (:Policy r) supplyref false))
+                       (record->unitdata r)))  []))))
+
 
 (definline generate-name 
   "Generates a conventional name for a unit, given an index."
@@ -387,7 +417,7 @@
 ;;   record, associated (named) relative to supply.
 ;;2) push that batch of units through cycle distribution. 
 ;;3) initialize 
-(defn create-units [amount src oititle compo policy supply extratags ghost]
+(defn create-units [amount src oititle compo policy supply ghost]
   (let [bound     (dec (quot amount 1))
         umap      (:unitmap supply)
         behavior  (if ghost (-> supply :behaviors :defaultGhostBehavior)
@@ -404,11 +434,14 @@
               (recur (unchecked-inc idx)
                      (assoc acc (:name new-unit) new-unit))))))))
 
+;;We really want to add prepped units.
 (defn add-units [amount src oititle compo policy supply ghost ctx]
   (if (== amount 1)
-    (create-unit nm src oititle compo 0 policy behavior policy)
+    (create-unit nm src oititle compo 0 policy behavior policy)    
+        
     (-> (create-units amount src oititle compo policy supply ghost)
         (distribute-cycle-time-locations policy supply)
+        
       
       
     
@@ -566,6 +599,9 @@
                        (assoc acc nm unit))))
            {}
            unitmap)))         
+
+(defn prep-cycle [unit]
+  (initialize-cycle (:policy unit) (core/ghost? unit)))
 
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
