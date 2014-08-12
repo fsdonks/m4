@@ -220,7 +220,11 @@
 ;;Registering the unit with supply (inserting the entity into a supply store)
 
 
-(defn prep-unit [unit supply strictname policystore params]
+(defn prep-unit 
+  "Given a raw-unit, ensures its name is good with the supplystore, 
+   assigns a policy (typically read from the existing policy field) 
+   and initializes its cycle relative to the current cycletime."
+  [unit supply strictname policystore params]
  (-> unit       
      (associate-unit supply strictname)
      (assign-policy policystore params)      
@@ -228,23 +232,22 @@
 
 ;;All we need to do is eat a unit, returning the updated context.
 ;;A raw unit is a unitdata that is freshly parsed, via create-unit.
-(defn process-unit [raw-unit extra-tags parameters policystore supplystore behaviors ctx]
-  (let [prepped   (-> unit       
-                      (associate-unit supplystore strictname)
-                      (assign-policy policystore params)      
-                      (prep-cycle))
-        newpol    (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)]
-    (->> ctx 
-         (supply/register-unit supplystore behaviors prepped nil extra-tags)
-         (assoc-in [:state :policystore]))))  
+(defn process-unit [raw-unit extra-tags parameters behaviors ctx]
+  (core/with-simstate [[supplystore policystore] ctx]
+    (let [prepped   (-> unit       
+                        (associate-unit supplystore strictname)
+                        (assign-policy policystore params)      
+                        (prep-cycle))]
+      (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
+          (core/set-policystore 
+           (plcy/subscribe-unit prepped (:policy prepped) prepped policystore))))))  
 
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters] ctx]
     (reduce (fn [acc unit]
-              (core/with-simstate [[supplystore policystore] acc]
-                (process-unit unit nil parameters policystore supplystore nil acc)))
+                (process-unit unit nil parameters policystore supplystore nil acc))
             ctx 
             raw-units)))
 
@@ -428,21 +431,21 @@
 ;;2) push that batch of units through cycle distribution. 
 ;;3) initialize 
 (defn create-units [amount src oititle compo policy supply ghost]
-  (let [bound     (dec (quot amount 1))
-        umap      (:unitmap supply)
+  (let [umap      (:unitmap supply)
+        ucount    (count umap)
+        bound     (+ ucount (quot amount 1))
         behavior  (if ghost (-> supply :behaviors :defaultGhostBehavior)
                       (-> supply :behaviors :defaultACBehavior))]
     (if (pos? amount)
-        (loop [idx 0
+        (loop [idx ucount
                acc umap]
-          (if (== idx amount) 
+          (if (== idx bound) 
             acc
             (let [nm       (str idx  "_" src  "_" compo)
-                  new-unit (-> (create-unit nm src oititle compo 0 
-                                            policy behavior policy)                    
-                               (associate-unit supply true))]                
+                  new-unit (create-unit nm src oititle compo 0 
+                                        policy behavior policy)]                
               (recur (unchecked-inc idx)
-                     (assoc acc (:name new-unit) new-unit))))))))
+                     (assoc acc nm new-unit))))))))
 
 ;;We really want to add prepped units.
 (defn add-units [amount src oititle compo policy supply ghost ctx]

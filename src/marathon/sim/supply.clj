@@ -128,7 +128,7 @@
 
 ;----FOREIGN -> THESE SHOULD BE MOVED, THEY'RE MORE GENERAL.....
 (defn conj-policy [unit policy] (update-in unit [:policy-queue] conj policy))
-(defn set-supplystore [ctx supply] (assoc-in ctx [:state :supplystore] supply))
+
 ;came from OpFactory..
 (defn create-unit [name src title component cycletime policy-id 
                     parameters policystore & [behavior]]
@@ -331,7 +331,7 @@
         supply (-> (add-unit supply unit)
                    (tag-unit unit extra-tags)
                    (add-src (:src unit)))
-        ctx    (set-supplystore ctx supply)]
+        ctx    (core/set-supplystore ctx supply)]
     (if ghost 
       (->> (spawning-ghost! unit ctx)
            (set-ghosts true))
