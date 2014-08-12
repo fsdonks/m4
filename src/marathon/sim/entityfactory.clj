@@ -267,6 +267,7 @@
         res
         (throw (Exception. (str "Default Policy is set at "  
                                 policyname  " which does not exist!")))))))
+
 (defn assign-policy [unit policystore]
   (assoc unit :policy 
      (choose-policy (:policy unit) (:component unit) policystore (:src unit))))
@@ -276,7 +277,13 @@
 ;;may allow different behaviors in the future, but for now they are
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy]}]
-  (create-unit Name SRC OITitle Component CycleTime Policy :default nil))
+    (create-unit  Name SRC OITitle Component CycleTime Policy :default nil))
+
+(defn record->units [{:keys [Quantity Name SRC OITitle Component CycleTime Policy]}]
+  (if (> Quantity 1)
+    (create-units Quantity Name SRC OITitle Component CycleTime Policy)
+    (create-unit  Name SRC OITitle Component CycleTime Policy :default nil)))
+
 
  ;;  92:   Public Sub unitsFromTable(table As GenericTable, supply As TimeStep_ManagerOfSupply)
  ;;  93:  
@@ -318,6 +325,8 @@
     (->> recs 
          (r/filter valid-record?)    
          (r/map record->unitdata)
+         (r/map #(initialize-cycle % (:policy %) 
+                                     (core/ghost? %)))
          (into []))))
 
 (definline generate-name 
@@ -355,10 +364,9 @@
         nm         (if (= (clojure.string/upper-case nm) "AUTO")
                      (generate-name unit-count unit)
                      (check-name nm supply strictname))]
-    (-> unit (assoc :name nm) 
-        (assoc :index unit-count) 
-        (initialize-cycle (:policy unit) 
-                          (core/ghost? unit)))))
+    (-> unit 
+        (assoc :name nm) 
+        (assoc :index unit-count))))
 
 ;;Note -  register-unit is the other primary thing here.  It currently 
 ;;resides in marathon.sim.supply/register-unit 
@@ -379,7 +387,7 @@
 ;;   record, associated (named) relative to supply.
 ;;2) push that batch of units through cycle distribution. 
 ;;3) initialize 
-(defn create-units [amount src oititle compo policy supply extratags ghost ctx]
+(defn create-units [amount src oititle compo policy supply extratags ghost]
   (let [bound     (dec (quot amount 1))
         umap      (:unitmap supply)
         behavior  (if ghost (-> supply :behaviors :defaultGhostBehavior)
@@ -387,11 +395,27 @@
     (if (pos? amount)
         (loop [idx 0
                acc umap]
-          (if (== idx amount) acc
-              (let [nm       (str idx  "_" src  "_" compo)
-                    new-unit (create-unit nm src oititle compo 0 
-                                          policy behavior policy)]                                 
-  )
+          (if (== idx amount) 
+            acc
+            (let [nm       (str idx  "_" src  "_" compo)
+                  new-unit (-> (create-unit nm src oititle compo 0 
+                                            policy behavior policy)                    
+                               (associate-unit supply true))]                
+              (recur (unchecked-inc idx)
+                     (assoc acc (:name new-unit) new-unit))))))))
+
+(defn add-units [amount src oititle compo policy supply ghost ctx]
+  (if (== amount 1)
+    (create-unit nm src oititle compo 0 policy behavior policy)
+    (-> (create-units amount src oititle compo policy supply ghost)
+        (distribute-cycle-time-locations policy supply)
+      
+      
+    
+        
+;;we have two methods of initializing unit cycles.
+;;one is on a case-by-case basis, when we use create-unit
+  
   
 
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
@@ -487,13 +511,14 @@
    any movement via event triggers, returning the 
    new unit and a new policystore."
   [unit policy ghost ctx]
-  (-> unit 
-      (assoc :policy policy)
-      (assoc :positionpolicy (if (not ghost) 
+  (let [newpos (if (not ghost) 
                                (pol/get-position policy (:cycletime unit))
-                               "Spawning"))
-      (assoc :locationname "Spawning")  
-      (u/change-location newpos ctx)))
+                               "Spawning")] 
+    (-> unit 
+        (assoc :policy policy)
+        (assoc :positionpolicy newpos)
+        (assoc :locationname "Spawning")  
+        (u/change-location newpos ctx))))
 
 ;;We handle policy registration as a separate step now, before it 
 ;;we embedded in initialize-cycle.  We just ensure that every unit 
@@ -520,7 +545,7 @@
 ;;take the unit map and distribute the units evenly. Pass in a
 ;;collection of unit names, as well as the appropriate counts, and the
 ;;cycles are uniformly distributed (using integer division).
-(defn distribute-cycle-time-locations [unitmap policy supply ctx]
+(defn distribute-cycle-time-locations [unitmap policy supply]
   (let [clength (plcy/cycle-length policy)
         clength (if (> clength +max-cycle-length+) +default-cycle-length+)
         uniform-interval (atom (compute-interval clength (count unitmap)))
@@ -536,9 +561,8 @@
                                    nxt)))]                                              
     (reduce-kv (fn [acc nm unit]
                  (let [cycletime (next-interval)
-                       unit (initialize-cycle (assoc unit :cycletime cycletime) policy false ctx)]
+                       unit      (assoc unit :cycletime cycletime)]
                    (do (assert  (pos? cycletime) "Negative cycle time during distribution.")
-                       (assert  (not (:locationname unit)) "Nil locationname for unit, should be spawning")
                        (assoc acc nm unit))))
            {}
            unitmap)))         
