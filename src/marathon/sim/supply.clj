@@ -326,7 +326,7 @@
 ;Conjoins a unit to the supply, under the context.  Optional parameters for 
 ;communicating whether the unit is a ghost, as well as additional tags to be 
 ;added on-top-of the default tags derived from the unit data.
-(defn register-unit [supply behaviors unit & [ghost ctx extra-tags]]
+(defn register-unit [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
         supply (-> (add-unit supply unit)
                    (tag-unit unit extra-tags)

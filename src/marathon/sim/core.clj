@@ -46,17 +46,17 @@
 ;;via the paths, but the underlying representation is based on a dynamic map 
 ;;structure, so we can still add new data as needed in a flexible manner.
 
-;;Creates a set of getters for our simulation state.  This allows us to 
+;;Creates a set of accessors for our simulation state.  This allows us to 
 ;;dissect our nested map of state a bit easier.  Each symbol in the defpath 
 ;;binding returns a function that, given a simulation context, points to the 
 ;;named resource using standard clojure map operations via clojure.core/get-in.
 (util/defpaths [:state] 
-  {get-parameters    [:parameters]
-   get-supplystore   [:supplystore]
-   get-demandstore   [:demandstore]
-   get-policystore   [:policystore]
-   get-fillstore     [:fillstore]
-   get-fill-function [:fillstore :fillfunction]})
+  {parameters    [:parameters]
+   supplystore   [:supplystore]
+   demandstore   [:demandstore]
+   policystore   [:policystore]
+   fillstore     [:fillstore]
+   fill-function [:fillstore :fillfunction]})
 
 (defmacro with-simstate 
   "Given a destructuring of [[path1 path2...] the-simstate], paired

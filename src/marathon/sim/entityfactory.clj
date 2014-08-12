@@ -226,17 +226,27 @@
      (assign-policy policystore params)      
      (prep-cycle)))
 
+;;All we need to do is eat a unit, returning the updated context.
+;;A raw unit is a unitdata that is freshly parsed, via create-unit.
+(defn process-unit [raw-unit extra-tags parameters policystore supplystore behaviors ctx]
+  (let [prepped   (-> unit       
+                      (associate-unit supplystore strictname)
+                      (assign-policy policystore params)      
+                      (prep-cycle))
+        newpol    (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)]
+    (->> ctx 
+         (supply/register-unit supplystore behaviors prepped nil extra-tags)
+         (assoc-in [:state :policystore]))))  
+
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
 (defn process-units [raw-units ctx]
-  (core/with-simstate [[parameters policystore supplystore] ctx]
-    (for [unit raw-units]
-      (process-unit parameters policystore supplystore);; =>
-      ;; {:supplystore (new unit stored here)
-      ;;  :policystore  (new subscriptions) } 
-      ;;  
-  
-  
+  (core/with-simstate [[parameters] ctx]
+    (reduce (fn [acc unit]
+              (core/with-simstate [[supplystore policystore] acc]
+                (process-unit unit nil parameters policystore supplystore nil acc)))
+            ctx 
+            raw-units)))
 
 ;;create-unit provides a baseline, unattached unit derived from a set of data.
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
