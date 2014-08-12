@@ -219,29 +219,38 @@
 ;;Initializing the unit's cycle
 ;;Registering the unit with supply (inserting the entity into a supply store)
 
-
 (defn prep-unit 
   "Given a raw-unit, ensures its name is good with the supplystore, 
    assigns a policy (typically read from the existing policy field) 
    and initializes its cycle relative to the current cycletime."
-  [unit supply strictname policystore params]
- (-> unit       
-     (associate-unit supply strictname)
-     (assign-policy policystore params)      
-     (prep-cycle)))
+  [unit supplystore policystore ctx]
+  (-> unit       
+      (associate-unit supplystore true)
+      (assign-policy policystore params)      
+      (prep-cycle ctx)))
 
 ;;All we need to do is eat a unit, returning the updated context.
 ;;A raw unit is a unitdata that is freshly parsed, via create-unit.
 (defn process-unit [raw-unit extra-tags parameters behaviors ctx]
   (core/with-simstate [[supplystore policystore] ctx]
+    (if (:batch raw-unit) ;have to distribute multiple units
+      (process-unit-batch raw-unit policystore supplystore)
     (let [prepped   (-> unit       
                         (associate-unit supplystore strictname)
                         (assign-policy policystore params)      
                         (prep-cycle))]
       (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
           (core/set-policystore 
-           (plcy/subscribe-unit prepped (:policy prepped) prepped policystore))))))  
+           (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)))))))  
 
+(defn process-unit-batch [batch policystore supplystore]
+  (let [batch-policy (plcy/find-policy (:policy batch) policystore)]       
+    (create-units (:Quantity r) 
+                  (:SRC r) 
+                  (:OITitle r) 
+                  (:Component r)  
+                  batch-policy supplystore false)))  
+    
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
 (defn process-units [raw-units ctx]
@@ -358,18 +367,17 @@
 ;;Also need to add 
 (defn units-from-records [recs supply]
   (let [params (core/get-parameters *ctx*)
-;        supplyref (atom supply)
-        ]
+        supplyref (atom supply)]
     (->> recs 
          (r/filter valid-record?)
          (reduce (fn [acc r] 
                    (if (> (:Quantity r) 1) 
-                       (into acc (create-units (:Quantity r) 
+                       (conj acc (create-units (:Quantity r) 
                                                (:SRC r) 
                                                (:OITitle r) 
                                                (:Component r)  
                                                (:Policy r) supplyref false))
-                       (record->unitdata r)))  []))))
+                       (conj acc (record->unitdata r)))) []))))
 
 
 (definline generate-name 
@@ -427,25 +435,28 @@
 
 ;;Breaking apart add-units into three discrete steps: 
 ;;1) create n units, with empty cycles, according to the demand
-;;   record, associated (named) relative to supply.
+;;   record
 ;;2) push that batch of units through cycle distribution. 
-;;3) initialize 
+;;3) Prep
+;;4) Register
+;;The only real difference here is that we have to initialize 
+;;both the name and the cycle times artificially.  Since we're 
+;;doing that, we can guarantee no name conflicts.
 (defn create-units [amount src oititle compo policy supply ghost]
-  (let [umap      (:unitmap supply)
-        ucount    (count umap)
+  (let [ucount    (count (:unitmap supply))
         bound     (+ ucount (quot amount 1))
         behavior  (if ghost (-> supply :behaviors :defaultGhostBehavior)
-                      (-> supply :behaviors :defaultACBehavior))]
+                            (-> supply :behaviors :defaultACBehavior))]
     (if (pos? amount)
         (loop [idx ucount
-               acc umap]
-          (if (== idx bound) 
-            acc
-            (let [nm       (str idx  "_" src  "_" compo)
+               acc []]
+          (if (== idx bound)  
+            (distribute-cycle-times acc policy)
+            (let [nm       (str (core/next-idx)  "_" src  "_" compo)
                   new-unit (create-unit nm src oititle compo 0 
                                         policy behavior policy)]                
               (recur (unchecked-inc idx)
-                     (assoc acc nm new-unit))))))))
+                     (conj acc new-unit))))))))
 
 ;;We really want to add prepped units.
 (defn add-units [amount src oititle compo policy supply ghost ctx]
@@ -573,11 +584,8 @@
   [unit policystore]
   (plcy/subscribe-unit unit policy policy-store))
 
-
-
 (def ^:constant +max-cycle-length+ 10000)
 (def ^:constant +default-cycle-length+ 1095)
-
 
 ;;Computes the intervals between units distributed along a lifecylce.
 ;;Used to uniformly disperse units in a deterministic fashion.
@@ -588,10 +596,10 @@
       (quot clength unitcount)
       (quot clength (dec clength)))))
 
-;;take the unit map and distribute the units evenly. Pass in a
+;;take the unit seq and distribute the units evenly. Pass in a
 ;;collection of unit names, as well as the appropriate counts, and the
 ;;cycles are uniformly distributed (using integer division).
-(defn distribute-cycle-time-locations [unitmap policy supply]
+(defn distribute-cycle-times [units policy]
   (let [clength (plcy/cycle-length policy)
         clength (if (> clength +max-cycle-length+) +default-cycle-length+)
         uniform-interval (atom (compute-interval clength (count unitmap)))
@@ -605,16 +613,16 @@
                                    (reset! last-interval nxt)
                                    (swap! remaining dec)
                                    nxt)))]                                              
-    (reduce-kv (fn [acc nm unit]
+    (reduce (fn [acc  unit]
                  (let [cycletime (next-interval)
                        unit      (assoc unit :cycletime cycletime)]
                    (do (assert  (pos? cycletime) "Negative cycle time during distribution.")
-                       (assoc acc nm unit))))
-           {}
-           unitmap)))         
+                       (conj acc unit))))
+           []
+           units)))
 
-(defn prep-cycle [unit]
-  (initialize-cycle (:policy unit) (core/ghost? unit)))
+(defn prep-cycle [unit ctx]
+  (initialize-cycle (:policy unit) (core/ghost? unit) ctx))
 
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
