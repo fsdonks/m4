@@ -53,6 +53,18 @@
 ;;complex sequence of updates.
 
 
+
+;;#Stubs 
+
+;;Typicaly resides in unit/change-state, but we probably 
+;;want to make it universal for any entity with an FSM.
+;;Temporary Stub
+(defn change-state [entity newstate deltat duration ctx]
+  (do (println "entityfactory/change-state is a stub")
+      (sim/trigger-event :Change-State-Stub :EntityFactory 
+                         (:name entity) "State Change" [newstate deltat duration] ctx)))
+
+
 ;;*Basic Functions
 ;;Many of our functions are concerned with IO, that is, reading 
 ;;tab-delimited text records, and creating entity orders from them.
@@ -344,6 +356,7 @@
 ;;protocol.
 (defn get-default-behavior [supply] :default)
 ;;Adds multiple units according to a template.
+;;Associates each unit with a
 (defn add-units [amount src oititle compo policy supply extratags ghost]
   
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
@@ -365,10 +378,8 @@
  ;; 451:   Else
  ;; 452:       Set defbehavior = supply.behaviors.defaultGhostBehavior
  ;; 453:   End If
- ;; 454:  
- ;; 455:   Set DeployableBuckets = supply.DeployableBuckets
- ;; 456:  
- ;; 457:   Set AddUnits = supply.unitmap'Note this is in here for legacy reasons.  Return value is used.
+
+ ;; 457:   Set AddUnits = supply.unitmap 'Note this is in here for legacy reasons.  Return value is used.
  ;; 458:  
  ;; 459:   If amount > 0 Then
  ;; 460:       Set generated = New Dictionary
@@ -487,3 +498,110 @@
         res
         (throw (Exception. (str "Default Policy is set at "  
                                 policyname  " which does not exist!")))))))
+
+(def ^:constant +max-cycle-length+ 10000)
+(def ^:constant +default-cycle-length+ 1095)
+
+
+;;Computes the intervals between units distributed along a lifecylce.
+;;Used to uniformly disperse units in a deterministic fashion.
+(defn compute-interval [clength unitcount]
+  (if (or (zero? clength) (zero? unitcount)) 
+    (throw (Errror.  "Cannot have zero length cycle or 0 units"))
+    (if (< unitcount clength) 
+      (quot clength unitcount)
+      (quot clength (dec clength)))))
+
+;;take the unit map and distribute the units evenly. Pass in a
+;;collection of unit names, as well as the appropriate counts, and the
+;;cycles are uniformly distributed (using integer division).
+(defn distribute-cycle-time-locations [unitmap policy supply ctx]
+  (let [clength (plcy/cycle-length policy)
+        clength (if (> clength +max-cycle-length+) +default-cycle-length+)
+        uniform-interval (atom (compute-interval clength (count unitmap)))
+        last-interval (atom (- uniform-interval))
+        remaining     (atom (count unitmap))
+        next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
+                                   nxt (if (> nxt clength) 0 nxt)]
+                               (do (when (< @remaining clength)
+                                     (reset! @uniform-interval 
+                                             (compute-interval clength (count @remaining))))
+                                   (reset! last-interval nxt)
+                                   (swap! remaining dec)
+                                   nxt)))]                                              
+    (reduce-kv (fn [acc nm unit]
+                 (let [cycletime (next-interval)
+                       unit (initialize-cycle (assoc unit :cycletime cycletime) policy false ctx)]
+                   (do (assert  (pos? cycletime) "Negative cycle time during distribution.")
+                       (assert  (not (:locationname unit)) "Nil locationname for unit, should be spawning")
+                       (assoc acc nm unit))))
+           {}
+           unitmap)))         
+
+ ;; 360:   Private Sub distributeCycleTimeLocations(unitset As Dictionary, policy As IRotationPolicy, supply As TimeStep_ManagerOfSupply)
+ ;; 361:  'Dim ACEndTime As Long, RCendTime As Long
+ ;; 362:   Dim UniformInterval As Long'RCinterval As Long
+ ;; 363:   Dim unitname
+ ;; 364:   Dim existingunit As TimeStep_UnitData
+ ;; 365:   Dim LastInterval As Long
+ ;; 366:   Dim nextinterval As Long
+ ;; 367:  'Tom Hack....
+ ;; 368:   Dim binwidth As Long
+ ;; 369:   Dim remaining As Long
+ ;; 370:   Dim interval As Long
+ ;; 371:  'TOM Hack 24 july 2012
+ ;; 372:  'Dealing with very large, effectively unbounded policies.
+ ;; 373:  'For start cycles, we'll arbitrarily bound them to 3 years.
+ ;; 374:   Dim clength As Long
+ ;; 375:  
+ ;; 376:   clength = policy.cyclelength
+ ;; 377:   If clength > 10000 Then clength = 1095
+ ;; 378:  
+ ;; 379:   UniformInterval = computeinterval(clength, unitset.count)
+ ;; 384:       
+ ;; 385:   LastInterval = -1 * UniformInterval'allows cycles to start at 0
+ ;; 386:   remaining = unitset.count
+ ;; 387:  
+ ;; 388:   For Each unitname In unitset
+ ;; 389:       Set existingunit = unitset(unitname)
+ ;; 390:       With existingunit
+ ;; 391:          'TOM Hack 13 Aug 2012 -> modified to allow cycle distribution to roll over.
+ ;; 392:           nextinterval = Round(LastInterval + UniformInterval, 0)
+ ;; 393:           If nextinterval > clength Then
+ ;; 394:               nextinterval = 0
+ ;; 395:               If remaining < clength Then
+ ;; 396:                   UniformInterval = computeinterval(clength, remaining)
+ ;; 397:               End If
+ ;; 398:           End If
+ ;; 399:           .cycletime   = nextinterval
+ ;; 400:           LastInterval = nextinterval
+ ;; 401:          'Tom Change 17 June 2011 -> changed to reflect new function signature.
+ ;; 402:          'initialize_cycle existingunit, policy, supply, False
+ ;; 403:           initialize_cycle existingunit, policy, False
+ ;; 404:           If .LocationName = vbNullString Then
+ ;; 405:               .PositionPolicy = .policy.getPosition(.cycletime)'Tom Change 20 May 2011
+ ;; 406:               .changeLocation .PositionPolicy, state.context
+ ;; 407:              '.LocationName = .PositionPolicy 'Tom Change 20 May 2011
+ ;; 408:              'Tom Change 17 June 2011 -> not necessary, vestigial.
+ ;; 409:              '.location = supply.parent.policymanager.locationID(.LocationName)
+ ;; 410:           End If
+ ;; 411:           If .cycletime < 0 Then Err.Raise 101, , "Negative cycletime"
+ ;; 412:       End With
+ ;; 413:       remaining = remaining - 1
+ ;; 414:   Next unitname
+ ;; 415:  
+ ;; 416:   End Sub
+
+
+
+(defn start-state [supply ctx]
+  (core/with-simstate [[parameters] ctx]
+    (let [ctx  (assoc-in ctx [:state :parameters] 
+                   (assoc parameters :TotalUnits (count um)))]
+      (reduce-kv (fn [acc nm unit] (change-state unit :Spawning 0 nil ctx))
+                 ctx 
+                 (:unitmap supply)))))
+
+
+
+        
