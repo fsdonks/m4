@@ -14,6 +14,7 @@
   (:require [marathon        [schemas :as s]]
             [marathon.demand [demanddata :as d]]
             [marathon.sim.demand :as demand]
+            [marathon.sim.unit :as u]
             [marathon.supply [unitdata :as u]]
             [marathon.sim.policy :as plcy]
             [marathon.sim.engine :as engine]
@@ -51,18 +52,6 @@
 ;;Ideally, we end up with a simple interface for "Creating" entities
 ;;in the simulation, where entity creation may involve an arbitrarily 
 ;;complex sequence of updates.
-
-
-
-;;#Stubs 
-
-;;Typicaly resides in unit/change-state, but we probably 
-;;want to make it universal for any entity with an FSM.
-;;Temporary Stub
-(defn change-state [entity newstate deltat duration ctx]
-  (do (println "entityfactory/change-state is a stub")
-      (sim/trigger-event :Change-State-Stub :EntityFactory 
-                         (:name entity) "State Change" [newstate deltat duration] ctx)))
 
 
 ;;*Basic Functions
@@ -246,10 +235,38 @@
    0  ;dwell time before deployment
    ))
 
-;;Temporary stub.
-(defn choose-policy [pol compo policystore src]
-  :default)
+;;consider changing these to keywords.
+;;We can probably push this off to a policy default table.  It used
+;;to mean that we had this interpreted into policy objects, all
+;;initialized in a singleton class at runtime initiaion.  Now that
+;;it's pulled out of the class, we can probably interpret it easier 
+;;and then use a policy parser to point at the correct policies in 
+;;the policystore.
+(def ^:constant +policy-defaults+ 
+  {"Ghost" {:special "SpecialGhostPolicy"
+            :default "DefaultGhostPolicy"}
+   "AC"    {:special "SpecialACPolicy"
+            :default "DefaultACPolicy"}          
+   "RC"    {:special "SpecialRCPolicy"
+            :default "DefaultRCPolicy"}})
 
+;;Note -> we're not mutating anything here.  We can pass in a 
+;;parameters.
+(defn choose-policy 
+  "Tries to fetch an associated policy, and upon failing, selects a 
+   default policy based on the component/src and whether the SRC is 
+   tagged as being special."
+  [policyname component policystore parameters src]
+  (let [policy-type  (if (or (core/empty-string? src) 
+                             (not (core/special-src? (:tags parameters) src)))
+                       :default
+                       :special)]
+    (if-let [p (get-in policystore [:policies policyname])]
+      p 
+      (if-let [res (get-in +policy-defaults+ [component policy-type])]
+        res
+        (throw (Exception. (str "Default Policy is set at "  
+                                policyname  " which does not exist!")))))))
 (defn assign-policy [unit policystore]
   (assoc unit :policy 
      (choose-policy (:policy unit) (:component unit) policystore (:src unit))))
@@ -346,19 +363,37 @@
 ;;Note -  register-unit is the other primary thing here.  It currently 
 ;;resides in marathon.sim.supply/register-unit 
 
-
-
-;;THis is just a stub.  We currently hardwire behaviors, 
+;;This is just a stub.  We currently hardwire behaviors, 
 ;;but will allow more extension in the future.  The legacy 
 ;;behavior system required an inherited object model implementation, 
 ;;but now we don't have to worry about that.  We'll probably just 
 ;;have a map of functions, or types that can fulfill the unit behavior
 ;;protocol.
 (defn get-default-behavior [supply] :default)
+
 ;;Adds multiple units according to a template.
 ;;Associates each unit with a
-(defn add-units [amount src oititle compo policy supply extratags ghost]
+
+;;Breaking apart add-units into three discrete steps: 
+;;1) create n units, with empty cycles, according to the demand
+;;   record, associated (named) relative to supply.
+;;2) push that batch of units through cycle distribution. 
+;;3) initialize 
+(defn create-units [amount src oititle compo policy supply extratags ghost ctx]
+  (let [bound     (dec (quot amount 1))
+        umap      (:unitmap supply)
+        behavior  (if ghost (-> supply :behaviors :defaultGhostBehavior)
+                      (-> supply :behaviors :defaultACBehavior))]
+    (if (pos? amount)
+        (loop [idx 0
+               acc umap]
+          (if (== idx amount) acc
+              (let [nm       (str idx  "_" src  "_" compo)
+                    new-unit (create-unit nm src oititle compo 0 
+                                          policy behavior policy)]                                 
+  )
   
+
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
  ;; 436:                               compo As String, policy As IRotationPolicy, _
  ;; 437:                                       supply As TimeStep_ManagerOfSupply, _
@@ -395,8 +430,6 @@
  ;; 470:               .component = compo
  ;; 471:               .name = count & "_" & .src & "_" & .component
  ;; 472:               .index = count
- ;; 473:              'Tom Change 17 June 2011 -> reflects new function signature.
- ;; 474:              'initialize_cycle NewUnit, policy, supply, ghost
  ;; 475:               
  ;; 476:              'I don't think we need this.
  ;; 477:              'TOM Change 18 Sep 2012
@@ -462,42 +495,14 @@
       (assoc :locationname "Spawning")  
       (u/change-location newpos ctx)))
 
+;;We handle policy registration as a separate step now, before it 
+;;we embedded in initialize-cycle.  We just ensure that every unit 
+;;has its policy subscription, possibly upon registration.
 (defn initialize-policy 
   [unit policystore]
   (plcy/subscribe-unit unit policy policy-store))
 
-;;consider changing these to keywords.
-;;We can probably push this off to a policy default table.  It used
-;;to mean that we had this interpreted into policy objects, all
-;;initialized in a singleton class at runtime initiaion.  Now that
-;;it's pulled out of the class, we can probably interpret it easier 
-;;and then use a policy parser to point at the correct policies in 
-;;the policystore.
-(def ^:constant +policy-defaults+ 
-  {"Ghost" {:special "SpecialGhostPolicy"
-            :default "DefaultGhostPolicy"}
-   "AC"    {:special "SpecialACPolicy"
-            :default "DefaultACPolicy"}          
-   "RC"    {:special "SpecialRCPolicy"
-            :default "DefaultRCPolicy"}})
 
-;;Note -> we're not mutating anything here.  We can pass in a 
-;;parameters.
-(defn choose-policy 
-  "Tries to fetch an associated policy, and upon failing, selects a 
-   default policy based on the component/src and whether the SRC is 
-   tagged as being special."
-  [policyname component policystore parameters src]
-  (let [policy-type  (if (or (core/empty-string? src) 
-                             (not (core/special-src? (:tags parameters) src)))
-                       :default
-                       :special)]
-    (if-let [p (get-in policystore [:policies policyname])]
-      p 
-      (if-let [res (get-in +policy-defaults+ [component policy-type])]
-        res
-        (throw (Exception. (str "Default Policy is set at "  
-                                policyname  " which does not exist!")))))))
 
 (def ^:constant +max-cycle-length+ 10000)
 (def ^:constant +default-cycle-length+ 1095)
@@ -538,67 +543,11 @@
            {}
            unitmap)))         
 
- ;; 360:   Private Sub distributeCycleTimeLocations(unitset As Dictionary, policy As IRotationPolicy, supply As TimeStep_ManagerOfSupply)
- ;; 361:  'Dim ACEndTime As Long, RCendTime As Long
- ;; 362:   Dim UniformInterval As Long'RCinterval As Long
- ;; 363:   Dim unitname
- ;; 364:   Dim existingunit As TimeStep_UnitData
- ;; 365:   Dim LastInterval As Long
- ;; 366:   Dim nextinterval As Long
- ;; 367:  'Tom Hack....
- ;; 368:   Dim binwidth As Long
- ;; 369:   Dim remaining As Long
- ;; 370:   Dim interval As Long
- ;; 371:  'TOM Hack 24 july 2012
- ;; 372:  'Dealing with very large, effectively unbounded policies.
- ;; 373:  'For start cycles, we'll arbitrarily bound them to 3 years.
- ;; 374:   Dim clength As Long
- ;; 375:  
- ;; 376:   clength = policy.cyclelength
- ;; 377:   If clength > 10000 Then clength = 1095
- ;; 378:  
- ;; 379:   UniformInterval = computeinterval(clength, unitset.count)
- ;; 384:       
- ;; 385:   LastInterval = -1 * UniformInterval'allows cycles to start at 0
- ;; 386:   remaining = unitset.count
- ;; 387:  
- ;; 388:   For Each unitname In unitset
- ;; 389:       Set existingunit = unitset(unitname)
- ;; 390:       With existingunit
- ;; 391:          'TOM Hack 13 Aug 2012 -> modified to allow cycle distribution to roll over.
- ;; 392:           nextinterval = Round(LastInterval + UniformInterval, 0)
- ;; 393:           If nextinterval > clength Then
- ;; 394:               nextinterval = 0
- ;; 395:               If remaining < clength Then
- ;; 396:                   UniformInterval = computeinterval(clength, remaining)
- ;; 397:               End If
- ;; 398:           End If
- ;; 399:           .cycletime   = nextinterval
- ;; 400:           LastInterval = nextinterval
- ;; 401:          'Tom Change 17 June 2011 -> changed to reflect new function signature.
- ;; 402:          'initialize_cycle existingunit, policy, supply, False
- ;; 403:           initialize_cycle existingunit, policy, False
- ;; 404:           If .LocationName = vbNullString Then
- ;; 405:               .PositionPolicy = .policy.getPosition(.cycletime)'Tom Change 20 May 2011
- ;; 406:               .changeLocation .PositionPolicy, state.context
- ;; 407:              '.LocationName = .PositionPolicy 'Tom Change 20 May 2011
- ;; 408:              'Tom Change 17 June 2011 -> not necessary, vestigial.
- ;; 409:              '.location = supply.parent.policymanager.locationID(.LocationName)
- ;; 410:           End If
- ;; 411:           If .cycletime < 0 Then Err.Raise 101, , "Negative cycletime"
- ;; 412:       End With
- ;; 413:       remaining = remaining - 1
- ;; 414:   Next unitname
- ;; 415:  
- ;; 416:   End Sub
-
-
-
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
     (let [ctx  (assoc-in ctx [:state :parameters] 
                    (assoc parameters :TotalUnits (count um)))]
-      (reduce-kv (fn [acc nm unit] (change-state unit :Spawning 0 nil ctx))
+      (reduce-kv (fn [acc nm unit] (u/change-state unit :Spawning 0 nil ctx))
                  ctx 
                  (:unitmap supply)))))
 

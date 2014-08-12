@@ -1,3 +1,4 @@
+;A module for unit behaviors...
 (ns marathon.sim.unit)
 
 ;TEMPORARILY ADDED for marathon.sim.deman, marathon.sim.policy
@@ -5,10 +6,18 @@
          re-deploy-unit deploy-unit change-policy
          valid-deployer?) 
 
+
+
+;;Typicaly resides in unit/change-state, but we probably 
+;;want to make it universal for any entity with an FSM.
+;;Temporary Stub
+(defn change-state [entity newstate deltat duration ctx]
+  (do (println "entityfactory/change-state is a stub")
+      (sim/trigger-event :Change-State-Stub :EntityFactory 
+                         (:name entity) "State Change" [newstate deltat duration] ctx)))
+
 ;;#Needs Porting#
 
-;'marathonopunit
-;'A module for unit behaviors...
 ;Option Explicit
 ;'Wrapper for low level calls to the unit.
 ;'Assumes a unit is in a followon status.  Imediately puts the unit in a bogging state, with no
