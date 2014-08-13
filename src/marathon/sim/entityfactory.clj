@@ -219,71 +219,6 @@
 ;;Initializing the unit's cycle
 ;;Registering the unit with supply (inserting the entity into a supply store)
 
-(defn prep-unit 
-  "Given a raw-unit, ensures its name is good with the supplystore, 
-   assigns a policy (typically read from the existing policy field) 
-   and initializes its cycle relative to the current cycletime."
-  [unit supplystore policystore ctx]
-  (-> unit       
-      (associate-unit supplystore true)
-      (assign-policy policystore params)      
-      (prep-cycle ctx)))
-
-;;All we need to do is eat a unit, returning the updated context.
-;;A raw unit is a unitdata that is freshly parsed, via create-unit.
-(defn process-unit [raw-unit extra-tags parameters behaviors ctx]
-  (core/with-simstate [[supplystore policystore] ctx]
-    (if (:batch raw-unit) ;have to distribute multiple units
-      (process-unit-batch raw-unit policystore supplystore)
-    (let [prepped   (-> unit       
-                        (associate-unit supplystore strictname)
-                        (assign-policy policystore params)      
-                        (prep-cycle))]
-      (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
-          (core/set-policystore 
-           (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)))))))  
-
-(defn process-unit-batch [batch policystore supplystore]
-  (let [batch-policy (plcy/find-policy (:policy batch) policystore)]       
-    (create-units (:Quantity r) 
-                  (:SRC r) 
-                  (:OITitle r) 
-                  (:Component r)  
-                  batch-policy supplystore false)))  
-    
-;;At the highest level, we have to thread a supply around 
-;;and modify it, as well as a policystore.
-(defn process-units [raw-units ctx]
-  (core/with-simstate [[parameters] ctx]
-    (reduce (fn [acc unit]
-                (process-unit unit nil parameters policystore supplystore nil acc))
-            ctx 
-            raw-units)))
-
-;;create-unit provides a baseline, unattached unit derived from a set of data.
-;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
-;;nothing. parametrically create a new unit.
-
-(defn create-unit [name src oititle component cycletime policy behavior]
-  (u/->unitdata
-   name ;unit entity's unique name. corresponds to a UIC 
-   src ;unit entity's type, or capability it can supply.
-   component ;unit entity's membership in supply.
-   policy  ;the policy the entity is currently following.
-   [] ;a stack of any pending policy changes.
-   behavior ;the behavior the unit uses to interpret policy and messages.
-   nil ;generic state data for the unit's finite state machine.
-   cycletime ;the unit's current coordinate in lifecycle space.
-   nil       ;description of the categories this unit serve as a followon to.
-   :spawning ;the current physical location of the unit.
-   :spawning ;the current position of the unit in its policy space.
-    ;the current cycle data structure for the unit.
-   [] ;an ordered collection of the cycles that the unit has completed.
-   -1 ;the time in which the unit spawned.
-   oititle ;the description of the unit.
-   [] ;list of all the locations visited.
-   0  ;dwell time before deployment
-   ))
 
 ;;consider changing these to keywords.
 ;;We can probably push this off to a policy default table.  It used
@@ -322,6 +257,110 @@
   (assoc unit :policy 
      (choose-policy (:policy unit) (:component unit) policystore params (:src unit))))
 
+;;Given a unit, initialize it's currentcycle based on policy information
+
+;;Units maintain direct references to policies, but they do not
+;;actively subscribe directly to the policy.  Rather, the policy 
+;;store maintains a map of {policyname #{subscribers}}, we 
+;;can even do this via tags in the tagbase, but it's already 
+;;there in the policy store.  That way, when we invoke the 
+;;policy subscription service, we should have an couple of updates: 
+;;the unit now has a reference to the policy it subscribes to (
+;;to make unit querying and updating easier), and the policystore 
+;;has an association between the unit and the policy its 
+;;subscribed to.
+
+;;I think this guy should be elevated.
+;;This really needs to happen in the context of the full sim, since
+;;it's touching on several areas at once: policy, event-notification, supply.
+;;We need access to multiple spheres of influence.  We used to just
+;;mutate away and let the changes propgate via effects.  No mas.
+;;Returns a policystore update and a unit update.
+(defn initialize-cycle 
+  "Given a unit's policy, subscribes the unit with said policy, 
+   updates the unit's state to initial conditions, broadcasts 
+   any movement via event triggers, returning the 
+   new unit and a new policystore."
+  [unit policy ghost ctx]
+  (let [newpos (if (not ghost) 
+                 (pol/get-position policy (:cycletime unit))
+                 "Spawning")] 
+    (-> unit 
+        (assoc :policy policy)
+        (assoc :positionpolicy newpos)
+        (assoc :locationname "Spawning")  
+        (u/change-location newpos ctx))))
+
+;;We handle policy registration as a separate step now, before it 
+;;we embedded in initialize-cycle.  We just ensure that every unit 
+;;has its policy subscription, possibly upon registration.
+(defn initialize-policy 
+  [unit policystore]
+  (plcy/subscribe-unit unit policy policy-store))
+
+(def ^:constant +max-cycle-length+     10000)
+(def ^:constant +default-cycle-length+ 1095)
+
+;;Computes the intervals between units distributed along a lifecylce.
+;;Used to uniformly disperse units in a deterministic fashion.
+(defn compute-interval [clength unitcount]
+  (if (or (zero? clength) (zero? unitcount)) 
+    (throw (Error.  "Cannot have zero length cycle or 0 units"))
+    (if (< unitcount clength) 
+      (quot clength unitcount)
+      (quot clength (dec clength)))))
+
+;;take the unit seq and distribute the units evenly. Pass in a
+;;collection of unit names, as well as the appropriate counts, and the
+;;cycles are uniformly distributed (using integer division).
+(defn distribute-cycle-times [units policy]
+  (let [clength (plcy/cycle-length policy)
+        clength (if (> clength +max-cycle-length+) +default-cycle-length+)
+        uniform-interval (atom (compute-interval clength (count unitmap)))
+        last-interval (atom (- uniform-interval))
+        remaining     (atom (count unitmap))
+        next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
+                                   nxt (if (> nxt clength) 0 nxt)]
+                               (do (when (< @remaining clength)
+                                     (reset! @uniform-interval 
+                                             (compute-interval clength (count @remaining))))
+                                   (reset! last-interval nxt)
+                                   (swap! remaining dec)
+                                   nxt)))]                                              
+    (reduce (fn [acc  unit]
+                 (let [cycletime (next-interval)
+                       unit      (assoc unit :cycletime cycletime)]
+                   (do (assert  (pos? cycletime) "Negative cycle time during distribution.")
+                       (conj acc unit))))
+           []
+           units)))
+
+
+;;create-unit provides a baseline, unattached unit derived from a set of data.
+;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
+;;nothing. parametrically create a new unit.
+
+(defn create-unit [name src oititle component cycletime policy behavior]
+  (u/->unitdata
+   name ;unit entity's unique name. corresponds to a UIC 
+   src ;unit entity's type, or capability it can supply.
+   component ;unit entity's membership in supply.
+   policy  ;the policy the entity is currently following.
+   [] ;a stack of any pending policy changes.
+   behavior ;the behavior the unit uses to interpret policy and messages.
+   nil ;generic state data for the unit's finite state machine.
+   cycletime ;the unit's current coordinate in lifecycle space.
+   nil       ;description of the categories this unit serve as a followon to.
+   :spawning ;the current physical location of the unit.
+   :spawning ;the current position of the unit in its policy space.
+    ;the current cycle data structure for the unit.
+   [] ;an ordered collection of the cycles that the unit has completed.
+   -1 ;the time in which the unit spawned.
+   oititle ;the description of the unit.
+   [] ;list of all the locations visited.
+   0  ;dwell time before deployment
+   ))
+
 ;;Derives a default unit from a record that describes unitdata.
 ;;Vestigial policy objects and behavior fields are not defined.  We
 ;;may allow different behaviors in the future, but for now they are
@@ -329,61 +368,12 @@
 (defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy]}]
     (create-unit  Name SRC OITitle Component CycleTime Policy :default))
 
-
- ;;  92:   Public Sub unitsFromTable(table As GenericTable, supply As TimeStep_ManagerOfSupply)
- ;;  93:  
- ;;  94:   Dim rec
- ;;  95:   Dim unit As TimeStep_UnitData
- ;;  96:   Dim defbehavior As IUnitBehavior
- ;;  97:   Dim count As Long, quantity As Long
- ;;  98:   Dim policy As IRotationPolicy
- ;;  99:  
- ;; 100:   table.moveFirst
- ;; 101:   While Not table.EOF
- ;; 102:       Set record = table.getGenericRecord
- ;; 103:       With record
- ;; 104:           If .fields("Enabled") = True And inScope(.fields("SRC")) Then
- ;; 105:               quantity = Fix(.fields("Quantity"))
- ;; 106:              'Decouple
- ;; 107:               Set policy = choosepolicy(.fields("Policy"), .fields("Component"), state.policystore, .fields("SRC"))
- ;; 108:               If quantity > 1 Then
- ;; 109:                   AddUnits quantity, .fields("SRC"), .fields("OITitle"), _
- ;; 110:                               .fields("Component"), policy, supply
- ;; 111:               ElseIf quantity = 1 Then'unique unit record
- ;; 112:                  'Tom change 19 April 2012
- ;; 113:  
- ;; 114:                   Set unit = associateUnit(recordToUnit(record), supply)
- ;; 115:                   supply.registerUnit unit, unit.src = "Ghost"'Tom change 1 April, this takes care of all the registration, refactored.
- ;; 116:                   Set unit = Nothing
- ;; 117:               End If
- ;; 118:           End If
- ;; 119:       End With
- ;; 120:       
- ;; 121:       table.moveNext
- ;; 122:   Wend
- ;; 123:   End Sub
-
-;;Need to add filters to ensure integrality constraints on supply.
-;;Also need to add 
-(defn units-from-records [recs supply]
-  (let [params (core/get-parameters *ctx*)
-        supplyref (atom supply)]
-    (->> recs 
-         (r/filter valid-record?)
-         (reduce (fn [acc r] 
-                   (if (> (:Quantity r) 1) 
-                       (conj acc (create-units (:Quantity r) 
-                                               (:SRC r) 
-                                               (:OITitle r) 
-                                               (:Component r)  
-                                               (:Policy r) supplyref false))
-                       (conj acc (record->unitdata r)))) []))))
-
-
 (definline generate-name 
   "Generates a conventional name for a unit, given an index."
-  [idx unit]
-  `(str ~idx "_" (:SRC ~unit) "_" (:component ~unit)))
+  ([idx unit]
+     `(str ~idx "_" (:SRC ~unit) "_" (:component ~unit)))
+  ([idx src compo]
+     `(str ~idx "_" ~src "_" ~compo)))
 
 (defn check-name 
   "Ensures the unit is uniquely named, unless non-strictness rules are 
@@ -411,13 +401,8 @@
   "Associate or attach a new unit to a particular supply. If the new unit's name is 
   not unique, it will be changed to accomodate uniqueness requirement."
   [unit supply strictname]
-  (let [unit-count (count (:unitmap supply))
-        nm         (if (= (clojure.string/upper-case nm) "AUTO")
-                     (generate-name unit-count unit)
-                     (check-name nm supply strictname))]
-    (-> unit 
-        (assoc :name nm) 
-        (assoc :index unit-count))))
+  (assoc unit :name (check-name nm supply strictname)))
+        
 
 ;;Note -  register-unit is the other primary thing here.  It currently 
 ;;resides in marathon.sim.supply/register-unit 
@@ -439,36 +424,55 @@
 ;;2) push that batch of units through cycle distribution. 
 ;;3) Prep
 ;;4) Register
-;;The only real difference here is that we have to initialize 
-;;both the name and the cycle times artificially.  Since we're 
-;;doing that, we can guarantee no name conflicts.
-(defn create-units [amount src oititle compo policy supply ghost]
-  (let [ucount    (count (:unitmap supply))
-        bound     (+ ucount (quot amount 1))
-        behavior  (if ghost (-> supply :behaviors :defaultGhostBehavior)
-                            (-> supply :behaviors :defaultACBehavior))]
+
+
+;; ;(if ghost (-> supply :behaviors :defaultGhostBehavior)
+;; ;                            (-> supply :behaviors
+;; ;                            :defaultACBehavior))
+
+;;We can extract the supply dependencies, and the ghost arg, 
+;;if we provide the behavior to be used.
+(defn create-units [amount src oititle compo policy idx behavior]
+  (let [bound     (+ idx (quot amount 1))]
     (if (pos? amount)
         (loop [idx ucount
                acc []]
           (if (== idx bound)  
             (distribute-cycle-times acc policy)
-            (let [nm       (str (core/next-idx)  "_" src  "_" compo)
+            (let [nm       (generate-name idx  src  compo)
                   new-unit (create-unit nm src oititle compo 0 
                                         policy behavior policy)]                
               (recur (unchecked-inc idx)
                      (conj acc new-unit))))))))
 
-;;We really want to add prepped units.
-(defn add-units [amount src oititle compo policy supply ghost ctx]
-  (if (== amount 1)
-    (create-unit nm src oititle compo 0 policy behavior policy)    
-        
-    (-> (create-units amount src oititle compo policy supply ghost)
-        (distribute-cycle-time-locations policy supply)
-        
-      
-      
-    
+;;Given a set of raw unit records, create a set of unitdata that has
+;;all the information necessary for initialization, i.e. lifecycle, 
+;;policy, behavior, name, etc.  We want to name the units according 
+;;to the order in which they were generated, so we provide a
+;;supplystore to derive the next index from.  We'll pass the output
+;;from this onto a function that prepares the units.  From there 
+;;we do all the minute prepatory tasks to "fill in the details", 
+;;like associating the units with a supply, establishing unit 
+;;subscriptions to policies, etc..
+(defn units-from-records [recs supply]
+  (let [unit-count (atom (-> supply :unitmap (count)))
+        ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
+        normal-beh (-> supply :behaviors :defaultACBehavior)
+        conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
+                                    (into acc xs)))
+        conj-unit  (fn [acc x] (do (swap! unit-count inc)
+                                   (conj acc x)))]
+    (->> recs 
+         (r/filter valid-record?)
+         (reduce (fn [acc r]                    
+                   (if (> (:Quantity r) 1) 
+                     (conj-units acc 
+                       (create-units (:Quantity r) 
+                                     (:SRC r) 
+                                     (:OITitle r) 
+                                     (:Component r)  
+                                     (:Policy r) @unit-count normal-beh))
+                     (conj-unit  acc (record->unitdata r)))) []))))
         
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
@@ -543,87 +547,51 @@
  ;; 504:   End Function
 
 
-;;Given a unit, initialize it's currentcycle based on policy information
 
-;;Units maintain direct references to policies, but they do not
-;;actively subscribe directly to the policy.  Rather, the policy 
-;;store maintains a map of {policyname #{subscribers}}, we 
-;;can even do this via tags in the tagbase, but it's already 
-;;there in the policy store.  That way, when we invoke the 
-;;policy subscription service, we should have an couple of updates: 
-;;the unit now has a reference to the policy it subscribes to (
-;;to make unit querying and updating easier), and the policystore 
-;;has an association between the unit and the policy its 
-;;subscribed to.
-
-;;I think this guy should be elevated.
-;;This really needs to happen in the context of the full sim, since
-;;it's touching on several areas at once: policy, event-notification, supply.
-;;We need access to multiple spheres of influence.  We used to just
-;;mutate away and let the changes propgate via effects.  No mas.
-;;Returns a policystore update and a unit update.
-(defn initialize-cycle 
-  "Given a unit's policy, subscribes the unit with said policy, 
-   updates the unit's state to initial conditions, broadcasts 
-   any movement via event triggers, returning the 
-   new unit and a new policystore."
-  [unit policy ghost ctx]
-  (let [newpos (if (not ghost) 
-                               (pol/get-position policy (:cycletime unit))
-                               "Spawning")] 
-    (-> unit 
-        (assoc :policy policy)
-        (assoc :positionpolicy newpos)
-        (assoc :locationname "Spawning")  
-        (u/change-location newpos ctx))))
-
-;;We handle policy registration as a separate step now, before it 
-;;we embedded in initialize-cycle.  We just ensure that every unit 
-;;has its policy subscription, possibly upon registration.
-(defn initialize-policy 
-  [unit policystore]
-  (plcy/subscribe-unit unit policy policy-store))
-
-(def ^:constant +max-cycle-length+ 10000)
-(def ^:constant +default-cycle-length+ 1095)
-
-;;Computes the intervals between units distributed along a lifecylce.
-;;Used to uniformly disperse units in a deterministic fashion.
-(defn compute-interval [clength unitcount]
-  (if (or (zero? clength) (zero? unitcount)) 
-    (throw (Errror.  "Cannot have zero length cycle or 0 units"))
-    (if (< unitcount clength) 
-      (quot clength unitcount)
-      (quot clength (dec clength)))))
-
-;;take the unit seq and distribute the units evenly. Pass in a
-;;collection of unit names, as well as the appropriate counts, and the
-;;cycles are uniformly distributed (using integer division).
-(defn distribute-cycle-times [units policy]
-  (let [clength (plcy/cycle-length policy)
-        clength (if (> clength +max-cycle-length+) +default-cycle-length+)
-        uniform-interval (atom (compute-interval clength (count unitmap)))
-        last-interval (atom (- uniform-interval))
-        remaining     (atom (count unitmap))
-        next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
-                                   nxt (if (> nxt clength) 0 nxt)]
-                               (do (when (< @remaining clength)
-                                     (reset! @uniform-interval 
-                                             (compute-interval clength (count @remaining))))
-                                   (reset! last-interval nxt)
-                                   (swap! remaining dec)
-                                   nxt)))]                                              
-    (reduce (fn [acc  unit]
-                 (let [cycletime (next-interval)
-                       unit      (assoc unit :cycletime cycletime)]
-                   (do (assert  (pos? cycletime) "Negative cycle time during distribution.")
-                       (conj acc unit))))
-           []
-           units)))
 
 (defn prep-cycle [unit ctx]
   (initialize-cycle (:policy unit) (core/ghost? unit) ctx))
 
+(defn prep-unit 
+  "Given a raw-unit, ensures its name is good with the supplystore, 
+   assigns a policy (typically read from the existing policy field) 
+   and initializes its cycle relative to the current cycletime."
+  [unit supplystore policystore ctx]
+  (-> unit       
+      (associate-unit supplystore true)
+      (assign-policy policystore params)      
+      (prep-cycle ctx)))
+
+;;All we need to do is eat a unit, returning the updated context.
+;;A raw unit is a unitdata that is freshly parsed, via create-unit.
+(defn process-unit [raw-unit extra-tags parameters behaviors ctx]
+  (core/with-simstate [[supplystore policystore] ctx]
+    (let [prepped   (-> unit       
+                        (associate-unit supplystore strictname)
+                        (assign-policy policystore params)      
+                        (prep-cycle))]
+      (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
+          (core/set-policystore 
+           (plcy/subscribe-unit prepped (:policy prepped) prepped policystore))))))  
+
+;;At the highest level, we have to thread a supply around 
+;;and modify it, as well as a policystore.
+(defn process-units [raw-units ctx]
+  (core/with-simstate [[parameters] ctx]
+    (reduce (fn [acc unit]
+                (process-unit unit nil parameters policystore supplystore nil acc))
+            ctx 
+            raw-units)))
+
+;;Flesh this out, high level API for adding units to supply.  
+;;Convenience function.
+;;We really want to add prepped units.
+(defn add-units [amount src oititle compo policy supply ghost ctx]
+  (if (== amount 1)))
+        
+    
+
+        
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
     (let [ctx  (assoc-in ctx [:state :parameters] 
@@ -631,7 +599,3 @@
       (reduce-kv (fn [acc nm unit] (u/change-state unit :Spawning 0 nil ctx))
                  ctx 
                  (:unitmap supply)))))
-
-
-
-        
