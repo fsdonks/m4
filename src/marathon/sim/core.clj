@@ -22,7 +22,9 @@
 ;;largely ignored.
 (ns marathon.sim.core
   (:require [spork.util [metaprogramming :as util]
-                        [tags :as tag]]))
+                        [tags :as tag]]
+            [spork.sim.simcontext :as sim]
+            [marathon.data.simstate :as simstate]))
 
 ;;Possible use of dynamic context for later....
 ;;Dunno if I want to do this yet..
@@ -97,6 +99,21 @@
             
  
   
+;;#Empty Simulation Contexts
+(def emptystate (simstate/make-simstate))
+(def emptysim   (sim/make-context :state emptystate))
+;;A useful debugging context for us.  Prints out everything it sees.
+(def debugsim   
+  (-> (sim/make-debug-context 
+       :debug-handler  (fn [ctx edata name] 
+                         (do (println (sim/debug-msg ":debugger saw " 
+                                  {:type (spork.sim.data/event-type  edata) 
+                                   :from (spork.sim.data/event-from edata)
+                                   :to (spork.sim.data/event-to edata)
+                                   :msg (sim/packet-message edata)
+                                   :data (spork.sim.data/event-data  edata)})) ctx))) 
+                 (assoc :state emptystate)))
+
 ;;#Shared Functions
 
 ;;These functions were extracted due to use across multiple domains.  I may 
@@ -214,7 +231,7 @@
 
 (def ^:constant +empty-string+ "")
 (definline empty-string? [x] `(identical? ~x +empty-string+))
-
+(defn debug-print [msg obj] (do (println msg) obj))
 
 ;;Put on hold for now.  We're doing a lot of string building.  We can 
 ;;probably find some gains by replacing calls to (str ...) with an 

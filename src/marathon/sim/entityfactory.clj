@@ -61,7 +61,7 @@
 ;;tab-delimited text records, and creating entity orders from them.
 
 ;;For now, we're using dynamic scope...
-(def ^:dynamic *ctx* engine/emptysim)
+(def ^:dynamic *ctx* core/emptysim)
 
 
 ;;I think we may want to make the entityfactory functions operate 
@@ -144,21 +144,15 @@
   (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
                  SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup))
 
-(comment ;testing
-  (def demand-ctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
-)
-
-
 ;;Returns a set of demand data, derived from recs, with 
 ;;duplicate records attached as meta data.
-(defn demands-from-records [recs]  
-  (let [params (core/get-parameters *ctx*)]
-        (let [[uniques dupes]  (->> recs 
-                                    (r/filter valid-record?)
-                                    (partition-dupes demand-key)                                    
-                                    )]
-          (with-meta (mapv record->demand uniques)
-            {:duplicates dupes}))))
+(defn demands-from-records [recs ctx]  
+  (let [[uniques dupes]  
+            (->> recs 
+                 (r/filter #(valid-record? % (core/get-parameters ctx)))
+                 (partition-dupes demand-key))]
+    (with-meta (mapv record->demand uniques)
+      {:duplicates dupes})))
 
 ;;Broadcast the fact that we have duplicates.
 (defn notify-duplicate-demands! [dupes ctx]
@@ -181,9 +175,9 @@
 ;;and returns the resulting context.
 (defn associate-demand [ctx demand]
   (core/with-simstate [[parameters demandstore policystore] ctx]    
-    (let [demands (:demandmap demandstore)
+    (let [demands      (:demandmap demandstore)
           demand-count (count demands)
-          new-idx (+ (:demandstart parameters) demand-count)]
+          new-idx (+ (or (:demandstart parameters) 0) demand-count)]
       (-> (if (contains? demands (:name demand))
             (assoc demand :name 
                    (str (:name demand) "_" (inc demand-count)))
@@ -196,15 +190,15 @@
 (defn demands-from-table 
   "Read in multiple demand records from anything implementing a generic 
    table protocol in spork.util.table"
-  [demand-table demandstore]
+  [demand-table demandstore ctx]
   (let [rs (demands-from-records (tbl/record-seq demand-table))
-        dupes (get (meta rs) :duplicates)]
-    (binding [*ctx* (assoc-in *ctx* [:state :demandstore] demandstore)]
-      (->> (reduce (fn [ctx d] 
-                     (initialized-demand! (associate-demand *ctx* d) d))
-                   *ctx*
+        dupes (get (meta rs) :duplicates)
+        ctx   (assoc-in ctx [:state :demandstore] demandstore)]
+      (->> (reduce (fn [acc d] 
+                     (initialized-demand! (associate-demand acc d) d))
+                   ctx
                    rs)
-           (notify-duplicate-demands! dupes)))))
+           (notify-duplicate-demands! dupes))))
 
 
 (defn ungrouped? [grp] 
@@ -579,7 +573,7 @@
 
 
 ;; (defn add-units [amount src oititle compo policy supply ghost ctx]
-;;   (if (== amount 1)))
+;;   (if (== amount 1))
 
 ;;#Entity Initialization        
 (defn start-state [supply ctx]
@@ -589,3 +583,12 @@
       (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :Spawning 0 nil ctx))
                  ctx 
                  (:unitmap supply)))))
+
+
+
+
+
+(comment ;testing
+  (require '[marathon.sim.sampledata :as sd])
+  (def testctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+)

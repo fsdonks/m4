@@ -47,11 +47,12 @@
 ;preferably one that uses keywords.
 ;inject appropriate tags into the GenericTags
 (defn tag-demand [demand demandstore & {:keys [extras]}]
-  (update-in demandstore [:tags] tag/multi-tag 
-     (concat [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
-              (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
-              :enabled] 
-             extras)))
+  (->> (tag/multi-tag (:tags demandstore) (:name demand) 
+               (concat [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
+                        (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
+                        :enabled] 
+                       extras))
+       (assoc demandstore :tags)))
 
 (defn tag-demand-sink [demandstore sink]
   (update-in demandstore [:tags] tag/tag-subject  :Sinks sink))
@@ -237,7 +238,7 @@
 (defn add-deactivation [t demandname demandstore ctx]
   (let [inactives (get-deactivations demandstore t)
         tlast     (max (:tlastdeactivation demandstore) t)]
-    (->> (request-demand-update! t demandname ctx) 
+    (->> (request-demand-update! t demandname ctx)    
          (sim/merge-updates                                                  ;1)
            {:demandstore 
             (-> (assoc demandstore :tlastdeactivation tlast)
@@ -245,9 +246,9 @@
 
 ;Schedule activation and deactivation for demand. -> Looks fixed.
 (defn schedule-demand [demand demandstore ctx]
-  (let [{:keys [startday demand-name duration]} demand]
-    (->> (add-activation startday demand-name demandstore ctx)
-         (add-deactivation (+ startday duration) demand-name demandstore))))
+  (let [{:keys [startday name duration]} demand]
+    (->> (add-activation startday name demandstore ctx)
+         (add-deactivation (+ startday duration) name demandstore))))
 
 (defn register-demand [demand demandstore policystore ctx]
   (let [dname    (:name demand)
@@ -255,7 +256,7 @@
     (->> (registering-demand! demand ctx)
       (sim/merge-updates 
         {:demand-store  newstore 
-         :policy-store  (policy/register-location dname policystore)})
+         :policy-store  (policy/register-location dname policystore)})     
       (schedule-demand demand newstore)))) 
 
 ;utility function....
