@@ -12,10 +12,12 @@
 ;;functionality.
 (ns marathon.sim.entityfactory
   (:require [marathon        [schemas :as s]]
+            [marathon.data.protocols :as generic] ;rename
             [marathon.demand [demanddata :as d]]
             [marathon.sim.demand :as demand]
-            [marathon.sim.unit :as u]
+            [marathon.sim.unit :as unitsim]
             [marathon.supply [unitdata :as u]]
+            [marathon.sim.supply :as supply]
             [marathon.sim.policy :as plcy]
             [marathon.sim.engine :as engine]
             [spork.sim.simcontext :as sim]
@@ -153,7 +155,7 @@
   (let [params (core/get-parameters *ctx*)]
         (let [[uniques dupes]  (->> recs 
                                     (r/filter valid-record?)
-                                    (partition-dupes demand)                                    
+                                    (partition-dupes demand-key)                                    
                                     )]
           (with-meta (mapv record->demand uniques)
             {:duplicates dupes}))))
@@ -283,20 +285,13 @@
    new unit and a new policystore."
   [unit policy ghost ctx]
   (let [newpos (if (not ghost) 
-                 (pol/get-position policy (:cycletime unit))
+                 (generic/get-position policy (:cycletime unit))
                  "Spawning")] 
     (-> unit 
         (assoc :policy policy)
         (assoc :positionpolicy newpos)
         (assoc :locationname "Spawning")  
-        (u/change-location newpos ctx))))
-
-;;We handle policy registration as a separate step now, before it 
-;;we embedded in initialize-cycle.  We just ensure that every unit 
-;;has its policy subscription, possibly upon registration.
-(defn initialize-policy 
-  [unit policystore]
-  (plcy/subscribe-unit unit policy policy-store))
+        (unitsim/change-location newpos ctx))))
 
 (def ^:constant +max-cycle-length+     10000)
 (def ^:constant +default-cycle-length+ 1095)
@@ -314,16 +309,16 @@
 ;;collection of unit names, as well as the appropriate counts, and the
 ;;cycles are uniformly distributed (using integer division).
 (defn distribute-cycle-times [units policy]
-  (let [clength (plcy/cycle-length policy)
+  (let [clength (generic/cycle-length policy)
         clength (if (> clength +max-cycle-length+) +default-cycle-length+)
-        uniform-interval (atom (compute-interval clength (count unitmap)))
+        uniform-interval (atom (compute-interval clength (count units)))
         last-interval (atom (- uniform-interval))
-        remaining     (atom (count unitmap))
+        remaining     (atom (count units))
         next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
                                    nxt (if (> nxt clength) 0 nxt)]
                                (do (when (< @remaining clength)
                                      (reset! @uniform-interval 
-                                             (compute-interval clength (count @remaining))))
+                                             (compute-interval clength  @remaining)))
                                    (reset! last-interval nxt)
                                    (swap! remaining dec)
                                    nxt)))]                                              
@@ -334,7 +329,6 @@
                        (conj acc unit))))
            []
            units)))
-
 
 ;;create-unit provides a baseline, unattached unit derived from a set of data.
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
@@ -368,12 +362,12 @@
 (defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy]}]
     (create-unit  Name SRC OITitle Component CycleTime Policy :default))
 
-(definline generate-name 
+(defn generate-name 
   "Generates a conventional name for a unit, given an index."
   ([idx unit]
-     `(str ~idx "_" (:SRC ~unit) "_" (:component ~unit)))
+     (str idx "_" (:SRC unit) "_" (:component unit)))
   ([idx src compo]
-     `(str ~idx "_" ~src "_" ~compo)))
+     (str idx "_" src "_" compo)))
 
 (defn check-name 
   "Ensures the unit is uniquely named, unless non-strictness rules are 
@@ -401,7 +395,7 @@
   "Associate or attach a new unit to a particular supply. If the new unit's name is 
   not unique, it will be changed to accomodate uniqueness requirement."
   [unit supply strictname]
-  (assoc unit :name (check-name nm supply strictname)))
+  (assoc unit :name (check-name (:name unit) supply strictname)))
         
 
 ;;Note -  register-unit is the other primary thing here.  It currently 
@@ -435,7 +429,7 @@
 (defn create-units [amount src oititle compo policy idx behavior]
   (let [bound     (+ idx (quot amount 1))]
     (if (pos? amount)
-        (loop [idx ucount
+        (loop [idx idx
                acc []]
           (if (== idx bound)  
             (distribute-cycle-times acc policy)
@@ -476,8 +470,7 @@
         
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
-  
-  
+ 
 
  ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
  ;; 436:                               compo As String, policy As IRotationPolicy, _
@@ -546,9 +539,6 @@
  ;; 503:  
  ;; 504:   End Function
 
-
-
-
 (defn prep-cycle [unit ctx]
   (initialize-cycle (:policy unit) (core/ghost? unit) ctx))
 
@@ -556,19 +546,19 @@
   "Given a raw-unit, ensures its name is good with the supplystore, 
    assigns a policy (typically read from the existing policy field) 
    and initializes its cycle relative to the current cycletime."
-  [unit supplystore policystore ctx]
+  [unit supplystore policystore parameters ctx]
   (-> unit       
-      (associate-unit supplystore true)
-      (assign-policy policystore params)      
+      (associate-unit supplystore true)  ;;may move this into supply/register-unit...
+      (assign-policy policystore parameters)      
       (prep-cycle ctx)))
 
 ;;All we need to do is eat a unit, returning the updated context.
 ;;A raw unit is a unitdata that is freshly parsed, via create-unit.
 (defn process-unit [raw-unit extra-tags parameters behaviors ctx]
-  (core/with-simstate [[supplystore policystore] ctx]
-    (let [prepped   (-> unit       
-                        (associate-unit supplystore strictname)
-                        (assign-policy policystore params)      
+  (core/with-simstate [[supplystore policystore] ctx] ;could get expensive 
+    (let [prepped   (-> raw-unit       
+                        (associate-unit supplystore true)
+                        (assign-policy policystore parameters)      
                         (prep-cycle))]
       (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
           (core/set-policystore 
@@ -579,23 +569,23 @@
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters] ctx]
     (reduce (fn [acc unit]
-                (process-unit unit nil parameters policystore supplystore nil acc))
+                (process-unit unit nil parameters  nil acc))
             ctx 
             raw-units)))
 
 ;;Flesh this out, high level API for adding units to supply.  
 ;;Convenience function.
 ;;We really want to add prepped units.
-(defn add-units [amount src oititle compo policy supply ghost ctx]
-  (if (== amount 1)))
-        
-    
 
-        
+
+;; (defn add-units [amount src oititle compo policy supply ghost ctx]
+;;   (if (== amount 1)))
+
+;;#Entity Initialization        
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
     (let [ctx  (assoc-in ctx [:state :parameters] 
-                   (assoc parameters :TotalUnits (count um)))]
-      (reduce-kv (fn [acc nm unit] (u/change-state unit :Spawning 0 nil ctx))
+                   (assoc parameters :TotalUnits (count (:unitmap supply))))]
+      (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :Spawning 0 nil ctx))
                  ctx 
                  (:unitmap supply)))))

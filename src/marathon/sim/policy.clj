@@ -348,7 +348,7 @@
   "Applies f to the subscriptions associated with policy in policystore, then
    stores the updated result, returning the policystore."
   [f policy policystore]
-  (update-in policy-store [:subscriptions (policy-name policy)] f))
+  (update-in policystore [:subscriptions (policy-name policy)] f))
   
 (defn change-policy
   "High level policy management.  For policies that are period-driven, enforces 
@@ -365,7 +365,7 @@
   "Subscribes a unit to policy by establishing a relation with the policy in
    the policy store.  Rather than storing subscriptions in the policy, we now
    keep them in the policystore."
-  [unit policy policy-store]
+  [unit policy policystore]
   (let [old-policy (policy-name (:policy unit))
         new-policy (policy-name policy)
         nm         (:name unit)
@@ -375,19 +375,19 @@
     (->> (-> s
              (assoc old-policy oldsubs)
              (assoc new-policy newsubs))
-         (assoc policy-store :subscriptions))))
+         (assoc policystore :subscriptions))))
 
 (defn unsubscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in
    the policy store.  Rather than storing subscriptions in the policy, we now
    keep them in the policystore."
-  [unit policy policy-store]
+  [unit policy policystore]
   (let [old-policy (policy-name policy)
         nm         (:name unit)
         s          (:subscriptions policystore)
         oldsubs    (disj (get s old-policy)  nm)]
     (->> (-> s (assoc old-policy oldsubs))
-         (assoc policy-store :subscriptions))))
+         (assoc policystore :subscriptions))))
 
 ;We define change in a composite policy by the existence of both the new period 
 ;and the old period in the composite policy.  Atomic policies are defined across 

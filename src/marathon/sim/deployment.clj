@@ -30,7 +30,7 @@
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
     (if (supply/first-deployment? unit store)
-      (->> (supply/set-supplystore ctx (supply/tag-as-deployed unit store))
+      (->> (core/set-supplystore ctx (supply/tag-as-deployed unit store))
            (supply/first-deployment! store unit)
            (supply/adjust-max-utilization! store unit)))))
 

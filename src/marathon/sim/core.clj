@@ -20,10 +20,26 @@
 ;;insight.  
 ;;Even for intrepid readers, the section header __Developer Notes__ may be 
 ;;largely ignored.
-
 (ns marathon.sim.core
   (:require [spork.util [metaprogramming :as util]
                         [tags :as tag]]))
+
+;;Possible use of dynamic context for later....
+;;Dunno if I want to do this yet..
+;(def ^:dynamic *ctx* nil)
+;; (defmacro defcontextual 
+;;   "Define functions that work with or without a name context, ctx.
+;;    Yields functions that an extra arity fun, taking ctx as a final argument.
+;;    If no contextual function is provided, uses the var bound to marathon.sim.core/*ctx*
+;;    Designed to eliminate boilerplate, and allow us to maintain contextual functions 
+;;    that can use dynamic binding.  Note -> the main reason to use this, in lieu of."
+;;   [name args & expr]
+;;   (assert (vector? args) "arguments must be a vector")
+;;   (let [rawargs (if (= (last args) 'ctx)
+;;                     (subvec args 0 (dec (count args)))
+;;                     args)]                                
+;;   `(defn ~name ([~@rawargs] ~@expr)
+;;                ([~@(conj rawargs 'ctx)] ~@expr))))
 
 ;;#Providing Common Access to the State in the Simulation Context
 ;;The simulation context contains the simulation state - a large nested map of 

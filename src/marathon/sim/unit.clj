@@ -1,20 +1,52 @@
 ;A module for unit behaviors...
-(ns marathon.sim.unit)
+(ns marathon.sim.unit
+  (:require [spork.sim [simcontext :as sim]]
+            [marathon.sim.core :as core]
+            [marathon.sim.supply :as supply]))
 
-;TEMPORARILY ADDED for marathon.sim.deman, marathon.sim.policy
+;TEMPORARILY ADDED for marathon.sim.demand, marathon.sim.policy
 (declare change-state update can-deploy? change-location! 
          re-deploy-unit deploy-unit change-policy
          valid-deployer?) 
 
+;;Records unit movement between locations.
+(defn unit-moved-event!  [unit newlocation ctx]
+  (let [nm  (:name unit) 
+        loc (:locationname unit)
+        msg (str nm " moved from " loc " to " newlocation " on day " (sim/get-time ctx))]
+   (sim/trigger-event :UnitMoved nm newlocation  msg unit ctx)))
+
+;;Records the first time a unit moved.
+(defn unit-first-moved-event!  [unit newlocation ctx]
+  (let [nm  (:name unit) 
+        loc (:locationname unit)
+        msg (str nm " Started moving from " loc " to " newlocation " on day " (sim/get-time ctx))]
+   (sim/trigger-event :UnitMoved nm newlocation  msg unit ctx)))
 
 
-;;Typicaly resides in unit/change-state, but we probably 
+;;Typically resides in unit/change-state, but we probably 
 ;;want to make it universal for any entity with an FSM.
 ;;Temporary Stub
 (defn change-state [entity newstate deltat duration ctx]
-  (do (println "entityfactory/change-state is a stub")
+  (do (println "marathon.sim.unit/change-state is a stub")
       (sim/trigger-event :Change-State-Stub :EntityFactory 
                          (:name entity) "State Change" [newstate deltat duration] ctx)))
+
+(defn push-location [unit newlocation]
+  (-> unit 
+      (assoc :locationname    newlocation)
+      (assoc :locationhistory (conj (:locationhistory unit) 
+                                    newlocation))))
+
+(defn change-location [unit newlocation ctx]
+  (core/with-simstate [[supplystore] ctx]
+    (if (= newlocation (:locationname unit))
+      ctx
+      (let [nextu   (push-location unit newlocation)
+            ctx (core/set-supplystore (supply/add-unit supplystore nextu))]
+        (if (:moved unit)              
+          (unit-moved-event! nextu newlocation ctx)                                          
+          (unit-first-moved-event! (assoc nextu :moved true) newlocation ctx))))))
 
 ;;#Needs Porting#
 
@@ -91,20 +123,7 @@
 ;
 ;End Sub
 
-;'Records the first time a unit moved.
-;Public Sub unitMovedEvent(unit As TimeStep_UnitData, newlocation As String, context As TimeStep_SimContext)
-;With unit
-;triggerEvent UnitMoved, .name, newlocation, .name & " moved from " & _
-;                            .LocationName & " to " & newlocation & " on day " & SimLib.getTime(context), unit, context
-;End With
-;End Sub
 
-;Public Sub unitFirstMovedEvent(unit As TimeStep_UnitData, newlocation As String, context As TimeStep_SimContext)
-;With unit
-;triggerEvent UnitMoved, .name, newlocation, .name & " started moving from " & _
-;                            .LocationName & " to " & newlocation & " on day " & SimLib.getTime(context), unit, context
-;End With
-;End Sub
 
 
 ;'Initialize a unit's cycle history.
