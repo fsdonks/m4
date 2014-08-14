@@ -222,6 +222,39 @@
         (assoc-in m path (dissoc parent (last ks))))
       updated)))
 
+(defn  deep-get
+  "Returns the value in a nested associative structure,
+  where ks is a sequence of keys. Returns nil if the key
+  is not present, or the not-found value if supplied."
+  {:added "1.2"
+   :static true}
+  ([m ks]
+     (clojure.core/reduce1 get m ks))
+  ([m ks not-found]
+     (loop [sentinel (Object.)
+            m m
+            ks (seq ks)]
+       (if ks
+         (let [m (get m (first ks) sentinel)]
+           (if (identical? sentinel m)
+             not-found
+             (recur sentinel m (next ks))))
+         m))))
+
+(defmacro deep-update 
+  "Replacement for update-in, but without the function call overhead.
+   If the key-path is composed of literals, this is about 
+   3 times faster then assoc-in."
+  [m [k & ks] f & args]
+   (if ks
+     `(assoc ~m ~k (deep-update (get ~m ~k) ~ks ~f ~@args))
+     `(assoc ~m ~k (~f (get ~m ~k) ~@args))))
+
+(defmacro deep-dissoc [m ks]
+  (let [preds (vec (butlast ks))
+        k     (last ks)]
+    `(deep-update ~m ~preds ~dissoc ~k)))
+
 (defn key-tag-maker
   "Creates a little keyword factory that allows to to define descriptive 
    tags using keywords efficiently and consistently."
