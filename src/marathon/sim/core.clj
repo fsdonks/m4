@@ -22,7 +22,8 @@
 ;;largely ignored.
 (ns marathon.sim.core
   (:require [spork.util [metaprogramming :as util]
-                        [tags :as tag]]
+                        [tags :as tag]
+                        [table :as tbl]]
             [spork.sim.simcontext :as sim]
             [marathon.data.simstate :as simstate]))
 
@@ -96,8 +97,6 @@
                             `(~res ~state)                                   
                             (throw (Exception. (str "Unknown path " p))))]))]
        ~@expr)))
-            
- 
   
 ;;#Empty Simulation Contexts
 (def emptystate (simstate/make-simstate))
@@ -232,6 +231,9 @@
 (def ^:constant +empty-string+ "")
 (definline empty-string? [x] `(identical? ~x +empty-string+))
 (defn debug-print [msg obj] (do (println msg) obj))
+(defn as-records [record-source]
+  (if (and (seq? record-source) (map? (first record-source))) record-source
+      (tbl/record-seq record-source)))
 
 ;;Put on hold for now.  We're doing a lot of string building.  We can 
 ;;probably find some gains by replacing calls to (str ...) with an 

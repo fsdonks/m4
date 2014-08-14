@@ -185,20 +185,16 @@
           (assoc :index new-idx)
           (demand/register-demand demandstore policystore ctx)))))
 
-;;Do we need the vestigial demandstore args, or can we assume it's 
-;;all in context?
-(defn demands-from-table 
-  "Read in multiple demand records from anything implementing a generic 
-   table protocol in spork.util.table"
-  [demand-table demandstore ctx]
-  (let [rs (demands-from-records (tbl/record-seq demand-table))
+
+(defn load-demands [record-source demandstore ctx]
+  (let [rs (demands-from-records (core/as-records record-source))
         dupes (get (meta rs) :duplicates)
         ctx   (assoc-in ctx [:state :demandstore] demandstore)]
-      (->> (reduce (fn [acc d] 
-                     (initialized-demand! (associate-demand acc d) d))
-                   ctx
-                   rs)
-           (notify-duplicate-demands! dupes))))
+    (->> (reduce (fn [acc d] 
+                   (initialized-demand! (associate-demand acc d) d))
+                 ctx
+                 rs)
+         (notify-duplicate-demands! dupes))))
 
 
 (defn ungrouped? [grp] 
@@ -584,29 +580,28 @@
                  ctx 
                  (:unitmap supply)))))
 
-
-
-
-
 (comment ;testing
   (require '[marathon.sim.sampledata :as sd])
   (require '[clojure.test :as test :refer [deftest is]])
   
-  (def testctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
-  (def ds  (demands-from-records (sd/get-sample-records :DemandRecords) testctx))
-  (def firstrec (first ds))
-  (def tstart (:startday firstrec))
-  (def tfinal (+ tstart (:duration firstrec)))
-  (def res    (associate-demand testctx firstrec))
-  (def dstore (core/get-demandstore res))
+  (def testctx  (assoc-in core/emptysim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+  (def debugctx (assoc-in core/debugsim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+
+  (def demand-records    (sd/get-sample-records :DemandRecords))
+  (def ds       (demands-from-records demand-records testctx))
+  (def first-demand (first ds))
+  (def tstart   (:startday first-demand))
+  (def tfinal   (+ tstart (:duration first-demand)))
+  (def res      (associate-demand testctx first-demand))
+  (def dstore   (core/get-demandstore res))
   (deftest scheduled-demand-correctly 
-    (is (= ((juxt :name :startday :duration) firstrec)
+    (is (= ((juxt :name :startday :duration) first-demand)
            ["1__SRC1[901...1981]" 901 1080])
         "Sampledata should not change.  Naming should be determintic.")
     (is (= (first (demand/get-activations dstore tstart))
-           (:name firstrec))
+           (:name first-demand))
         "Demand should register as an activation on startday.")
-    (is (= (first (demand/get-deactivations dstore tfinal)) (:name firstrec)) 
+    (is (= (first (demand/get-deactivations dstore tfinal)) (:name first-demand)) 
         "Demand should be scheduled for deactivation")
     (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
