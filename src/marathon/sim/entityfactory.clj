@@ -114,10 +114,11 @@
    SourceFirst Quantity  OITitle Vignette Operation  DemandGroup]  
   (let [empty-op  (core/empty-string? Operation)
         empty-vig (core/empty-string? Vignette)
-        idx (if (or empty-op empty-vig) (core/next-idx) 0)]
-
+        idx       (if (or empty-op empty-vig) (core/next-idx) 0)
+        vig       (if empty-vig (str "Vig-ANON-" idx) Vignette)
+        op        (if empty-op  (str "Op-ANON-" idx) Operation)]
     (d/->demanddata    ;unique name associated with the demand entity.
-     (or DemandKey (demand-key SRC Vignette Operation Priority StartDay Duration)) 
+     (or DemandKey (demand-key SRC vig op Priority StartDay Duration)) 
      SRC ;demand-type, or other identifier of the capability demanded.
      Priority ;numerical value representing the relative fill priority.
      StartDay ;the day upon which the demand is activated and requiring fill.
@@ -127,8 +128,8 @@
      SourceFirst  ;descriptor for supply preference. 
      Quantity  ;the total amount of entities required to fill the demand.
      OITitle   ;formerly OITitle.  Long-form description of the src capability.
-     (if empty-vig (str "Anonymous" idx) Vignette)  ;Descriptor of the force list that generated this demand entity.
-     (if empty-op  (str "Anonymous" idx) Operation) ;Fine-grained, unique description of the demand.
+     vig  ;Descriptor of the force list that generated this demand entity.
+     op ;Fine-grained, unique description of the demand.
      DemandGroup ;Ket that associates a demand with other linked demands.  
      {} ;an ordered collection of all the fills recieved over time.                   
      {} ;map of the units currently associated with the demand.
@@ -165,7 +166,7 @@
 
 ;broadcast that a demand with initialized.
 (defn initialized-demand! [ctx d]
-  (let [msg (str (str "Demand" (:name d)) "Initialized")]
+  (let [msg (str  "Demand " (:name d) " Initialized")]
     (sim/trigger-event :Intialize :DemandStore :DemandStore msg nil ctx)))
   
 
@@ -186,15 +187,16 @@
           (demand/register-demand demandstore policystore ctx)))))
 
 
-(defn load-demands [record-source demandstore ctx]
-  (let [rs (demands-from-records (core/as-records record-source))
-        dupes (get (meta rs) :duplicates)
-        ctx   (assoc-in ctx [:state :demandstore] demandstore)]
-    (->> (reduce (fn [acc d] 
-                   (initialized-demand! (associate-demand acc d) d))
-                 ctx
-                 rs)
-         (notify-duplicate-demands! dupes))))
+(defn load-demands 
+  ([record-source ctx]
+     (let [rs    (demands-from-records (core/as-records record-source) ctx)
+           dupes (get (meta rs) :duplicates)]
+       (->> (reduce (fn [acc d] 
+                      (initialized-demand! (associate-demand acc d) d))
+                    ctx rs)
+            (notify-duplicate-demands! dupes))))
+  ([record-source demandstore ctx] 
+     (load-demands record-source (core/set-demandstore ctx demandstore))))
 
 
 (defn ungrouped? [grp] 
@@ -574,11 +576,9 @@
 ;;#Entity Initialization        
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
-    (let [ctx  (assoc-in ctx [:state :parameters] 
-                   (assoc parameters :TotalUnits (count (:unitmap supply))))]
       (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :Spawning 0 nil ctx))
-                 ctx 
-                 (:unitmap supply)))))
+                 (core/set-parameter ctx :TotalUnits (count (:unitmap supply)))
+                 (:unitmap supply))))
 
 (comment ;testing
   (require '[marathon.sim.sampledata :as sd])
@@ -605,9 +605,7 @@
         "Demand should be scheduled for deactivation")
     (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
-    (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation")
-        
-    ) 
+    (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation")) 
         
     
 )

@@ -97,6 +97,11 @@
                             `(~res ~state)                                   
                             (throw (Exception. (str "Unknown path " p))))]))]
        ~@expr)))
+
+(defn set-parameter [s p v]
+  (update-parameters s #(assoc % p v)))
+(defn merge-parameters [s ps]
+  (update-parameters s #(merge % ps)))
   
 ;;#Empty Simulation Contexts
 (def emptystate (simstate/make-simstate))
@@ -227,9 +232,7 @@
 
 
 ;;#Utils
-
-(def ^:constant +empty-string+ "")
-(definline empty-string? [x] `(identical? ~x +empty-string+))
+(definline empty-string? [x] `(= ~x ""))
 (defn debug-print [msg obj] (do (println msg) obj))
 (defn as-records [record-source]
   (if (and (seq? record-source) (map? (first record-source))) record-source
