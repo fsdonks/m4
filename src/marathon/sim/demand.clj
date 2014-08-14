@@ -226,38 +226,39 @@
 ;methods.
 ;Register demand activation for a given day, given demand.
 ;TOM Change 7 Dec 2010
-(defn add-activation [t demandname dstore ctx]
+(defn add-activation [t demandname dstore]
   (let [actives (get-activations dstore t)]
-    (->> (request-demand-update! t demandname ctx) ;FIXED - fix side effect
-      (sim/merge-updates 
-        {:demandstore (set-activations dstore t (conj actives demandname))}))))
+    (set-activations dstore t (conj actives demandname))))
 
 ;Register demand deactviation for a given day, given demand.
 ;1)Tom Note 20 May 2013 -> Our merge-updates function looks alot like entity 
 ;  updates in the component-based model.  Might be easy to port...
-(defn add-deactivation [t demandname demandstore ctx]
+(defn add-deactivation [t demandname demandstore]
   (let [inactives (get-deactivations demandstore t)
-        tlast     (max (:tlastdeactivation demandstore) t)]
-    (->> (request-demand-update! t demandname ctx)    
-         (sim/merge-updates                                                  ;1)
-           {:demandstore 
-            (-> (assoc demandstore :tlastdeactivation tlast)
-                (set-deactivations t (conj inactives demandname)))}))))
+        tlast     (max (:tlastdeactivation demandstore) t)]   
+    (-> (assoc demandstore :tlastdeactivation tlast)
+        (set-deactivations t (conj inactives demandname)))))
 
 ;Schedule activation and deactivation for demand. -> Looks fixed.
 (defn schedule-demand [demand demandstore ctx]
-  (let [{:keys [startday name duration]} demand]
-    (->> (add-activation startday name demandstore ctx)
-         (add-deactivation (+ startday duration) name demandstore))))
+  (let [{:keys [startday name duration]} demand
+        endday (+ startday duration)
+        demandname (:name demand)]
+    (->> ctx
+         (request-demand-update! startday demandname)
+         (request-demand-update! endday demandname)
+         (sim/merge-updates 
+          {:demandstore
+           (->>  demandstore
+                 (add-activation   startday name )
+                 (add-deactivation endday name))}))))
 
 (defn register-demand [demand demandstore policystore ctx]
   (let [dname    (:name demand)
         newstore (tag-demand demand (add-demand demandstore demand))]
-    (->> (registering-demand! demand ctx)
-      (sim/merge-updates 
-        {:demand-store  newstore 
-         :policy-store  (policy/register-location dname policystore)})     
-      (schedule-demand demand newstore)))) 
+    (->> (registering-demand! demand ctx)         
+         (sim/merge-updates {:policystore (policy/register-location dname policystore)})
+         (schedule-demand demand newstore)))) 
 
 ;utility function....
 (defn pop-priority-map [m]

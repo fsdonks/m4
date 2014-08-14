@@ -101,7 +101,7 @@
   
 ;;#Empty Simulation Contexts
 (def emptystate (simstate/make-simstate))
-(def emptysim   (sim/make-context :state emptystate))
+(def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
 ;;A useful debugging context for us.  Prints out everything it sees.
 (def debugsim   
   (-> (sim/make-debug-context 

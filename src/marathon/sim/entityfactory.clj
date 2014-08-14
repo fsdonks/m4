@@ -175,8 +175,8 @@
 ;;and returns the resulting context.
 (defn associate-demand [ctx demand]
   (core/with-simstate [[parameters demandstore policystore] ctx]    
-    (let [demands      (:demandmap demandstore)
-          demand-count (count demands)
+    (let [demands        (:demandmap demandstore)
+          demand-count   (count demands)
           new-idx (+ (or (:demandstart parameters) 0) demand-count)]
       (-> (if (contains? demands (:name demand))
             (assoc demand :name 
@@ -590,5 +590,29 @@
 
 (comment ;testing
   (require '[marathon.sim.sampledata :as sd])
+  (require '[clojure.test :as test :refer [deftest is]])
+  
   (def testctx (assoc-in *ctx* [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+  (def ds  (demands-from-records (sd/get-sample-records :DemandRecords) testctx))
+  (def firstrec (first ds))
+  (def tstart (:startday firstrec))
+  (def tfinal (+ tstart (:duration firstrec)))
+  (def res    (associate-demand testctx firstrec))
+  (def dstore (core/get-demandstore res))
+  (deftest scheduled-demand-correctly 
+    (is (= ((juxt :name :startday :duration) firstrec)
+           ["1__SRC1[901...1981]" 901 1080])
+        "Sampledata should not change.  Naming should be determintic.")
+    (is (= (first (demand/get-activations dstore tstart))
+           (:name firstrec))
+        "Demand should register as an activation on startday.")
+    (is (= (first (demand/get-deactivations dstore tfinal)) (:name firstrec)) 
+        "Demand should be scheduled for deactivation")
+    (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
+    (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
+    (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation")
+        
+    ) 
+        
+    
 )
