@@ -22,6 +22,7 @@
 ;;largely ignored.
 (ns marathon.sim.core
   (:require [spork.util [metaprogramming :as util]
+                        [general :as gen]
                         [tags :as tag]
                         [table :as tbl]]
             [spork.sim.simcontext :as sim]
@@ -98,10 +99,8 @@
                             (throw (Exception. (str "Unknown path " p))))]))]
        ~@expr)))
 
-(defn set-parameter [s p v]
-  (update-parameters s #(assoc % p v)))
-(defn merge-parameters [s ps]
-  (update-parameters s #(merge % ps)))
+(defn set-parameter [s p v]  (update-parameters s #(assoc % p v)))
+(defn merge-parameters [s ps]  (update-parameters s #(merge % ps)))
   
 ;;#Empty Simulation Contexts
 (def emptystate (simstate/make-simstate))
@@ -230,7 +229,6 @@
 ;helper macro for defining key-building functions.
 (defmacro defkey [name base] `(def ~name (key-tag-maker ~base)))
 
-
 ;;#Utils
 (definline empty-string? [x] `(= ~x ""))
 (defn debug-print [msg obj] (do (println msg) obj))
@@ -238,53 +236,12 @@
   (if (and (seq? record-source) (map? (first record-source))) record-source
       (tbl/record-seq record-source)))
 
-;;Put on hold for now.  We're doing a lot of string building.  We can 
-;;probably find some gains by replacing calls to (str ...) with an 
-;;optimized variant that does multi-arity function dispatch, 
-;;rather than using varargs (varargs are slow since they create 
-;;arrayseqs). 
+;;We alias the more efficient make-string function, rather than 
+;;using core/str.  This is commonly used for logging messages 
+;;and other things.  Since there are lots of events flying 
+;;around with string data, this is a serious bottleneck.
+(def msg gen/make-string)
 
-
-(defn n-string-body [n] 
-  (let [args (into (with-meta [] {:tag 'String}) (map (fn [_] (gensym "str")) (range n)))]
-    `(~args
-      (let [sb# (StringBuilder. (str ~(first args)))]
-        (str 
-         (doto sb#
-           ~@(for [a (rest args)]
-               `(.append (str ~a)))))))))
-
-(defmacro build-string [& args]
-  `(let [sb# (StringBuilder. (str ~(first args)))]
-     (str 
-      (doto sb#
-        ~@(for [a (rest args)]
-            `(.append (str ~a)))))))
-
-(def ^:constant +max-params+ 10)
-(defn string-func-body [n]
-  (let [obj (with-meta (gensym "obj") {:tag 'Object})]
-    (assert (>= n 0))
-    (if (<= n +max-params+)
-      (case n 
-        0 `(~(with-meta [] {:tag 'String}) "")
-        1 `(~(with-meta [obj] {:tag 'String})
-            (if (nil? ~obj) "" (. ~obj (toString))))    
-        (let [args (-> (vec (for [x (range n)] (gensym "str")))
-                       (with-meta {:tag String}))]    
-          `(~args
-            (build-string ~@args))))
-      `(~(with-meta ['& 'args] {:tag String}) (apply clojure.core/str ~'args)))))
-
-;;Positional definitions of str, to eliminate arrayseq overhead due 
-;;to varargs version of str.  Since we're making lots of strings,
-;;it's stupid to incur the varargs cost here...
-(eval `(defn ~'mystr
-   "With no args, returns the empty string. With one arg x, returns
-    x.toString().  (str nil) returns the empty string. With more than
-    one arg, returns the concatenation of the str values of the args."
-   ~@(for [n (range (+ +max-params+ 2))]
-      (string-func-body n))))
 
 (let [idx (atom 0)]
   (defn next-idx 
@@ -297,7 +254,6 @@
               i)))
     ([new-idx] (do (reset! idx new-idx)
                    new-idx))))
-       
 
 ;;##Developer Notes
 
