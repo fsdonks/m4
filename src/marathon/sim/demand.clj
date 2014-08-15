@@ -12,7 +12,7 @@
                               [policy :as policy]
                               [unit :as u]]           
              [spork.sim       [simcontext :as sim]]
-             [spork.util      [tags :as tag]]))
+             [spork.util      [tags :as tag] [general :as gen]]))
 
 ;;##Primitive Demand and DemandStore Operations
 
@@ -22,26 +22,26 @@
 (defn add-fillable [fillrule demandstore]
   (assert (not (contains? (-> demandstore :fillables) fillrule))  
           "Tried to add fillrule multiple times")
-  (update-in demandstore [:fillables] conj fillrule))
+  (gen/deep-update demandstore [:fillables] conj fillrule))
 
 (defn remove-fillable [fillrule demandstore]
   (assert (contains? (-> demandstore :fillables) fillrule)  
           "Tried to remove non-existent fillrule")
-  (update-in demandstore [:fillables] disj fillrule))
+  (gen/deep-update demandstore [:fillables] disj fillrule))
 
 ;TOM ADDED 30 MAy 2013 
 (defn add-demand [demandstore demand]
-  (assoc-in demandstore [:demand-map (:name demand)] demand))
+  (gen/deep-assoc demandstore [:demand-map (:name demand)] demand))
 
 (defn manage-changed-demands [day state] ;REDUNDANT
-  (assoc-in state [:demand-store :changed] {}))
+  (gen/deep-assoc state [:demand-store :changed] {}))
 
 (defn clear-changes [demandstore] (assoc demandstore :changed {}))
 
 (defn register-change [demandstore demandname]
   (if (contains? (:changed demandstore) demandname)
     demandstore 
-    (assoc-in demandstore [:changed] demandname 0)))
+    (gen/deep-assoc demandstore [:changed demandname]  0)))
 
 ;TOM Note 20 May 2013 -> need to abstract fillrule, etc. behind a function, 
 ;preferably one that uses keywords.
@@ -57,7 +57,7 @@
   ([demand demandstore] (tag-demand demand demandstore nil)))
 
 (defn tag-demand-sink [demandstore sink]
-  (update-in demandstore [:tags] tag/tag-subject  :Sinks sink))
+  (gen/deep-update demandstore [:tags] tag/tag-subject  :Sinks sink))
 
 (defn get-demand-sinks [demandstore] 
   (tag/get-subjects (:tags demandstore) :Sinks))
@@ -112,10 +112,9 @@
           tstart (:startday demand)
           tfinal (+ tstart (:duration demand))]
       (-> demandstore                                                        ;1)
-        (update-in [:demand-map] dissoc demand-map demandname)
-        (update-in [:activations] update-in activations [tstart] dissoc dname)
-        (update-in [:deactivations]  
-                   update-in deactivations [tfinal] dissoc dname)))
+        (gen/deep-update [:demand-map] dissoc    dname)
+        (gen/deep-update [:activations tstart]   dissoc dname)
+        (gen/deep-update [:deactivations tfinal] dissoc dname)))
     demandstore)) 
 
 ;procedure that allows us to process a set of tags indicating associated demands
@@ -218,9 +217,9 @@
 
 ;;#Demand Registration and Scheduling
 (defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
-(defn set-activations   [dstore t m] (assoc-in dstore [:activations t] m))
+(defn set-activations   [dstore t m] (gen/deep-assoc dstore [:activations t] m))
 (defn get-deactivations [dstore t]   (get-in dstore   [:deactivations t] #{}))
-(defn set-deactivations [dstore t m] (assoc-in dstore [:deactivations t] m))
+(defn set-deactivations [dstore t m] (gen/deep-assoc dstore [:deactivations t] m))
 
 
 ;TOM note 27 Mar 2011 ->  I'd like to factor these two methods out into a single 
@@ -319,7 +318,7 @@
         (let [demandq (get unfilled src (sorted-map))]  
           (if (contains? demandq fill-key) ctx ;pass-through
             (->> (sim/merge-updates ;add to unfilled 
-                   {:demandstore (assoc-in demandstore [:unfilled src] 
+                   {:demandstore (gen/deep-assoc demandstore [:unfilled src] 
                        (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
 
@@ -487,7 +486,7 @@
   "Shifts demand d to the active set of demands, updates its fill status, and 
    notifies any interested parties."
   [demandstore t d ctx]
-  (let [store (-> (assoc-in demandstore [:activedemands (:name d)] d)
+  (let [store (-> (gen/deep-assoc demandstore [:activedemands (:name d)] d)
                   (register-change (:name d)))]               
     (->> (activating-demand! store d t ctx)
       (update-fill store (:name d)))))    
@@ -598,7 +597,7 @@
       (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
       (sim/merge-updates
         {:demandstore 
-         (assoc-in (core/get-demandstore ctx) [:demandmap (:name demand)]
+         (gen/deep-assoc (core/get-demandstore ctx) [:demandmap (:name demand)]
                    (assoc demand :units-assigned {}))}))))
 
 ;;#Demand DeActivation
@@ -609,7 +608,7 @@
   [demandstore t d ctx]
   (assert (contains? (:activedemands demandstore) (:name d)) 
     (throw (Exception. (str "DeActivating an inactive demand: " (:name d))))) 
-  (let [store (-> (update-in demandstore [:activedemands] dissoc (:name d))
+  (let [store (-> (gen/deep-update demandstore [:activedemands] dissoc (:name d))
                   (register-change (:name d)))]
     (->> (deactivating-demand! store d t ctx)
          (send-home-units d t)

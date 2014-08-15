@@ -21,7 +21,8 @@
             [marathon.sim  [missing :as missing]    
                            [core :as core]    
                            [unit :as u]]            
-            [spork.util [tags :as tag]]
+            [spork.util [tags :as tag]
+                        [general :as gen]]
             [spork.sim  [simcontext :as sim]]))
 
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
@@ -170,7 +171,7 @@
 
 (defn add-period  "Registers a period data structure with the policystore."
   [policystore per] 
-  (assoc-in policystore [:periods (:name per)] per))
+  (gen/deep-assoc policystore [:periods (:name per)] per))
 
 (defn add-periods  "Import a sequence of periods into the policystore"  
   [periods policystore] 
@@ -230,7 +231,7 @@
 ;This sub helps us to keep track of demand and policy locations.
 ;Conjoins a location to the set of known locations...
 (defn register-location [locname policystore]
-  (update-in policystore [:locationmap]  conj  locname)) 
+  (gen/deep-update policystore [:locationmap]  conj  locname)) 
 
 ;Register multiple locations in the locs collection with the policystore.
 (defn register-locations [locs policystore] 
@@ -260,13 +261,13 @@
 ;WEAK, but gets the job done...need a cleaner way to annotate composites.
 (defn register-composite [p policystore]
   (if (composite-policy? p) 
-    (assoc-in policystore [:composites (:name p)] p)
+    (gen/deep-assoc policystore [:composites (:name p)] p)
     policystore))
 
 ;method for adding atomic and composite policies to the policystore.
 (defn add-policy [p policystore]
   (assert (not (nil? (:name p))) (str "Policy has no name " p))
-  (->> (assoc-in policystore [:policies (:name p)] p)
+  (->> (gen/deep-assoc policystore [:policies (:name p)] p)
        (register-composite p)
        (register-locations (get-policy-locations p))))
 
@@ -322,10 +323,10 @@
     (if (= (:name (:policy unit)) (:name atomic-policy))
            {:unit-update (assoc unit :policy newpolicy)}
            {:unit-update (-> (assoc unit :policy current-policy)
-                             (update-in  [:policystack] [newpolicy]))})))        
+                             (assoc  :policystack [newpolicy]))})))        
 
 (defn update-policy [policystore p] 
-  (assoc-in policystore [:policies (:name p)] p))
+  (gen/deep-assoc policystore [:policies (:name p)] p))
 
 
 (defn alter-unit-policies
@@ -348,7 +349,7 @@
   "Applies f to the subscriptions associated with policy in policystore, then
    stores the updated result, returning the policystore."
   [f policy policystore]
-  (update-in policystore [:subscriptions (policy-name policy)] f))
+  (gen/deep-update policystore [:subscriptions (policy-name policy)] f))
   
 (defn change-policy
   "High level policy management.  For policies that are period-driven, enforces 
@@ -550,12 +551,12 @@
 ;Adds an equivalence relationship to the policystore
 (defn add-equivalence [recepient donor policystore]
   (let [delim (:ruledelim policystore)] 
-    (assoc-in policystore 
+    (gen/deep-assoc policystore 
         [:rules :equivalencies (equivalence-key delim recepient donor)] 0))) 
 ;Adds a substitution relationship to the policystore
 (defn add-substitution [recepient donor cost policystore]
   (let [delim (:ruledelim policystore)]
-    (assoc-in policystore 
+    (gen/deep-assoc policystore 
         [:rules :substitutions (equivalence-key delim recepient donor)] cost)))
 ;determine if the policystore has a registered rule
 (defn has-rule? [rule policystore] 
