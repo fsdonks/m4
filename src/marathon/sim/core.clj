@@ -222,39 +222,6 @@
         (assoc-in m path (dissoc parent (last ks))))
       updated)))
 
-(defn  deep-get
-  "Returns the value in a nested associative structure,
-  where ks is a sequence of keys. Returns nil if the key
-  is not present, or the not-found value if supplied."
-  {:added "1.2"
-   :static true}
-  ([m ks]
-     (clojure.core/reduce1 get m ks))
-  ([m ks not-found]
-     (loop [sentinel (Object.)
-            m m
-            ks (seq ks)]
-       (if ks
-         (let [m (get m (first ks) sentinel)]
-           (if (identical? sentinel m)
-             not-found
-             (recur sentinel m (next ks))))
-         m))))
-
-(defmacro deep-update 
-  "Replacement for update-in, but without the function call overhead.
-   If the key-path is composed of literals, this is about 
-   3 times faster then assoc-in."
-  [m [k & ks] f & args]
-   (if ks
-     `(assoc ~m ~k (deep-update (get ~m ~k) ~ks ~f ~@args))
-     `(assoc ~m ~k (~f (get ~m ~k) ~@args))))
-
-(defmacro deep-dissoc [m ks]
-  (let [preds (vec (butlast ks))
-        k     (last ks)]
-    `(deep-update ~m ~preds ~dissoc ~k)))
-
 (defn key-tag-maker
   "Creates a little keyword factory that allows to to define descriptive 
    tags using keywords efficiently and consistently."
@@ -278,47 +245,46 @@
 ;;arrayseqs). 
 
 
-;; (defn n-string-body [n] 
-;;   (let [args (into (with-meta [] {:tag 'String}) (map (fn [_] (gensym "str")) (range n)))]
-;;     `(~args
-;;       (let [sb# (StringBuilder. (str ~(first args)))]
-;;         (str 
-;;          (doto sb#
-;;            ~@(for [a (rest args)]
-;;                `(.append (str ~a)))))))))
+(defn n-string-body [n] 
+  (let [args (into (with-meta [] {:tag 'String}) (map (fn [_] (gensym "str")) (range n)))]
+    `(~args
+      (let [sb# (StringBuilder. (str ~(first args)))]
+        (str 
+         (doto sb#
+           ~@(for [a (rest args)]
+               `(.append (str ~a)))))))))
 
-;; (defn n-string-bodies [lower upper]
-;;   `(~@(for [n (range lower upper)]
-;;         (n-string-body n))))   
-                     
-;; (defmacro defn-arities [name & bodies]
-;;   `(defn ~name ~(n-string-body 2)))
+(defmacro build-string [& args]
+  `(let [sb# (StringBuilder. (str ~(first args)))]
+     (str 
+      (doto sb#
+        ~@(for [a (rest args)]
+            `(.append (str ~a)))))))
 
-;; ;;Positional definitions of str, to eliminate arrayseq overhead due 
-;; ;;to varargs version of str.
-;; (defn str!
-;;   "With no args, returns the empty string. With one arg x, returns
-;;   x.toString().  (str nil) returns the empty string. With more than
-;;   one arg, returns the concatenation of the str values of the args."
-;;   {:tag String
-;;    :added "1.0"
-;;    :static true}
-;;   (^String [] "")
-;;   (^String [^Object x]
-;;    (if (nil? x) "" (. x (toString))))
-;;   (n-string-body 2)
-;;   (n-string-body 3)
-;;   (n-string-body 4)
-;;   (n-string-body 5) 
-;;   (n-string-body 6)
-;;   (n-string-body 7))  
-;;   ;; (^String [x & ys]
-;;   ;;    ((fn [^StringBuilder sb more]
-;;   ;;         (if more
-;;   ;;           (recur (. sb  (append (str (first more)))) (next more))
-;;   ;;           (str sb)))
-;;   ;;     (new StringBuilder (str x)) ys)))
+(def ^:constant +max-params+ 10)
+(defn string-func-body [n]
+  (let [obj (with-meta (gensym "obj") {:tag 'Object})]
+    (assert (>= n 0))
+    (if (<= n +max-params+)
+      (case n 
+        0 `(~(with-meta [] {:tag 'String}) "")
+        1 `(~(with-meta [obj] {:tag 'String})
+            (if (nil? ~obj) "" (. ~obj (toString))))    
+        (let [args (-> (vec (for [x (range n)] (gensym "str")))
+                       (with-meta {:tag String}))]    
+          `(~args
+            (build-string ~@args))))
+      `(~(with-meta ['& 'args] {:tag String}) (apply clojure.core/str ~'args)))))
 
+;;Positional definitions of str, to eliminate arrayseq overhead due 
+;;to varargs version of str.  Since we're making lots of strings,
+;;it's stupid to incur the varargs cost here...
+(eval `(defn ~'mystr
+   "With no args, returns the empty string. With one arg x, returns
+    x.toString().  (str nil) returns the empty string. With more than
+    one arg, returns the concatenation of the str values of the args."
+   ~@(for [n (range (+ +max-params+ 2))]
+      (string-func-body n))))
 
 (let [idx (atom 0)]
   (defn next-idx 

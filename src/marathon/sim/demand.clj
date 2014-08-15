@@ -46,13 +46,15 @@
 ;TOM Note 20 May 2013 -> need to abstract fillrule, etc. behind a function, 
 ;preferably one that uses keywords.
 ;inject appropriate tags into the GenericTags
-(defn tag-demand [demand demandstore & {:keys [extras]}]
-  (->> (tag/multi-tag (:tags demandstore) (:name demand) 
-               (concat [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
-                        (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
-                        :enabled] 
-                       extras))
+(defn tag-demand 
+  ([demand demandstore extras]
+     (->> (tag/multi-tag (:tags demandstore) (:name demand) 
+                         (into   [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
+                                  (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
+                                  :enabled]
+                                  extras))
        (assoc demandstore :tags)))
+  ([demand demandstore] (tag-demand demand demandstore nil)))
 
 (defn tag-demand-sink [demandstore sink]
   (update-in demandstore [:tags] tag/tag-subject  :Sinks sink))

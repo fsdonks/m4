@@ -595,8 +595,8 @@
   (def res      (associate-demand testctx first-demand))
   (def dstore   (core/get-demandstore res))
   (deftest scheduled-demand-correctly 
-    (is (= ((juxt :name :startday :duration) first-demand)
-           ["1__SRC1[901...1981]" 901 1080])
+    (is (= ((juxt  :startday :duration) first-demand)
+           [ 901 1080])
         "Sampledata should not change.  Naming should be determintic.")
     (is (= (first (demand/get-activations dstore tstart))
            (:name first-demand))
