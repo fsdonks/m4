@@ -261,6 +261,9 @@
          (sim/merge-updates {:policystore (policy/register-location dname policystore)})
          (schedule-demand demand newstore)))) 
 
+;;bulk loading functions, experimental.
+
+
 ;utility function....
 (defn pop-priority-map [m]
   (if (empty? m) m (dissoc m (first (keys m)))))

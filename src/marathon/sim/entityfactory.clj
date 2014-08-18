@@ -736,8 +736,76 @@
                           ~symb
                           ~path-map)]
        (do ~@expr
-           (-> ~state 
-               ~@updates)))))
+         (-> ~state 
+             ~@updates)))))
+
+(defmacro with-atoms 
+  "Macro that follows an idiom of extract-and-pack.
+   We define paths into a nested associative structure, 
+   and create a context in which the conceptual places 
+   those paths point to are to be treated as mutable 
+   containers - atoms.  Inside of expr, these 
+   places take on the symbol names defined by the 
+   path-map, a map of path-name to sequences of keys 
+   inside the associative strucure symb.  From there, 
+   we use the default clojure idioms for operating on atoms, 
+   namely reset!, swap!, and (deref x) or @x to get at 
+   values.  After we're done, much like transients, 
+   we collect the current values of the named paths
+   and push them into the associative structure, 
+   returning a persisent structure as a result.  
+   This is akin to automatically calling (persistent!)
+   on a transient structure."
+  [[symb path-map] & expr]
+  (let [state   (symbol "*state*")
+        updates (for [[s path] path-map] 
+                  `(assoc-in ~path (deref ~s)))]
+    `(let [~@(unpair (for [[s path] path-map]
+                        [s `(let [res# (get-in ~symb ~path)]
+                              (if (atom? res#) 
+                                res# 
+                                (atom res#)))]))
+           ~state (reduce-kv (fn [acc# s# p#] 
+                               (assoc-in acc# p# s#))
+                          ~symb
+                          ~path-map)]
+       (do ~@expr
+         (-> ~state 
+             ~@updates)))))
+
+;; (defmacro with-atoms 
+;;   "Macro that follows an idiom of extract-and-pack.
+;;    We define paths into a nested associative structure, 
+;;    and create a context in which the conceptual places 
+;;    those paths point to are to be treated as mutable 
+;;    containers - atoms.  Inside of expr, these 
+;;    places take on the symbol names defined by the 
+;;    path-map, a map of path-name to sequences of keys 
+;;    inside the associative strucure symb.  From there, 
+;;    we use the default clojure idioms for operating on atoms, 
+;;    namely reset!, swap!, and (deref x) or @x to get at 
+;;    values.  After we're done, much like transients, 
+;;    we collect the current values of the named paths
+;;    and push them into the associative structure, 
+;;    returning a persisent structure as a result.  
+;;    This is akin to automatically calling (persistent!)
+;;    on a transient structure."
+;;   [[symb path-map] & expr]
+;;   (let [state   (symbol "*state*")
+;;         updates (for [[s path] path-map] 
+;;                   `(assoc-in ~path (deref ~s)))]
+;;     `(let [~@(unpair (for [[s path] path-map]
+;;                         [s `(let [res# (get-in ~symb ~path)]
+;;                               (if (atom? res#) 
+;;                                 res# 
+;;                                 (atom res#)))]))
+;;            ~state (reduce-kv (fn [acc# s# p#] 
+;;                             (assoc-in acc# p# s#))
+;;                           ~symb
+;;                           ~path-map)]
+;;         (-> ~@expr
+;;             ~@updates))))
+
 
 (defmacro with-transients 
   "Macro that follows an idiom of extract-and-pack.
@@ -772,3 +840,38 @@
            (-> ~state 
                ~@updates)))))
 
+(comment ;testing
+
+(def m {:a {1 2}, :b {1 3} :c {:d {:e {:f 4}}}})
+(defn atest []
+  (with-atoms [m {a1 [:a 1] b1 [:b 1]}] 
+    (time (dotimes [i 1000000] (reset! b1 i)))))
+
+(defn deeptest []
+  (with-atoms [m {a1 [:a 1] 
+                  b1 [:b 1]}] 
+    (with-atoms {cdef [:c :d :e :f]}
+            (do (println "this is side-effecting!")
+                (reset! cdef 500)))
+    (with-atoms {cde [:c :d :e]}
+               (assoc! ced :hello "world"))))
+)
+
+
+;; (defn atest []
+;;   (with-atoms [m {a1 [:a 1] 
+;;                   b1 [:b 1]}] 
+;;     (let [res (with-atoms [*state {cdef [:c :d :e :f]}]
+;;                 (do (println "this is side-effecting!")
+;;                     (reset! cdef 500)))
+;;           (with-atoms [{cde [:c :d :e]}
+;;             (assoc! ced :hello "world"))))
+
+
+;; (with-atoms [m {a1 [:a 1] 
+;;                 b1 [:b 1]}] 
+;;   (with-atoms {cdef [:c :d :e :f]}
+;;     (do (println "this is side-effecting!")
+;;         (reset! cdef 500)))
+;;   (with-atoms {cde [:c :d :e]}
+;;     (assoc ced :hello "world")))
