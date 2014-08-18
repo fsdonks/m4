@@ -597,7 +597,7 @@
   (deftest scheduled-demand-correctly 
     (is (= ((juxt  :startday :duration) first-demand)
            [ 901 1080])
-        "Sampledata should not change.  Naming should be determintic.")
+        "Sampledata should not change.  Naming should be deterministic.")
     (is (= (first (demand/get-activations dstore tstart))
            (:name first-demand))
         "Demand should register as an activation on startday.")
@@ -609,3 +609,166 @@
         
     
 )
+
+
+;;testing out some theories on a volatile cache for doing sparse
+;;mutation in a nested structure.
+
+;;The question is, is it faster to have a set of paths and a
+;;mutable buffer in front of the original structure, so 
+;;that we perform "gets" on the persistent structure, 
+;;but we assoc, or update, into the new structure? 
+
+;;For nested ops, since we're associng based on paths, 
+;;we can maintain tuples as keys and use nassoc.
+;;Have a sparse transient structure that only 
+;;buffers the nested paths.
+;;Maintains a transient map of paths...
+;;Lookups are done on the transient map first, 
+;;then the original.
+;;Updates are done on the transient.
+;;(This is one way) 
+;;Another way is to have a flat transient map 
+;;of paths -> values.
+;;Lookups are done here first, by path.
+;;Anything that misses the cache, goes to 
+;;the normal lookup process.
+;;Updates are intercepted, and pushed to the 
+;;cache, which is mutated in place for each 
+;;path.
+;;The question now is whether the cost of lookup 
+;;is worth it.  For small, but frequently acessed 
+;;sets of paths, it's likely worth it.  I.e., if 
+;;the bulk of your operations are going to be writes, 
+;;that's a good thing.  For example, loading data, 
+;;or performing large, sparse updates, would make 
+;;this option appealing.
+;;Yet another way is to define a transient operation 
+;;on everything, possibly computing nested transients 
+;;lazily (i.e. on update).
+
+;;This option sounds really nice....
+;;We have a macro, with-mutable-paths, that 
+;;allows us to specify "locations" in the 
+;;nested structure that should be mutable (i.e. 
+;;possibly transient).
+;;We can do either do some code-walking to 
+;;detect where we're walking these paths, 
+;;and intercept calls to assoc and dissoc.
+;;Or, we can just define local functions 
+;;like set-, update-, get-, etc. that 
+;;handle the mutation for us (sounds really 
+;;good). 
+;;In a sense, we call out the stuff in the 
+;;nested structure that is open to change, 
+;;the macro provides a context with these things 
+;;expanded into some mutable container, along 
+;;with accessors to modify the container, 
+;;and at the end of the transaction, 
+;;we commit all the changes to the persistent 
+;;structure ala a database commit.
+(comment 
+(defn fast-update-and-add [some-map]  
+  (with-places [some-map {x [:state :x] 
+                          y [:state :y]}]
+    (do-times [i 100000]
+     (let [num (+ @x @y)]
+       (! x (+ @x @y))
+       (! y num)))     
+    @some-map))
+
+;;maybe we say that locations should be leaves.
+;;We can do stuff with the leaves atomically, 
+;;then pack it up at the end.
+
+;;(def ! reset!)
+
+(defn fast-update-and-add [some-map]
+  (let [some-map    (atom some-map)
+        x           (atom (get-in state  [:x])) ;;probably want to ensure defonce or something...or code-walk
+        y           (atom (get-in state  [:y]))]
+    (do-times [i 100000]
+       (let [num (+ @x @y)]
+         (! x (+ @x @y))
+         (! y num)))     
+    @some-map))
+  
+        
+)
+
+(defn unpair [xs]
+  (reduce (fn [acc [x y]] 
+            (-> acc (conj x) (conj y))) [] xs))
+(defn atom? [x] (= (type x) clojure.lang.Atom))
+
+(defn transient? [x]
+  (instance? clojure.lang.ITransientCollection x))
+
+;;we can have a variant of this guy, with-transients....
+(defmacro with-atoms 
+  "Macro that follows an idiom of extract-and-pack.
+   We define paths into a nested associative structure, 
+   and create a context in which the conceptual places 
+   those paths point to are to be treated as mutable 
+   containers - atoms.  Inside of expr, these 
+   places take on the symbol names defined by the 
+   path-map, a map of path-name to sequences of keys 
+   inside the associative strucure symb.  From there, 
+   we use the default clojure idioms for operating on atoms, 
+   namely reset!, swap!, and (deref x) or @x to get at 
+   values.  After we're done, much like transients, 
+   we collect the current values of the named paths
+   and push them into the associative structure, 
+   returning a persisent structure as a result.  
+   This is akin to automatically calling (persistent!)
+   on a transient structure."
+  [[symb path-map] & expr]
+  (let [state   (symbol "*state*")
+        updates (for [[s path] path-map] 
+                  `(assoc-in ~path (deref ~s)))]
+    `(let [~@(unpair (for [[s path] path-map]
+                        [s `(let [res# (get-in ~symb ~path)]
+                              (if (atom? res#) 
+                                res# 
+                                (atom res#)))]))
+           ~state (reduce-kv (fn [acc# s# p#] 
+                            (assoc-in acc# p# s#))
+                          ~symb
+                          ~path-map)]
+       (do ~@expr
+           (-> ~state 
+               ~@updates)))))
+
+(defmacro with-transients 
+  "Macro that follows an idiom of extract-and-pack.
+   We define paths into a nested associative structure, 
+   and create a context in which the conceptual places 
+   those paths point to are to be treated as mutable 
+   containers - atoms.  Inside of expr, these 
+   places take on the symbol names defined by the 
+   path-map, a map of path-name to sequences of keys 
+   inside the associative strucure symb.  From there, 
+   we use the default clojure idioms for operating on transients, 
+   namely assoc!, dissoc!, conj!, disj!, get, nth to access. 
+   After we're done, we coerce the transients into persistent 
+   values, and push them into the associative structure, 
+   returning a persisent structure as a result.  
+   This is akin to automatically calling (persistent!)
+   on a transient structure."
+  [[symb path-map] & expr]
+  (let [state   (symbol "*state*")
+        updates (for [[s path] path-map] 
+                  `(assoc-in ~path (persistent! ~s)))]
+    `(let [~@(unpair (for [[s path] path-map]
+                        [s `(let [res# (get-in ~symb ~path)]
+                              (if (transient? res#) 
+                                res# 
+                                (transient res#)))]))
+           ~state (reduce-kv (fn [acc# s# p#] 
+                            (assoc-in acc# p# s#))
+                          ~symb
+                          ~path-map)]
+       (do ~@expr
+           (-> ~state 
+               ~@updates)))))
+
