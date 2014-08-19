@@ -217,7 +217,7 @@
 
 ;;#Demand Registration and Scheduling
 (defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
-(defn set-activations   [dstore t m] (gen/deep-assoc dstore [:activations t] m))
+(defn set-activations   [dstore t m] (gen/deep-assoc dstore [:activations t] m)) ;;requires a double assoc.
 (defn get-deactivations [dstore t]   (get-in dstore   [:deactivations t] #{}))
 (defn set-deactivations [dstore t m] (gen/deep-assoc dstore [:deactivations t] m))
 
@@ -262,7 +262,18 @@
          (schedule-demand demand newstore)))) 
 
 ;;bulk loading functions, experimental.
-
+;;If we could pass in the demandstore as an atomic reference, 
+;;that would suffice....then we update the accumulated 
+;;reference at the end...
+;; (defn register-demands [demands demandstore policystore ctx]
+;;   (let [dstore (atom demandstore)
+;;         pstore (atom policystore)]
+;;     (reduce (fn [acc demand]
+;;               (let [dname    (:name demand)
+;;                     newstore (tag-demand demand (add-demand dstore demand))]
+;;                 (->> (registering-demand! demand ctx)         
+;;                      (sim/merge-updates {:policystore (policy/register-location dname policystore)})
+;;                      (schedule-demand demand newstore)))) 
 
 ;utility function....
 (defn pop-priority-map [m]

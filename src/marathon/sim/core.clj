@@ -99,7 +99,154 @@
                             (throw (Exception. (str "Unknown path " p))))]))]
        ~@expr)))
 
-(defn set-parameter [s p v]  (update-parameters s #(assoc % p v)))
+
+;;#Operations for working with mutable references
+;;particularly working with pieces of state in a nested associative
+;;structure.
+
+;;All of the marathon operations are defined to work on associative 
+;;structures, for the most part.  Sometimes, I'd like to 
+;;pass a reference and allow the thing to act transitively as 
+;;a reference to the object. 
+
+;;Thus, we have "cells" 
+;;A cell acts as a container for maps, vectors, sets.
+;;The difference between a cell and a raw atom is 
+;;that the cell maintains a reference to what it contains, 
+;;and applies operations directly to the item.  Any 
+;;operation other than a read will result in 
+;;an update to the state of the cell. 
+;;Thus, cells support fast dereferencing, and 
+;;implement protocols for operating on 
+;;maps, vectors, etc. The difference is, 
+;;their return value is the updated cell on 
+;;operations like assoc and conj....
+
+;;The intent is to use cells sparingly.
+
+(deftype cell [^clojure.lang.Atom contents]
+  Object
+  (toString [this] (str (.seq this)))
+  clojure.lang.ISeq
+  (first [this] (first @contents))
+  (next  [this] (next @contents))
+  (more  [this]  (rest @contents))
+  clojure.lang.IPersistentCollection
+  (empty [this]  (cell. (atom nil)))
+  (equiv [this that] (= @contents that))
+  ;;Note -> if we don't implement this, vector equality doesn't work both ways!
+  java.util.Collection  
+  (iterator [self]    (clojure.lang.SeqIterator. (seq  self)))  
+  (size     [self]    (count self))  
+  (toArray  [self]    (.toArray (seq self)))
+  clojure.lang.Seqable
+  (seq [this]  (seq @contents))
+  clojure.lang.Counted
+  (count [this] (count @contents))
+  clojure.lang.IPersistentVector
+  (cons [this a] (do (swap! contents cons a) this))
+  (length [this]  (count @contents))
+  (assocN [this index value] (do (swap! contents assoc  index value) this))
+  clojure.lang.IPersistentStack
+  (pop  [this] (do (swap! contents pop) this))
+  (peek [this] (peek @contents))
+  clojure.lang.Indexed
+  (nth [this i] (nth @contents i))
+  (nth [this i not-found] (nth @contents i not-found))
+  clojure.lang.IPersistentStack
+  (pop  [this] )
+  (peek [this] (peek @contents))
+  clojure.lang.IObj
+  ;adds metadata support
+  (meta [this] (meta @contents))
+  (withMeta [this m] (do (swap! contents with-meta m) this))      
+  clojure.lang.Reversible
+  (rseq [this]  (rseq @contents))
+  java.io.Serializable ;Serialization comes for free with the other stuff.
+  )
+  
+
+
+(defn unpair [xs]
+  (reduce (fn [acc [x y]] 
+            (-> acc (conj x) (conj y))) [] xs))
+(defn atom? [x] (= (type x) clojure.lang.Atom))
+
+(defn transient? [x]
+  (instance? clojure.lang.ITransientCollection x))
+
+
+;;#Atomic access to avoid deep associating
+;;we can have a variant of this guy, with-transients....
+(defmacro with-atoms 
+  "Macro that follows an idiom of extract-and-pack.
+   We define paths into a nested associative structure, 
+   and create a context in which the conceptual places 
+   those paths point to are to be treated as mutable 
+   containers - atoms.  Inside of expr, these 
+   places take on the symbol names defined by the 
+   path-map, a map of path-name to sequences of keys 
+   inside the associative strucure symb.  From there, 
+   we use the default clojure idioms for operating on atoms, 
+   namely reset!, swap!, and (deref x) or @x to get at 
+   values.  After we're done, much like transients, 
+   we collect the current values of the named paths
+   and push them into the associative structure, 
+   returning a persisent structure as a result.  
+   This is akin to automatically calling (persistent!)
+   on a transient structure."
+  [[symb path-map] & expr]
+  (let [state   (symbol "*state*")
+        updates (for [[s path] path-map] 
+                  `(assoc-in ~path (deref ~s)))]
+    `(let [~@(unpair (for [[s path] path-map]
+                        [s `(let [res# (get-in ~symb ~path)]
+                              (if (atom? res#) 
+                                res# 
+                                (atom res#)))]))
+           ~state (reduce-kv (fn [acc# s# p#] 
+                               (assoc-in acc# p# s#))
+                          ~symb
+                          ~path-map)]
+       (do ~@expr
+         (-> ~state 
+             ~@updates)))))
+
+(defmacro with-transients 
+  "Macro that follows an idiom of extract-and-pack.
+   We define paths into a nested associative structure, 
+   and create a context in which the conceptual places 
+   those paths point to are to be treated as mutable 
+   containers - atoms.  Inside of expr, these 
+   places take on the symbol names defined by the 
+   path-map, a map of path-name to sequences of keys 
+   inside the associative strucure symb.  From there, 
+   we use the default clojure idioms for operating on transients, 
+   namely assoc!, dissoc!, conj!, disj!, get, nth to access. 
+   After we're done, we coerce the transients into persistent 
+   values, and push them into the associative structure, 
+   returning a persisent structure as a result.  
+   This is akin to automatically calling (persistent!)
+   on a transient structure."
+  [[symb path-map] & expr]
+  (let [state   (symbol "*state*")
+        updates (for [[s path] path-map] 
+                  `(assoc-in ~path (persistent! ~s)))]
+    `(let [~@(unpair (for [[s path] path-map]
+                        [s `(let [res# (get-in ~symb ~path)]
+                              (if (transient? res#) 
+                                res# 
+                                (transient res#)))]))
+           ~state (reduce-kv (fn [acc# s# p#] 
+                            (assoc-in acc# p# s#))
+                          ~symb
+                          ~path-map)]
+       (do ~@expr
+           (-> ~state 
+               ~@updates)))))
+
+
+(defn set-parameter    [s p v] (update-parameters s #(assoc % p v)))
 (defn merge-parameters [s ps]  (update-parameters s #(merge % ps)))
   
 ;;#Empty Simulation Contexts
