@@ -191,13 +191,15 @@
   (getValidator [ths]     (.getValidator contents))
   (getWatches   [this]    (.getWatches contents)) 
   (addWatch     [this key callback] (do (.addWatch contents key callback) this)) 
-  (removeWatch  [this key] (do (.removeWatch contents key) this))
+  (removeWatch  [this key] (do (.removeWatch contents key) this))  
   )
 
 ;;Allows us to see cells transparently.
 (defmethod print-method cell [s ^java.io.Writer  w] (.write w (str "<#cell: " @s ">")))
-(defn ->cell [val]  (cell. (atom val)))
-
+(defn ->cell [val]  
+  (if (= (type val) cell)
+      val
+      (cell. (atom val))))
 
 (defn unpair [xs]
   (reduce (fn [acc [x y]] 
@@ -269,16 +271,15 @@
                   `(assoc-in ~path (deref ~s)))]
     `(let [~@(unpair (for [[s path] path-map]
                         [s `(let [res# (get-in ~symb ~path)]
-                              (if (atom? res#) 
-                                res# 
-                                (atom res#)))]))
-           ~state (reduce-kv (fn [acc# s# p#] 
+                              (->cell res#))]))
+           ~state (->cell (reduce-kv (fn [acc# s# p#] 
                                (assoc-in acc# p# s#))
                           ~symb
-                          ~path-map)]
+                          ~path-map))]
        (do ~@expr
          (-> ~state 
-             ~@updates)))))
+             ~@updates
+             (deref))))))
 
 (defmacro with-transients 
   "Macro that follows an idiom of extract-and-pack.
