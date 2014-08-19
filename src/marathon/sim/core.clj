@@ -126,7 +126,7 @@
 
 (deftype cell [^clojure.lang.Atom contents]
   Object
-  (toString [this] (str (.seq this)))
+  (toString [this] (str @contents))
   clojure.lang.ISeq
   (first [this] (first @contents))
   (next  [this] (next @contents))
@@ -144,33 +144,67 @@
   clojure.lang.Counted
   (count [this] (count @contents))
   clojure.lang.IPersistentVector
-  (cons [this a] (do (swap! contents cons a) this))
+  (cons [this a] (do (swap! contents conj a) this))
   (length [this]  (count @contents))
   (assocN [this index value] (do (swap! contents assoc  index value) this))
+  clojure.core.protocols/IKVReduce
+  (kv-reduce [amap f init] (clojure.core.protocols/kv-reduce @contents f init))
+  clojure.core.protocols/CollReduce 
+  (coll-reduce [coll f]     (clojure.core.protocols/coll-reduce @contents f))
+  (coll-reduce [coll f val] (clojure.core.protocols/coll-reduce @contents f val))
+  clojure.lang.ILookup
+  ; valAt gives (get pm key) and (get pm key not-found) behavior
+  (valAt [this k] (get @contents  k))
+  (valAt [this k not-found] (get @contents k not-found))  
+  clojure.lang.IPersistentMap
+  (assoc [this k v]    (do (swap! contents assoc k v) this))
+  (equals [this o] (or (identical? @contents o) (= @contents o)))  
+  ;containsKey implements (contains? pm k) behavior
+  (containsKey [this k] (.containsKey  ^clojure.lang.IPersistentMap @contents k))
+  (entryAt [this k]     (.entryAt ^clojure.lang.IPersistentMap @contents k))
+  ;without implements (dissoc pm k) behavior
+  (without [this k] (let [^clojure.lang.IPersistentMap m @contents]
+                      (do (reset! contents (.without m k))
+                          this))) 
+  clojure.lang.IFn
+  ;makes lex map usable as a function
+  (invoke [this k] (get @contents k))
+  (invoke [this k not-found] (get @contents k not-found))
   clojure.lang.IPersistentStack
   (pop  [this] (do (swap! contents pop) this))
   (peek [this] (peek @contents))
   clojure.lang.Indexed
   (nth [this i] (nth @contents i))
   (nth [this i not-found] (nth @contents i not-found))
-  clojure.lang.IPersistentStack
-  (pop  [this] )
-  (peek [this] (peek @contents))
   clojure.lang.IObj
   ;adds metadata support
   (meta [this] (meta @contents))
   (withMeta [this m] (do (swap! contents with-meta m) this))      
   clojure.lang.Reversible
   (rseq [this]  (rseq @contents))
-  java.io.Serializable ;Serialization comes for free with the other stuff.
+  java.io.Serializable ;Serialization comes for free with the other
+                       ;stuff.
+  clojure.lang.IDeref
+  (deref [this] @contents)
+  clojure.lang.IRef
+  (setValidator [this vf] (do (.setValidator contents vf) this))
+  (getValidator [ths]     (.getValidator contents))
+  (getWatches   [this]    (.getWatches contents)) 
+  (addWatch     [this key callback] (do (.addWatch contents key callback) this)) 
+  (removeWatch  [this key] (do (.removeWatch contents key) this))
   )
-  
+
+;;Allows us to see cells transparently.
+(defmethod print-method cell [s ^java.io.Writer  w] (.write w (str "<#cell: " @s ">")))
+(defn ->cell [val]  (cell. (atom val)))
 
 
 (defn unpair [xs]
   (reduce (fn [acc [x y]] 
             (-> acc (conj x) (conj y))) [] xs))
 (defn atom? [x] (= (type x) clojure.lang.Atom))
+
+(defn cell? [x] (= (type x) ))
 
 (defn transient? [x]
   (instance? clojure.lang.ITransientCollection x))
@@ -179,6 +213,40 @@
 ;;#Atomic access to avoid deep associating
 ;;we can have a variant of this guy, with-transients....
 (defmacro with-atoms 
+  "Macro that follows an idiom of extract-and-pack.
+   We define paths into a nested associative structure, 
+   and create a context in which the conceptual places 
+   those paths point to are to be treated as mutable 
+   containers - atoms.  Inside of expr, these 
+   places take on the symbol names defined by the 
+   path-map, a map of path-name to sequences of keys 
+   inside the associative strucure symb.  From there, 
+   we use the default clojure idioms for operating on atoms, 
+   namely reset!, swap!, and (deref x) or @x to get at 
+   values.  After we're done, much like transients, 
+   we collect the current values of the named paths
+   and push them into the associative structure, 
+   returning a persisent structure as a result.  
+   This is akin to automatically calling (persistent!)
+   on a transient structure."
+  [[symb path-map] & expr]
+  (let [state   (symbol "*state*")
+        updates (for [[s path] path-map] 
+                  `(assoc-in ~path (deref ~s)))]
+    `(let [~@(unpair (for [[s path] path-map]
+                        [s `(let [res# (get-in ~symb ~path)]
+                              (if (atom? res#) 
+                                res# 
+                                (atom res#)))]))
+           ~state (reduce-kv (fn [acc# s# p#] 
+                               (assoc-in acc# p# s#))
+                          ~symb
+                          ~path-map)]
+       (do ~@expr
+         (-> ~state 
+             ~@updates)))))
+
+(defmacro with-cells
   "Macro that follows an idiom of extract-and-pack.
    We define paths into a nested associative structure, 
    and create a context in which the conceptual places 
