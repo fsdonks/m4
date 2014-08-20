@@ -79,220 +79,218 @@ End If
             )
           (throw (Exception. "unknown length case!")))))))               
 
-Private Function getdelta(position As String, deltas As Dictionary) As Long
-getdelta = 0
-If Not (deltas Is Nothing) Then
-    If deltas.exists(position) Then
-        getdelta = deltas(position)
-    End If
-End If
+;;Aux function, may be able to get rid of this...
+(defn get-delta [position deltas] (get deltas position 0))
 
-End Function
+;;Helper function to allow us to push maps into policies as positions.
+;;Basically sets the state associated with a policy position.
+(defn add-positions [p position-state-map]
+  (reduce-kv (fn [acc pos state] (generic/add-position p pos state)) 
+             p position-state-map))
+(defn add-routes [p rs]
+  (reduce (fn [acc [from to t]]
+            (generic/add-route p from to t))
+          p rs))
 
 ;;TOM Hack 24 July 2012-> This is a good idea.
 ;;Describe a base policy with recovery built in.
-Public Function recoverableTemplate(Optional recoverytime As Single) As TimeStep_Policy
-Set recoverableTemplate = New TimeStep_Policy
+(defn recoverable-template [& {:keys [recoverytime] :or {recoverytime 90}}]
+  (-> (policydata/make-policy :name "Recoverable")
+      (add-positions {:Recovery :Recovering 
+                      :Recovered :Recovered})
+      (add-routes [[:Recovery :Recovered recoverytime]])))
+ 
+(def default-positions 
+  {reset "Dwelling" 
+   train "Dwelling" 
+   ready "Dwelling" 
+   available "Dwelling" 
+   deployed "Bogging" 
+   Overlapping "Overlapping"})
 
-If recoverytime = 0 Then recoverytime = 90
+(def default-routes 
+  [[reset train           182]
+   [train ready           183]
+   [ready available       365]
+   [available reset       365]
+   [deployed Overlapping  365]
+   [Overlapping reset     0]])
 
-With recoverableTemplate
-    .name = "Recoverable"
-    .AddPosition recovery, Recovering, Recovered, Recovered
-    .AddRoute recovery, Recovered, recoverytime
-End With
+(defn modified-routes [rts overlap deltas]
+  (mapv (fn [[from to t]]
+          (->> (cond (overlapping? from) (+ overlap t)
+                     (overlapping? to)   (- t overlap)
+                     :else t)
+               (+ (get-delta from deltas)))
+          (vector from to))
+        rts))        
 
-End Function
+;; (defn ac12-defaults [overlap]
+;;   {reset, 182, 
+;;    train, 183, 
+;;    ready, 365, 
+;;    available, 365, 
+;;    deployed, (- 365 overlap),
+;;    Overlapping, overlap})
+
 ;;template for AC policies, we use the parameters to grow and shrink pools
-Public Function AC12Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
-Set AC12Template = New TimeStep_Policy
-With AC12Template
-    .overlap = overlap
-    ;;.AlterPositions ("AC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", ready, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping"
-    .AddRoute reset, train, 182 + getdelta(available, deltas)
-    .AddRoute train, ready, 183 + getdelta(train, deltas)
-    .AddRoute ready, available, 365 + getdelta(ready, deltas)
-    .AddRoute available, reset, 365 + getdelta(available, deltas)
-    .AddRoute deployed, Overlapping, 365 - overlap + getdelta(deployed, deltas)
-    .AddRoute Overlapping, reset, overlap + getdelta(Overlapping, deltas)
-End With
-;;policyname, from, to, time, state
-End Function
-Public Function AC12defaults(overlap As Long) As Dictionary
-Set AC12defaults = _
-    newdict(reset, 182, train, 183, ready, 365, available, 365, _
-                deployed, 365 - overlap, Overlapping, overlap)
-End Function
+(defn ac12-template [name overlap & {:keys [deltas]}]
+    (-> (policydata/make-policy :name name :overlap overlap)
+        (generic/add-positions default-positions)
+        (add-routes (modified-routes default-routes overlap deltas))))
+
+;; (defmacro deftemplate [name args & {:keys [name positions routes]}]
+;;   `(defn ~name [~@args & {:keys [~'deltas]}]
+;;      (-> (policydata/make-policy :name ~(str name))
+;;          (generic/add-positions ~positions)
+;;          (add-routes ~(for [[from to t] routes]
+;;                         [from to `(get-deltas ~from ~'deltas)])))))
+
+;; (deftemplate ac12-template [overlap]
+;;   {:positions {reset "Dwelling" 
+;;                train "Dwelling" 
+;;                ready "Dwelling" 
+;;                available "Dwelling" 
+;;                deployed "Bogging" 
+;;                Overlapping "Overlapping"}
+;;    :routes [[reset train (+ 182  (get-delta reset deltas))]
+;;             [train ready (+ 183  (get-delta train deltas))]
+;;             [ready available (+ 365  (get-delta ready deltas))]
+;;             [available reset (+ 365  (get-delta available deltas))]
+;;             [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
+;;             [Overlapping reset (+ overlap (get-delta Overlapping deltas))]]})
 
 ;;These are default policy routes for AC entities in arforgen.
 ;;Used as scaffolding for templates.
-Public Function ACRoutes(overlap As Long, Optional deltas As Dictionary) As Collection
-Set ACRoutes = _
-    list(list("Reset", "Train", maxFloat(1, getDeltas("Available", deltas))), _
-         list("Train", "Ready", maxFloat(1, getDeltas("Train", deltas))), _
-         list("Ready", "Available", maxFloat(1, getDeltas("Ready", deltas))), _
-         list("Available", "Reset", maxFloat(1, getDeltas("Available", deltas))), _
-         list("Deployed", "Overlapping", maxFloat(1, getDeltas("Deployed", deltas) - overlap)), _
-         list("Overlapping", "Reset", maxFloat(1, getDeltas("Overlapping", deltas))))
-End Function
+(defn ac-routes [overlap & [deltas]]
+  [["Reset" "Train" (max-float 1 (get-deltas "Available" deltas))]
+   ["Train" "Ready" (max-float 1 (get-deltas "Train" deltas))]
+   ["Ready" "Available" (max-float 1 (get-deltas "Ready" deltas))]
+   ["Available" "Reset" (max-float 1 (get-deltas "Available" deltas))]
+   ["Deployed" "Overlapping" (max-float 1 (- (get-deltas "Deployed" deltas)  overlap))]
+   ["Overlapping" "Reset" (max-float 1 (get-deltas "Overlapping" deltas))]])
 
 ;;These are default policy routes for RC entities in arforgen.
 ;;Used as scaffolding for templates.
-Public Function RCRoutes(overlap As Long, demob As Single, Optional deltas As Dictionary) As Collection
-Set RCRoutes = _
-   list(list("Reset", "Train", maxFloat(1, getDeltas("Reset", deltas))), _
-    list("Train", "Ready", maxFloat(1, getDeltas("Train", deltas))), _
-    list("Ready", "Available", maxFloat(1, getDeltas("Ready", deltas))), _
-    list("Available", "Reset", maxFloat(1, getDeltas("Available", deltas))), _
-    list("Deployed", "Overlapping", maxFloat(1, getDeltas("Deployed", deltas) - overlap)), _
-    list("Overlapping", "DeMobilization", maxFloat(1, overlap + getDeltas("Ready", deltas))), _
-    list("DeMobilization", "Reset", maxFloat(1, demob + getDeltas("Ready", deltas))))
-End Function
+(defn rc-routes [overlap demob & [deltas]]
+  [["Reset" "Train"          (max-float 1 (get-deltas "Reset" deltas))]
+   ["Train" "Ready"          (max-float 1 (get-deltas "Train" deltas))]
+   ["Ready" "Available"      (max-float 1 (get-deltas "Ready" deltas))]
+   ["Available" "Reset"      (max-float 1 (get-deltas "Available" deltas))]
+   ["Deployed" "Overlapping" (max-float 1 (- (get-deltas "Deployed" deltas)  overlap))]
+   ["Overlapping" "DeMobilization" (max-float 1 (+ overlap (get-deltas "Ready" deltas)))]
+   ["DeMobilization" "Reset" (max-float 1 (+ demob  (get-deltas "Ready" deltas)))]])
 
 ;;These are default routes for ghost entities. they are significantly different than AC/RC
 ;;Used as scaffolding for templates.
-Public Function GhostRoutes(Optional bog As Long, Optional overlap As Long, Optional deltas As Dictionary)
+(defn ghost-routes [& {:keys [bog overlap deltas] :or {bog 0 overlap 0 deltas 0}}]
+  [["Spawning" "Deployable" 0]
+   ["Deployable" "Waiting" 0]
+   ["Waiting" "Deploying" +inf+]
+   ["Deploying" "NotDeployable" 0]
+   ["NotDeployable" "Deployed" 0]
+   ["Deployed" Overlapping (- bog overlap)]
+   [Overlapping "ReturnToDeployable" overlap]
+   ["ReturnToDeployable" "Deployable" 0]])
 
-Set GhostRoutes = _
-    list(list("Spawning", "Deployable", 0), _
-         list("Deployable", "Waiting", 0), _
-         list("Waiting", "Deploying", inf), _
-         list("Deploying", "NotDeployable", 0), _
-         list("NotDeployable", "Deployed", 0), _
-         list("Deployed", Overlapping, bog - overlap), _
-         list(Overlapping, "ReturnToDeployable", overlap), _
-         list("ReturnToDeployable", "Deployable", 0))
-End Function
+(defn ac13-defaults [overlap]
+    {reset     182 
+     train     183 
+     ready     460 
+     available 270 
+     deployed (- 270 overlap) 
+     Overlapping overlap})
 
+(defn ac13-template [name overlap & {:keys [deltas]}]
+    (-> (policydata/make-policy :name name :overlap overlap)
+        (generic/add-positions default-positions)
+        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+                     [train ready (+ 183  (get-delta train deltas))]
+                     [ready available (+ 460  (get-delta ready deltas))]
+                     [available reset (+ 270  (get-delta available deltas))]
+                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+                     [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
 
-Public Function AC13Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
-Set AC13Template = New TimeStep_Policy
-With AC13Template
-    .overlap = overlap
-    ;;.AlterPositions ("AC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", ready, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping"
-    .AddRoute reset, train, 182 + getdelta(reset, deltas)
-    .AddRoute train, ready, 183 + getdelta(train, deltas)
-    .AddRoute ready, available, 460 + getdelta(ready, deltas)
-    .AddRoute available, reset, 270 + getdelta(available, deltas)
-    .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
-    .AddRoute Overlapping, reset, overlap + getdelta(Overlapping, deltas)
-End With
-End Function
+(defn ac11-template [name overlap & {:keys [deltas]}]
+    (-> (policydata/make-policy :name name :overlap overlap)
+        (generic/add-positions default-positions)
+        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+                     [train ready (+ 183  (get-delta train deltas))]
+                     [available reset (+ 365  (get-delta available deltas))]
+                     [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
+                     [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
 
-Public Function AC13defaults(overlap As Long) As Dictionary
-Set AC13defaults = _
-    newdict(reset, 182, train, 183, ready, 460, available, 270, _
-                deployed, 270 - overlap, Overlapping, overlap)
-End Function
+(defn ac11-defaults [overlap]
+  {reset       182 
+   train       183 
+   available   365
+   deployed    (- 365 overlap) 
+   Overlapping overlap})
 
+(def default-rc-positions (assoc default-positions demobilization "DeMobilizing"))
 
+(defn rc14-defaults [overlap]
+   {reset 365 
+    train 365 
+    ready 730 
+    available 365 
+    deployed (- 270 overlap) 
+    Overlapping overlap 
+    demobilization 95})
 
-Public Function AC11Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
-Set AC11Template = New TimeStep_Policy
-With AC11Template
-    .overlap = overlap
-    ;;.AlterPositions ("AC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping"
-    .AddRoute reset, train, 182 + getdelta(reset, deltas)
-    .AddRoute train, available, 183 + getdelta(train, deltas)
-    .AddRoute available, reset, 365 + getdelta(available, deltas)
-    .AddRoute deployed, Overlapping, 365 - overlap + getdelta(deployed, deltas)
-    .AddRoute Overlapping, reset, overlap + getdelta(Overlapping, deltas)
-End With
-End Function
+(defn rc14-template [name overlap & {:keys [deltas]}]
+  (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+      (generic/add-positions default-rc-positions)
+      (add-routes [[reset train (+ 365  (get-delta reset deltas))]
+                   [train ready (+ 365  (get-delta train deltas))]
+                   [ready available (+ 730  (get-delta ready deltas))]
+                   [available reset (+ 365  (get-delta available deltas))]
+                   [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+                   [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+                   [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+                   ])))
 
-Public Function AC11defaults(overlap As Long) As Dictionary
-Set AC11defaults = _
-    newdict(reset, 182, train, 183, available, 365, _
-                deployed, 365 - overlap, Overlapping, overlap)
-End Function
+(defn rc15-template [name overlap deltas]
+    (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+        (generic/add-positions default-rc-positions)
+        (add-routes [[reset train (+ 730  (get-delta reset deltas))]
+                     [train ready (+ 365  (get-delta train deltas))]
+                     [ready available (+ 730  (get-delta ready deltas))]
+                     [available reset (+ 365  (get-delta available deltas))]
+                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+                     [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+                     [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+                     ])))
 
-Public Function RC14Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
-Set RC14Template = New TimeStep_Policy
-With RC14Template
-    .MaxMOB = 95
-    .overlap = overlap
-    ;;.AlterPositions ("RC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", ready, "Dwelling", available, "Dwelling", _
-                 deployed, "Bogging", Overlapping, "Overlapping", demobilization, "DeMobilizing"
-    .AddRoute reset, train, 365 + getdelta(reset, deltas)
-    .AddRoute train, ready, 365 + getdelta(train, deltas)
-    .AddRoute ready, available, 730 + getdelta(ready, deltas)
-    .AddRoute available, reset, 365 + getdelta(available, deltas)
-    .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
-    
-    ;;TOM Change 13 July 2011
-    ;;.AddRoute Overlapping, Reset, overlap + getdelta(Overlapping, deltas)
-    .AddRoute Overlapping, demobilization, overlap + getdelta(ready, deltas)
-    .AddRoute demobilization, reset, 95 + getdelta(ready, deltas)
-End With
-End Function
-Public Function RC14Defaults(overlap As Long) As Dictionary
-Set RC14Defaults = _
-    newdict(reset, 365, train, 365, ready, 730, available, 365, _
-                deployed, 270 - overlap, Overlapping, overlap, demobilization, 95)
-End Function
+(defn rc15-defaults [overlap]
+  {reset 730 
+   train 365
+   ready 730 
+   available 365 
+   deployed (- 270  overlap)
+   Overlapping overlap
+   demobilization 95})
 
-;;TOM Note 21 Mar 2011 -> Double check the lengths on these policies...
-Public Function RC15Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
-Set RC15Template = New TimeStep_Policy
-With RC15Template
-    .MaxMOB = 95
-    .overlap = overlap
-    ;;.AlterPositions ("RC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", ready, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping", _
-        demobilization, "DeMobilizing"
-    .AddRoute reset, train, 730 + getdelta(reset, deltas)
-    .AddRoute train, ready, 365 + getdelta(train, deltas)
-    .AddRoute ready, available, 730 + getdelta(ready, deltas)
-    .AddRoute available, reset, 365 + getdelta(ready, deltas)
-    .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
-        ;;TOM Change 13 July 2011
-    ;;.AddRoute Overlapping, Reset, overlap + getdelta(Overlapping, deltas)
-    .AddRoute Overlapping, demobilization, overlap + getdelta(ready, deltas)
-    .AddRoute demobilization, reset, 95 + getdelta(ready, deltas)
-End With
-End Function
-
-Public Function RC15Defaults(overlap As Long) As Dictionary
-Set RC15Defaults = _
-    newdict(reset, 730, train, 365, ready, 730, available, 365, _
-                deployed, 270 - overlap, Overlapping, overlap, demobilization, 95)
-End Function
+(defn rc11-defaults [overlap]
+  {reset 182 
+   train 183 
+   available 365
+   deployed (- 270 overlap)
+   Overlapping overlap
+   demobilization 95})
+  
+(defn rc11-template [name overlap deltas]
+    (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+        (generic/add-positions default-rc-positions)
+        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+                     [train available (+ 183  (get-delta train deltas))]
+                     [available reset (+ 365  (get-delta available deltas))]
+                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+                     [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+                     [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+                     ])))
 
 
-Public Function RC11Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
-Set RC11Template = New TimeStep_Policy
-With RC11Template
-    .MaxMOB = 95
-    .overlap = overlap
-    ;;.AlterPositions ("RC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping", _
-        demobilization, "DeMobilizing"
-    .AddRoute reset, train, 182 + getdelta(reset, deltas)
-    .AddRoute train, available, 183 + getdelta(train, deltas)
-    .AddRoute available, reset, 365 + getdelta(ready, deltas)
-    .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
-        ;;TOM Change 13 July 2011
-    ;;.AddRoute Overlapping, Reset, overlap + getdelta(Overlapping, deltas)
-    .AddRoute Overlapping, demobilization, overlap + getdelta(ready, deltas)
-    .AddRoute demobilization, reset, 95 + getdelta(ready, deltas)
-End With
-End Function
-
-Public Function RC11Defaults(overlap As Long) As Dictionary
-Set RC11Defaults = _
-    newdict(reset, 182, train, 183, available, 365, _
-                deployed, 270 - overlap, Overlapping, overlap, demobilization, 95)
-End Function
 
 Public Function RC12Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
 Set RC12Template = New TimeStep_Policy
