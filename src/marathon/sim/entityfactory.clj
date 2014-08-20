@@ -170,11 +170,14 @@
     (sim/trigger-event :Intialize :DemandStore :DemandStore msg nil ctx)))
   
 
+;;#Testing cell usage...
+
 ;;Updates the demand index according to the contents of 
 ;;demandmanager, providing unique names for duplicate 
 ;;demands.  Threads the demand through the context 
 ;;and returns the resulting context.
-(defn associate-demand [ctx demand]
+(defn associate-demand 
+  [ctx demand]
   (core/with-simstate [[parameters demandstore policystore] ctx]    
     (let [demands        (:demandmap demandstore)
           demand-count   (count demands)
@@ -185,7 +188,6 @@
             demand)                     
           (assoc :index new-idx)
           (demand/register-demand demandstore policystore ctx)))))
-
 
 (defn load-demands 
   ([record-source ctx]
@@ -198,6 +200,40 @@
   ([record-source demandstore ctx] 
      (load-demands record-source (core/set-demandstore ctx demandstore))))
 
+
+
+;;Optimized versions for bulk loading information.
+(defn associate-demand!     
+  [ctx demand demand-idx demandstore policystore]
+  (-> (if (contains? (:demandmap demandstore) (:name demand))
+        (assoc demand :name 
+               (str (:name demand) "_" demand-idx))
+        demand)                     
+      (assoc :index demand-idx)
+      (demand/register-demand demandstore policystore ctx)))
+
+(defn load-demands! 
+  ([record-source ctx]
+     (let [rs    (demands-from-records (core/as-records record-source) ctx)
+           dupes (get (meta rs) :duplicates)
+           demandstore  (core/->cell (core/get-demandstore ctx))
+           policystore  (core/->cell (core/get-policystore ctx))
+           demand-count (count (:demandmap demandstore))
+           demand-start (or (:demandstart (core/get-parameters ctx)) 0)
+           idx          (atom (+ demand-start demand-count))]       
+       (->> (reduce (fn [acc d] 
+                      (initialized-demand! (associate-demand! acc d (core/inc! idx) demandstore policystore) d))
+                    ctx rs)
+            (notify-duplicate-demands! dupes)
+            (core/merge-updates {:demandstore (deref demandstore)
+                                 :policystore (deref policystore)}))))
+  ([record-source demandstore ctx] 
+     (load-demands! record-source (core/set-demandstore ctx demandstore))))
+
+;;Mutable version designed to work with refs.
+(defn load-demand! 
+  [ctx demand demandstore policystore idx-ref]
+  (initialized-demand! (associate-demand! ctx demand (core/inc! idx-ref) demandstore policystore) demand))
 
 (defn ungrouped? [grp] 
   (when grp 

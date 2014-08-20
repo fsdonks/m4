@@ -194,6 +194,8 @@
   (removeWatch  [this key] (do (.removeWatch contents key) this))  
   )
 
+(defn inc! [^clojure.lang.Atom x] (swap! x inc))
+
 ;;Allows us to see cells transparently.
 (defmethod print-method cell [s ^java.io.Writer  w] (.write w (str "<#cell: " @s ">")))
 (defn ->cell [val]  
@@ -201,12 +203,38 @@
       val
       (cell. (atom val))))
 
+(def merge-updates  sim/merge-updates)
+
+;;Experimental...
+;;Overloading of simcontext/merge-updates, in that we short-circuit 
+;;cells.  If an updated value is a cell, we do not merge.  Idiomatically, 
+;;operations that modify simulation state use this merge/updates instead 
+;;of simcontext/merge-updates.  We'll move this into spork in the 
+;;future, for now it's a proof of principle.
+;; (definline merge-updates  [m ctx] 
+;;   `(if (map? ~m)
+;;      (reduce-kv (fn [c# k# v#]
+;;                   (cond (cell? v#) c# ;short-circuit cells
+;;                         (= k# :trigger) (v# c#) 
+;;                         :else   (sim/assoc-state k# v# c#)))
+;;                 ~ctx ~m)
+;;      (reduce (fn [c# [k# v#]]
+;;                (cond (cell? v#) c#
+;;                      (= k# :trigger) (v# c#) 
+;;                      :else          (sim/assoc-state k# v# c#)))
+;;             ~ctx ~m)))
+
+;;#Note -> early experiments lead me to believe we're missing the mark 
+;;by not using transients or actually mutable structures inside of 
+;;cells.  For now, we'll stick with the pure interface and see 
+;;what the performance hits are.
+
 (defn unpair [xs]
   (reduce (fn [acc [x y]] 
             (-> acc (conj x) (conj y))) [] xs))
 (defn atom? [x] (= (type x) clojure.lang.Atom))
 
-(defn cell? [x] (= (type x) ))
+
 
 (defn transient? [x]
   (instance? clojure.lang.ITransientCollection x))

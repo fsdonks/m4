@@ -213,7 +213,7 @@
 
 (defn registering-demand! [demand ctx]
   (sim/trigger-event :added-demand "DemandStore" "DemandStore" 
-       (str "Added Demand " (:name demand)) nil ctx))
+       (core/msg "Added Demand " (:name demand)) nil ctx))
 
 ;;#Demand Registration and Scheduling
 (defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
@@ -248,7 +248,7 @@
     (->> ctx
          (request-demand-update! startday demandname)
          (request-demand-update! endday demandname)
-         (sim/merge-updates 
+         (core/merge-updates 
           {:demandstore
            (->>  demandstore
                  (add-activation   startday name )
@@ -258,7 +258,7 @@
   (let [dname    (:name demand)
         newstore (tag-demand demand (add-demand demandstore demand))]
     (->> (registering-demand! demand ctx)         
-         (sim/merge-updates {:policystore (policy/register-location dname policystore)})
+         (core/merge-updates {:policystore (policy/register-location dname policystore)})
          (schedule-demand demand newstore)))) 
 
 ;;bulk loading functions, experimental.
@@ -266,13 +266,13 @@
 ;;that would suffice....then we update the accumulated 
 ;;reference at the end...
 ;; (defn register-demands [demands demandstore policystore ctx]
-;;   (let [dstore (atom demandstore)
-;;         pstore (atom policystore)]
+;;   (let [dstore (core/->cell demandstore)
+;;         pstore (core/->cell policystore)]
 ;;     (reduce (fn [acc demand]
 ;;               (let [dname    (:name demand)
 ;;                     newstore (tag-demand demand (add-demand dstore demand))]
 ;;                 (->> (registering-demand! demand ctx)         
-;;                      (sim/merge-updates {:policystore (policy/register-location dname policystore)})
+;;                      (core/merge-updates {:policystore (policy/register-location dname policystore)})
 ;;                      (schedule-demand demand newstore)))) 
 
 ;utility function....
@@ -325,13 +325,13 @@
                                  (dissoc unfilled src) 
                                  (assoc unfilled src demandq))]
             (->> (removing-unfilled! demandstore demandname ctx)
-                 (sim/merge-updates 
+                 (core/merge-updates 
                    {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
           (deactivating-unfilled! demandstore demandname ctx))     ;notification
         ;demand is unfilled, make sure it's added
         (let [demandq (get unfilled src (sorted-map))]  
           (if (contains? demandq fill-key) ctx ;pass-through
-            (->> (sim/merge-updates ;add to unfilled 
+            (->> (core/merge-updates ;add to unfilled 
                    {:demandstore (gen/deep-assoc demandstore [:unfilled src] 
                        (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
@@ -609,7 +609,7 @@
     (deactivating-empty-demand! demand t ctx)
     (->> (:units-assigned demand) ;otherwise send every unit home.
       (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
-      (sim/merge-updates
+      (core/merge-updates
         {:demandstore 
          (gen/deep-assoc (core/get-demandstore ctx) [:demandmap (:name demand)]
                    (assoc demand :units-assigned {}))}))))
