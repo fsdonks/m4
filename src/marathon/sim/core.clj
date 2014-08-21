@@ -586,3 +586,39 @@
 ;;out the onperiodchange event handling.
 ;;Rather, we'll let policy ops take care of changing units' composite policies.  
 ;;The good news is, all the bits are here.  Just need to re-organize the code.
+
+;;Is there a way we can create shallow maps?  For instance, if we're 
+;;trying to update a nested map, and we don't want to make the whole 
+;;thing transient, can we pass around a temporarily mutable version? 
+
+;;one idea here, is to have something that wraps the map and creates 
+;;a map of transient info...
+;;When we do reads, we use the transient, when we do writes, we 
+;;use the transient.  Then, when we want to reify, 
+;;we merge the transient with the original.  Ideally, this 
+;;keeps the copy paths nice and small.
+
+;;the simplest way is to have a mutable collection, i.e. 
+;;a hashtable, with the values along the path.
+;;Then for get-in and assoc-in, we can look at the 
+;;path cache and see if the path exists there.  Then, we 
+;;can apply the ops to the pathcache. 
+
+
+;; (defprotocol INested
+;;   (nest-assoc  [m path v])
+;;   (nest-update [m path f])
+;;   (nest-get    [m path not-found]))
+
+;; (defrecord cachedmap [origin ^java.util.HashMap cache]
+;;   INested
+;;   (nest-assoc [m path  v]  (do (.put cache path v) m))
+;;   (nest-update [m path f]  (do (when-let [res (.get cache path)] 
+;;                                  (.put cache path (f res)))
+;;                              m))
+;;   (nest-get [m path not-found]
+;;     (if-let [res (.get cache path)]
+;;       res
+;;       (get-in origin path not-found))))
+  
+

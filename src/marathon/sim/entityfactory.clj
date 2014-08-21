@@ -115,8 +115,8 @@
   (let [empty-op  (core/empty-string? Operation)
         empty-vig (core/empty-string? Vignette)
         idx       (if (or empty-op empty-vig) (core/next-idx) 0)
-        vig       (if empty-vig (str "Vig-ANON-" idx) Vignette)
-        op        (if empty-op  (str "Op-ANON-" idx) Operation)]
+        vig       (if empty-vig (core/msg "Vig-ANON-" idx) Vignette)
+        op        (if empty-op  (core/msg "Op-ANON-" idx) Operation)]
     (d/->demanddata    ;unique name associated with the demand entity.
      (or DemandKey (demand-key SRC vig op Priority StartDay Duration)) 
      SRC ;demand-type, or other identifier of the capability demanded.
@@ -160,13 +160,13 @@
   (let [name (:name (core/get-demandstore *ctx*))]
     (reduce (fn [ctx dup]
               (sim/trigger-event :Initialize name name 
-                     (str "Demand " (:DemandKey dup) " had duplicates in source data.") nil ctx))
+                     (core/msg "Demand " (:DemandKey dup) " had duplicates in source data.") nil ctx))
             ctx
             dupes)))
 
 ;broadcast that a demand with initialized.
 (defn initialized-demand! [ctx d]
-  (let [msg (str  "Demand " (:name d) " Initialized")]
+  (let [msg (core/msg  "Demand " (:name d) " Initialized")]
     (sim/trigger-event :Intialize :DemandStore :DemandStore msg nil ctx)))
   
 
@@ -641,6 +641,4 @@
     (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
     (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation")) 
-        
-    
 )
