@@ -258,7 +258,27 @@
         newstore (tag-demand demand (add-demand demandstore demand))]
     (->> (registering-demand! demand ctx)         
          (core/merge-updates {:policystore (policy/register-location dname policystore)})
-         (schedule-demand demand newstore)))) 
+         (schedule-demand demand newstore))))
+
+(defn register-demands! [xs ctx]
+  (core/with-cells [ctx {demandstore    [:state :demandstore]
+                         policystore    [:state :policystore]
+                         demands        [:state :demandstore :demandmap]
+                         dmenad-tags    [:state :demandstore :tags]}
+                    :as state]
+    (let [demand-count   (count demands)
+          new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
+        (reduce (fn [acc d]                  
+                  (let [dname    (get  demand :name)
+                        newstore (tag-demand demand (add-demand demandstore demand))]
+                    (->> (registering-demand! demand acc)         
+                         (policy/register-location dname policystore)
+                         (schedule-demand demand newstore))))
+                ctx' xs)
+        (update-state))))
+        
+                
+  
 
 ;;bulk loading functions, experimental.
 ;;If we could pass in the demandstore as an atomic reference, 

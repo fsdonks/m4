@@ -139,6 +139,8 @@
      (assoc-any m k (apply f (get m k) args)))))
 
 
+
+
 ;;All of the marathon operations are defined to work on associative 
 ;;structures, for the most part.  Sometimes, I'd like to 
 ;;pass a reference and allow the thing to act transitively as 
@@ -276,6 +278,18 @@
       (let [contents (atom val)]
          (cell. contents val))))
 
+(defn try-transient [itm]
+  (if (instance? clojure.lang.IEditableCollection itm)
+    (transient itm)
+    itm))
+    
+(defn transient-cells [xs]
+  (doseq [x xs]
+    (swap-cell! x try-transient)))
+(defn persistent-cells! [xs]
+  (doseq [x xs]
+    (swap-cell! x persistent!)))
+
 
 (def merge-updates sim/merge-updates)
 
@@ -372,8 +386,9 @@
             
 (defmacro with-cells
   ""
-  [[symb path-map] & expr]
-  (let [state   (symbol "*state*")]
+  [[symb path-map & {:keys [as] :or {as '*state*}}] & expr]
+  (let [state as
+        update-state! (symbol (str "update-" state "!"))]
     `(let [~@(unpair (for [[s path] path-map]
                         [s `(let [res# (get-in ~symb ~path)]
                               (->cell res#))]))
@@ -381,7 +396,7 @@
                                (assoc-in-any acc# p# s#))
                           ~symb
                           ~path-map))
-           ~'update-state! (fn [] (deref (update-cells ~state ~path-map)))]
+           ~update-state! (fn [] (deref (update-cells ~state ~path-map)))]
        ~@expr)))
 
 (comment ;testing

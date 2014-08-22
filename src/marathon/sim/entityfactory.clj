@@ -181,13 +181,30 @@
   (core/with-simstate [[parameters demandstore policystore] ctx]    
     (let [demands        (:demandmap demandstore)
           demand-count   (count demands)
-          new-idx (+ (or (:demandstart parameters) 0) demand-count)]
+          new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
       (-> (if (contains? demands (:name demand))
             (assoc demand :name 
                    (str (:name demand) "_" (inc demand-count)))
             demand)                     
           (assoc :index new-idx)
           (demand/register-demand demandstore policystore ctx)))))
+
+(defn ensure-name [named names name-count]                  
+  (if (contains? names (:name demand))
+    (assoc demand :name 
+           (core/msg (:name demand) "_" (inc name-count)))
+    demand))
+
+;; (defn associate-demands 
+;;   [ctx xs]
+;;   (core/with-simstate [[parameters] ctx] 
+;;     (core/with-cells [ctx {demandstore [:state :demandstore]
+;;                            policystore [:state :policystore]}
+;;                       :as ctx']
+;;       (let [demands        (:demandmap demandstore)
+;;             demand-count   (count demands)
+;;             new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
+;;         (demand/register-demands! demandstore policystore ctx)))))
 
 (defn load-demands 
   ([record-source ctx]
@@ -199,6 +216,25 @@
             (notify-duplicate-demands! dupes))))
   ([record-source demandstore ctx] 
      (load-demands record-source (core/set-demandstore ctx demandstore))))
+
+(defn load-demands! 
+  ([record-source ctx]
+     (let [rs    (demands-from-records (core/as-records record-source) ctx)
+           dupes (get (meta rs) :duplicates)]
+       (core/with-cells [ctx {dstore  [:demandstore]
+                              pstore  [:policystore]
+                              locs    [:policystore :locations]
+                              demands [:demandstore :demandmap]}
+                         :as ctx!]
+         (do (core/transient-cells [dstore pstore locs])
+             (->> (reduce (fn [acc d] 
+                            (initialized-demand! 
+                             (associate-demand acc d) d))
+                          ctx! rs)
+                  (notify-duplicate-demands! dupes))
+             (core/persistent-cells [dstore pstore locs])
+             (update-ctx!))))))
+  
 
 
 
@@ -231,28 +267,28 @@
       (assoc :index demand-idx)
       (demand/register-demand demandstore policystore ctx)))
 
-(defn load-demands! 
-  ([record-source ctx]
-     (let [rs    (demands-from-records (core/as-records record-source) ctx)
-           dupes (get (meta rs) :duplicates)
-           demandstore  (core/->cell (core/get-demandstore ctx))
-           policystore  (core/->cell (core/get-policystore ctx))
-           demand-count (count (:demandmap demandstore))
-           demand-start (or (:demandstart (core/get-parameters ctx)) 0)
-           idx          (atom (+ demand-start demand-count))]       
-       (->> (reduce (fn [acc d] 
-                      (initialized-demand! (associate-demand! acc d (core/inc! idx) demandstore policystore) d))
-                    ctx rs)
-            (notify-duplicate-demands! dupes)
-            (core/merge-updates {:demandstore (deref demandstore)
-                                 :policystore (deref policystore)}))))
-  ([record-source demandstore ctx] 
-     (load-demands! record-source (core/set-demandstore ctx demandstore))))
+;; (defn load-demands! 
+;;   ([record-source ctx]
+;;      (let [rs    (demands-from-records (core/as-records record-source) ctx)
+;;            dupes (get (meta rs) :duplicates)
+;;            demandstore  (core/->cell (core/get-demandstore ctx))
+;;            policystore  (core/->cell (core/get-policystore ctx))
+;;            demand-count (count (:demandmap demandstore))
+;;            demand-start (or (:demandstart (core/get-parameters ctx)) 0)
+;;            idx          (atom (+ demand-start demand-count))]       
+;;        (->> (reduce (fn [acc d] 
+;;                       (initialized-demand! (associate-demand! acc d (core/inc! idx) demandstore policystore) d))
+;;                     ctx rs)
+;;             (notify-duplicate-demands! dupes)
+;;             (core/merge-updates {:demandstore (deref demandstore)
+;;                                  :policystore (deref policystore)}))))
+;;   ([record-source demandstore ctx] 
+;;      (load-demands! record-source (core/set-demandstore ctx demandstore))))
 
 ;;Mutable version designed to work with refs.
-(defn load-demand! 
-  [ctx demand demandstore policystore idx-ref]
-  (initialized-demand! (associate-demand! ctx demand (core/inc! idx-ref) demandstore policystore) demand))
+;; (defn load-demand! 
+;;   [ctx demand demandstore policystore idx-ref]
+;;   (initialized-demand! (associate-demand! ctx demand (core/inc! idx-ref) demandstore policystore) demand))
 
 (defn ungrouped? [grp] 
   (when grp 
@@ -671,12 +707,12 @@
   (def xs (vec (range 1000000)))
   (defn slow-test []
     (time (dotimes [i 1] 
-            (core/with-cells [dstore {dmap [:demandmap]}] 
+            (core/with-cells [dstore {dmap [:demandmap]} :as state] 
               (let [newmap  (reduce (fn [acc n] (assoc acc n n)) dmap xs)] (update-state!))))))
 
   (defn fast-test []    
     (time (dotimes [i 1] 
-            (core/with-cells [dstore {dmap [:demandmap]}] 
+            (core/with-cells [dstore {dmap [:demandmap]} :as state] 
               (let [newmap (core/reset-cell! dmap 
                               (persistent! 
                                (reduce (fn [acc n] (assoc! acc n n)) 
@@ -686,10 +722,11 @@
     (core/with-cells [dstore       
                       {dmap          [:demandmap]
                        activations   [:activations]
-                       deactivations [:deactivations]}]
-      (do (core/assoc-any dmap demandname d)
-          (core/assoc-any activations (:startday d) demandname)
-          (core/assoc-any deactivations (+ (:startday d) (:duration d)) demandname)
+                       deactivations [:deactivations]}
+                      :as state]
+      (do (assoc dmap demandname d)
+          (assoc activations (:startday d) demandname)
+          (assoc deactivations (+ (:startday d) (:duration d)) demandname)
           (update-state!))))
 
   (defn add-demand! [dmap activations deactivations  d]
@@ -699,21 +736,52 @@
           (core/swap-cell!  activations   assoc! start n)
           (core/swap-cell!  deactivations assoc! (+ start (get d :duration)) n))))
 
+  (defn add-demand!! [dmap activations deactivations  d]
+    (let [n (get d :name)
+          start (get d :startday)]
+      (do (core/swap-cell!  dmap          core/assoc-any n  d)
+          (core/swap-cell!  activations   core/assoc-any start n)
+          (core/swap-cell!  deactivations core/assoc-any (+ start (get d :duration)) n))))
+
+  (defn add-demand!!! [dmap activations deactivations  d]
+    (let [n (get d :name)
+          start (get d :startday)]
+      (do (assoc  dmap           n  d)
+          (assoc  activations    start n)
+          (assoc  deactivations  (+ start (get d :duration)) n))))
+
   (defn test-demands [n] (r/map (fn [n] {:name n :startday n :duration  55}) (range n)))
   (defn add-demands! [dstore ds]
     (core/with-cells [dstore {dmap          [:demandmap]
                               activations   [:activations]
-                              deactivations [:deactivations]}]
-      (let [dmap          (core/swap-cell! dmap transient)
-            activations   (core/swap-cell! activations   transient)
-            deactivations (core/swap-cell! deactivations transient)]
-        (do  (reduce (fn [acc d] 
-                       (add-demand! dmap activations deactivations d))
+                              deactivations [:deactivations]}
+                      :as state]
+      (do (core/transient-cells [dmap activations deactivations])
+          (reduce (fn [acc d] 
+                       (add-demand!!! dmap activations deactivations d))
                      nil ds)
-             (core/swap-cell!  dmap persistent!)
-             (core/swap-cell!  activations persistent!)
-             (core/swap-cell!  deactivations persistent!)
-             (update-state!)))))
+          (core/persistent-cells! [dmap activations deactivations])
+          (update-state!))))
+
+  ;;nested cell defs also work fine.
+  (defn add-demands!! [dstore ds]
+    (core/with-cells [dstore {dmap          [:demandmap]
+                              activations   [:activations]
+                              deactivations [:deactivations]}
+                      :as state1]
+      (core/with-cells [state {dmap          [:demandmap]
+                               activations   [:activations]
+                               deactivations [:deactivations]}
+                        :as state2]                                 
+        (do (core/transient-cells [dmap activations deactivations])
+            (reduce (fn [acc d] 
+                      (add-demand!!! dmap activations deactivations d))
+                    nil ds)
+            (core/persistent-cells! [dmap activations deactivations])
+            (update-state2)))))
+
+  ;; (defn add-demand [dstore d]
+  ;;   (add-demands! dstore [d]))
 
   (defn add-demands [dstore ds]
     (reduce (fn [acc d] 
