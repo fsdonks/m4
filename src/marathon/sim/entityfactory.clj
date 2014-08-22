@@ -202,6 +202,25 @@
 
 
 
+;;It would be soooooo much easier if we could just define a way to
+;;temporarily cloak nested locations as transients.  The biggest 
+;;cost is the associng to the persistent map at the end of the
+;;chain...
+
+;;(with-transient-locations [demands])
+;;Useful...
+;;(assoc-location   .... v)
+;;(get-location    ...  v)
+;;(update-location ...  f args)
+
+;;(assoc-location [:a :b :c] v) => (deep-assoc [:a :b :c] v)
+;;(with-locations {abc [:a :b :c]}
+;;   (push-location abc 2)) => (push-location {:path [:a :b :c] :val 2} v)
+;;
+
+;;or....(transient-in [:a :b :c] 
+ 
+
 ;;Optimized versions for bulk loading information.
 (defn associate-demand!     
   [ctx demand demand-idx demandstore policystore]
@@ -239,6 +258,9 @@
   (when grp 
       (or (core/empty-string? grp) 
           (= (clojure.string/upper-case grp) "UNGROUPED"))))
+
+
+
 
 
 ;;#Unit Entity Creation
@@ -642,3 +664,115 @@
     (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
     (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation")) 
 )
+
+
+(comment ;testing
+  (def xs (vec (range 1000000)))
+  (defn slow-test []
+    (time (dotimes [i 1] 
+            (core/with-cells [dstore {dmap [:demandmap]}] 
+              (let [newmap  (reduce (fn [acc n] (assoc acc n n)) dmap xs)] (update-state!))))))
+  (defn fast-test []    
+    (time (dotimes [i 1] 
+            (core/with-cells [dstore {dmap [:demandmap]}] 
+              (let [newmap (core/reset-cell! dmap 
+                              (persistent! 
+                               (reduce (fn [acc n] (assoc! acc n n)) 
+                                 (transient @dmap) xs)))] (update-state!))))))
+
+  (defn add-demand [dstore demandname d]
+    (core/with-cells [dstore {dmap          [:demandmap]
+                         activations   [:activations]
+                         deactivations [:deactivations]}]
+      (do (core/assoc-any dmap demandname d)
+          (core/assoc-any activations (:startday d) demandname)
+          (core/assoc-any deactivations (+ (:startday d) (:duration d)) demandname)
+          (update-state!))))
+
+  (defn add-demands! [dstore ds]
+    (core/with-cells [dstore {dmap          [:demandmap]
+                              activations   [:activations]
+                              deactivations [:deactivations]}]
+      (let [dmap          (core/swap-cell! dmap transient)
+            activations   (core/swap-cell! activations   transient)
+            deactivations (core/swap-cell! deactivations transient)]
+        (do  (reduce (fn [acc d] 
+                       (add-demand acc (:name d) d))
+                     *state* ds)
+             (core/swap-cell!  dmap persistent!)
+             (core/swap-cell!  activations persistent!)
+             (core/swap-cell! deactivations persistent!)
+             (update-state!)))))
+
+  (defn add-demands [dstore ds]
+    (reduce (fn [acc d] 
+              (add-demand acc (:name d) d))  dstore ds))      
+)
+
+
+;;another option is to identify bulk operations 
+;;center around the data that's being changed (i.e. may be optimized
+;;for mutation) and make it easier to express how to unpack and repack 
+;;the data.  something like with-transient-locations...
+
+;; (comment 
+;;   (defn load-demands! 
+;;     ([record-source ctx]
+;;        (let [rs    (demands-from-records (core/as-records record-source) ctx)
+;;              dupes (get (meta rs) :duplicates)]
+;;          (->> (reduce (fn [acc d]                       
+;;                         (-> (associate-demand acc d)
+;;                             (initialized-demand!  d)))
+;;                       ctx rs)
+;;               (notify-duplicate-demands! dupes))))
+;;     ([record-source demandstore ctx] 
+;;        (load-demands record-source (core/set-demandstore ctx (make-mutable! demandstore)))))
+
+;;    ...
+;;     ([rs ctx]
+       
+;;        (reduce (fn [acc d]                       
+;;                  (-> (associate-demand acc d) ;mutation heavy...
+                     
+;;                      (initialized-demand!  d) ;independent....
+;;                      ))
+;;                ctx rs)
+
+;;     ([rs ctx]
+;;       (core/with-simstate [[parameters demandstore policystore] ctx]
+;;         (let [idx     (or (:demandstart parameters) 0)
+;;               demands (:demandmap demandstore)              
+;;               transient-demands (transient demands)]
+;;           (reduce (fn [ctx demand]                       
+;;                     (->  ;mutation heavy...
+;;                      (let [demand-count   (count demands)
+;;                            new-idx        (+ idx  demand-count)
+;;                            new-demand     (-> (if (contains? demands (:name demand))
+;;                                                 (assoc demand :name 
+;;                                                        (str (:name demand) "_" (inc demand-count)))
+;;                                                 demand)                     
+;;                                               (assoc :index new-idx))]
+;;                        (demand/register-demand new-demand demandstore policystore ctx)) ;mutation heavy...                                            
+;;                        (initialized-demand!  d))) ;independent....                        
+;;                   ctx rs))))
+;;     ....
+;;     ([rs ctx]
+;;       (core/with-simstate [[parameters demandstore policystore] ctx]
+;;         (let [idx     (or (:demandstart parameters) 0)
+;;               demands (:demandmap demandstore)              
+;;               transient-demands (transient demands)]
+;;           (reduce (fn [ctx demand]                       
+;;                     (->  ;mutation heavy...
+;;                      (let [demand-count   (count demands)
+;;                            new-idx        (+ idx  demand-count)
+;;                            new-demand     (-> (if (contains? demands (:name demand))
+;;                                                 (assoc demand :name 
+;;                                                        (str (:name demand) "_" (inc demand-count)))
+;;                                                 demand)                     
+;;                                               (assoc :index new-idx))]
+;;                        ;;if we had another interface for registering
+;;                        ;;mutable demands, using a transient
+;;                        ;;demand-map, then we're golden....
+;;                        (demand/register-demand! new-demand demandstore policystore transient-demands ctx)) ;mutation heavy...                         
+;;                        (initialized-demand!  d))) ;independent....                        
+;;                   ctx rs)))))

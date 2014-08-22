@@ -104,6 +104,41 @@
 ;;particularly working with pieces of state in a nested associative
 ;;structure.
 
+(definline assoc-any [m k v] 
+  `(if (instance? clojure.lang.ITransientAssociative ~m) 
+     (.assoc ~m ~k ~v)
+     (assoc ~m ~k ~v)))
+
+(definline conj-any [m v] 
+  `(if (instance? clojure.lang.ITransientCollection ~m) 
+     (conj! ~m ~v)
+     (conj ~m ~v)))
+
+(definline dissoc-any [m k ] 
+  `(if (instance? clojure.lang.ITransientAssociative ~m) 
+     (.without ~m ~k )
+     (dissoc ~m ~k )))
+
+(definline disj-any [m v] 
+  `(if (instance? clojure.lang.ITransientSet ~m) 
+     (disj! ~m ~v)
+     (disj ~m ~v)))
+
+(defn assoc-in-any
+  "Replacement for assoc-in, works on both transients and persistents."
+  [m [k & ks] v]
+  (if ks
+    (assoc-any m k (assoc-in-any (get m k) ks v))
+    (assoc-any m k v)))
+
+(defn update-in-any
+  "Replacement for update-in, works on both transients and persistents."
+  ([m [k & ks] f & args]
+   (if ks
+     (assoc-any m k (apply update-in-any (get m k) ks f args))
+     (assoc-any m k (apply f (get m k) args)))))
+
+
 ;;All of the marathon operations are defined to work on associative 
 ;;structures, for the most part.  Sometimes, I'd like to 
 ;;pass a reference and allow the thing to act transitively as 
@@ -124,7 +159,16 @@
 
 ;;The intent is to use cells sparingly.
 
-(deftype cell [^clojure.lang.Atom contents]
+(defprotocol IAlterable 
+  (set-altered [obj])
+  (get-altered [obj]))
+
+(declare swap-cell!)
+
+(deftype cell [^clojure.lang.Atom contents origin]
+  IAlterable 
+  (set-altered [obj] obj) ;(do (reset! altered true) obj))
+  (get-altered [obj] (not (identical? origin @contents)))
   Object
   (toString [this] (str @contents))
   clojure.lang.ISeq
@@ -132,7 +176,7 @@
   (next  [this] (next @contents))
   (more  [this]  (rest @contents))
   clojure.lang.IPersistentCollection
-  (empty [this]  (cell. (atom nil)))
+  (empty [this]  (cell. (atom nil) false))
   (equiv [this that] (= @contents that))
   ;;Note -> if we don't implement this, vector equality doesn't work both ways!
   java.util.Collection  
@@ -144,7 +188,7 @@
   clojure.lang.Counted
   (count [this] (count @contents))
   clojure.lang.IPersistentVector
-  (cons [this a] (do (swap! contents conj a) this))
+  (cons [this a] (do (swap! contents conj-any a) this))
   (length [this]  (count @contents))
   (assocN [this index value] (do (swap! contents assoc  index value) this))
   clojure.core.protocols/IKVReduce
@@ -157,7 +201,7 @@
   (valAt [this k] (get @contents  k))
   (valAt [this k not-found] (get @contents k not-found))  
   clojure.lang.IPersistentMap
-  (assoc [this k v]    (do (swap! contents assoc k v) this))
+  (assoc [this k v]    (do (swap! contents assoc-any k v) this))
   (equals [this o] (or (identical? @contents o) (= @contents o)))  
   ;containsKey implements (contains? pm k) behavior
   (containsKey [this k] (.containsKey  ^clojure.lang.IPersistentMap @contents k))
@@ -194,16 +238,36 @@
   (removeWatch  [this key] (do (.removeWatch contents key) this))  
   )
 
+(defn swap-cell! [^cell c f & args]
+  (do  (apply swap! (.contents c) f args)
+      c))
+
+(defn reset-cell! [^cell c v]
+  (do (reset! (.contents c) v)
+      c))
+
 (defn inc! [^clojure.lang.Atom x] (swap! x inc))
+;; (defn on-first-alter [atm cl f] 
+;;   (add-watch atm :on-first-alter 
+;;    (fn [k r o n] (do (remove-watch r :on-first-alter)
+;;                      (do (f cl))))))
+
+(defn altered? [^cell c] (.get-altered c))
 
 ;;Allows us to see cells transparently.
 (defmethod print-method cell [s ^java.io.Writer  w] (.write w (str "<#cell: " @s ">")))
-(defn ->cell [val]  
+(defn ->cell
+  "Wraps val in a cell, which allows transparent access to val though it's inside
+   an atom.  Acts like a super reference.  Also keeps track of whether the 
+   atom was ever altered.  Can check the status of the cell using get-altered"
+  [val]  
   (if (= (type val) cell)
       val
-      (cell. (atom val))))
+      (let [contents (atom val)]
+         (cell. contents val))))
 
-(def merge-updates  sim/merge-updates)
+
+(def merge-updates sim/merge-updates)
 
 ;;Experimental...
 ;;Overloading of simcontext/merge-updates, in that we short-circuit 
@@ -275,39 +339,46 @@
        (do ~@expr
          (-> ~state 
              ~@updates)))))
+     
+(defmacro unpack-if [m pred path v]
+  `(if ~pred
+     (assoc-in ~m ~path (deref ~v))
+     (deref ~v)))
 
+
+(defn update-cells [m cell-paths]
+  (reduce (fn [acc [cell path]]
+            (if (altered? cell)
+              (assoc-in-any m path @cell)
+              acc))
+          m cell-paths)) 
+(defn create-cells 
+  [m path-map]
+  (reduce-kv 
+   (fn [acc s p] 
+     (assoc-in-any acc p s))
+   m
+   path-map))          
+            
 (defmacro with-cells
-  "Macro that follows an idiom of extract-and-pack.
-   We define paths into a nested associative structure, 
-   and create a context in which the conceptual places 
-   those paths point to are to be treated as mutable 
-   containers - atoms.  Inside of expr, these 
-   places take on the symbol names defined by the 
-   path-map, a map of path-name to sequences of keys 
-   inside the associative strucure symb.  From there, 
-   we use the default clojure idioms for operating on atoms, 
-   namely reset!, swap!, and (deref x) or @x to get at 
-   values.  After we're done, much like transients, 
-   we collect the current values of the named paths
-   and push them into the associative structure, 
-   returning a persisent structure as a result.  
-   This is akin to automatically calling (persistent!)
-   on a transient structure."
+  ""
   [[symb path-map] & expr]
-  (let [state   (symbol "*state*")
-        updates (for [[s path] path-map] 
-                  `(assoc-in ~path (deref ~s)))]
+  (let [state   (symbol "*state*")]
     `(let [~@(unpair (for [[s path] path-map]
                         [s `(let [res# (get-in ~symb ~path)]
                               (->cell res#))]))
            ~state (->cell (reduce-kv (fn [acc# s# p#] 
-                               (assoc-in acc# p# s#))
+                               (assoc-in-any acc# p# s#))
                           ~symb
-                          ~path-map))]
-       (do ~@expr
-         (-> ~state 
-             ~@updates
-             (deref))))))
+                          ~path-map))
+           ~'update-state! (fn [] (deref (update-cells ~state ~path-map)))]
+       ~@expr)))
+
+(comment ;testing
+
+    
+  
+)
 
 (defmacro with-transients 
   "Macro that follows an idiom of extract-and-pack.
@@ -621,4 +692,39 @@
 ;;       res
 ;;       (get-in origin path not-found))))
   
+
+
+;;Operations optimized for speed.  the -in and friends 
+;;are not sufficient...
+(defmacro deep-assoc 
+  "Replacement for assoc-in, but without the function call overhead.
+   If the key-path is composed of literals, this is about 
+   3 times faster then assoc-in."
+  [m [k & ks] v]
+  (if ks
+    `(assoc-any ~m ~k (deep-assoc (get ~m ~k) ~ks ~v))
+    `(assoc-any ~m ~k ~v)))
+
+
+
+;;This is a clone of get-in, directly from source.
+(def deep-get get-in)
+
+;;can we provide a version of this that recognizes transients?
+(defmacro deep-update 
+  "Replacement for update-in, but without the function call overhead.
+   If the key-path is composed of literals, this is about 
+   3 times faster then assoc-in."
+  [m [k & ks] f & args]
+   (if ks
+     `(deep-assoc ~m ~k (deep-update (get ~m ~k) ~ks ~f ~@args))
+     `(deep-assoc ~m ~k (~f (get ~m ~k) ~@args))))
+
+
+
+(defmacro deep-dissoc [m ks]
+  (let [preds (vec (butlast ks))
+        k     (last ks)]
+    `(deep-update ~m ~preds ~dissoc ~k)))
+
 

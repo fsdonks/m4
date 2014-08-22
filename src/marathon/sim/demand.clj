@@ -31,7 +31,7 @@
 
 ;TOM ADDED 30 MAy 2013 
 (defn add-demand [demandstore demand]
-  (gen/deep-assoc demandstore [:demand-map (:name demand)] demand))
+  (gen/deep-assoc demandstore [:demandmap (:name demand)] demand))
 
 (defn manage-changed-demands [day state] ;REDUNDANT
   (gen/deep-assoc state [:demand-store :changed] {}))
@@ -49,8 +49,8 @@
 (defn tag-demand 
   ([demand demandstore extras]
      (->> (tag/multi-tag (:tags demandstore) (:name demand) 
-                         (into   [(str "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
-                                  (str "PRIORITY_" (:priority demand)) ;USE KEYWORD
+                         (into   [(core/msg "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
+                                  (core/msg "PRIORITY_" (:priority demand)) ;USE KEYWORD
                                   :enabled]
                                   extras))
        (assoc demandstore :tags)))
@@ -105,14 +105,14 @@
 ;1) Tom Note 20 May 2013 -> It would be nice to have a function or macro for 
 ;   defining nested updates like this, as it will probably happen quite a bit.
 (defn remove-demand [demandstore demandname]
-  (if (contains? (:demand-map demandstore) demandname)
-    (let [{:keys [activations deactivations demand-map]} demandstore
-          demand (get demand-map demandname)
+  (if (contains? (:demandmap demandstore) demandname)
+    (let [{:keys [activations deactivations demandmap]} demandstore
+          demand (get demandmap demandname)
           dname  (:name demand)
           tstart (:startday demand)
           tfinal (+ tstart (:duration demand))]
       (-> demandstore                                                        ;1)
-        (gen/deep-update [:demand-map] dissoc    dname)
+        (gen/deep-update [:demandmap] dissoc    dname)
         (gen/deep-update [:activations tstart]   dissoc dname)
         (gen/deep-update [:deactivations tfinal] dissoc dname)))
     demandstore)) 
@@ -125,7 +125,7 @@
   (let [tags    (:tags demandstore)
         f       (if removal #(remove-demand %1 %2) (fn [m k] m))]     
     (reduce (fn [store demand-name] 
-              (let [demands (:demand-map store)]
+              (let [demands (:demandmap store)]
                 (if (contains? demands demand-name)
                   (f (core/disable store demand-name) demand-name) store)))
       demandstore (mapcat (partial tag/get-subjects tags) disable-tags))))
@@ -218,9 +218,8 @@
 ;;#Demand Registration and Scheduling
 (defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
 (defn set-activations   [dstore t m] (gen/deep-assoc dstore [:activations t] m)) ;;requires a double assoc.
-(defn get-deactivations [dstore t]   (get-in dstore   [:deactivations t] #{}))
+(defn get-deactivations [dstore t]   (get-in dstore         [:deactivations t] #{}))
 (defn set-deactivations [dstore t m] (gen/deep-assoc dstore [:deactivations t] m))
-
 
 ;TOM note 27 Mar 2011 ->  I'd like to factor these two methods out into a single 
 ;function, discriminating based on a parameter, rather than having two entire 
