@@ -106,7 +106,7 @@
 
 (definline assoc-any [m k v] 
   `(if (instance? clojure.lang.ITransientAssociative ~m) 
-     (.assoc ~m ~k ~v)
+     (assoc! ~m ~k ~v)
      (assoc ~m ~k ~v)))
 
 (definline conj-any [m v] 
@@ -116,7 +116,7 @@
 
 (definline dissoc-any [m k ] 
   `(if (instance? clojure.lang.ITransientAssociative ~m) 
-     (.without ~m ~k )
+     (dissoc! ~m ~k )
      (dissoc ~m ~k )))
 
 (definline disj-any [m v] 
@@ -238,9 +238,19 @@
   (removeWatch  [this key] (do (.removeWatch contents key) this))  
   )
 
-(defn swap-cell! [^cell c f & args]
-  (do  (apply swap! (.contents c) f args)
-      c))
+(defn swap-cell! 
+  ([^cell c f]
+     (do  (swap! (.contents c) f)
+          c))
+  ([^cell c f x]
+     (do  (swap! (.contents c) f x)
+          c))
+  ([^cell c f x y]
+     (do  (swap! (.contents c) f x y)
+          c))
+  ([^cell c f x y & args]
+     (do  (apply swap! (.contents c) f x y args)
+          c)))
 
 (defn reset-cell! [^cell c v]
   (do (reset! (.contents c) v)

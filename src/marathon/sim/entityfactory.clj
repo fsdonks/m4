@@ -667,11 +667,13 @@
 
 
 (comment ;testing
+  (require '[clojure.core.reducers :as r])
   (def xs (vec (range 1000000)))
   (defn slow-test []
     (time (dotimes [i 1] 
             (core/with-cells [dstore {dmap [:demandmap]}] 
               (let [newmap  (reduce (fn [acc n] (assoc acc n n)) dmap xs)] (update-state!))))))
+
   (defn fast-test []    
     (time (dotimes [i 1] 
             (core/with-cells [dstore {dmap [:demandmap]}] 
@@ -681,14 +683,23 @@
                                  (transient @dmap) xs)))] (update-state!))))))
 
   (defn add-demand [dstore demandname d]
-    (core/with-cells [dstore {dmap          [:demandmap]
-                         activations   [:activations]
-                         deactivations [:deactivations]}]
+    (core/with-cells [dstore       
+                      {dmap          [:demandmap]
+                       activations   [:activations]
+                       deactivations [:deactivations]}]
       (do (core/assoc-any dmap demandname d)
           (core/assoc-any activations (:startday d) demandname)
           (core/assoc-any deactivations (+ (:startday d) (:duration d)) demandname)
           (update-state!))))
 
+  (defn add-demand! [dmap activations deactivations  d]
+    (let [n (get d :name)
+          start (get d :startday)]
+      (do (core/swap-cell!  dmap          assoc! n  d)
+          (core/swap-cell!  activations   assoc! start n)
+          (core/swap-cell!  deactivations assoc! (+ start (get d :duration)) n))))
+
+  (defn test-demands [n] (r/map (fn [n] {:name n :startday n :duration  55}) (range n)))
   (defn add-demands! [dstore ds]
     (core/with-cells [dstore {dmap          [:demandmap]
                               activations   [:activations]
@@ -697,11 +708,11 @@
             activations   (core/swap-cell! activations   transient)
             deactivations (core/swap-cell! deactivations transient)]
         (do  (reduce (fn [acc d] 
-                       (add-demand acc (:name d) d))
-                     *state* ds)
+                       (add-demand! dmap activations deactivations d))
+                     nil ds)
              (core/swap-cell!  dmap persistent!)
              (core/swap-cell!  activations persistent!)
-             (core/swap-cell! deactivations persistent!)
+             (core/swap-cell!  deactivations persistent!)
              (update-state!)))))
 
   (defn add-demands [dstore ds]
