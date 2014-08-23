@@ -262,9 +262,9 @@
 
 (defn register-demands! [xs ctx]
   (core/with-cells [ctx {demandstore    [:state :demandstore]
-                         policystore    [:state :policystore]
+                         policystore    [:state :policystore]                         
                          demands        [:state :demandstore :demandmap]
-                         dmenad-tags    [:state :demandstore :tags]}
+                         demand-tags    [:state :demandstore :tags]}
                     :as state]
     (let [demand-count   (count demands)
           new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
