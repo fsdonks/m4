@@ -260,35 +260,57 @@
          (core/merge-updates {:policystore (policy/register-location dname policystore)})
          (schedule-demand demand newstore))))
 
+
+;;Maybe we make this reaallllly simple and focused.  WE only use this 
+;;when it makes sense for bulk updates.  There should be a few
+;;hotspots where we're doing bulk updates (particularly updating
+;;supply).
+
+;;Can we efficiently register demands using this api?  Let alone 
+;;anything else....
+
+
+;;Another option....we have a dynamic var: *mutables* 
+;;From we assoc all these guys on there...
+;;Inside a transaction, when we create a mutable, we just 
+;;assoc it to the existing mutables.
+;;Then define functions that, when acquiring resources, prefer 
+;;to use the mutable version first.
+;;If the mutable version exists, operations like repacking are 
+;;not necessary.
+;;This brings us back to splicing alternate code paths.....where 
+;;we have a mutable and an imperative version that are largely
+;;identical.  Some of these are mitigated by unifying assoc 
+;;and friends...
+
 ;;efficiently register demands...This is a trial run of the new cells 
 ;;API, to see what practical problems arise when we actually try to
 ;;use it!
+
+;;At the very least, having an interface to call out high level 
+;;mutation and push it to specific functions is nice....better than 
+;;what was there...
 (defn register-demands! [xs ctx]
   ;;Cleaner representation, allow multiple cells to be defined in a
   ;;single binding.
-  (core/with-cells [{demandstore        [:state :demandstore]
-                     policystore        [:state :policystore]                         
-                     :as stores}        ctx'
-
-                    {locations          [:locationmap] :as locs} policystore
-
-                    {demandtags         [:tags] 
+  (core/with-cells [{locations          [:state :policystore :locationmap]
+                     demandtags         [:state :demandstore :tags] 
                      demands            [:state :demandstore :demandmap]
-                     demand-tags        [:state :demandstore :tags]
-                     :as dstore}     demandstore]
-    (let [demand-count   (count demands)
-          new-idx        (+ (or (:demandstart (:parameters ctx)) 0) demand-count)]
-      (reduce (fn [acc d]                  
+                     :as txn}    ctx]
+    (with-transient-cells [locations demandtags demands]
+      (let [demand-count   (count demands)
+            new-idx        (+ (or (:demandstart (:parameters ctx)) 0) demand-count)]
+        (->> xs
+             (reduce 
+              (fn [acc d]                  
                 (let [dname    (core/entity-name  demand) ;;replace with entity-name
                       newstore (tag-demand demand 
                                            (add-demand dstore demand))]
-                  (->> (registering-demand! demand acc)         
-                       (policy/register-location dname policystore) ;;we care about locs here..
-                       (schedule-demand demand newstore))))
-              ctx xs)
-      (do (update-dstore!)
-          (update-locs!)
-          (update-ctx'!)))))
+                  (->> (registering-demand! demand acc)     ;;doesn't care.
+                       (policy/register-location dname policystore) ;;this should still be fast.
+                       (schedule-demand demand newstore)))) ctx)
+             (update-txn!))))))
+
 
 ;; ;;Alternate formulation
 ;; (deftransaction register-demands! {dstore    [:state :demandstore]

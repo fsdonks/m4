@@ -104,9 +104,7 @@
 
 ;;#Protocols 
 ;;Alias for entity protocol.  Helps us unify name access.
-(def entity-name spork.entitysystem.store/entity-name)
-
-  
+(def entity-name spork.entitysystem.store/entity-name)  
 
 ;;#Operations for working with mutable references
 ;;particularly working with pieces of state in a nested associative
@@ -147,7 +145,29 @@
      (assoc-any m k (apply f (get m k) args)))))
 
 
+;;#still working on api for mutating transactions...
+;;We can just cache our cells...
+;;When we call inside, it means we want 
+;;to operate inside the data structure via mutation 
+;;if possible.  If we have a reference to the 
+;;path we're after, then we use that, 
+;;else fall back to deep-update.  
+;; (within {:a {:b 2}} [:a]
+;;         (assoc :c 3))
+;; => (deep-update {:a {:b 2}} [:a]
+;;                 assoc :c 3)
+;; ;;{:a {:b 2 :c 3}}
+;; (within {:a <cell>{:b 2}}
+;;         (assoc :c 3))
+;; =>
+;; (if-let [ab (get *cells* :ab)]
+;;   (do (assoc ab)
+;;       input)
+;;   (gen/deep-update {:a {:b 2}} [:a] assoc :c 3))
 
+;; (def ^:dynamic *cells*)
+;; (defn get-cell [path]
+;;   (
 
 ;;All of the marathon operations are defined to work on associative 
 ;;structures, for the most part.  Sometimes, I'd like to 

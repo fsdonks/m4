@@ -228,10 +228,36 @@
 ;;Defining abstract locations.  
 (defn get-locations [policystore] (:locationmap policystore))
 
+
+;;#Decision point for determining how smaller aux functions may 
+;;consume pre-existing mutation information...
+
+;;register-location follows the assumptions that we want to "update" 
+;;the policystore that's passed in by fetching the existing value of
+;;the locationmap, then conjing a new location name onto it, then 
+;;packing the value back in.  What's the difference if this guy 
+;;is called on a cellular policystore, where locationmap is already 
+;;available? 
+
 ;This sub helps us to keep track of demand and policy locations.
 ;Conjoins a location to the set of known locations...
 (defn register-location [locname policystore]
   (gen/deep-update policystore [:locationmap]  conj  locname)) 
+
+;This sub helps us to keep track of demand and policy locations.
+;Conjoins a location to the set of known locations...
+(defn register-location! 
+  ([locname locs]
+     (conj locname locs))
+  ([locname policystore-cell locs]
+     (-> (get policystore-cell :locationmap)
+         (conj  locname))))
+
+(defn register-location! 
+  ([locname policystore-cell locs]
+     (-> (inside policystore-cell :locationmap)
+         (conj  locname))))
+
 
 ;Register multiple locations in the locs collection with the policystore.
 (defn register-locations [locs policystore] 
