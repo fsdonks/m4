@@ -260,22 +260,22 @@
          (core/merge-updates {:policystore (policy/register-location dname policystore)})
          (schedule-demand demand newstore))))
 
-(defn register-demands! [xs ctx]
-  (core/with-cells [ctx {demandstore    [:state :demandstore]
-                         policystore    [:state :policystore]                         
-                         demands        [:state :demandstore :demandmap]
-                         demand-tags    [:state :demandstore :tags]}
-                    :as state]
-    (let [demand-count   (count demands)
-          new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
-        (reduce (fn [acc d]                  
-                  (let [dname    (get  demand :name)
-                        newstore (tag-demand demand (add-demand demandstore demand))]
-                    (->> (registering-demand! demand acc)         
-                         (policy/register-location dname policystore)
-                         (schedule-demand demand newstore))))
-                ctx' xs)
-        (update-state))))
+;; (defn register-demands! [xs ctx]
+;;   (core/with-cells [ctx {demandstore    [:state :demandstore]
+;;                          policystore    [:state :policystore]                         
+;;                          demands        [:state :demandstore :demandmap]
+;;                          demand-tags    [:state :demandstore :tags]}
+;;                     :as state]
+;;     (let [demand-count   (count demands)
+;;           new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
+;;         (reduce (fn [acc d]                  
+;;                   (let [dname    (get  demand :name)
+;;                         newstore (tag-demand demand (add-demand demandstore demand))]
+;;                     (->> (registering-demand! demand acc)         
+;;                          (policy/register-location dname policystore)
+;;                          (schedule-demand demand newstore))))
+;;                 ctx' xs)
+;;         (update-state))))
         
                 
   

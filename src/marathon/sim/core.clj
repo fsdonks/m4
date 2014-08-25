@@ -165,8 +165,13 @@
   (set-altered [obj])
   (get-altered [obj]))
 
-(declare swap-cell!)
-
+(defprotocol ICell 
+  (swap-cell!  [c f]
+               [c f x]
+               [c f x y]
+               [c f x y & args])
+  (reset-cell! [c v]))
+             
 (deftype cell [^clojure.lang.Atom contents origin]
   IAlterable 
   (set-altered [obj] obj) ;(do (reset! altered true) obj))
@@ -238,36 +243,91 @@
   (getWatches   [this]    (.getWatches contents)) 
   (addWatch     [this key callback] (do (.addWatch contents key callback) this)) 
   (removeWatch  [this key] (do (.removeWatch contents key) this))  
-  )
+  ICell
+  (swap-cell!  [c f]     (do  (swap! contents f)      c))
+  (swap-cell!  [c f x]   (do  (swap! contents f x)  c))
+  (swap-cell!  [c f x y] (do  (swap! contents f x y)  c))
+  (swap-cell!  [c f x y & args] (do  (apply swap! contents f x y args)  c))
+  (reset-cell! [c v] (do (reset! contents v) c)))
 
-(defn swap-cell! 
-  ([^cell c f]
-     (do  (swap! (.contents c) f)
-          c))
-  ([^cell c f x]
-     (do  (swap! (.contents c) f x)
-          c))
-  ([^cell c f x y]
-     (do  (swap! (.contents c) f x y)
-          c))
-  ([^cell c f x y & args]
-     (do  (apply swap! (.contents c) f x y args)
-          c)))
-
-(defn reset-cell! [^cell c v]
-  (do (reset! (.contents c) v)
-      c))
+(deftype mcell [^:unsynchronized-mutable contents origin]
+  IAlterable 
+  (set-altered [obj] obj);(do (set! alt true) obj)) 
+  (get-altered [obj] (not (identical? contents origin)))
+  Object
+  (toString [this] (str contents))
+  clojure.lang.ISeq
+  (first [this] (first contents))
+  (next  [this] (next contents))
+  (more  [this]  (rest contents))
+  clojure.lang.IPersistentCollection
+  (empty [this]  (cell. nil false))
+  (equiv [this that] (= contents that))
+  ;;Note -> if we don't implement this, vector equality doesn't work both ways!
+  java.util.Collection  
+  (iterator [self]    (clojure.lang.SeqIterator. (seq  self)))  
+  (size     [self]    (count self))  
+  (toArray  [self]    (.toArray (seq self)))
+  clojure.lang.Seqable
+  (seq [this]  (seq contents))
+  clojure.lang.Counted
+  (count [this] (count contents))
+  clojure.lang.IPersistentVector
+  (cons [this a] (do (set! contents (conj-any contents a)) this))
+  (length [this]  (count contents))
+  (assocN [this index value] (do (set! contents (assoc contents  index value)) this))
+  clojure.core.protocols/IKVReduce
+  (kv-reduce [amap f init] (clojure.core.protocols/kv-reduce contents f init))
+  clojure.core.protocols/CollReduce 
+  (coll-reduce [coll f]     (clojure.core.protocols/coll-reduce contents f))
+  (coll-reduce [coll f val] (clojure.core.protocols/coll-reduce contents f val))
+  clojure.lang.ILookup
+  ; valAt gives (get pm key) and (get pm key not-found) behavior
+  (valAt [this k] (get contents  k))
+  (valAt [this k not-found] (get contents k not-found))  
+  clojure.lang.IPersistentMap
+  (assoc [this k v]    (do (set! contents (assoc-any contents k v)) this))
+  (equals [this o] (or (identical? contents o) (= contents o)))  
+  ;containsKey implements (contains? pm k) behavior
+  (containsKey [this k] (.containsKey  ^clojure.lang.IPersistentMap contents k))
+  (entryAt [this k]     (.entryAt ^clojure.lang.IPersistentMap contents k))
+  ;without implements (dissoc pm k) behavior
+  (without [this k] (let [^clojure.lang.IPersistentMap m contents]
+                      (do (set! contents (.without m k))
+                          this))) 
+  clojure.lang.IFn
+  ;makes lex map usable as a function
+  (invoke [this k] (get contents k))
+  (invoke [this k not-found] (get contents k not-found))
+  clojure.lang.IPersistentStack
+  (pop  [this] (do (set! contents (pop contents)) this))
+  (peek [this] (peek contents))
+  clojure.lang.Indexed
+  (nth [this i] (nth contents i))
+  (nth [this i not-found] (nth contents i not-found))
+  clojure.lang.IObj
+  ;adds metadata support
+  (meta [this] (meta contents))
+  (withMeta [this m] (do (set! contents (with-meta contents m)) this))      
+  clojure.lang.Reversible
+  (rseq [this]  (rseq contents))
+  java.io.Serializable ;Serialization comes for free with the other
+                       ;stuff.
+  clojure.lang.IDeref
+  (deref [this] contents)
+  ICell
+  (swap-cell! [c f]     (do  (set! contents (f contents))      c))
+  (swap-cell! [c f x]   (do  (set! contents (f contents x))  c))
+  (swap-cell! [c f x y] (do  (set! contents (f contents x y))  c))
+  (swap-cell! [c f x y & args] (do  (set! contents (apply f contents x y args))  c))
+  (reset-cell! [c v] (do (set! contents v) c)))
 
 (defn inc! [^clojure.lang.Atom x] (swap! x inc))
-;; (defn on-first-alter [atm cl f] 
-;;   (add-watch atm :on-first-alter 
-;;    (fn [k r o n] (do (remove-watch r :on-first-alter)
-;;                      (do (f cl))))))
-
-(defn altered? [^cell c] (.get-altered c))
+(defn altered? [c] (get-altered c))
 
 ;;Allows us to see cells transparently.
 (defmethod print-method cell [s ^java.io.Writer  w] (.write w (str "<#cell: " @s ">")))
+(defmethod print-method mcell [s ^java.io.Writer  w] (.write w (str "<#mcell: " @s ">")))
 (defn ->cell
   "Wraps val in a cell, which allows transparent access to val though it's inside
    an atom.  Acts like a super reference.  Also keeps track of whether the 
@@ -277,6 +337,15 @@
       val
       (let [contents (atom val)]
          (cell. contents val))))
+
+(defn ->mcell
+  "Wraps val in a cell, which allows transparent access to val though it's inside
+   an atom.  Acts like a super reference.  Also keeps track of whether the 
+   atom was ever altered.  Can check the status of the cell using get-altered"
+  [val]  
+  (if (= (type val) cell)
+      val
+      (mcell. val val)))
 
 (defn try-transient [itm]
   (if (instance? clojure.lang.IEditableCollection itm)
@@ -289,6 +358,68 @@
 (defn persistent-cells! [xs]
   (doseq [x xs]
     (swap-cell! x persistent!)))
+
+(defmacro with-transient-cells [symbs & expr] 
+  `(do (transient-cells ~symbs)
+       ~@expr
+       (persistent-cells! ~symbs)))
+
+(comment ;examples using cells and not...
+  (def nested-structure {:a {:b {:c 2}
+                             :e {:f []}}})
+  (defn simple-example [& {:keys [n] :or {n 10}}]
+    (reduce (fn [acc n]
+              (-> acc
+                  (update-in [:a :b :c] inc)
+                  (update-in [:a :e :f] conj n)))
+            nested-structure (range n)))
+
+  (defn simple-example! [& {:keys [n] :or {n 10}}]
+    (let [abc (atom (get-in nested-structure [:a :b :c]))
+          aef (transient (get-in nested-structure [:a :e :f]))]
+      (do  (dotimes [i n]
+             (swap! abc inc)
+             (conj! aef n))
+           (-> nested-structure 
+               (assoc-in [:a :b :c] @abc)
+               (assoc-in [:a :e :f] (persistent! aef))))))           
+    
+  (defn simple-cell-example [& {:keys [n mutable?] :or {n 10}}]
+    (with-cells [{abc [:a :b :c]
+                  aef [:a :e :f]
+                  :as nested
+                  :cellfn (if mutable? ->mcell ->cell)}     nested-structure]
+      (do  (transient-cells [aef])
+           (dotimes [i n] 
+             (do (swap-cell! abc inc)
+                 (conj aef i)))
+           (persistent-cells! [aef])
+           (update-nested!))))
+
+  (defn simple-cell-example2 [& {:keys [n mutable?] :or {n 10}}]
+    (with-cells [{abc [:a :b :c]
+                  aef [:a :e :f]
+                  :as nested
+                  :cellfn (if mutable? ->mcell ->cell)}     nested-structure]
+      (with-transient-cells [aef]
+        (dotimes [i n] 
+          (do (swap-cell! abc inc)
+              (conj aef i))))
+      (update-nested!)))
+    
+
+;;Maybe something like this...
+(defcellular 
+  [stuff we want to work on]                 ;;where
+  [stuff we want to do with the stuff above] ;;how
+  [what we intend to return as a result]     ;;result
+  )
+                      
+
+  ;;we can probably come up with an idiom that works this way...
+  ;;in other words, get the places we want to work with, modify it, 
+  ;;then patch the updates back in.
+)
 
 
 (def merge-updates sim/merge-updates)
@@ -386,13 +517,15 @@
             
 (defmacro with-cells
   ""
-  [[symb path-map & {:keys [as] :or {as '*state*}}] & expr]
-  (let [state as
+  [[path-map symb] & expr]
+  (let [state    (get path-map :as '*state*)
+        cell-fn  (get path-map :cellfn 'marathon.sim.core/->cell)
+        path-map (->  path-map (dissoc :as) (dissoc :cellfn))
         update-state! (symbol (str "update-" state "!"))]
     `(let [~@(unpair (for [[s path] path-map]
                         [s `(let [res# (get-in ~symb ~path)]
-                              (->cell res#))]))
-           ~state (->cell (reduce-kv (fn [acc# s# p#] 
+                              (~cell-fn res#))]))
+           ~state (~cell-fn (reduce-kv (fn [acc# s# p#] 
                                (assoc-in-any acc# p# s#))
                           ~symb
                           ~path-map))

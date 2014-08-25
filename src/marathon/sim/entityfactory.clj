@@ -704,28 +704,61 @@
 
 (comment ;testing
   (require '[clojure.core.reducers :as r])
-  (def xs (vec (range 1000000)))
+  
+  (defn range-reducer [n]
+    (reify clojure.core.protocols.CollReduce 
+      (coll-reduce [coll f] 
+        (loop [idx 2
+               res (f 0 1)]
+          (if (or (== idx n) (reduced? res))
+            res
+            (recur (unchecked-inc idx)
+                   (f res idx)))))
+      (coll-reduce [coll f val]
+        (loop [idx 0
+               res val]
+          (if (or (== idx n) (reduced? res))
+            res
+            (recur (unchecked-inc idx)
+                   (f res idx)))))))
+
+  ;;much faster....more efficient.
+  (def xs (range-reducer 1000000))
+;  (def xs (vec (range 1000000)))
+
   (defn slow-test []
     (time (dotimes [i 1] 
-            (core/with-cells [dstore {dmap [:demandmap]} :as state] 
+            (core/with-cells [{dmap [:demandmap] 
+                               :as state}         dstore] 
               (let [newmap  (reduce (fn [acc n] (assoc acc n n)) dmap xs)] (update-state!))))))
 
   (defn fast-test []    
     (time (dotimes [i 1] 
-            (core/with-cells [dstore {dmap [:demandmap]} :as state] 
+            (core/with-cells [{dmap [:demandmap] 
+                               :as state}         dstore] 
               (let [newmap (core/reset-cell! dmap 
                               (persistent! 
                                (reduce (fn [acc n] (assoc! acc n n)) 
                                  (transient @dmap) xs)))] (update-state!))))))
 
+
+  ;;This costs us a bit, because we're not slamming directly on the transient.
+  (defn fast-test! []    
+    (time (dotimes [i 1] 
+            (core/with-cells [{dmap [:demandmap] 
+                               :as state}         dstore] 
+             (core/with-transient-cells [dmap]
+               (reduce (fn [acc n] (assoc acc n n)) 
+                       dmap  xs)) 
+             (update-state!)))))
+
   (defn add-demand [dstore demandname d]
-    (core/with-cells [dstore       
-                      {dmap          [:demandmap]
+    (core/with-cells [{dmap          [:demandmap]
                        activations   [:activations]
-                       deactivations [:deactivations]}
-                      :as state]
+                       deactivations [:deactivations]
+                       :as state}                     dstore]
       (do (assoc dmap demandname d)
-          (assoc activations (:startday d) demandname)
+          (assoc activations   (:startday d) demandname)
           (assoc deactivations (+ (:startday d) (:duration d)) demandname)
           (update-state!))))
 
@@ -752,33 +785,42 @@
 
   (defn test-demands [n] (r/map (fn [n] {:name n :startday n :duration  55}) (range n)))
   (defn add-demands! [dstore ds]
-    (core/with-cells [dstore {dmap          [:demandmap]
-                              activations   [:activations]
-                              deactivations [:deactivations]}
-                      :as state]
-      (do (core/transient-cells [dmap activations deactivations])
-          (reduce (fn [acc d] 
-                       (add-demand!!! dmap activations deactivations d))
-                     nil ds)
-          (core/persistent-cells! [dmap activations deactivations])
-          (update-state!))))
-
-  ;;nested cell defs also work fine.
-  (defn add-demands!! [dstore ds]
-    (core/with-cells [dstore {dmap          [:demandmap]
-                              activations   [:activations]
-                              deactivations [:deactivations]}
-                      :as state1]
-      (core/with-cells [state1 {dmap          [:demandmap]
-                               activations   [:activations]
-                               deactivations [:deactivations]}
-                        :as state2]                                 
-        (do (core/transient-cells [dmap activations deactivations])
+    (core/with-cells [{dmap          [:demandmap]
+                       activations   [:activations]
+                       deactivations [:deactivations]
+                       :as state}                      dstore] 
+      (do (core/with-transient-cells [dmap activations deactivations]
             (reduce (fn [acc d] 
                       (add-demand!!! dmap activations deactivations d))
                     nil ds)
-            (core/persistent-cells! [dmap activations deactivations])
-            (update-state2!)))))
+            (update-state!)))))
+
+  ;;nested cell defs also work fine.
+  (defn add-demands!! [dstore ds]
+    (core/with-cells [{dmap          [:demandmap]
+                       activations   [:activations]
+                       deactivations [:deactivations] 
+                       :as state1}              dstore]
+      (core/with-cells [{dmap          [:demandmap]
+                         activations   [:activations]
+                         deactivations [:deactivations]
+                         :as state2}            state1]                                 
+        (do (core/with-transient-cells [dmap activations deactivations]
+              (reduce (fn [acc d] 
+                        (add-demand!!! dmap activations deactivations d))
+                      nil ds)
+              (update-state2!))))))
+
+
+;;can we define a macro that uses the cell infrastructure? 
+;;i.e. a cell reducer?  or a cell transducer? 
+;;A lot of these update steps are consistent: 
+;;we acquire a temporary bit of cellular storage from the 
+;;context.
+;;We define operations that modify the storage.
+;;We compose these operations into storage updates 
+;;At the end of a storage update, we pack modified 
+;;storage into the persistent data structure.
 
   ;; (defn add-demand [dstore d]
   ;;   (add-demands! dstore [d]))
