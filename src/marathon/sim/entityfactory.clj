@@ -783,7 +783,7 @@
           (assoc  activations    start n)
           (assoc  deactivations  (+ start (get d :duration)) n))))
 
-  (defn test-demands [n] (r/map (fn [n] {:name n :startday n :duration  55}) (range n)))
+  (defn test-demands [n] (r/map (fn [n] {:name n :startday n :duration  55}) (range-reducer n)))
   (defn add-demands! [dstore ds]
     (core/with-cells [{dmap          [:demandmap]
                        activations   [:activations]

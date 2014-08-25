@@ -260,22 +260,34 @@
          (core/merge-updates {:policystore (policy/register-location dname policystore)})
          (schedule-demand demand newstore))))
 
-;; (defn register-demands! [xs ctx]
-;;   (core/with-cells [ctx {demandstore    [:state :demandstore]
-;;                          policystore    [:state :policystore]                         
-;;                          demands        [:state :demandstore :demandmap]
-;;                          demand-tags    [:state :demandstore :tags]}
-;;                     :as state]
-;;     (let [demand-count   (count demands)
-;;           new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
-;;         (reduce (fn [acc d]                  
-;;                   (let [dname    (get  demand :name)
-;;                         newstore (tag-demand demand (add-demand demandstore demand))]
-;;                     (->> (registering-demand! demand acc)         
-;;                          (policy/register-location dname policystore)
-;;                          (schedule-demand demand newstore))))
-;;                 ctx' xs)
-;;         (update-state))))
+;;efficiently register demands...This is a trial run of the new cells 
+;;API, to see what practical problems arise when we actually try to
+;;use it!
+(defn register-demands! [xs ctx]
+  (core/with-cells [{demandstore        [:state :demandstore]
+                     policystore        [:state :policystore]                         
+                     :as stores}        ctx']
+
+    (core/with-cells [{locations        [:locationmap] :as locs} policystore]
+
+      (core/with-cells [{demandtags     [:tags] 
+                         demands        [:state :demandstore :demandmap]
+                         demand-tags    [:state :demandstore :tags]
+                         :as dstore}     demandstore]
+
+        (let [demand-count   (count demands)
+              new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
+          (reduce (fn [acc d]                  
+                    (let [dname    (get  demand :name)
+                          newstore (tag-demand demand 
+                                      (add-demand dstore demand))]
+                      (->> (registering-demand! demand acc)         
+                           (policy/register-location dname policystore) ;;we care about locs here..
+                           (schedule-demand demand newstore))))
+                  ctx' xs)
+          (do (update-dstore!)
+              (update-locs!)
+              (update-ctx'!)))))))
         
                 
   
