@@ -294,7 +294,7 @@
   ;;Cleaner representation, allow multiple cells to be defined in a
   ;;single binding.
   (core/with-cells [{locations          [:state :policystore :locationmap]
-                     demandtags         [:state :demandstore :tags] 
+                     demandtags         [:state :demandstore :tags] ;this won't work well. 
                      demands            [:state :demandstore :demandmap]
                      :as txn}    ctx]
     (with-transient-cells [locations demandtags demands]
@@ -305,7 +305,7 @@
               (fn [acc d]                  
                 (let [dname    (core/entity-name  demand) ;;replace with entity-name
                       newstore (tag-demand demand 
-                                           (add-demand dstore demand))]
+                                 (add-demand dstore demand))]
                   (->> (registering-demand! demand acc)     ;;doesn't care.
                        (policy/register-location dname policystore) ;;this should still be fast.
                        (schedule-demand demand newstore)))) ctx)
