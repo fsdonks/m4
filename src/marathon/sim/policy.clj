@@ -244,6 +244,8 @@
 (defn register-location [locname policystore]
   (gen/deep-update policystore [:locationmap]  conj  locname)) 
 
+
+(comment 
 ;This sub helps us to keep track of demand and policy locations.
 ;Conjoins a location to the set of known locations...
 (defn register-location! 
@@ -252,11 +254,18 @@
   ([locname policystore-cell locs]
      (-> (get policystore-cell :locationmap)
          (conj  locname))))
+)
 
-(defn register-location! 
-  ([locname policystore-cell locs]
-     (-> (inside policystore-cell :locationmap)
-         (conj  locname))))
+;; (defn register-location! 
+;;   ([locname policystore-cell locs]
+;;      (inside policystore-cell :locationmap ;;I like that...
+;;              (conj  locname))))
+
+;; (defn register-location! 
+;;   ([locname policystore-cell locs]
+;;      (inside policystore-cell :locationmap ;;expands based on type.
+;;         (if (map? pstore) (gen/deep-update .... (conj  locname))
+
 
 
 ;Register multiple locations in the locs collection with the policystore.

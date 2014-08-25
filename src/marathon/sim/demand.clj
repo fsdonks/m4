@@ -290,6 +290,8 @@
 ;;At the very least, having an interface to call out high level 
 ;;mutation and push it to specific functions is nice....better than 
 ;;what was there...
+(comment 
+
 (defn register-demands! [xs ctx]
   ;;Cleaner representation, allow multiple cells to be defined in a
   ;;single binding.
@@ -310,7 +312,7 @@
                        (policy/register-location dname policystore) ;;this should still be fast.
                        (schedule-demand demand newstore)))) ctx)
              (update-txn!))))))
-
+)
 
 ;; ;;Alternate formulation
 ;; (deftransaction register-demands! {dstore    [:state :demandstore]
