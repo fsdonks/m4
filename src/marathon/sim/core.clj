@@ -25,6 +25,7 @@
                         [general :as gen]
                         [tags :as tag]
                         [table :as tbl]]
+            [spork.entitysystem.store]
             [spork.sim.simcontext :as sim]
             [marathon.data.simstate :as simstate]))
 
@@ -99,6 +100,13 @@
                             (throw (Exception. (str "Unknown path " p))))]))]
        ~@expr)))
 
+
+
+;;#Protocols 
+;;Alias for entity protocol.  Helps us unify name access.
+(def entity-name spork.entitysystem.store/entity-name)
+
+  
 
 ;;#Operations for working with mutable references
 ;;particularly working with pieces of state in a nested associative

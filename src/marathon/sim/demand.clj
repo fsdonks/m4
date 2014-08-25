@@ -264,31 +264,120 @@
 ;;API, to see what practical problems arise when we actually try to
 ;;use it!
 (defn register-demands! [xs ctx]
+  ;;Cleaner representation, allow multiple cells to be defined in a
+  ;;single binding.
   (core/with-cells [{demandstore        [:state :demandstore]
                      policystore        [:state :policystore]                         
-                     :as stores}        ctx']
+                     :as stores}        ctx'
 
-    (core/with-cells [{locations        [:locationmap] :as locs} policystore]
+                    {locations          [:locationmap] :as locs} policystore
 
-      (core/with-cells [{demandtags     [:tags] 
-                         demands        [:state :demandstore :demandmap]
-                         demand-tags    [:state :demandstore :tags]
-                         :as dstore}     demandstore]
+                    {demandtags         [:tags] 
+                     demands            [:state :demandstore :demandmap]
+                     demand-tags        [:state :demandstore :tags]
+                     :as dstore}     demandstore]
+    (let [demand-count   (count demands)
+          new-idx        (+ (or (:demandstart (:parameters ctx)) 0) demand-count)]
+      (reduce (fn [acc d]                  
+                (let [dname    (core/entity-name  demand) ;;replace with entity-name
+                      newstore (tag-demand demand 
+                                           (add-demand dstore demand))]
+                  (->> (registering-demand! demand acc)         
+                       (policy/register-location dname policystore) ;;we care about locs here..
+                       (schedule-demand demand newstore))))
+              ctx xs)
+      (do (update-dstore!)
+          (update-locs!)
+          (update-ctx'!)))))
 
-        (let [demand-count   (count demands)
-              new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
-          (reduce (fn [acc d]                  
-                    (let [dname    (get  demand :name)
-                          newstore (tag-demand demand 
-                                      (add-demand dstore demand))]
-                      (->> (registering-demand! demand acc)         
-                           (policy/register-location dname policystore) ;;we care about locs here..
-                           (schedule-demand demand newstore))))
-                  ctx' xs)
-          (do (update-dstore!)
-              (update-locs!)
-              (update-ctx'!)))))))
+;; ;;Alternate formulation
+;; (deftransaction register-demands! {dstore    [:state :demandstore]
+;;                                    pstore    [:state :policystore]
+;;                                    locations {pstore [:locationmap]}
+;;                                    demandtags {dstore [:tags]}
+;;                                    demands    {dstore [:demands]}}
+;;   ...) 
+
+
+;; ;;even better....
+;; (transaction
+;;  register-demands! [{:resources [dstore pstore locations demandtags demands] 
+;;                      :or {dstore [:state :demandstore]
+;;                           pstore [:state :policystore]
+;;                           locations {pstore [:locationmap]}
+;;                           demandtags {dstore [:tags]}
+;;                           demands    {dstore [:demands]}} :as resources}]
+;;  ....do work 
+;;  (update-resources!))
+
+
+
+  
+                                   
+                                               
+                                   
         
+
+;;another way to look at this guy is that we're modifying disparate
+;;domains via a transaction.  Specifically, we're working on multiple
+;;things simultaneously.
+
+;;Maybe we create a transactional system that understands how to
+;;provide mutable references for processing "inside" the transaction.
+;;This is like STM....transactions expect to have access to 
+;;resources so they can do their jobs.  So we can provide a 
+;;transactional context, to decouple the "storage" of stuff from 
+;;the processing of stuff.  This is close to how the entity system 
+;;decouples component data from how that data is operated on in 
+;;systems.
+
+;;In an ideal world, we'd really just love to have a flat map of 
+;;resources, or bindings, that form the local transactional context.
+;;Given that, we can drastically simplify the operations...i.e. 
+;;a transactional function operates on a map and returns a map.
+;;What can transactions do? 
+;;  Some times we want to add resources to the transaction, i.e.
+;;  establish a handle to them for bulk-loading or more efficient 
+;;  processing (via mutation).  Maybe we just don't want to pay 
+;;  the lookup cost over and over again.  
+;;  These resources should be shared within a transaction....;
+;;  In other words, we allow transactions to a) bind resources 
+;;  to the transactional context, b) fetch resources from 
+;;  the transactional context, and c) commit resources to the 
+;;  transactional context. 
+
+;;  Under this paradigm, we spend time defining "where" resources 
+;;  are, and "how" to acquire them -> the current example is 
+;;  using the cells methodolgy to establish resource paths in 
+;;  nested maps.  This is a clean divide between acquiring and 
+;;  freeing resources...
+
+;;  Transactions can "assume" they have access to everything 
+;;  they need, along with facilities for altering the transactional 
+;;  context.  When this assumption is violated, we can bomb out 
+;;  with an error.  This is akin to a transactional contract.
+
+;;#simple contract, but gets us away from simple, focused computation.
+;;  Thus, transactional functions operate without any consideration 
+;;  of how the resources are managed.  They retain the pure functional
+;;  aspect of the current design.  We know what the "input" contract
+;;  is explicitly:  transactional functions request specific resources 
+;;  from the context, and if those do not exist, they bomb.
+
+;;  What about the output contract?  What should a transactional 
+;;  function "return"?  Perhaps a sequence of effects, if any?  
+;;  At the very least, it needs to return the transactional 
+;;  context.  This lets us define a monadic setting for operating 
+;;  on this stuff.  It also keeps the interface uniform, akin to 
+;;  the state monad.  Transactors take a context, and other args, 
+;;  and return the context.  This is pretty consistent with the 
+;;  majority of our functions that operate on simstate, but 
+;;  small auxillary functions are - currently - at a loss.
+;;  The aux functions like those in sim.demand, expect to 
+;;  operate on demandstore's for the most part, or policystores.
+;;  We can (and do) pack that into the transactional context.
+;;  However, 
+
                 
   
 
