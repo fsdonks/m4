@@ -28,7 +28,7 @@
             [spork.entitysystem.store]
             [spork.sim.simcontext :as sim]
             [marathon.data.simstate :as simstate]
-            [clojure.core.reducers]))
+            [clojure.core.reducers :as r]))
 
 ;;Possible use of dynamic context for later....
 ;;Dunno if I want to do this yet..
@@ -778,11 +778,8 @@
 (definline empty-string? [x] `(= ~x ""))
 (defn debug-print [msg obj] (do (println msg) obj))
 (defn as-records [record-source]
-  (if (and (seq? record-source) (map? (first record-source))) record-source
+  (if (and (seq? record-source) (map? (first record-source))) record-source      
       (tbl/record-seq record-source)))
-
-
-
 
 (let [idx (atom 0)]
   (defn next-idx 
@@ -801,8 +798,16 @@
 ;;These haven't made it into clojure.core yet, they probably will in
 ;;1.7  .  I hacked together a couple of useful ones, like range.
 (in-ns 'clojure.core.reducers)
+
+;;we're going to add in iterate, range, and friends
+
+(doseq [s    '[range
+               iterate
+               map-indexed]]
+  (ns-unmap *ns* s))  
+
 ;;Reducers patch for Clojure courtesy of Alan Malloy, CLJ-992, Eclipse Public License
-(defcurried iterate-r
+(defcurried iterate
   "A reducible collection of [seed, (f seed), (f (f seed)), ...]"
   {:added "1.5"}
   [f seed]
@@ -820,7 +825,7 @@
     (seq [this]
       (seq (clojure.core/iterate f seed)))))
 
-  (defn range-r 
+  (defn range
     "Creates a reducible sequence of numbers, ala core/range, except 
      there is no intermediate collection to muck with."
     ([lower n]
@@ -840,15 +845,16 @@
             (recur (unchecked-inc idx)
                    (f res idx)))))
          clojure.lang.Seqable ;;good idea...saw this from patch CLJ992
-         (seq [this]  (range lower n))))
-    ([n] (range-r 0 n)))
+         (seq [this]  (clojure.core/range lower n))))
+    ([n] (range 0 n)))
 
-    (defn map-indexed-r 
+    (defn map-indexed
       "Creates a reducer analogue to core/map-indexed"
       [f r] 
       (let [idx (atom 0)]
         (map (fn [x] 
-               (f (swap! idx inc) x))  r)))
+               (f (swap! idx inc) x))  r)))     
+
 (in-ns 'marathon.sim.core)
 
 ;;##Developer Notes

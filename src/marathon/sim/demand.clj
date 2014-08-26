@@ -253,13 +253,6 @@
                  (add-activation   startday name )
                  (add-deactivation endday name))}))))
 
-(defn register-demand [demand demandstore policystore ctx]
-  (let [dname    (:name demand)
-        newstore (tag-demand demand (add-demand demandstore demand))]
-    (->> (registering-demand! demand ctx)         
-         (core/merge-updates {:policystore (policy/register-location dname policystore)})
-         (schedule-demand demand newstore))))
-
 
 ;;Maybe we make this reaallllly simple and focused.  WE only use this 
 ;;when it makes sense for bulk updates.  There should be a few
@@ -292,28 +285,83 @@
 ;;what was there...
 ;(comment) 
 
-(defn register-demands! [xs ctx]
-  ;;Cleaner representation, allow multiple cells to be defined in a
-  ;;single binding.
-  (core/with-cells [{locations     [:state :policystore :locationmap]
-                     demandtags    [:state :demandstore :tags]  
-                     demands       [:state :demandstore :demandmap]
-                     :as txn}    ctx]
-    (update-txn!
-     (core/with-transient-cells [locations demandtags demands]
-       (let [policystore    (core/get-policystore txn) ;has mutable cells inside txn
-             dstore         (core/get-demandstore txn) ;has mutable cells inside txn
-             ]
-         (->> xs
-              (reduce 
-               (fn [acc demand]                  
-                 (let [demand   (ensure-name demand demands)
-                       dname    (core/entity-name   demand) ;;replace with entity-name                      
-                       newstore (tag-demand demand (add-demand dstore demand))
-                       _        (policy/register-location dname policystore)]
-                   (->> (registering-demand! demand acc)     ;;doesn't care.                       
-                        ;;this should still be fast.  Alternately just modify locs directly...
-                        (schedule-demand demand newstore)))) txn)))))))
+(defn register-demand! [ctx demand demands dstore pstore]
+  (let [demand   (core/ensure-name demand demands)
+        dname    (core/entity-name   demand) ;;replace with entity-name                      
+        newstore (tag-demand demand (add-demand dstore demand))
+        _        (policy/register-location dname pstore)]
+    (->> (registering-demand! demand ctx)     ;;doesn't care.                       
+         ;;this should still be fast.  Alternately just modify locs directly...
+         (schedule-demand demand newstore))))
+
+;; (defn register-demand [ctx demand dstore pstore]
+;;   (let [demand   (core/ensure-name demand demands)
+;;         dname    (core/entity-name   demand) ;;replace with entity-name                      
+;;         newstore (tag-demand demand (add-demand dstore demand))
+;;         _        (policy/register-location dname pstore)]
+;;     (->> (registering-demand! demand acc)     ;;doesn't care.                       
+;;          ;;this should still be fast.  Alternately just modify locs directly...
+;;          (schedule-demand demand newstore))))
+  
+;; (defn register-demands! [xs ctx]
+;;   ;;Cleaner representation, allow multiple cells to be defined in a
+;;   ;;single binding.
+;;   (core/with-cells [{locations     [:state :policystore :locationmap]
+;;                      demandtags    [:state :demandstore :tags]  
+;;                      demands       [:state :demandstore :demandmap]
+;;                      :as txn}    ctx]
+;;     (update-txn!
+;;      (core/with-transient-cells [locations demandtags demands]
+;;        (let [policystore    (core/get-policystore txn) ;has mutable cells inside txn
+;;              dstore         (core/get-demandstore txn) ;has mutable cells inside txn
+;;              ]
+;;          (->> xs
+;;               (reduce 
+;;                (fn [acc demand]                  
+;;                  (let [demand   (core/ensure-name demand demands)
+;;                        dname    (core/entity-name   demand) ;;replace with entity-name                      
+;;                        newstore (tag-demand demand (add-demand dstore demand))
+;;                        _        (policy/register-location dname policystore)]
+;;                    (->> (registering-demand! demand acc)     ;;doesn't care.                       
+;;                         ;;this should still be fast.  Alternately just modify locs directly...
+;;                         (schedule-demand demand newstore)))) txn)))))))
+
+(defn register-demands! 
+  ([register-f xs ctx]
+     ;;Cleaner representation, allow multiple cells to be defined in a
+     ;;single binding.
+     (core/with-cells [{locations     [:state :policystore :locationmap]
+                        demandtags    [:state :demandstore :tags]  
+                        demands       [:state :demandstore :demandmap]
+                        :as txn}    ctx]
+       (update-txn!
+        (core/with-transient-cells [locations demandtags demands]
+          (let [pstore    (core/get-policystore txn) ;has mutable cells inside txn
+                dstore    (core/get-demandstore txn) ;has mutable cells inside txn
+                ]
+            (->> xs
+                 (reduce 
+                  (fn [acc demand]                  
+                    (register-f (register-demand! acc demand demands dstore pstore) demand)) txn)))))))
+  ([xs ctx] (register-demands! identity)))
+
+;;Non-mutable version...
+(defn register-demand 
+  ([demand demandstore policystore ctx]
+     (let [dname    (:name demand)
+           newstore (tag-demand demand (add-demand demandstore demand))]
+       (->> (registering-demand! demand ctx)         
+            (core/merge-updates {:policystore (policy/register-location dname policystore)})
+            (schedule-demand demand newstore))))
+  ([demand ctx] (register-demand demand (core/get-demandstore ctx)
+                                 (core/get-policystore ctx) ctx)))
+;;cop-out, see if it's faster...
+(comment
+  (defn register-demand  [demand ctx] (register-demands! [demand] ctx))
+)
+
+
+
 
 ;; ;;Alternate formulation
 ;; (deftransaction register-demands! {dstore    [:state :demandstore]

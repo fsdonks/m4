@@ -145,6 +145,9 @@
   (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
                  SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup))
 
+
+;;#Optimization: we can use reducers here instead of seqs.
+
 ;;Returns a set of demand data, derived from recs, with 
 ;;duplicate records attached as meta data.
 (defn demands-from-records [recs ctx]  
@@ -168,7 +171,6 @@
 (defn initialized-demand! [ctx d]
   (let [msg (core/msg  "Demand " (:name d) " Initialized")]
     (sim/trigger-event :Intialize :DemandStore :DemandStore msg nil ctx)))
-  
 
 ;;Do we need to worry about naming here? 
 ;;Seems like associate-demand could be done inside demand ops...
@@ -182,33 +184,24 @@
      (let [rs    (demands-from-records (core/as-records record-source) ctx)
            dupes (get (meta rs) :duplicates)]
        (->> (reduce (fn [acc d] 
-                      (initialized-demand! 
-                         (associate-demand acc d) d))
+                      (initialized-demand!                        
+                         (demand/register-demand d acc) d))
                     ctx rs)
             (notify-duplicate-demands! dupes))))
   ([record-source demandstore ctx] 
      (load-demands record-source (core/set-demandstore ctx demandstore))))
 
-;; (defn load-demands! 
-;;   ([record-source ctx]
-;;      (let [rs    (demands-from-records (core/as-records record-source) ctx)
-;;            dupes (get (meta rs) :duplicates)]
-;;        (core/with-cells [ctx {dstore  [:demandstore]
-;;                               pstore  [:policystore]
-;;                               locs    [:policystore :locations]
-;;                               demands [:demandstore :demandmap]}
-;;                          :as ctx!]
-;;          (do (core/transient-cells [dstore pstore locs])
-;;              (->> (reduce (fn [acc d] 
-;;                             (initialized-demand! 
-;;                              (associate-demand acc d) d))
-;;                           ctx! rs)
-;;                   (notify-duplicate-demands! dupes))
-;;              (core/persistent-cells! [dstore pstore locs])
-;;             (update-ctx))))))
-  
-
-
+(defn load-demands! 
+  ([record-source ctx]
+     (let [rs    (demands-from-records (core/as-records record-source) ctx)
+           dupes (get (meta rs) :duplicates)]
+       (->> ctx
+            (demand/register-demands! 
+             (fn [d acc] 
+               (initialized-demand! d acc))  rs)             
+            (notify-duplicate-demands! dupes))))
+  ([record-source demandstore ctx] 
+     (load-demands record-source (core/set-demandstore ctx demandstore))))
 
 ;;It would be soooooo much easier if we could just define a way to
 ;;temporarily cloak nested locations as transients.  The biggest 
@@ -657,7 +650,7 @@
   (def first-demand (first ds))
   (def tstart   (:startday first-demand))
   (def tfinal   (+ tstart (:duration first-demand)))
-  (def res      (associate-demand testctx first-demand))
+  (def res      (demand/register-demand  first-demand testctx))
   (def dstore   (core/get-demandstore res))
   (deftest scheduled-demand-correctly 
     (is (= ((juxt  :startday :duration) first-demand)
@@ -676,26 +669,9 @@
 
 (comment ;testing
   (require '[clojure.core.reducers :as r])
-  
-  (defn range-reducer [n]
-    (reify clojure.core.protocols.CollReduce 
-      (coll-reduce [coll f] 
-        (loop [idx 2
-               res (f 0 1)]
-          (if (or (== idx n) (reduced? res))
-            res
-            (recur (unchecked-inc idx)
-                   (f res idx)))))
-      (coll-reduce [coll f val]
-        (loop [idx 0
-               res val]
-          (if (or (== idx n) (reduced? res))
-            res
-            (recur (unchecked-inc idx)
-                   (f res idx)))))))
 
   ;;much faster....more efficient.
-  (def xs (range-reducer 1000000))
+  (def xs (r/range 1000000))
 ;  (def xs (vec (range 1000000)))
 
   (defn slow-test []
