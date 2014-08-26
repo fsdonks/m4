@@ -292,6 +292,12 @@
 ;;what was there...
 ;(comment) 
 
+(defn ensure-name [named names]                  
+  (if (contains? names (:name demand))
+    (assoc demand :name 
+           (core/msg (:name demand) "_" (count names)))
+    demand))
+
 (defn register-demands! [xs ctx]
   ;;Cleaner representation, allow multiple cells to be defined in a
   ;;single binding.
@@ -301,23 +307,19 @@
                      :as txn}    ctx]
     (update-txn!
      (core/with-transient-cells [locations demandtags demands]
-       (let [demand-count   (count demands)
-             new-idx        (+ (or (:demandstart (:parameters ctx)) 0) demand-count)
-             policystore    (core/get-policystore txn)
-             dstore         (core/get-demandstore txn)
+       (let [policystore    (core/get-policystore txn) ;has mutable cells inside txn
+             dstore         (core/get-demandstore txn) ;has mutable cells inside txn
              ]
          (->> xs
               (reduce 
                (fn [acc demand]                  
-                 (let [dname    (core/entity-name  demand) ;;replace with entity-name                      
-                       newstore (tag-demand demand 
-                                            (add-demand dstore demand))
-                       _        (policy/register-location dname policystore)
-                       _ (println dname )]
+                 (let [demand   (ensure-name demand demands)
+                       dname    (core/entity-name   demand) ;;replace with entity-name                      
+                       newstore (tag-demand demand (add-demand dstore demand))
+                       _        (policy/register-location dname policystore)]
                    (->> (registering-demand! demand acc)     ;;doesn't care.                       
                         ;;this should still be fast.  Alternately just modify locs directly...
                         (schedule-demand demand newstore)))) txn)))))))
-
 
 ;; ;;Alternate formulation
 ;; (deftransaction register-demands! {dstore    [:state :demandstore]

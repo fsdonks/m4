@@ -172,46 +172,47 @@
 
 ;;#Testing cell usage...
 
+(defn ensure-name [named names name-count]                  
+  (if (contains? names (:name demand))
+    (assoc demand :name 
+           (core/msg (:name demand) "_" (inc name-count)))
+    demand))
+
+
+;;Do we need to worry about naming here? 
+;;Seems like associate-demand could be done inside demand ops...
+
 ;;Updates the demand index according to the contents of 
 ;;demandmanager, providing unique names for duplicate 
 ;;demands.  Threads the demand through the context 
 ;;and returns the resulting context.
 (defn associate-demand 
-  [ctx demand]
+  [ctx xs]
   (core/with-simstate [[parameters demandstore policystore] ctx]    
     (let [demands        (:demandmap demandstore)
           demand-count   (count demands)
           new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
-      (-> (if (contains? demands (:name demand))
-            (assoc demand :name 
-                   (str (:name demand) "_" (inc demand-count)))
-            demand)                     
+      (-> (r/map (fn [d] (ensure-name demands demand-count)                     
           (assoc :index new-idx)
           (demand/register-demand demandstore policystore ctx)))))
 
-;; (defn ensure-name [named names name-count]                  
-;;   (if (contains? names (:name demand))
-;;     (assoc demand :name 
-;;            (core/msg (:name demand) "_" (inc name-count)))
-;;     demand))
-
-;; (defn associate-demands 
-;;   [ctx xs]
-;;   (core/with-simstate [[parameters] ctx] 
-;;     (core/with-cells [ctx {demandstore [:state :demandstore]
-;;                            policystore [:state :policystore]}
-;;                       :as ctx']
-;;       (let [demands        (:demandmap demandstore)
-;;             demand-count   (count demands)
-;;             new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
-;;         (demand/register-demands! demandstore policystore ctx)))))
+(defn associate-demands! 
+  [ctx xs]
+  (core/with-simstate [[parameters] ctx] 
+    (core/with-cells [{demandstore [:state :demandstore]
+                       policystore [:state :policystore] :as txn} ctx]
+      (let [demands        (:demandmap demandstore)
+            demand-count   (count demands)
+            new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
+        (demand/register-demands! demandstore policystore ctx)))))
 
 (defn load-demands 
   ([record-source ctx]
      (let [rs    (demands-from-records (core/as-records record-source) ctx)
            dupes (get (meta rs) :duplicates)]
        (->> (reduce (fn [acc d] 
-                      (initialized-demand! (associate-demand acc d) d))
+                      (initialized-demand! 
+                         (associate-demand acc d) d))
                     ctx rs)
             (notify-duplicate-demands! dupes))))
   ([record-source demandstore ctx] 

@@ -372,6 +372,11 @@
   (untag-subject [store tag subject]  (do (set! contents (tag/untag-subject contents tag subject)) store)))
 
 (defn inc! [^clojure.lang.Atom x] (swap! x inc))
+(defn ->counter 
+  ([n] (atom n))
+  ([]  (atom 0)))
+
+
 (defn altered? [c] (get-altered c))
 
 ;;Allows us to see cells transparently.
@@ -552,11 +557,12 @@
 
 
 (defn update-cells [m cell-paths]
-  (reduce (fn [acc [cell path]]
+  (reduce (fn [acc [cell path]]            
             (if (altered? cell)
-              (assoc-in-any m path @cell)
-              acc))
+                (assoc-in-any acc path @cell)
+                acc))
           m cell-paths)) 
+
 (defn create-cells 
   [m path-map]
   (reduce-kv 
@@ -578,9 +584,9 @@
            ~state (reduce-kv (fn [acc# s# p#] 
                                (assoc-in-any acc# p# s#))
                              ~symb
-                             ~path-map)
-           ~update-state! (fn ([]   (update-cells ~state ~path-map))
-                             ([m#] (update-cells  m# ~path-map)))]
+                             ~path-map) ;;packs the path...
+           ~update-state! (fn  ([]   (update-cells ~state ~path-map))
+                               ([m#] (update-cells  m# ~path-map)))]
        ~@expr)))
 
 (comment ;testing
@@ -754,6 +760,15 @@
 (defmacro defkey [name base] `(def ~name (key-tag-maker ~base)))
 
 ;;#Utils
+(defn ensure-name
+  "We tend to prefer unique names, and often times we accomplish that by concatenating the 
+   count of a container onto a non-unique name.  ensure-names generalizes this stuff."
+  [named names]                  
+  (if (contains? names (:name demand))
+    (assoc demand :name 
+           (core/msg (:name demand) "_" (count names)))
+    demand))
+
 (definline empty-string? [x] `(= ~x ""))
 (defn debug-print [msg obj] (do (println msg) obj))
 (defn as-records [record-source]
