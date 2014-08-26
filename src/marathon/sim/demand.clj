@@ -253,7 +253,6 @@
                  (add-activation   startday name )
                  (add-deactivation endday name))}))))
 
-
 ;;Maybe we make this reaallllly simple and focused.  WE only use this 
 ;;when it makes sense for bulk updates.  There should be a few
 ;;hotspots where we're doing bulk updates (particularly updating
@@ -292,39 +291,7 @@
         _        (policy/register-location dname pstore)]
     (->> (registering-demand! demand ctx)     ;;doesn't care.                       
          ;;this should still be fast.  Alternately just modify locs directly...
-         (schedule-demand demand newstore))))
-
-;; (defn register-demand [ctx demand dstore pstore]
-;;   (let [demand   (core/ensure-name demand demands)
-;;         dname    (core/entity-name   demand) ;;replace with entity-name                      
-;;         newstore (tag-demand demand (add-demand dstore demand))
-;;         _        (policy/register-location dname pstore)]
-;;     (->> (registering-demand! demand acc)     ;;doesn't care.                       
-;;          ;;this should still be fast.  Alternately just modify locs directly...
-;;          (schedule-demand demand newstore))))
-  
-;; (defn register-demands! [xs ctx]
-;;   ;;Cleaner representation, allow multiple cells to be defined in a
-;;   ;;single binding.
-;;   (core/with-cells [{locations     [:state :policystore :locationmap]
-;;                      demandtags    [:state :demandstore :tags]  
-;;                      demands       [:state :demandstore :demandmap]
-;;                      :as txn}    ctx]
-;;     (update-txn!
-;;      (core/with-transient-cells [locations demandtags demands]
-;;        (let [policystore    (core/get-policystore txn) ;has mutable cells inside txn
-;;              dstore         (core/get-demandstore txn) ;has mutable cells inside txn
-;;              ]
-;;          (->> xs
-;;               (reduce 
-;;                (fn [acc demand]                  
-;;                  (let [demand   (core/ensure-name demand demands)
-;;                        dname    (core/entity-name   demand) ;;replace with entity-name                      
-;;                        newstore (tag-demand demand (add-demand dstore demand))
-;;                        _        (policy/register-location dname policystore)]
-;;                    (->> (registering-demand! demand acc)     ;;doesn't care.                       
-;;                         ;;this should still be fast.  Alternately just modify locs directly...
-;;                         (schedule-demand demand newstore)))) txn)))))))
+         (schedule-demand demand newstore))))  
 
 (defn register-demands! 
   ([register-f xs ctx]
@@ -337,13 +304,12 @@
        (update-txn!
         (core/with-transient-cells [locations demandtags demands]
           (let [pstore    (core/get-policystore txn) ;has mutable cells inside txn
-                dstore    (core/get-demandstore txn) ;has mutable cells inside txn
+                dstore    (core/get-demandstore txn) ;has mutable cells inside txn                
                 ]
-            (->> xs
-                 (reduce 
-                  (fn [acc demand]                  
-                    (register-f (register-demand! acc demand demands dstore pstore) demand)) txn)))))))
-  ([xs ctx] (register-demands! identity)))
+          (reduce  (fn [acc demand]                     
+                     (-> (register-demand! acc demand demands dstore pstore)
+                         (register-f  demand))) txn xs))))))
+  ([xs ctx] (register-demands! (fn [ctx d] ctx) xs ctx)))
 
 ;;Non-mutable version...
 (defn register-demand 

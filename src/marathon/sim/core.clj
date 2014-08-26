@@ -106,9 +106,9 @@
 ;;#Protocols 
 ;;Alias for entity protocol.  Helps us unify name access.
 (defn entity-name [x]
-  (if (satisfies? spork.entitysystem.store/IEntity x)
-    (spork.entitysystem.store/entity-name x)
-    (get x :name)))  
+  ;; (if (satisfies? spork.entitysystem.store/IEntity x)
+  ;;   (spork.entitysystem.store/entity-name x)
+    (get x :name))
 
 ;;#Operations for working with mutable references
 ;;particularly working with pieces of state in a nested associative
@@ -147,6 +147,9 @@
    (if ks
      (assoc-any m k (apply update-in-any (get m k) ks f args))
      (assoc-any m k (apply f (get m k) args)))))
+
+(definline contains-any? [m k]
+    `(not (identical? (get ~m ~k :not-found) :not-found)))
 
 
 ;;#still working on api for mutating transactions...
@@ -241,13 +244,13 @@
   (valAt [this k not-found] (get @contents k not-found))  
   clojure.lang.IPersistentMap
   (assoc [this k v]    (do (swap! contents assoc-any k v) this))
-  (equals [this o] (or (identical? @contents o) (= @contents o)))  
+  (equals [this o]     (or (identical? @contents o) (= @contents o)))  
   ;containsKey implements (contains? pm k) behavior
-  (containsKey [this k] (.containsKey  ^clojure.lang.IPersistentMap @contents k))
-  (entryAt [this k]     (.entryAt ^clojure.lang.IPersistentMap @contents k))
+  (containsKey [this k] (contains-any?  @contents k))
+  (entryAt [this k]     (throw (Exception. "Unsupported op .entryAt on cells")))
   ;without implements (dissoc pm k) behavior
-  (without [this k] (let [^clojure.lang.IPersistentMap m @contents]
-                      (do (reset! contents (.without m k))
+  (without [this k] (let [m @contents]
+                      (do (reset! contents (dissoc-any m k))
                           this))) 
   clojure.lang.IFn
   ;makes lex map usable as a function
@@ -330,12 +333,11 @@
   (assoc [this k v]    (do (set! contents (assoc-any contents k v)) this))
   (equals [this o] (or (identical? contents o) (= contents o)))  
   ;containsKey implements (contains? pm k) behavior
-  (containsKey [this k] (.containsKey  ^clojure.lang.IPersistentMap contents k))
-  (entryAt [this k]     (.entryAt ^clojure.lang.IPersistentMap contents k))
+  (containsKey [this k] (contains-any? contents k))
+  (entryAt [this k]     (throw (Exception. "Unsupported op .entryAt on mcell" )))
   ;without implements (dissoc pm k) behavior
-  (without [this k] (let [^clojure.lang.IPersistentMap m contents]
-                      (do (set! contents (.without m k))
-                          this))) 
+  (without [this k]  (do (set! contents (dissoc-any contents k))
+                         this)) 
   clojure.lang.IFn
   ;makes lex map usable as a function
   (invoke [this k] (get contents k))
@@ -419,6 +421,9 @@
          res# ~@expr
          ~'_ (persistent-cells! ~symbs)]
      res#))
+
+;; (defmacro with-transient-updates [ctx & expr]
+;;   (with-cells [{updater [:updater 
 
 (comment ;examples using cells and not...
   (def nested-structure {:a {:b {:c 2}
