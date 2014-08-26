@@ -104,7 +104,10 @@
 
 ;;#Protocols 
 ;;Alias for entity protocol.  Helps us unify name access.
-(def entity-name spork.entitysystem.store/entity-name)  
+(defn entity-name [x]
+  (if (satisfies? spork.entitysystem.store/IEntity x)
+    (spork.entitysystem.store/entity-name x)
+    (get x :name)))  
 
 ;;#Operations for working with mutable references
 ;;particularly working with pieces of state in a nested associative
@@ -276,7 +279,16 @@
   (swap-cell!  [c f x]   (do  (swap! contents f x)  c))
   (swap-cell!  [c f x y] (do  (swap! contents f x y)  c))
   (swap-cell!  [c f x y & args] (do  (apply swap! contents f x y args)  c))
-  (reset-cell! [c v] (do (reset! contents v) c)))
+  (reset-cell! [c v] (do (reset! contents v) c))
+  spork.util.tags.ITagStore
+  (get-tags [store subject]  (tag/get-tags @contents subject))
+  (get-subjects [store tag]  (tag/get-subjects @contents tag))
+  (add-tag [store tag] (do (swap! contents tag/add-tag tag) store))
+  (add-subject [store subject] (do (swap! contents tag/add-subject subject) store))
+  (drop-tag [store tag]  (do (swap! contents tag/drop-tag tag) store))
+  (drop-subject [store subject] (do (swap! contents tag/drop-subject subject) store))
+  (tag-subject [store tag subject] (do (swap! contents tag/tag-subject tag subject) store))
+  (untag-subject [store tag subject]  (do (swap! contents tag/untag-subject tag subject) store)))
 
 (deftype mcell [^:unsynchronized-mutable contents origin]
   IAlterable 
@@ -348,7 +360,16 @@
   (swap-cell! [c f x]   (do  (set! contents (f contents x))  c))
   (swap-cell! [c f x y] (do  (set! contents (f contents x y))  c))
   (swap-cell! [c f x y & args] (do  (set! contents (apply f contents x y args))  c))
-  (reset-cell! [c v] (do (set! contents v) c)))
+  (reset-cell! [c v] (do (set! contents v) c))
+  spork.util.tags.ITagStore
+  (get-tags [store subject]  (tag/get-tags contents subject))
+  (get-subjects [store tag]  (tag/get-subjects contents tag))
+  (add-tag [store tag] (do (set! contents (tag/add-tag contents tag)) store))
+  (add-subject [store subject] (do (set! contents (tag/add-subject contents subject)) store))
+  (drop-tag [store tag]  (do (set! contents (tag/drop-tag contents tag)) store))
+  (drop-subject [store subject] (do (set! contents (tag/drop-subject contents subject)) store))
+  (tag-subject [store tag subject] (do (set! contents (tag/tag-subject contents tag subject)) store))
+  (untag-subject [store tag subject]  (do (set! contents (tag/untag-subject contents tag subject)) store)))
 
 (defn inc! [^clojure.lang.Atom x] (swap! x inc))
 (defn altered? [c] (get-altered c))
@@ -388,9 +409,10 @@
     (swap-cell! x persistent!)))
 
 (defmacro with-transient-cells [symbs & expr] 
-  `(do (transient-cells ~symbs)
-       ~@expr
-       (persistent-cells! ~symbs)))
+  `(let [~'_ (transient-cells ~symbs)
+         res# ~@expr
+         ~'_ (persistent-cells! ~symbs)]
+     res#))
 
 (comment ;examples using cells and not...
   (def nested-structure {:a {:b {:c 2}
@@ -553,11 +575,12 @@
     `(let [~@(unpair (for [[s path] path-map]
                         [s `(let [res# (get-in ~symb ~path)]
                               (~cell-fn res#))]))
-           ~state (~cell-fn (reduce-kv (fn [acc# s# p#] 
+           ~state (reduce-kv (fn [acc# s# p#] 
                                (assoc-in-any acc# p# s#))
-                          ~symb
-                          ~path-map))
-           ~update-state! (fn [] (deref (update-cells ~state ~path-map)))]
+                             ~symb
+                             ~path-map)
+           ~update-state! (fn ([]   (update-cells ~state ~path-map))
+                             ([m#] (update-cells  m# ~path-map)))]
        ~@expr)))
 
 (comment ;testing

@@ -70,7 +70,7 @@
           :activations {}
           :active-demands {}
           :fillables {}
-          :tags (tag/tag-subject (tag/empty-tags) :Sinks)}))
+          :tags (tag/add-tag tag/empty-tags :Sinks)}))
 
 ;;__TODO__ Possibly move unit-related functionality to supply/unit simulations..
 
@@ -290,29 +290,34 @@
 ;;At the very least, having an interface to call out high level 
 ;;mutation and push it to specific functions is nice....better than 
 ;;what was there...
-(comment 
+;(comment) 
 
 (defn register-demands! [xs ctx]
   ;;Cleaner representation, allow multiple cells to be defined in a
   ;;single binding.
-  (core/with-cells [{locations          [:state :policystore :locationmap]
-                     demandtags         [:state :demandstore :tags] ;this won't work well. 
-                     demands            [:state :demandstore :demandmap]
+  (core/with-cells [{locations     [:state :policystore :locationmap]
+                     demandtags    [:state :demandstore :tags]  
+                     demands       [:state :demandstore :demandmap]
                      :as txn}    ctx]
-    (with-transient-cells [locations demandtags demands]
-      (let [demand-count   (count demands)
-            new-idx        (+ (or (:demandstart (:parameters ctx)) 0) demand-count)]
-        (->> xs
-             (reduce 
-              (fn [acc d]                  
-                (let [dname    (core/entity-name  demand) ;;replace with entity-name
-                      newstore (tag-demand demand 
-                                 (add-demand dstore demand))]
-                  (->> (registering-demand! demand acc)     ;;doesn't care.
-                       (policy/register-location dname policystore) ;;this should still be fast.
-                       (schedule-demand demand newstore)))) ctx)
-             (update-txn!))))))
-)
+    (update-txn!
+     (core/with-transient-cells [locations demandtags demands]
+       (let [demand-count   (count demands)
+             new-idx        (+ (or (:demandstart (:parameters ctx)) 0) demand-count)
+             policystore    (core/get-policystore txn)
+             dstore         (core/get-demandstore txn)
+             ]
+         (->> xs
+              (reduce 
+               (fn [acc demand]                  
+                 (let [dname    (core/entity-name  demand) ;;replace with entity-name                      
+                       newstore (tag-demand demand 
+                                            (add-demand dstore demand))
+                       _        (policy/register-location dname policystore)
+                       _ (println dname )]
+                   (->> (registering-demand! demand acc)     ;;doesn't care.                       
+                        ;;this should still be fast.  Alternately just modify locs directly...
+                        (schedule-demand demand newstore)))) txn)))))))
+
 
 ;; ;;Alternate formulation
 ;; (deftransaction register-demands! {dstore    [:state :demandstore]
