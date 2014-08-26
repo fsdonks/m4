@@ -170,15 +170,6 @@
     (sim/trigger-event :Intialize :DemandStore :DemandStore msg nil ctx)))
   
 
-;;#Testing cell usage...
-
-(defn ensure-name [named names name-count]                  
-  (if (contains? names (:name demand))
-    (assoc demand :name 
-           (core/msg (:name demand) "_" (inc name-count)))
-    demand))
-
-
 ;;Do we need to worry about naming here? 
 ;;Seems like associate-demand could be done inside demand ops...
 
@@ -186,26 +177,6 @@
 ;;demandmanager, providing unique names for duplicate 
 ;;demands.  Threads the demand through the context 
 ;;and returns the resulting context.
-(defn associate-demand 
-  [ctx xs]
-  (core/with-simstate [[parameters demandstore policystore] ctx]    
-    (let [demands        (:demandmap demandstore)
-          demand-count   (count demands)
-          new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
-      (-> (r/map (fn [d] (ensure-name demands demand-count)                     
-          (assoc :index new-idx)
-          (demand/register-demand demandstore policystore ctx)))))
-
-(defn associate-demands! 
-  [ctx xs]
-  (core/with-simstate [[parameters] ctx] 
-    (core/with-cells [{demandstore [:state :demandstore]
-                       policystore [:state :policystore] :as txn} ctx]
-      (let [demands        (:demandmap demandstore)
-            demand-count   (count demands)
-            new-idx        (+ (or (:demandstart parameters) 0) demand-count)]
-        (demand/register-demands! demandstore policystore ctx)))))
-
 (defn load-demands 
   ([record-source ctx]
      (let [rs    (demands-from-records (core/as-records record-source) ctx)

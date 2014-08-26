@@ -292,12 +292,6 @@
 ;;what was there...
 ;(comment) 
 
-(defn ensure-name [named names]                  
-  (if (contains? names (:name demand))
-    (assoc demand :name 
-           (core/msg (:name demand) "_" (count names)))
-    demand))
-
 (defn register-demands! [xs ctx]
   ;;Cleaner representation, allow multiple cells to be defined in a
   ;;single binding.

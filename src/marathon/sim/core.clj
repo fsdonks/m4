@@ -27,7 +27,8 @@
                         [table :as tbl]]
             [spork.entitysystem.store]
             [spork.sim.simcontext :as sim]
-            [marathon.data.simstate :as simstate]))
+            [marathon.data.simstate :as simstate]
+            [clojure.core.reducers]))
 
 ;;Possible use of dynamic context for later....
 ;;Dunno if I want to do this yet..
@@ -704,8 +705,6 @@
 (defn disable [store item]
   (update-in store [:tags] tag/untag-subject :enabled item))
 (defn special-src? [tags src]  (tag/has-tag? tags src "Special"))
-  
-
 
 ;;#Fill Related Functions
 
@@ -726,6 +725,12 @@
 ;;I started this due to the fact that several functions - primarily accessors, 
 ;;were bubbling up in each of the domain-specific modules.  As a result, we'll 
 ;;just shove them in here.  If we don't, we'll get circular dependencies.
+
+;;We alias the more efficient make-string function, rather than 
+;;using core/str.  This is commonly used for logging messages 
+;;and other things.  Since there are lots of events flying 
+;;around with string data, this is a serious bottleneck.
+(def msg gen/make-string)
 
 ;;Stubs were used during the initial port to toss exceptions if an unimplemented
 ;;or deferred function was called.  
@@ -764,10 +769,11 @@
   "We tend to prefer unique names, and often times we accomplish that by concatenating the 
    count of a container onto a non-unique name.  ensure-names generalizes this stuff."
   [named names]                  
-  (if (contains? names (:name demand))
-    (assoc demand :name 
-           (core/msg (:name demand) "_" (count names)))
-    demand))
+  (let [nm (entity-name named)]
+    (if (contains? names nm)
+      (assoc named :name 
+             (msg nm "_" (count names)))
+    named)))
 
 (definline empty-string? [x] `(= ~x ""))
 (defn debug-print [msg obj] (do (println msg) obj))
@@ -775,11 +781,7 @@
   (if (and (seq? record-source) (map? (first record-source))) record-source
       (tbl/record-seq record-source)))
 
-;;We alias the more efficient make-string function, rather than 
-;;using core/str.  This is commonly used for logging messages 
-;;and other things.  Since there are lots of events flying 
-;;around with string data, this is a serious bottleneck.
-(def msg gen/make-string)
+
 
 
 (let [idx (atom 0)]
@@ -793,6 +795,61 @@
               i)))
     ([new-idx] (do (reset! idx new-idx)
                    new-idx))))
+
+
+;;#Additional Reducers 
+;;These haven't made it into clojure.core yet, they probably will in
+;;1.7  .  I hacked together a couple of useful ones, like range.
+(in-ns 'clojure.core.reducers)
+;;Reducers patch for Clojure courtesy of Alan Malloy, CLJ-992, Eclipse Public License
+(defcurried iterate-r
+  "A reducible collection of [seed, (f seed), (f (f seed)), ...]"
+  {:added "1.5"}
+  [f seed]
+  (reify
+    clojure.core.protocols/CollReduce
+    (coll-reduce [this f1] (clojure.core.protocols/coll-reduce this f1 (f1)))
+    (coll-reduce [this f1 init]
+      (loop [ret (f1 init seed), seed seed]
+        (if (reduced? ret)
+          @ret
+          (let [next (f seed)]
+            (recur (f1 ret next) next)))))
+
+    clojure.lang.Seqable
+    (seq [this]
+      (seq (clojure.core/iterate f seed)))))
+
+  (defn range-r 
+    "Creates a reducible sequence of numbers, ala core/range, except 
+     there is no intermediate collection to muck with."
+    ([lower n]
+       (reify clojure.core.protocols/CollReduce 
+         (coll-reduce [coll f] 
+           (loop [idx (+ 2 lower)
+                  res (f lower (inc lower))]
+             (if (or (== idx n) (reduced? res))
+               res
+               (recur (unchecked-inc idx)
+                      (f res idx)))))
+         (coll-reduce [coll f val]
+           (loop [idx lower
+                  res val]
+             (if (or (== idx n) (reduced? res))
+            res
+            (recur (unchecked-inc idx)
+                   (f res idx)))))
+         clojure.lang.Seqable ;;good idea...saw this from patch CLJ992
+         (seq [this]  (range lower n))))
+    ([n] (range-r 0 n)))
+
+    (defn map-indexed-r 
+      "Creates a reducer analogue to core/map-indexed"
+      [f r] 
+      (let [idx (atom 0)]
+        (map (fn [x] 
+               (f (swap! idx inc) x))  r)))
+(in-ns 'marathon.sim.core)
 
 ;;##Developer Notes
 
