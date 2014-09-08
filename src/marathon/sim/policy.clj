@@ -167,7 +167,7 @@
 (defn flip [f] (fn [x y] (f y x)))
 
 (defn policy-update! [t ctx] 
-  (sim/request-update t :PolicyManager :policy-update nil ctx))  
+  (sim/request-update t :PolicyManager :policy-update ctx))  
 
 (defn add-period  "Registers a period data structure with the policystore."
   [policystore per] 
