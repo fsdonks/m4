@@ -82,6 +82,13 @@ End If
 ;;Aux function, may be able to get rid of this...
 (defn get-delta [position deltas] (get deltas position 0))
 
+(defmacro with-deltas [[binds deltasource] & expr]
+  (let [ds (symb "deltas")]
+    `(let [~ds ~deltasource
+           ~@(flatten (for [position binds]
+                        [position `(get-delta ~position ~ds)]))]
+       ~@expr)))
+
 ;;Helper function to allow us to push maps into policies as positions.
 ;;Basically sets the state associated with a policy position.
 (defn add-positions [p position-state-map]
@@ -201,6 +208,21 @@ End If
      deployed (- 270 overlap) 
      Overlapping overlap})
 
+;;This is becoming tempting again...
+;; (defmacro deftemplate [name args routes]
+;;   `(let [base# (-> (policydata/make-policy :name ~name :overlap overlap#)
+;;                    (generic/add-positions default-positions)
+;;                    (add-routes routes))]         
+;;      (defn ~name [~args overlap# & {:keys [~'deltas ~'routes]}]
+;;        (-> base#
+;;            (add-routes [reset train (+ 182  (get-delta reset deltas))]
+;;                        [train ready (+ 183  (get-delta train deltas))]
+;;                        [ready available (+ 460  (get-delta ready deltas))]
+;;                        [available reset (+ 270  (get-delta available deltas))]
+;;                        [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+;;                        [Overlapping reset    (+ overlap (get-delta Overlapping deltas))]))))) 
+
+
 (defn ac13-template [name overlap & {:keys [deltas]}]
     (-> (policydata/make-policy :name name :overlap overlap)
         (generic/add-positions default-positions)
@@ -212,13 +234,22 @@ End If
                      [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
 
 (defn ac11-template [name overlap & {:keys [deltas]}]
-    (-> (policydata/make-policy :name name :overlap overlap)
-        (generic/add-positions default-positions)
-        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
-                     [train ready (+ 183  (get-delta train deltas))]
-                     [available reset (+ 365  (get-delta available deltas))]
-                     [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
-                     [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
+  (-> (policydata/make-policy :name name :overlap overlap)
+      (generic/add-positions default-positions)
+      (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+                   [train ready (+ 183  (get-delta train deltas))]
+                   [available reset (+ 365  (get-delta available deltas))]
+                   [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
+                   [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
+
+;;an example...
+;; (deftemplate ac11 [name overlap]
+;;   [reset train          182]
+;;   [train ready          183]
+;;   [available reset      365]
+;;   [deployed Overlapping (- 365 overlap)]
+;;   [Overlapping reset    overlap])
+  
 
 (defn ac11-defaults [overlap]
   {reset       182 
@@ -290,7 +321,13 @@ End If
                      [demobilization reset   (+ 95 (get-delta demobilization deltas))]
                      ])))
 
-
+(defn rc12-defaults [overlap]
+  {reset 365 
+   train 365 
+   available 365
+   deployed (- 270 overlap)
+   Overlapping overlap
+   demobilization 95})
 
 Public Function RC12Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
 Set RC12Template = New TimeStep_Policy
@@ -315,6 +352,18 @@ With RC12Template
 End With
 
 End Function
+
+(defn rc12-template [name overlap deltas]
+    (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+        (generic/add-positions default-rc-positions)
+        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+                     [train available (+ 183  (get-delta train deltas))]
+                     [available reset (+ 365  (get-delta available deltas))]
+                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+                     [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+                     [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+                     ])))
+
 
 Public Function RC12Defaults(overlap As Long) As Dictionary
 Set RC12Defaults = _
