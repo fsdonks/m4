@@ -63,7 +63,6 @@
 ;;For now, we're using dynamic scope...
 (def ^:dynamic *ctx* core/emptysim)
 
-
 ;;I think we may want to make the entityfactory functions operate 
 ;;on a dynamic var.  That should make the calling code clearer...
 ;;There are events where we trigger notifications and such, for 
@@ -78,6 +77,11 @@
 
 ;;For instance: 
 
+
+;;This is technically a bottleneck at the moment; Not terrible, but 
+;;we may look at more efficient ways of doing it.  It's the check for 
+;;duplicate demands that's slowing us; The partitioning may be done 
+;;more smartly, or without building two collections.
 (defn partition-dupes 
   "Returns a pair of [uniques, dupes] based on the key function"
   [keyfn xs]
@@ -89,10 +93,10 @@
                          (if (.contains known k)
                            [uniques (assoc! dupes k (cons x (get dupes k nil)))]
                            (do (.add known k)
-                               [(conj uniques x) dupes]))))
-                     [[]  (transient {})]
+                               [(conj! uniques x) dupes]))))
+                     [(transient [])  (transient {})]
                      xs)]
-    [(first res) (persistent! (second res))]))
+    [(persistent! (first res)) (persistent! (second res))]))
 
 (defn valid-record? 
   ([r params] 
@@ -202,67 +206,11 @@
             (notify-duplicate-demands! dupes))))
   ([record-source demandstore ctx] 
      (load-demands record-source (core/set-demandstore ctx demandstore))))
-
-;;It would be soooooo much easier if we could just define a way to
-;;temporarily cloak nested locations as transients.  The biggest 
-;;cost is the associng to the persistent map at the end of the
-;;chain...
-
-;;(with-transient-locations [demands])
-;;Useful...
-;;(assoc-location   .... v)
-;;(get-location    ...  v)
-;;(update-location ...  f args)
-
-;;(assoc-location [:a :b :c] v) => (deep-assoc [:a :b :c] v)
-;;(with-locations {abc [:a :b :c]}
-;;   (push-location abc 2)) => (push-location {:path [:a :b :c] :val 2} v)
-;;
-
-;;or....(transient-in [:a :b :c] 
  
-
-;;Optimized versions for bulk loading information.
-(defn associate-demand!     
-  [ctx demand demand-idx demandstore policystore]
-  (-> (if (contains? (:demandmap demandstore) (:name demand))
-        (assoc demand :name 
-               (str (:name demand) "_" demand-idx))
-        demand)                     
-      (assoc :index demand-idx)
-      (demand/register-demand demandstore policystore ctx)))
-
-;; (defn load-demands! 
-;;   ([record-source ctx]
-;;      (let [rs    (demands-from-records (core/as-records record-source) ctx)
-;;            dupes (get (meta rs) :duplicates)
-;;            demandstore  (core/->cell (core/get-demandstore ctx))
-;;            policystore  (core/->cell (core/get-policystore ctx))
-;;            demand-count (count (:demandmap demandstore))
-;;            demand-start (or (:demandstart (core/get-parameters ctx)) 0)
-;;            idx          (atom (+ demand-start demand-count))]       
-;;        (->> (reduce (fn [acc d] 
-;;                       (initialized-demand! (associate-demand! acc d (core/inc! idx) demandstore policystore) d))
-;;                     ctx rs)
-;;             (notify-duplicate-demands! dupes)
-;;             (core/merge-updates {:demandstore (deref demandstore)
-;;                                  :policystore (deref policystore)}))))
-;;   ([record-source demandstore ctx] 
-;;      (load-demands! record-source (core/set-demandstore ctx demandstore))))
-
-;;Mutable version designed to work with refs.
-;; (defn load-demand! 
-;;   [ctx demand demandstore policystore idx-ref]
-;;   (initialized-demand! (associate-demand! ctx demand (core/inc! idx-ref) demandstore policystore) demand))
-
 (defn ungrouped? [grp] 
   (when grp 
       (or (core/empty-string? grp) 
           (= (clojure.string/upper-case grp) "UNGROUPED"))))
-
-
-
-
 
 ;;#Unit Entity Creation
 ;;Interpreting unit entities typically requires four steps:
@@ -416,9 +364,9 @@
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
   ([idx unit]
-     (str idx "_" (:SRC unit) "_" (:component unit)))
+     (core/msg idx "_" (:SRC unit) "_" (:component unit)))
   ([idx src compo]
-     (str idx "_" src "_" compo)))
+     (core/msg idx "_" src "_" compo)))
 
 (defn check-name 
   "Ensures the unit is uniquely named, unless non-strictness rules are 
@@ -615,14 +563,43 @@
           (core/set-policystore 
            (plcy/subscribe-unit prepped (:policy prepped) prepped policystore))))))  
 
+;;Mutable version for bulk updates.
+(defn process-unit! [raw-unit extra-tags parameters behaviors supplystore policystore ctx]
+  (let [prepped   (-> raw-unit       
+                      (associate-unit supplystore true)
+                      (assign-policy policystore parameters)      
+                      (prep-cycle))]
+    (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
+        (core/set-policystore 
+         (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)))))  
+
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
 (defn process-units [raw-units ctx]
-  (core/with-simstate [[parameters] ctx]
-    (reduce (fn [acc unit]
-                (process-unit unit nil parameters  nil acc))
-            ctx 
-            raw-units)))
+  (core/with-simstate [[parameters behaviors] ctx]
+    (core/with-cells [{supplystore [:state :supplystore] 
+                       policystore [:state :policystore]
+                       :as ctx2}         ctx] 
+    (-> (reduce (fn [acc unit]
+                  (process-unit! unit nil parameters behaviors supplystore policystore acc))
+                ctx2 
+                raw-units)
+        (update-ctx2!)))))
+
+;;- WIP
+;;An alternative is to call register-units and subscribe-units
+;;separately...makes a bit more sense to me from the FP perspective.
+;; (defn process-units [raw-units ctx]
+;;   (core/with-simstate [[parameters behaviors] ctx]
+;;     (-> ctx
+;;         (supply/register-units supplystore behaviors)
+;;         (plcy/subscribe-units 
+;;     (-> (reduce (fn [acc unit]
+;;                   (process-unit! unit nil parameters behaviors supplystore policystore acc))
+;;                 ctx2 
+;;                 raw-units)
+;;         (update-ctx2!)))))
+
 
 ;;Flesh this out, high level API for adding units to supply.  
 ;;Convenience function.
@@ -845,3 +822,18 @@
 ;;                        (demand/register-demand! new-demand demandstore policystore transient-demands ctx)) ;mutation heavy...                         
 ;;                        (initialized-demand!  d))) ;independent....                        
 ;;                   ctx rs)))))
+
+;;Optimized versions for bulk loading information.
+;; (defn associate-demand!     
+;;   [ctx demand demand-idx demandstore policystore]
+;;   (-> (if (contains? (:demandmap demandstore) (:name demand))
+;;         (assoc demand :name 
+;;                (str (:name demand) "_" demand-idx))
+;;         demand)                     
+;;       (assoc :index demand-idx)
+;;       (demand/register-demand demandstore policystore ctx)))
+
+;;Mutable version designed to work with refs.
+;; (defn load-demand! 
+;;   [ctx demand demandstore policystore idx-ref]
+;;   (initialized-demand! (associate-demand! ctx demand (core/inc! idx-ref) demandstore policystore) demand))
