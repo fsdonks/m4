@@ -86,8 +86,12 @@
 
 (def empty-policy (make-policy))
 
+;;Boiler plate reduction stuff.  This lets us provide shell
+;;implementations in the composite policy, and expands out into the
+;;actual error being thrown.  Should not be necessary, but hey, be defensive.
 (defmacro atomic-mod-err []
   `(throw (Exception. "Atomic policies may not be modified inside of composite policies!")))
+
 ;policies defined by more than one atomic policy.
 ;;Debate turning policies away from a map....so we can support more
 ;;than one policy composition type based off of data structure used to 
