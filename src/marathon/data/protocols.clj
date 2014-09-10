@@ -4,7 +4,8 @@
 ;core data structures....especially if the core data structures are just 
 ;maps or records (which support a map API).
 (ns marathon.data.protocols
-  (:use [spork.util.metaprogramming :only [keyvals->constants]]))
+  (:use [spork.util.metaprogramming :only [keyvals->constants]]
+        [spork.cljgraph.core :as graph]))
 
 ;This is the policy interface.  We have both constant and composite 
 ;(or time/event variant) policies. This interface is used to implement a common 
@@ -202,14 +203,11 @@
   (add-position     [p name state])
   (add-route        [p start destination transfer-time])
   (cycle-length     [p])
-  (deployable?      [p position])
   (end-state        [p])
   (get-cycle-time   [p position])
   (get-policy-type  [p])
   (get-position     [p cycletime])
   (get-state        [p position])
-  (deployable?      [p cycletime])
-  (dwell?           [p position])
   (max-bog          [p])
   (max-dwell        [p])
   (max-mob          [p])
@@ -221,7 +219,23 @@
   (add-policy           [p policy]))
 
 
+(definline betweeen? [t l r]
+  `(and (>= t l) (<= t r)))
 
+(def modifiers #{:deployable :not-deployable})
+(defn modifier? [pos] (contains? modifiers pos))
+
+;;used to be isDeployable
+(defn deployable-when?      [p cycletime]
+  (between? cycletime (start-deployable p) (stop-deployable p)))
+
+;;used to be deployable
+(defn  deployable-at?       [p position]  )
+
+(defn dwell? [p position] (= (get-state p position) Dwelling))
+
+;;(def deployables #{
+(defn deployable-state? [s] (contains? deployables s))
 
 ;Note ---->
 ;Deployability is no longer just a function of Position....it's also a function of
@@ -243,7 +257,6 @@
 ;To determine if a Position is deployable, we just do a DFS from the policystart to the currentPosition.
 ;We then parse the resulting path (from the last Position), to determine the deployable state.  Simple.
 
-
 ;Note -----> from insertModifier
 ; 'algorithm for transforming a graph into a graph with modified nodes existing after tstart
 ; 'This basically communicates meta-information about some temporally-dependent change in the policy.
@@ -260,9 +273,25 @@
 ;    'new node automatically links to all subsequent nodes (should be 1 edge).
 ;    'since we're conserving the cost, we update the edge costs for the two nodes...
 
+(defn insert-modifier 
+  ([policy cycletime {:keys [name weight] :or {name :modified weight 0}}]
+     (let [x     (get-position policy cycletime)
+           nxt   (next-position policy x)      
+           pg    (get-position-graph policy)
+           tprev (-> (graph/depth-first-search pg (start-state policy) x)
+                     (get :distance)
+                     (get x))
+           offset (- cycletime tprev)
+           dnxt   (- (graph/arc-weight x nxt) offset)]                          
+       (set-position-graph policy
+            (-> pg 
+                (graph/disj-arc x nxt) 
+                (graph/conj-arcs [[x name offset]
+                                  [name [x name] weight]
+                                  [[x name] nxt dnxt]])))))
+  ([policy cycletime] (insert-modifer policy cycletime {})))
+         
 
-(defn modifier? [pos] (or (identical? pos :deployable)
-                          (identical? pos :notdeployable)))
 
 (defprotocol IUnitBehavior
   (behavior-name [b] "Return the name of the behavior...duh.")

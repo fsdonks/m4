@@ -8,21 +8,6 @@
 ;__TODO__ Extend core/IRotationPolicy protocol to policy and
 ;policycomposite..
 
-;;Generic ops on position graphs in policies.
-(defn insert-modifier [policy cycletime & {:keys [name] :or {name :modified}]]
-  (let [x     (get-position policy cycletime)
-        nxt   (core/next-position policy x)                              
-        tprev (-> (graph/depth-first-search (core/get-position-graph policy) (core/start-state policy) position)
-                  (get :distance)
-                  (get x))
-        offset (- cycletime tprev)
-        dnxt   (- (graph/arc-weight x nxt) offset) ]                          
-    (core/set-position-graph policy
-       (-> positiongraph 
-           (graph/disj-arc x nxt) 
-           (graph/conj-arc x [name x] offset)
-           (graph/conj-arc [name x]  nxt dnxt)))))
-
 ;a structure for unit entity policies.
 (defrecord+ policy [[name "BlankPolicy"]
                     [cyclelength :inf]
@@ -49,10 +34,10 @@
   (set-position-graph   [p g] (assoc p :positiongraph g)) 
   (previous-position    [p position] (first (graph/sources positiongraph)))
   (set-deployable       [p tstart tfinal] (-> p 
-                                              (insert-modifier tstart :name :deployable)
-                                              (insert-modifier tstop  :name :non-deployable)))
-  (set-deployable-start [p cycletime]  (insert-modifier p cycletime :name :deployable))
-  (set-deployable-stop  [p cycletime]  (insert-modifier p cycletime :name :non-deployable))
+                                              (core/insert-modifier tstart :name :deployable)
+                                              (core/insert-modifier tfinal  :name :non-deployable)))
+  (set-deployable-start [p cycletime]  (core/insert-modifier p cycletime :name :deployable))
+  (set-deployable-stop  [p cycletime]  (core/insert-modifier p cycletime :name :non-deployable))
   (start-deployable     [p] startdeployable)
   (stop-deployable      [p] stopdeployable)
   (start-state          [p] startstate)
