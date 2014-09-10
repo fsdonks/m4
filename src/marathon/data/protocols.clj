@@ -192,11 +192,9 @@
   (policy-name       [p])
   (next-position     [p position])
   (overlap           [p])
-  (position-graph    [p]) ;if we have this, we can build the rest... 
+  (get-position-graph    [p]) ;if we have this, we can build the rest... 
+  (set-position-graph    [p g]) ;if we have this, we can build the rest... 
   (previous-position    [p position])
-  (set-deployable       [p tstart tfinal])
-  (set-deployable-start [p cycletime])
-  (set-deployable-stop  [p cycletime])
   (start-deployable     [p])
   (stop-deployable      [p])
   (start-state          [p])
@@ -216,8 +214,12 @@
   (max-dwell        [p])
   (max-mob          [p])
   (min-dwell        [p])
-  (add-policy       [p policy])
-  (get-locations    [p]))
+  (get-locations    [p])
+  (set-deployable       [p tstart tfinal])
+  (set-deployable-start [p cycletime])
+  (set-deployable-stop  [p cycletime])
+  (add-policy           [p policy]))
+
 
 
 
@@ -259,6 +261,9 @@
 ;    'since we're conserving the cost, we update the edge costs for the two nodes...
 
 
+(defn modifier? [pos] (or (identical? pos :deployable)
+                          (identical? pos :notdeployable)))
+
 (defprotocol IUnitBehavior
   (behavior-name [b] "Return the name of the behavior...duh.")
   (init-behavior [b state] "Used for stateful initializaion, may tank this one.")
@@ -266,6 +271,6 @@
   (change-state [b unit to-state deltat duration following-state] 
       "Return the result of changing the unit's finite state machine to a 
        new state using behavior b."))
-
-
+    
+    
 
