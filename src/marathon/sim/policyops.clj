@@ -1,4 +1,28 @@
-(ns marathon.sim.policyops)
+(ns marathon.sim.policyops
+  (:require [spork.util.metaprogramming :refer [keyvals->constants]]
+            [marathon.policy.policydata :as policydata]
+            [marathon.data.protocols :as core :refer [Bogging 
+                                                      Dwelling 
+                                                      BogDeployable 
+                                                      DwellDeployable 
+                                                      Deployable 
+                                                      AC12  
+                                                      AC13  
+                                                      RC14  
+                                                      RC15  
+                                                      AC11 
+                                                      RC11 
+                                                      RC12 
+                                                      GhostPermanent12 
+                                                      GhostPermanent13 
+                                                      GhostTransient12 
+                                                      GhostTransient13 
+                                                      reset 
+                                                      train 
+                                                      ready 
+                                                      available 
+                                                      deployed 
+                                                      Overlapping]]))
 
 ;;The functions in this library focus on quickly deriving policies from existing templates.  There are a
 ;;multitude of hard-coded templates in here that describe canonical policies, which are used in
@@ -10,8 +34,6 @@
 ;;pushing the specification outside of VBA should allow for specialized, graphical tools to build policies,
 ;;which are then imported into Marathon during pre-processing.
 
-
-
 ;;Replace with keywords..
 ;; Private Enum lengthcase
 ;;     equiv ;;scale is 1.0
@@ -19,7 +41,6 @@
 ;;     infminus
 ;;     Normal
 ;; End Enum
-
 
 ;;Tom change 24 Sep 2012 -> added to deal with infinite cycle transitions.  Provides a projection function to determine
 ;;how far a unit will project, proportionally, onto a cycle it;;s changing to.
@@ -36,24 +57,24 @@
          :else (throw (Exception. "Uknown case for projecting cycle time!"))))
     
 
-If cycleLengthA > 365# * 100# Then cycleLengthA = inf
-If cyclelengthB > 365# * 100# Then cyclelengthB = inf
+;; If cycleLengthA > 365# * 100# Then cycleLengthA = inf
+;; If cyclelengthB > 365# * 100# Then cyclelengthB = inf
 
-If (cycleLengthA = cyclelengthB) Or (cyclelengthB = inf) Then ;;equivalent cycle lengths or transitioning to infinite cycle
-    lengthType = equiv ;;position = cycleTimeA / cyclelengthB
-Else
-    If (cycleLengthA <> inf) And (cyclelengthB <> inf) Then
-        lengthType = Normal
-    ElseIf cycleLengthA = inf Then
-        If cycletimeA < cyclelengthB Then
-            lengthType = infminus ;;cyclelength is infinite, but cycletime is effectively less than targetted cycle.
-        Else
-            lengthType = infplus ;;cyclelength is infinite, cycletime is > than targetting cycle.
-        End If
-    Else
-        Err.Raise 101, , "unknown case"
-    End If
-End If
+;; If (cycleLengthA = cyclelengthB) Or (cyclelengthB = inf) Then ;;equivalent cycle lengths or transitioning to infinite cycle
+;;     lengthType = equiv ;;position = cycleTimeA / cyclelengthB
+;; Else
+;;     If (cycleLengthA <> inf) And (cyclelengthB <> inf) Then
+;;         lengthType = Normal
+;;     ElseIf cycleLengthA = inf Then
+;;         If cycletimeA < cyclelengthB Then
+;;             lengthType = infminus ;;cyclelength is infinite, but cycletime is effectively less than targetted cycle.
+;;         Else
+;;             lengthType = infplus ;;cyclelength is infinite, cycletime is > than targetting cycle.
+;;         End If
+;;     Else
+;;         Err.Raise 101, , "unknown case"
+;;     End If
+;; End If
 
 (def ^:constant +century+ (* 100 365))
 ;;look into replacing this with a universal constant, or upperbound
@@ -92,11 +113,12 @@ End If
 ;;Helper function to allow us to push maps into policies as positions.
 ;;Basically sets the state associated with a policy position.
 (defn add-positions [p position-state-map]
-  (reduce-kv (fn [acc pos state] (generic/add-position p pos state)) 
+  (reduce-kv (fn [acc pos state] (core/add-position acc pos state)) 
              p position-state-map))
+
 (defn add-routes [p rs]
   (reduce (fn [acc [from to t]]
-            (generic/add-route p from to t))
+            (core/add-route acc from to t))
           p rs))
 
 ;;TOM Hack 24 July 2012-> This is a good idea.
@@ -108,13 +130,12 @@ End If
       (add-routes [[:Recovery :Recovered recoverytime]])))
  
 (def default-positions 
-  {reset "Dwelling" 
-   train "Dwelling" 
-   ready "Dwelling" 
-   available "Dwelling" 
-   deployed "Bogging" 
-   Overlapping "Overlapping"})
-
+  {reset :dwelling 
+   train :dwelling 
+   ready :dwelling 
+   available :dwelling 
+   deployed :bogging
+   Overlapping :overlapping})
 (def default-routes 
   [[reset train           182]
    [train ready           183]
@@ -208,19 +229,22 @@ End If
      deployed (- 270 overlap) 
      Overlapping overlap})
 
+;; (defn waits->routes [ws]
+;;   (assert (even? (count ws)) "wait schedule must have a set number of routes."
+;;           (map (fn [(partition 3 21 (cycle ws))
+
+(defn altered-routes [routes deltas]
+  `[~@ (for [[from to time] routes]
+         `[~from ~to (+ ~time (get-delta ~deltas ~from))])])
+
 ;;This is becoming tempting again...
-;; (defmacro deftemplate [name args routes]
-;;   `(let [base# (-> (policydata/make-policy :name ~name :overlap overlap#)
-;;                    (generic/add-positions default-positions)
-;;                    (add-routes routes))]         
-;;      (defn ~name [~args overlap# & {:keys [~'deltas ~'routes]}]
-;;        (-> base#
-;;            (add-routes [reset train (+ 182  (get-delta reset deltas))]
-;;                        [train ready (+ 183  (get-delta train deltas))]
-;;                        [ready available (+ 460  (get-delta ready deltas))]
-;;                        [available reset (+ 270  (get-delta available deltas))]
-;;                        [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
-;;                        [Overlapping reset    (+ overlap (get-delta Overlapping deltas))]))))) 
+(defmacro deftemplate [name overlap routes]
+  `(let [base# (-> (policydata/make-policy :name ~(str  name) :overlap ~overlap)
+                   (add-positions default-positions)
+                   (add-routes ~routes))         ]         
+     (defn ~name [name#  & {:keys [~'deltas ~'overlap]}]
+       (-> base#
+           (add-routes (altered-routes ~routes ~'deltas))))))
 
 
 (defn ac13-template [name overlap & {:keys [deltas]}]
@@ -328,6 +352,7 @@ End If
    deployed (- 270 overlap)
    Overlapping overlap
    demobilization 95})
+
 
 Public Function RC12Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
 Set RC12Template = New TimeStep_Policy

@@ -191,7 +191,6 @@
   (get-policy        [p period])
   (policy-name       [p])
   (next-position     [p position])
-  (on-period-change  [p period])
   (overlap           [p])
   (position-graph    [p]) ;if we have this, we can build the rest... 
   (previous-position    [p position])
@@ -201,11 +200,8 @@
   (start-deployable     [p])
   (stop-deployable      [p])
   (start-state          [p])
-  (subscribe        [p unit]) ;EXCTRICATE 
-  (get-subscribers  [p]) ;EXCTRICATE
-  (set-subscribers  [p xs]) ;EXCTRICATE
   (transfer-time    [p start-position end-position])
-  (add-position     [p name state & more-nodes])
+  (add-position     [p name state])
   (add-route        [p start destination transfer-time])
   (cycle-length     [p])
   (deployable?      [p position])
@@ -220,7 +216,7 @@
   (max-dwell        [p])
   (max-mob          [p])
   (min-dwell        [p])
-  (add-policy       [p policy & args])
+  (add-policy       [p policy])
   (get-locations    [p]))
 
 
