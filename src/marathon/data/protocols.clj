@@ -216,7 +216,19 @@
   (set-deployable       [p tstart tfinal])
   (set-deployable-start [p cycletime])
   (set-deployable-stop  [p cycletime])
-  (add-policy           [p policy]))
+  (add-policy           [p period policy]))
+
+(defprotocol IAlterablePolicy
+  (set-deployable       [p tstart tfinal] )
+  (set-deployable-start [p cycletime]    )
+  (set-deployable-stop  [p cycletime]    )
+  (add-position         [p name state] )
+  (add-route            [p start destination transfer-time] )
+  (set-position-graph   [p g] ))
+
+(defprotocol IPolicyContainer
+  (add-policy       [p policy] 
+                    [p period policy]))
 
 
 (definline betweeen? [t l r]
