@@ -194,14 +194,11 @@
   (next-position     [p position])
   (overlap           [p])
   (get-position-graph    [p]) ;if we have this, we can build the rest... 
-  (set-position-graph    [p g]) ;if we have this, we can build the rest... 
   (previous-position    [p position])
   (start-deployable     [p])
   (stop-deployable      [p])
   (start-state          [p])
   (transfer-time    [p start-position end-position])
-  (add-position     [p name state])
-  (add-route        [p start destination transfer-time])
   (cycle-length     [p])
   (end-state        [p])
   (get-cycle-time   [p position])
@@ -212,27 +209,25 @@
   (max-dwell        [p])
   (max-mob          [p])
   (min-dwell        [p])
-  (get-locations    [p])
-  (set-deployable       [p tstart tfinal])
-  (set-deployable-start [p cycletime])
-  (set-deployable-stop  [p cycletime])
-  (add-policy           [p period policy]))
+  (get-locations    [p]))
 
+;;Functions for working with policies that can be changed after creation.
 (defprotocol IAlterablePolicy
   (set-deployable       [p tstart tfinal] )
-  (set-deployable-start [p cycletime]    )
-  (set-deployable-stop  [p cycletime]    )
-  (add-position         [p name state] )
+  (set-deployable-start [p cycletime]     )
+  (set-deployable-stop  [p cycletime]     )
+  (add-position         [p name state]    )
   (add-route            [p start destination transfer-time] )
   (set-position-graph   [p g] ))
 
+;;Functions for working with composite policies.
 (defprotocol IPolicyContainer
   (add-policy       [p policy] 
                     [p period policy]))
 
 
-(definline betweeen? [t l r]
-  `(and (>= t l) (<= t r)))
+(definline between? [t l r]
+  `(and (>= ~t ~l) (<= ~t ~r)))
 
 (def modifiers #{:deployable :not-deployable})
 (defn modifier? [pos] (contains? modifiers pos))
@@ -242,12 +237,17 @@
   (between? cycletime (start-deployable p) (stop-deployable p)))
 
 ;;used to be deployable
-(defn  deployable-at?       [p position]  )
+;;A position is deployable in a policy if the node data associated 
+;;with the position is deployable.  We just store deployability in 
+;;each node.
+(defn  deployable-at?       [p position]  
+  (deployable-state? (graph/get-node (get-position-graph p position))))
 
 (defn dwell? [p position] (= (get-state p position) Dwelling))
 
-;;(def deployables #{
-(defn deployable-state? [s] (contains? deployables s))
+;;Might want to cache this stuff....
+;;Include a facility for defining deployable states..
+(defn deployable-state? [s] (:deployable s))
 
 ;Note ---->
 ;Deployability is no longer just a function of Position....it's also a function of
@@ -285,6 +285,15 @@
 ;    'new node automatically links to all subsequent nodes (should be 1 edge).
 ;    'since we're conserving the cost, we update the edge costs for the two nodes...
 
+;;more general, stick this into cljgraph...
+(defn update-node [g label f]
+  (graph/set-node g label (f (graph/get-node pg position))))
+;;also should be in cljgraph...should define path reducers too...
+(defn update-nodes [g nodes f] 
+  (reduce (fn [acc nd] (update-node acc nd f)) g nodes))
+
+(defn toggle-tag [s tg] (if (contains? s tg) (disj s tg) (conj s tg)))
+
 (defn insert-modifier 
   ([policy cycletime {:keys [name weight] :or {name :modified weight 0}}]
      (let [x     (get-position policy cycletime)
@@ -297,13 +306,21 @@
            dnxt   (- (graph/arc-weight x nxt) offset)]                          
        (set-position-graph policy
             (-> pg 
-                (graph/disj-arc x nxt) 
+                (graph/disj-arc x nxt)
                 (graph/conj-arcs [[x name offset]
                                   [name [x name] weight]
                                   [[x name] nxt dnxt]])))))
   ([policy cycletime] (insert-modifer policy cycletime {})))
          
-
+(defn mark-deployable-region 
+  "Adds modifiers to each node in the position graph of a policy between :deployable and :non-deployable nodes, 
+   indicating the position is an eligible deployable state."
+  [policy] 
+  (let [pg (get-position-graph policy)]
+    (if-let [path (graph/depth-nodes pg :deployable :non-deployable)]    
+      (->> (update-nodes pg (drop 1 (butlast path)) #(toggle-tag % :deployable))
+           (set-position-graph policy))
+      (throw (Exception. (str "No deployable range found between in " policy))))))
 
 (defprotocol IUnitBehavior
   (behavior-name [b] "Return the name of the behavior...duh.")
