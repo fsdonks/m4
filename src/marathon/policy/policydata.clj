@@ -1,5 +1,13 @@
 ;;Rotational policy data definitions.  Both atomic and composite policies are 
 ;;represented here.
+;;The general idea is that rotational policies correspond to state
+;;transitions.  Positions in the policy have associated state data.
+;;We can define complex policies by composing primitive policies
+;;together using sequences and policies defined by period (or event
+;;really...).  Policies conform to three basic protocols that 
+;;define policy queries and alterations.  Also, policies have 
+;;state transitions represented as a position graph, a directed 
+;;graph with special properties.  
 (ns marathon.policy.policydata
   (:use [spork.util.record :only [defrecord+]])
   (:require [marathon.data [protocols :as core]]
@@ -12,15 +20,15 @@
 (defrecord+ policy [[name "BlankPolicy"]
                     [cyclelength :inf]
                     [mindwell 0]
-                    [maxdwell :inf]
-                    [maxbog :inf]
-                    [maxMOB :inf]
+                    [maxdwell  :inf]
+                    [maxbog    :inf]
+                    [maxMOB    :inf]
                     [recovery  90]
                     [startdeployable 0]
                     [stopdeployable :inf]
                     [positiongraph  graph/empty-graph]
-                    [startstate :spawn]
-                    [endstate :spawn]
+                    [startstate    :spawn]
+                    [endstate      :spawn]
                     [overlap 45]]
   core/IRotationPolicy 
   (atomic-name         [p] name)
@@ -46,7 +54,7 @@
   (get-position     [p cycletime] (loop [pos startstate
                                          t   0]
                                     (if-let [nxt (first (graph/sinks positiongraph pos))]
-                                      (let [tnxt (+ t   (graph/arc-weight pos nxt))]
+                                      (let [tnxt (+ t   (long (graph/arc-weight pos nxt)))]
                                         (if (>= tnxt cycletime) pos
                                             (recur nxt tnxt)))
                                       (throw (Exception. "Cycletime exceeds policy!")))))                                    
@@ -59,12 +67,13 @@
   core/IAlterablePolicy
   (set-deployable       [p tstart tfinal] (-> p 
                                               (core/insert-modifier tstart :name :deployable)
-                                              (core/insert-modifier tfinal  :name :non-deployable)))
+                                              (core/insert-modifier tfinal :name :non-deployable)))
   (set-deployable-start [p cycletime]  (core/insert-modifier p cycletime :name :deployable))
   (set-deployable-stop  [p cycletime]  (core/insert-modifier p cycletime :name :non-deployable))
-  (set-position-graph   [p g] (assoc p :positiongraph g)) 
+  (set-position-graph   [p g]          (assoc p :positiongraph g)) 
   (add-position         [p name state] (assoc p :positiongraph (graph/conj-node positiongraph name state)))
-  (add-route            [p start destination transfer-time] (assoc p :positiongraph (graph/conj-arc start destination transfer-time))))
+  (add-route            [p start destination transfer-time] 
+      (assoc p :positiongraph (graph/conj-arc positiongraph start destination transfer-time))))
 
 (def empty-policy (make-policy))
 
@@ -85,10 +94,10 @@
   (next-position       [p position] (.next-position activepolicy position))
   (overlap             [p] (.overlap activepolicy))
   (get-position-graph  [p] (.get-position-graph activepolicy))
-  (previous-position    [p position] (.previous-position activepolicy position))
-  (start-deployable     [p] (.start-deployable activepolicy))
-  (stop-deployable      [p] (.stop-deployable activepolicy))
-  (start-state          [p] (.start-state activepolicy))
+  (previous-position   [p position] (.previous-position activepolicy position))
+  (start-deployable    [p] (.start-deployable activepolicy))
+  (stop-deployable     [p] (.stop-deployable activepolicy))
+  (start-state         [p] (.start-state activepolicy))
   (transfer-time    [p start-position end-position] (.transfer-time activepolicy start-position end-position))
   (cycle-length     [p] (.cycle-length activepolicy))
   (end-state        [p] (.end-state activepolicy))

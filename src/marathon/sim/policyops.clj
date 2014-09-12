@@ -34,13 +34,30 @@
 ;;pushing the specification outside of VBA should allow for specialized, graphical tools to build policies,
 ;;which are then imported into Marathon during pre-processing.
 
-;;Replace with keywords..
-;; Private Enum lengthcase
-;;     equiv ;;scale is 1.0
-;;     infplus
-;;     infminus
-;;     Normal
-;; End Enum
+
+(def ^:constant +century+ (* 100 365))
+;;look into replacing this with a universal constant, or upperbound
+;;for longs
+(def ^:constant +inf+ 9999999)
+(defn century-ceiling [length] (if (> length +century+) +inf+ length))
+
+;;helper function.  Determines the type of cycle transform.
+;;treat large cycles as effectively infinite for this function.
+(defn length-type [t lengtha lengthb]
+  (let [lengtha (century-ceiling lengtha)
+        lengthb (century-ceiling lengthb)]
+    (if (== lengtha lengthb) 
+      :equiv   ;position = cycleTimeA / cyclelengthB
+      (if (and (== lengtha +inf+)
+               (== lengthb +inf+)) 
+        :normal
+        (if (== lengtha +inf+)
+          (if (< t lengthb) 
+            :infminus ;cyclelength is infinite, but cycletime is effectively less than targetted cycle.
+            :infplus  ;cyclelength is infinite, cycletime is > than targetting cycle.
+            )
+          (throw (Exception. "unknown length case!")))))))               
+
 
 ;;Tom change 24 Sep 2012 -> added to deal with infinite cycle transitions.  Provides a projection function to determine
 ;;how far a unit will project, proportionally, onto a cycle it;;s changing to.
@@ -57,77 +74,23 @@
          :else (throw (Exception. "Uknown case for projecting cycle time!"))))
     
 
-;; If cycleLengthA > 365# * 100# Then cycleLengthA = inf
-;; If cyclelengthB > 365# * 100# Then cyclelengthB = inf
-
-;; If (cycleLengthA = cyclelengthB) Or (cyclelengthB = inf) Then ;;equivalent cycle lengths or transitioning to infinite cycle
-;;     lengthType = equiv ;;position = cycleTimeA / cyclelengthB
-;; Else
-;;     If (cycleLengthA <> inf) And (cyclelengthB <> inf) Then
-;;         lengthType = Normal
-;;     ElseIf cycleLengthA = inf Then
-;;         If cycletimeA < cyclelengthB Then
-;;             lengthType = infminus ;;cyclelength is infinite, but cycletime is effectively less than targetted cycle.
-;;         Else
-;;             lengthType = infplus ;;cyclelength is infinite, cycletime is > than targetting cycle.
-;;         End If
-;;     Else
-;;         Err.Raise 101, , "unknown case"
-;;     End If
-;; End If
-
-(def ^:constant +century+ (* 100 365))
-;;look into replacing this with a universal constant, or upperbound
-;;for longs
-(def ^:constant +inf+ 9999999)
-
-(defn century-ceiling [length] (if (> length century) +inf+ length))
-
-;;helper function.  Determines the type of cycle transform.
-;;treat large cycles as effectively infinite for this function.
-(defn length-type [t lengtha lengthb]
-  (let [lengtha (century-ceiling lengtha)
-        lengthb (centutry-ceiling lengthb)]
-    (if (== lengtha lengthb) 
-      :equiv   ;position = cycleTimeA / cyclelengthB
-      (if (and (== lengtha +inf+)
-               (== lengthb +inf+)) 
-        :normal
-        (if (== lengtha +inf+)
-          (if (< t lengthb) 
-            :infminus ;cyclelength is infinite, but cycletime is effectively less than targetted cycle.
-            :infplus  ;cyclelength is infinite, cycletime is > than targetting cycle.
-            )
-          (throw (Exception. "unknown length case!")))))))               
-
 ;;Aux function, may be able to get rid of this...
 (defn get-delta [position deltas] (get deltas position 0))
 
 (defmacro with-deltas [[binds deltasource] & expr]
-  (let [ds (symb "deltas")]
+  (let [ds (symbol "deltas")]
     `(let [~ds ~deltasource
            ~@(flatten (for [position binds]
                         [position `(get-delta ~position ~ds)]))]
        ~@expr)))
 
-;;Helper function to allow us to push maps into policies as positions.
-;;Basically sets the state associated with a policy position.
-(defn add-positions [p position-state-map]
-  (reduce-kv (fn [acc pos state] (core/add-position acc pos state)) 
-             p position-state-map))
-
-(defn add-routes [p rs]
-  (reduce (fn [acc [from to t]]
-            (core/add-route acc from to t))
-          p rs))
-
 ;;TOM Hack 24 July 2012-> This is a good idea.
 ;;Describe a base policy with recovery built in.
 (defn recoverable-template [& {:keys [recoverytime] :or {recoverytime 90}}]
   (-> (policydata/make-policy :name "Recoverable")
-      (add-positions {:Recovery :Recovering 
-                      :Recovered :Recovered})
-      (add-routes [[:Recovery :Recovered recoverytime]])))
+      (core/add-positions {:Recovery :Recovering 
+                           :Recovered :Recovered})
+      (core/add-routes [[:Recovery :Recovered recoverytime]])))
  
 (def default-positions 
   {reset :dwelling 
@@ -144,13 +107,20 @@
    [deployed Overlapping  365]
    [Overlapping reset     0]])
 
+(defn overlapping? [x] (= x Overlapping))
+(defn ensure-positive [msgf x] 
+  (if (pos? x) x
+      (throw (Exception. (str (msgf  x))))))
+
 (defn modified-routes [rts overlap deltas]
   (mapv (fn [[from to t]]
           (->> (cond (overlapping? from) (+ overlap t)
                      (overlapping? to)   (- t overlap)
                      :else t)
-               (+ (get-delta from deltas)))
-          (vector from to))
+               (+ (get-delta from deltas))
+               (ensure-positive #(str "nonpositive in modified-routes" 
+                                      {:from from :to to :overlap overlap :deltas deltas :x %}))
+               (vector from to)))
         rts))        
 
 ;; (defn ac12-defaults [overlap]
@@ -164,8 +134,8 @@
 ;;template for AC policies, we use the parameters to grow and shrink pools
 (defn ac12-template [name overlap & {:keys [deltas]}]
     (-> (policydata/make-policy :name name :overlap overlap)
-        (generic/add-positions default-positions)
-        (add-routes (modified-routes default-routes overlap deltas))))
+        (core/add-positions default-positions)
+        (core/add-routes (modified-routes default-routes overlap deltas))))
 
 ;; (defmacro deftemplate [name args & {:keys [name positions routes]}]
 ;;   `(defn ~name [~@args & {:keys [~'deltas]}]

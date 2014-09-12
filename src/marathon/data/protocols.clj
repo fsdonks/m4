@@ -126,6 +126,20 @@
                     [p period policy]))
 
 
+
+;;Helper function to allow us to push maps into policies as positions.
+;;Basically sets the state associated with a policy position.
+(defn add-positions [p xs]
+  (if (map? xs)
+      (reduce-kv (fn [acc pos state] (add-position acc pos #{state})) 
+                 p xs)
+      (reduce (fn [acc pos] (add-position acc pos {})))))
+
+(defn add-routes [p rs]
+  (reduce (fn [acc [from to t]]
+            (add-route acc from to t))
+          p rs))
+
 (definline between? [t l r]
   `(and (>= ~t ~l) (<= ~t ~r)))
 
