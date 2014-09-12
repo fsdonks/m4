@@ -36,9 +36,7 @@
   (stop-deployable      [p] stopdeployable)
   (start-state          [p] startstate)
   (transfer-time    [p start-position end-position] (graph/arc-weight positiongraph start-position end-position))
-
   (cycle-length     [p] cyclelength)
-  (deployable?      [p position] (core/deployable-state? (graph/get-node positiongraph position)))
   (end-state        [p] endstate)
   (get-cycle-time   [p position] (if (= position startstate) 0 
                                      (-> (graph/depth-first-search positiongraph startstate position)
@@ -48,18 +46,16 @@
   (get-position     [p cycletime] (loop [pos startstate
                                          t   0]
                                     (if-let [nxt (first (graph/sinks positiongraph pos))]
-                                      (let [tnxt (+ t (graph/arc-weight pos nxt))]
-                                        (if (>= tnxt cycletime) acc
+                                      (let [tnxt (+ t   (graph/arc-weight pos nxt))]
+                                        (if (>= tnxt cycletime) pos
                                             (recur nxt tnxt)))
-                                      (throw (Excption. "Cycletime exceeds policy!")))))                                    
+                                      (throw (Exception. "Cycletime exceeds policy!")))))                                    
   (get-state        [p position]   (graph/get-node positiongraph position))
-  (deployable?      [p cycletime]  (core/deployable? (.get-position p cycletime)))
-  (dwell?           [p position]   (core/dwell?  (graph/get-node positiongraph position)))
   (max-bog          [p]            maxbog)
   (max-dwell        [p]            maxdwell)
-  (max-mob          [p]            maxmob)
+  (max-mob          [p]            maxMOB)
   (min-dwell        [p]            mindwell)
-  (get-locations    [p]            (graph/get-node-labels positiongraph))
+  (get-locations    [p]           (graph/get-node-labels positiongraph))
   core/IAlterablePolicy
   (set-deployable       [p tstart tfinal] (-> p 
                                               (core/insert-modifier tstart :name :deployable)
@@ -71,12 +67,6 @@
   (add-route            [p start destination transfer-time] (assoc p :positiongraph (graph/conj-arc start destination transfer-time))))
 
 (def empty-policy (make-policy))
-
-;;Boiler plate reduction stuff.  This lets us provide shell
-;;implementations in the composite policy, and expands out into the
-;;actual error being thrown.  Should not be necessary, but hey, be defensive.
-(defmacro atomic-mod-err []
-  `(throw (Exception. "Atomic policies may not be modified inside of composite policies!")))
 
 ;policies defined by more than one atomic policy.
 ;;Debate turning policies away from a map....so we can support more
@@ -101,27 +91,23 @@
   (start-state          [p] (.start-state activepolicy))
   (transfer-time    [p start-position end-position] (.transfer-time activepolicy start-position end-position))
   (cycle-length     [p] (.cycle-length activepolicy))
-  (deployable?      [p position] (.deployable? activepolicy position))
-  (end-state        [p] (.end-state active-policy))
+  (end-state        [p] (.end-state activepolicy))
   (get-cycle-time   [p position] (.get-cycle-time activepolicy position))     
   (get-policy-type  [p] :composite)
-  (get-position     [p cycletime] (.get-position activepolicy))                                    
-  (get-state        [p position]  (.get-state activepolicy))
-  (deployable?      [p cycletime]  (.deployable? activepolicy cycletime))
-  (dwell?           [p position]   (.dwell?  activepolicy position))
+  (get-position     [p cycletime] (.get-position activepolicy cycletime))                                    
+  (get-state        [p position]  (.get-state activepolicy position))
   (max-bog          [p]            (.max-bog activepolicy))
   (max-dwell        [p]            (.max-dwell activepolicy))
-  (max-mob          [p]            (.max-mov activepolicy))
+  (max-mob          [p]            (.max-mob activepolicy))
   (min-dwell        [p]            (.min-dwell activepolicy))
   (get-locations    [p]            (.get-locations activepolicy))
   core/IPolicyContainer
-  (add-policy       [p period policy]   (policymap. activepolicy activeperiod (assoc policies period policy)))
+  (add-policy       [p period policy]   (policymap. name activepolicy activeperiod (assoc policies period policy)))
   (add-policy       [p keyval] (if (coll? keyval) 
-                                 (let [[k v] keyval] (add-policy p k v))
+                                 (let [[k v] keyval] (.add-policy p k v))
                                  (throw (Exception. "Expected a [period policy] pair for arity 2 add-policy on a policymap")))))
 
 (def empty-policymap (make-policymap))
-
 
 ;;Defines a policy that scripts a sequence of policies, starting from
 ;;a root policy.  We might want to have a policy offset...depends on
@@ -146,21 +132,18 @@
   (start-state         [p] (.start-state rootpolicy))
   (transfer-time       [p start-position end-position] (.transfer-time rootpolicy start-position end-position))
   (cycle-length        [p] (.cycle-length rootpolicy))
-  (deployable?         [p position] (.deployable? rootpolicy position))
-  (end-state           [p] (.end-state active-policy))
+  (end-state           [p] (.end-state rootpolicy))
   (get-cycle-time      [p position] (.get-cycle-time rootpolicy position))     
-  (get-policy-type     [p] :composite)
-  (get-position        [p cycletime]  (.get-position rootpolicy))                                    
-  (get-state           [p position]   (.get-state rootpolicy))
-  (deployable?         [p cycletime]  (.deployable? rootpolicy cycletime))
-  (dwell?              [p position]   (.dwell?  rootpolicy position))
+  (get-policy-type     [p] :sequential)
+  (get-position        [p cycletime]  (.get-position rootpolicy cycletime))                                    
+  (get-state           [p position]   (.get-state rootpolicy position))
   (max-bog             [p]            (.max-bog rootpolicy))
   (max-dwell           [p]            (.max-dwell rootpolicy))
-  (max-mob             [p]            (.max-mov rootpolicy))
+  (max-mob             [p]            (.max-mob rootpolicy))
   (min-dwell           [p]            (.min-dwell rootpolicy))
   (get-locations       [p]            (.get-locations rootpolicy))
   core/IPolicyContainer
-  (add-policy       [p period policy]   (add-policy p policy))
+  (add-policy       [p period policy]   (.add-policy p policy))
   (add-policy       [p policy]  (assert (satisfies? core/IRotationPolicy policy) 
                                         "expected a rotation policy for add-policy arity 2 on a policyseq")
                                 (policyseq. name (or rootpolicy policy) idx  (conj policies policy))))
