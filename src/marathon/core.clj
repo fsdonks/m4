@@ -2,11 +2,11 @@
   (:require [spork.util [table :as tbl]
                         [io :as io]]
             [marathon.processing.helmet [core :as helm]]
-            [marathon.processing.stoke  [core :as stoke]
-                                        [io :as stokeio]
-                                        [scraper :as scraper]]
-            [clojure                    [pprint :as pprint]]
-            [spork.cljgui.components    [swing :as gui]]
+            [marathon.processing.stoke [core :as stoke]
+                                       [io :as stokeio]
+                                       [scraper :as scraper]]
+            [clojure       [pprint :as pprint]]
+            [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
                            [native :as swing-events]])
@@ -111,7 +111,8 @@
    "High-Water"         "Computes HighWater trails"
    "Deployment-Vectors" "Analyzes deployments"
 ;;   "Charts"             "Generate plots."
-   "Stochastic-Demand"  "Generate stochastic demand files from a casebook."   
+   "Stochastic-Demand"  "Generate stochastic demand files from a casebook."
+   "Compute-Peaks"      "Extract the peak concurrent demands from a folder."
 ;;   "Custom"             "Run a custom script on the project"
 ;;   "Eval"               "Evaluate an expression in the context"
    })
@@ -156,19 +157,29 @@
 
 (defn compute-peaks-dialogue []
   (request-path [the-path "Please select a file co-located in a folder with demand case files."]
-     (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
-                                              (repeat "\\")))
-           target (str dump-folder "peaks\\")
-           _      (gui/alert (str "dumping peaks files to " target))]
-       (stokeio/compute-peaks dump-folder target))))
+    (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
+                                               (repeat "\\")))
+          target (str dump-folder "peaks\\")          
+          _ (gui/alert (str "dumping peaks files to " target))]            
+      (stokeio/compute-peaks dump-folder target))))
 
+;;a quick hack to compute the deciles from a set of peaks, in case we 
+;;don't need to compute the peaks and the deciles again.  We may 
+;;separate this from the compute-peaks entirely.
+(defn compute-deciles-dialogue []
+  (request-path [the-path "Please select a file co-located in a folder with demand peak files."]
+    (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
+                                               (repeat "\\")))
+          target dump-folder          
+          _ (gui/alert (str "dumping peaks stats to " target))]            
+      (stokeio/compute-peak-stats dump-folder target))))
 
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
   (request-path [wbpath "Please select the location of valid case-book."]
     (let [dump-folder (apply str (interleave (butlast (io/list-path wbpath))
-                                             (repeat "\\")))
-          _ (gui/alert (str "dumping to " dump-folder))]      
+                                               (repeat "\\")))
+          _ (gui/alert (str "dumping to " dump-folder))]            
       (spit-tables 
        (helm/futures->tables 
         (helm/xlsx->futures wbpath :ignore-dates? true :log? false)) dump-folder))))
@@ -241,19 +252,18 @@
 ;       :save-project        
 ;       :view-project  
 ;       :view-table   
-;       :add-table})))
+;       :add-table}))
                   
-;;just some mucking around with parallel mapping stuff.
+
+
+;;Just some mucking around with parallel mapping stuff.
 ;;Didn't see a boost.  Need to tweak this guy.
-;;(defn chunked-pmap [f size coll]
-;;  (->> coll
-;;       (partition-all size)
-;;       (pmap (comp doall 
-;;                   (partial map f)))
-;;       (apply concat)))
-
-
-
+;; (defn chunked-pmap [f size coll]
+;;   (->> coll 
+;;        (partition-all size)
+;;        (pmap (comp doall 
+;;                    (partial map f)))
+;;        (apply concat)))
 
                
                

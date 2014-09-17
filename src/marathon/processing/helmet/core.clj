@@ -275,7 +275,8 @@
         (string? v) (cond (= (first v) \") v
                           (truthy-string? v) (read-string 
                                                (clojure.string/lower-case v))
-                          :else (parse-legacy-field (read-string v)))                      
+                          :else (parse-legacy-field (read-string v)))
+                      
         :else v)) 
 
 (defn check-fields [r fields]
@@ -326,7 +327,15 @@
                         (get original-fields :start))
                      (get original-fields :start))]
       (merge original-fields (assoc computed-fields :start newstart))))
-  
+
+;;Modified to use new vocabulary.  We now allow forms of pools that
+;;have [:no-replace [x1 x2 ....]] to use (->without-replacement ) 
+;;instead of (->choice)
+(defn no-replace? [pool]
+  (case (first pool) 
+    (:no-replace 'no-replace :without-replacement 'without-replacement) true
+    nil))
+
 (defn legacy-rule-record->sample-rule
   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
    We build a set of rules from the legacy rule records, forming them into a 
@@ -337,10 +346,15 @@
                       :expected-fields legacy-rule-keys)
         distributions (get-computed-fields parsed)
         [name freq pool] (rec/get-fields parsed [:Rule :Frequency :Pool])]
-    (->> (if (include-all? pool)
-           (sample/->transform flatten 
-               (sample/->replications 1 (subvec pool 1)))
-           (sample/->choice pool))
+    (->> (cond (include-all? pool)
+                  (sample/->transform flatten 
+                        (sample/->replications 1 (subvec pool 1)))           
+               (no-replace? pool)
+                  (let [xs (second pool)]
+                    (assert  (vector? xs) (str "invalid pool sample :" pool ", expected a nested vector!"))
+                    (sample/->without-replacement xs))                                        
+               :else
+                 (sample/->choice pool))
          ((fn [nd] (if (empty? distributions) nd 
                      (sample/->transform 
                        (fn [xs] 
@@ -353,6 +367,34 @@
                      (->record-draw nd))))
          (sample/->transform flatten)
          (assoc {} name))))
+
+;; (defn legacy-rule-record->sample-rule
+;;   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
+;;    We build a set of rules from the legacy rule records, forming them into a 
+;;    sampling network, and then apply the ruleset to source data - usually demand 
+;;    records."
+;;   [rule-record]
+;;   (let [parsed (parse-legacy-record rule-record 
+;;                       :expected-fields legacy-rule-keys)
+;;         distributions (get-computed-fields parsed)
+;;         [name freq pool] (rec/get-fields parsed [:Rule :Frequency :Pool])]
+;;     (->> (if (include-all? pool)
+;;            (sample/->transform flatten 
+;;                (sample/->replications 1 (subvec pool 1)))           
+;;            (sample/->choice pool))
+;;          ((fn [nd] (if (empty? distributions) nd 
+;;                      (sample/->transform 
+;;                        (fn [xs] 
+;;                          (let [sampled-fields ((sample/merge-stochastic
+;;                                                 distributions) {})
+;;                                f (partial apply-computed-fields sampled-fields)]
+;;                                (map f xs))) nd))))
+;;          ((fn [nd] (if (> freq 1)                              
+;;                      (sample/->replications freq [(->record-draw nd)])
+;;                      (->record-draw nd))))
+;;          (sample/->transform flatten)
+;;          (assoc {} name))))
+
 
 (defn read-legacy-population
   "Given a table of demand-records, converts the table into a map of records 
@@ -420,62 +462,73 @@
 ;;            (first case-futures)))                     
 ;;        (sample/->replications future-count [case-rules])))})
 
-;;Patched to fix a memory leak....Replacement for build-case.  We now
+
+;;Patched to fix a memory leak....Replacement for build-case. We now
 ;;encode the specified amount of futures in an intermediate sampler
 ;;specification map, rather than generating the entirety of the
-;;samples for all futures at once.  This should scale much better for
-;;larger cases, so long a we process the sampled futures lazily,
+;;samples for all futures at once.  This should scale much better
+;;for larger cases, so long as we process the sampled futures lazily,
 ;;and without retaining the head.
-(defn case->sampler 
-  "Wrapper for build-case.  Added to enforce O(1) memoery constraints 
-   when sampling from demand futures.  Rather than embedding the (potentially
-   high) future replications in the case rules using a replication node,
+(defn case->sampler
+  "Wrapper for build-case.  Added to enforce O(1) memory constraints when 
+   sampling from demand futures.  Rather than embedding the (potentially 
+   high) future replications in the case rules using a replication node, 
    we treat the case rules as a sampler.  The sampler is responsible 
-   for generating a uniquely identified case future, every time it is
+   for generating a uniquely identified case future, every time it is 
    sampled.  Also, the return is a map that describes a sampling operation
    rather than a pre-cooked set of samples.  In this case, the sampling 
-   operation is evaluated as needed, to generate a set of samples -  
+   operation is evaluated as needed, to generate a set of samples - 
    identical in function to the old Helmet sampling rules."
   [case-name case-rules future-count duration-max seed tfinal replacement]
-  (let [idx          (atom 0)
-        seeder       (stats/make-random seed)
-        next-idx!    (fn [] (let [i @idx] (swap! idx inc) i))
-        next-seed!   (fn [] (stats/draw seeder))]
-    {case-name
+  (let [idx           (atom 0)        
+        seeder        (stats/make-random seed)
+        next-idx!     (fn [] (let [i @idx]  (swap! idx inc) i))
+        next-seed!    (fn [] (stats/draw seeder))]
+    {case-name 
      {:case-name case-name
-      :samples   future-count
-      :sampler   
-      (sample/->constrain
-              {:tfinal tfinal :duration-max duration-max :seed seed}
-       (stats/with-seed (next-seed!) ;hack, we're re-seeding here for 
-                                     ;each rep, should have been 
-                                     ;covered in ->constrain !
-         (sample/->transform
-          (fn [case-futures]
+      :samples   future-count 
+      :sampler
+      (sample/->constrain 
+              {:tfinal tfinal :duration-max duration-max  :seed seed}
+       (stats/with-seed (next-seed!)  ;hack, we're re-seeding here for
+                                      ;each rep, should have been
+                                      ;covered in ->constrain !
+         (sample/->transform 
+          (fn [case-futures] 
             (let [i (next-idx!)]
-              (->> (first (first case-futures)) ;extract the only future
-                   (flatten)           ;slim down the concatenated rules
-                   (map #(let [vig (str (:Vignette %) "_" (:draw-index %))] ;tag
-                           (merge % {:case-name (tbl/field->string case-name)
-                                     :case-future i
-                                     :Vignette vig
-                                     :Operation (str vig "_" (:Operation %))}))))))
+              (->>  (first (first case-futures)) ;extract the only future
+                    (flatten) ;slim down the concatenated rules
+                    (map #(let [vig (str (:Vignette %) "_" (:draw-index %))] ;tag
+                            (merge % {:case-name  (tbl/field->string case-name)
+                                      :case-future i
+                                      :Vignette    vig
+                                      :Operation   (str vig  "_" (:Operation %))}))))))                     
           (sample/->replications 1 [case-rules]))))}}))
 
-(defn sampler->stream
-  "Given a sampling environment - typically the population from a helmet case
+(defn sampler->stream 
+  "Given a sampling environment - typically the population from a helmet case 
    - and a sampler, returns a lazy sequence of stochastic futures.  Intended to 
-   be used with doseq, or any other process that does not retain the head of the
+   be used with doseq, or any other process that does not retain the head of the 
    sequence."
   [env s]
   (when (> (:samples s) 0)
-    (lazy-seq
-      (cons (sample/sample-from env (:sampler s))
-            (sampler->stream env (assoc s :samples (-> s :samples dec)))))))
-
+    (lazy-seq 
+     (cons (sample/sample-from env (:sampler s))
+           (sampler->stream env (assoc s :samples (-> s :samples dec)))))))
+   
 (defn read-legacy-cases [table] (->> (tbl/table-records table)
                                   (map parse-legacy-case)
                                   (filter :Enabled)))
+
+;; (defn compose-cases [case-records case-rules]
+;;   (reduce (fn [acc case-record] 
+;;             (let [{:keys [Futures Tfinal RandomSeed Enabled MaxDuration CaseName 
+;;                           Replacement]} case-record]
+;;               (conj acc 
+;;                     (build-case CaseName (get case-rules CaseName) 
+;;                                 Futures MaxDuration RandomSeed 
+;;                                 Tfinal Replacement))))
+;;           {} case-records))
 
 ;;Patched to use case->sampler, for lazy sampling of futures.
 (defn compose-cases [case-records case-rules]
@@ -488,7 +541,6 @@
                                    Tfinal Replacement))))
           {} case-records))
 
-
 (defn read-casebook [& {:keys [wbpath ignore-dates?]}]
   (let [db (into {} (for [[k table] (xl/xlsx->tables 
                                       (or wbpath (gui/select-file))
@@ -500,7 +552,7 @@
                         (read-legacy-population (get db "DemandRecords"))}
         rules   (into {} (for [k  active-cases]
                            (let [rule-table (or (get db k)
-                                                (get db (tbl/field->string k))                                                
+                                                (get db (tbl/field->string k))        
                                                 (throw (Exception. 
                                          (str "Table " k " does not exist"))))]
                              ;This is a hack at the moment.  We only return the
@@ -512,6 +564,10 @@
         demandsplit {:DemandSplit (get db "DemandSplit")}]
     (merge cases population validation demandsplit)))
 
+
+;;___Patches__
+;;group-by is superfluous here, and quite undesirable.  The use case
+;;is to cleanly compile a set of 
 ;; (defn compile-cases
 ;;   "Given a map of tables, process each case, building its associated rule set, 
 ;;    drawing from a sample population.  The results from each case are returned 
@@ -529,19 +585,19 @@
 ;;     (into {} 
 ;;           (for [[case-name c] (:Cases db)]
 ;;             (->> (sample/sample-from (:Population db) c)
-;;               (map fix-fields) 
+;;               (map      fix-fields) 
 ;;               (group-by case-key)
 ;;         (seq))))))
 
 ;;Patched.
 ;;Changed from original, patched to use lazy sequences and to eschew
-;;intermediate maps (i.e. forcing results).  This should return a 
-;;map of lazy sequences of partitions of futures for each case.
-;;That's a mouthful.  So, [[case-name case-future] lazy-records]
-;;should be the outcome.  From here, we're ready to post process
+;;intermediate maps (i.e. forcing results). This should return a 
+;;map of lazy sequences of partitions of futures for each case. 
+;;That's mouthful.  So, [[case-name case-future] lazy-records]
+;;should be the outcome.  From here, we're ready to post process 
 ;;each set of lazy-records with collisions and splitting, etc.
 ;;We already have the case-name and case-future embedded in each 
-;;record in the demand.
+;;record in the demand. 
 (defn compile-cases
   "Given a map of tables, process each case, building its associated rule set, 
    drawing from a sample population.  The results from each case are returned 
@@ -550,19 +606,19 @@
    fields.  The table map, or the database, is expected to have at least the 
    following fields [:ValidationRules :DemandRecords :Cases], where each value
    is a table.  Each enabled case will be evaluated, returning a seq of 
-   [[case-name case-future]] lazy-records]"
+   [[case-name case-future] lazy-records]"
   [db & {:keys [field-merges] 
-               :or   {field-merges {:start :StartDay 
+         :or   {field-merges {:start :StartDay 
                                     :duration :Duration}}}]
-  (let [case-key (juxt :case-name :case-future)
+  (let [case-key   (juxt :case-name :case-future)
         fix-fields (comp (partial collapse-fields field-merges) integral-times)]
     (concat
-      (for [[case-name sampler] (:Cases db)
-            xs (sampler->stream (:Population db) sampler)] ;generate stream of futures
-        (->> xs
-             (map      fix-fields) ;window dressing.
-             (vector (case-key (first xs))))))))
-
+     (for [[case-name sampler]  (:Cases db)
+           xs  (sampler->stream (:Population db) sampler)] ;generate stream of futures 
+       (->> xs
+            (map      fix-fields)  ;window dressing
+            (vector (case-key (first xs))))))))
+  
 (defn collide-and-split
   "Given a seq of records, a map of split timings and a map of collision 
    classes, processes the sequence of records by handling collisions, then 
@@ -604,7 +660,7 @@
 ;;               (process-if (:collide processes)
 ;;                 #(collision/process-collisions classes % :log? log?))
 ;;               (process-if false ;(:split processes) 
-;;                 #(split/split-future splitmap %)))]))))     
+;;                 #(split/split-future splitmap %)))])))) 
 
 ;;Patched to avoid intermediate hash-map.
 (defn post-process-cases
@@ -619,13 +675,11 @@
       [case-key
        (->> case-records 
             (process-if (:collide processes)
-              #(collision/process-collisions classes % :log? log?))
+                #(collision/process-collisions classes % :log? log?))
             (process-if (:split processes) 
-              #(split/split-future splitmap %)))])))
-         
+                #(split/split-future splitmap %)))])))
 
 ;;Patched to included discrete processes..
-
 (defn xlsx->futures [wbpath & {:keys [ignore-dates? log? processes] 
                                :or {ignore-dates? true
                                     log? true
@@ -699,7 +753,8 @@
   (def rules (read-legacy-rules rule-tbl))
   
   (def statics (:Static rules))
- 
+
+  
   
 ;want to transform a rule record into this ->
 ;{:GetHoot {:replicate 2 {:transform [{:start (uniform 0 1000)} 

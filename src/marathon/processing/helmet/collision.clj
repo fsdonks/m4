@@ -116,7 +116,7 @@
             (map first (for [[k v] groups]
                          (if (contains? classes k)
                            {:collides v}
-                           {:static v}))))))
+                           {:static   v}))))))
 (defn fix-group [space xs]
   (fix-records (partial near? space)
                (partial fix-collision space) (sort-by start-time xs)))

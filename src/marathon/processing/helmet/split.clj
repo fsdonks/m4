@@ -63,11 +63,12 @@
 (defn add-start-dur [r] 
   (merge r {:start (get r :StartDay)
             :duration (get r :Duration)}))
+
 (defn drop-start-dur [r]
   (-> (merge r {:StartDay (get r :start) 
                 :Duration (get r :duration)})
-    (dissoc :start)
-    (dissoc :duration)))
+      (dissoc :start)
+      (dissoc :duration)))
 
 ;;Patched to account for unique draws and demandgroups.
 
@@ -96,3 +97,26 @@
            split-recs))
     (flatten)
     (map drop-start-dur)))
+
+
+;;probably move this guy out at some point...
+
+;;Perform a sensitivity analysis for a single future.
+;;If we're doing a sensitivity analysis, one way to look at it 
+;;is to vary something, and measure the sensitivity of the result.
+;;It's a simple experiment.  At the barest level, we're just doing 
+;;repeated evaluations of functions relative to input variation,
+;;albeit the variation is controlled.
+
+;;We can do a very quick sensitivity check by compiling stochastic
+;;demand for a future, NOT processing its demand split, and then 
+;;creating N futures where the demand split is varied.  We may 
+;;include this in a later run...
+(defn future->multiple-splits [xs splitmap splitnums & {:keys [exclude?] 
+                                                        :or   {exclude? title32?}}]
+  (assert (every? pos? splitnums) "Inputs for splitnums must all be positive numbers")
+  (let [new-split (fn [n]  (persistent! (reduce-kv 
+                                        (fn [acc k v] (assoc! acc k (assoc v :DayRule n))) (transient {}) splitmap)))]
+    (->> (map new-split splitnums)
+         (map-indexed (fn [idx sm] (->> (split-future sm xs :exclude? exclude?)
+                                        (map #(assoc % :SplitCase (nth splitnums idx)))))))))

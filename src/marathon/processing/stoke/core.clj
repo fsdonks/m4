@@ -106,10 +106,24 @@
   (->> (seq peak-map)  
        (reduce (fn [[tot-supplied tot-required] [src required]]
                 (let [supplied (get supply-map src 0)]
-                  [(+ tot-supplied supplied)
+                  [(+ tot-supplied (min supplied required))
                    (+ tot-required required)]))
                [0.0 0.0])
        (apply /)))
+
+(defn strength-weighted-supply-evaluator
+  "Creates a function that evaluates supply based on strength."
+  [src->strength]
+  (fn  [supply-map peak-map]
+    (->> (seq peak-map)  
+         (reduce (fn [[tot-supplied tot-required] [src required]]
+                   (let [supplied (get supply-map src 0)
+                         strength (src->strength src)]
+                     [(+ tot-supplied (* strength (min supplied required)))
+                      (+ tot-required (* strength required))]))
+                 [0.0 0.0])
+         (apply /))))
+
 
 ;;Scraping Peak Demand
 ;;====================
@@ -135,7 +149,7 @@
   "Computes a map of {src peak-records} for each src in the demand."
   [xs] 
   (temporal/peaks-by :SRC xs  
-                     :start-func :Start  :duration-func :Duration
+                     :start-func :StartDay  :duration-func :Duration
                      :peak-function total-quantity-demanded))
 
 (defn src-activity-records->src-peaks
@@ -191,13 +205,20 @@
      :total-strength   0
      :max-end-strength max-end-strength}))
 
-(defn add-supply [s src compo qty & [strength]]
-  (assert (contains? (:supply s) [src compo]) 
-          (str "Unknown supply key" [src compo]))
-  (-> s 
-    (update-in [:supply [src compo]] + qty)
-    (update-in [:total-strength] + (or strength 
-                                       (* qty (get (:src->strength s) src))))))
+(defn add-supply 
+  ([s src compo qty]
+     (assert (contains? (:supply s) [src compo]) 
+             (str "Unknown supply key" [src compo]))
+     (-> s 
+         (update-in [:supply [src compo]] + qty)
+         (update-in [:total-strength] +  (* qty (get (:src->strength s) src)))))
+  ([s src compo qty strength] 
+     (assert (contains? (:supply s) [src compo]) 
+             (str "Unknown supply key" [src compo]))
+     (-> s 
+         (update-in [:supply [src compo]] + qty)
+         (update-in [:total-strength] +  strength))))
+
 (defn surplus-strength [s] 
   (- (:max-end-strength s) (:total-strength s)))
 
@@ -249,7 +270,7 @@
 (defn hierarchically-fill-supply 
   [supply demand-records 
    & {:keys [demand->compo demand->priority demand->src rollover?] 
-      :or   {demand->compo    :Com3ponent
+      :or   {demand->compo    :Component
              demand->priority #(or (:Priority %) 1)
              demand->src      :SRC}}]
   (let [{:keys [src->strength max-end-strength]} supply
@@ -338,23 +359,34 @@
   "Given a portfolio of x supplies and a sample size, generates k 
    demand futures, and evaluates each supply against them."
   [xs futures & {:keys [value-func]  :or {value-func evaluate-supply}}]
-  (let [indexed-supply  (map-indexed vector xs)
+  (let [indexed-supply     (map-indexed vector xs)
         indexed-src-supply (map-indexed (fn [idx s] [idx (supply-by-src s)]) xs)        
         indexed-futures (->>  (map process-future futures)
-                              (map-indexed vector))
+                              (map-indexed vector))        
         results (for [[i supply] indexed-src-supply
                       [j {:keys [src-peaks]}] indexed-futures]
-                {:force i :future j :value (value-func supply src-peaks)})]
+                  {:force i :future j :value (value-func supply src-peaks)})]
     {:performance (vec results)
      :peaks (into {} (for [[idx d] indexed-futures]  [idx (:src-peaks d)]))
      :forces (into {} indexed-supply)
      :futures (into {} indexed-futures)}))
 
+;;__NOTE__Fix the version in utils/stats , it's weak.
+;;This is a hack to account for a weak quantile function in spork.util.stats
+(defn fixed-deciles [xs]
+  (let [n (count xs)
+        xs (sort xs)
+        xv (vec xs)
+        width (/ n 10)
+        res    (map #(get xv %) (map #(long (Math/floor (* width %))) (range 9)))]    
+    (if (not= (count res) 9) 
+        (throw (Exception. (str "Count is less than 9 " res " for " xs)))
+        res)))
 
 (defn peaks->demand-ranges
   "Distills a sequence of sampled demand futures into a map of 
   {src demand-deciles}"
-  [indexed-peaks & {:keys [range-func] :or {range-func stats/deciles}}]
+  [indexed-peaks & {:keys [range-func] :or {range-func fixed-deciles}}]
   (let [add-sample (fn [m [src qty]] 
                      (assoc m src (conj (get m src []) qty)))
         src-peaks (->> (seq indexed-peaks)
@@ -363,6 +395,8 @@
     (->>  (for [[src peak-quantities] src-peaks]
             [src (range-func peak-quantities)])
           (into {}))))       
+;;Hack
+(def empty-deciles  (take  9 (repeat 0.0)))
 
 (defn stoke
   "Given an initial supply, a supply portfolio width, n, and an evaluation 
@@ -379,6 +413,22 @@
   ([srcs compos max-end-strength src->strength n k futures] 
     (stoke (->supply-solution srcs compos max-end-strength src->strength)
            n k futures)))
+
+;;This is a more general version of stoke...
+;;We'll port it up after it's proven to be working on real data.
+(defn stoke-portfolio
+  "Given an initial supply, a supply portfolio width, n, and an evaluation 
+   sample size, k, and a sequence of demand futures, generates a map of  
+  
+   {performance {{[0...n] [0...k] value}
+    peaks       {0 {[src compo] peak ...}}
+    forces      {0 supply1, 1 supply2,...n supplyn}
+    futures     {0 future0, 1 future1,...k futurek}}"
+  [init-supply n k futures supply-gen value-function]
+  (let [init-futs  (take n futures) 
+        eval-futs  (take k (drop n futures))]
+    (-> (supply->portfolio init-supply init-futs :n n :supply-gen supply-gen)
+        (portfolio->performance eval-futs :value-func value-function))))
   
 ;;Scraping output from our experiments.
 (defn stoked->stats [results] 
@@ -402,6 +452,7 @@
           best-supply   (get best-force :supply)
           src->strength (get best-force :src->strength)
           demand-ranges (peaks->demand-ranges (:peaks stoke-results))
+          k             (count (:futures stoke-results))           
           supply-ranges  (for [[[src compo] supplies]  
                                (compare-supplies 
                                  (vals (select-keys (:forces stoke-results)  
@@ -409,7 +460,8 @@
                            {:src src :compo compo :strength (src->strength src) 
                             :best (get best-supply [src compo])
                             ;:ranges (stats/deciles supplies)
-                            :ranges (get demand-ranges src)})]
+                            :ranges (or (get demand-ranges src) 
+                                        empty-deciles)})]
       {:best             best
        :top-performers   force-keys 
        :supply-ranges    supply-ranges}))
@@ -425,7 +477,8 @@
                              (map as-percentile  (range 9)))
         expand-record (fn [rec] (->> (:ranges rec)                        
                                      (map-indexed (fn [idx v] [(as-percentile idx) v]))
-                                     (into (dissoc rec :ranges))))]
+                                     (into (dissoc rec :ranges))))
+        _             (println [:building :table])]
      (->> (tbl/records->table (map expand-record (:supply-ranges summarized-results)))
           (tbl/order-by [:src :compo])
           (tbl/select-fields ordered-fields))))
