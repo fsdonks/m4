@@ -84,7 +84,7 @@
 (defn demand-file->table [path]
   (tabdelimited->table (slurp path) 
                        :parsemode :no-science
-                       :schema schemas/demand-table-schema))
+                       :schema (schemas/get-schema :demand-table-schema)))
 
 ;;Cloned from stoke.core.....
 (defn total-quantity

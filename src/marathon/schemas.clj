@@ -109,7 +109,32 @@
      [:Enabled :boolean]]
    :Parameters 
     [:ParameterName 
-     :Value]})
+     :Value]
+   :demand-table-schema ;;added for legacy purposes.
+   [:Type
+    :Enabled
+    [:Priority :float]
+    [:Quantity :float]
+    [:DemandIndex :float]
+    [:StartDay :float]
+    [:Duration :float]
+    [:Overlap  :float]
+    :SRC
+    :SourceFirst
+    :DemandGroup
+    :Vignette
+    :Operation
+    :Category
+    :OITitle
+    :case-name
+    :case-future
+    :DependencyClass
+    :DemandSplit
+    :Include
+    :draw-index
+    :Group
+    :DemandType
+    "Title 10_32"]})
 
 (def known-schemas 
   (reduce-kv (fn [acc name fields]

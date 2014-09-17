@@ -22,145 +22,13 @@
             [spork.util     [table :as tbl]]
             [spork.cljgui.components [swing :as gui]]))
 
-
-;;PATCHES
-;;=======
-;;Added general functions for manipulating networks ala map and reduce.
-(in-ns 'spork.cljgraph.flow)
-;;we can probably replace these with stuff from core/reducers fyi
-(defmacro edge-reduce [net node f & {:keys [direction] :or {direction :forward}}]
-  (let [dfunc (case direction :forward  'spork.cljgraph.flow/-flow-sinks 
-                              :backward 'spork.cljgraph.flow/-flow-sources
-                (throw (Exception. "Unknown edge direction in edge-reduce, 
-                                    expected :forward or :backward")))]
-  `(let [visited# (atom (transient {}))
-         visited?# (fn [from# to#] (spork.util.general/get2   @visited# from# to# nil))
-         visit!#   (fn [from# to#] (reset! visited# (spork.util.general/assoc2! @visited# from# to# 1)))]
-     (loop [fringe#  #{~node}         
-            acc#        ~net]
-       (if (zero? (.count fringe#)) acc#
-           (let [from#    (first fringe#)
-                 parents# (reduce-kv (fn [acc# k# v#] (conj acc# k#)) #{} (~dfunc ~net from#))]
-             (recur (clojure.set/union (disj fringe# from#) parents#)
-                    (reduce (fn [inner-acc# to#] 
-                              (if (visited?# from# to#) 
-                               inner-acc#
-                               (let [~'_   (visit!# from# to#)
-                                     e#    (spork.cljgraph.flow/-edge-info inner-acc# to# from#)]
-                                 (~f inner-acc# e#))))
-                            acc# parents#))))))))
-
-(defmacro edge-map [net node f & {:keys [direction] :or {direction :forward}}] 
-  `(edge-reduce ~net ~node 
-      (fn [acc# edge#] 
-        (let [res# (~f edge#)] 
-          (if (identical? res# edge#) acc# (spork.cljgraph.flow/-set-edge acc# res#)))) 
-      :direction ~direction))
-
-(defn persistent-network! [^transient-net the-net]
-  (let [g (:g the-net)]
-    (assoc g
-           :flow-info (kv-map2 (fn [_ _  v] (medge->edge v))  (persistent2! (:flow-info the-net))))))
-
-;;Possibly move these to spork.cljgraph.flow
-;;==========================================
-;;allow us to scale the flows by src strength.
-(defn variable-scale [var] 
-  (reify spork.cljgraph.flow/IScaling
-    (scale   [sc n] (quot n @var))
-    (unscale [sc n] (*    n @var))))
-
-(defrecord variable-scaled-flow [atm]
-  IScaling
-  (scale [n x]   (quot x @atm))
-  (unscale [n x] (* x @atm)))
-
-;;Creates a function ala mincost-flow that 
-;;scales by the IScaling scalar.
-(defn ->scaled-mincostflow [scalar]  
-  (with-scaled-flow scalar     
-    (eval (flow-fn *flow-options*))))
-
-(def ^:dynamic *flow-options* 
-  (merge default-flow-opts      
-         {:get-sources 'spork.cljgraph.flow/-flow-sources, 
-          :get-sinks 'spork.cljgraph.flow/-flow-sinks, 
-          :weightf 'spork.cljgraph.flow/-flow-weight, 
-          :get-edge 'spork.cljgraph.flow/-edge-info, 
-          :get-direction 'spork.cljgraph.flow/-get-direction}))
-
-(defn flow-fn
-  "Defines a flow computation across net, originating at from and ending at to.  
-   Caller may supply flow options explicitly, or defer to the explicit 
-   *flow-options* dynamic binding, using  supporting macros ala with-flow-options 
-   or manual modification."
-  [{:keys [get-sinks get-sources get-edge get-direction neighborf weightf augmentations
-           forward-filter backward-filter state alter-flow unalter-flow] :as opts}]
-   (doseq [[k v] opts] (when (not= k :neighborf) (assert (not (nil? v)) (println [k :is :nil!]))))
-   `(let [neighborf# (fn ~(gensym "neighborf") [flow-info# v#]
-                       (general-flow-neighbors flow-info# v#
-                                               :get-sinks       ~get-sinks
-                                               :get-sources     ~get-sources
-                                               :forward-filter  ~forward-filter
-                                               :backward-filter ~backward-filter
-                                               :get-edge        ~get-edge))
-          traverse# (fn ~(gensym "traverse") [net# startnode# targetnode# startstate#] 
-                      (general-flow-traverse net# startnode# targetnode# startstate#
-                                             :weightf ~weightf   :neighborf neighborf#))
-          aug#     (fn ~(gensym "aug-path") [g# from# to#] (aug-path g# from# to# traverse# ~state))
-          flows#   (fn ~(gensym "path->edge-flows") [flow-info# p#]
-                     (path-walk flow-info# p#
-                                :alter-flow    ~alter-flow
-                                :unalter-flow  ~unalter-flow
-                                :get-edge      ~get-edge
-                                :get-direction ~get-direction))]
-      (with-meta 
-        (fn ~(gensym "flow") [net# from# to#] 
-          (~(case augmentations 
-              nil 'spork.cljgraph.flow/flowbody 
-              (true :recording) 'spork.cljgraph.flow/augbody 
-                :debug 'spork.cljgraph.flow/augdebug 
-                (throw (Exception. (str "unknown aug type" augmentations))))
-           net# from# to# aug# flows#))
-        {:opts ~opts
-         :neighborf neighborf#
-         :traverse  traverse#
-         :aug-path  aug#
-         :path->edge-flows flows#}))) 
-
-(defn scaling? [x] (satisfies? IScaling x))
-(defn as-scale [x] 
-  (cond (scaling? x) x 
-        (instance? clojure.lang.IDeref x) (->variable-scaled-flow x)
-        (number? x) (->scaled-int-flow x)
-        :else (throw (Exception. (str "Cannot make a flow scaler out of " x)))))
-
-;;A transient network with dynamic edge weights.
-;; (m/defmutable wrapped-transient-net [^transient-net tnet weightf sinkf sourcef meta]
-;;   clojure.lang.IObj
-;;   ;adds metadata support
-;;   (meta [this] metadata)
-;;   (withMeta [this m] (do (set! metadata m) this))
-;;   IFlowNet
-;;   (-edge-info    [net from to] (.-edge-info tnet))
-;;   (einfos [n]     (get-edge-infos! tnet))
-;;   (-get-direction [net from to] (.-get-direction tnet))
-;;   (-flow-weight   [net from to] (weightf g from to))
-;;   (-set-edge [net edge]    (.-set-edge tnet edge))
-;;   (-flow-sinks     [net x] (sinkf  x))
-;;   (-flow-sources   [net x] (sourcef  x))
-;;   (-push-flow      [net edge flow] (.-push-flow tnet edge flow))
-;;   IDynamicFlow 
-;;   (-conj-cap-arc [net from to w cap]                 
-;;          (do (set! g  (graph/conj-arc g from to w))
-;;              (set! flow-info
-;;                    (assoc2! flow-info
-;;                             from to  
-;;                             (meinfo. from to cap 0 :forward)))
-;;              net))
-;;   (-active-flows [net] (.-active-flows tnet)))
-
-(in-ns 'marathon.processing.stoke.scraper)
+;; (def ^:dynamic *flow-options* 
+;;   (merge default-flow-opts      
+;;          {:get-sources 'spork.cljgraph.flow/-flow-sources, 
+;;           :get-sinks 'spork.cljgraph.flow/-flow-sinks, 
+;;           :weightf 'spork.cljgraph.flow/-flow-weight, 
+;;           :get-edge 'spork.cljgraph.flow/-edge-info, 
+;;           :get-direction 'spork.cljgraph.flow/-get-direction}))
 
 ;;Flow Scaling
 ;;============
@@ -168,11 +36,12 @@
 ;;can't flow in parallel with this...
 (def current-scale (atom 1))
 (definline set-scale! [n] `(reset! current-scale ~n))
-(def flow-scale (flow/->variable-scaled-flow current-scale))
-(def scaled-mincost-flow 
-  (flow/with-altered-flow 
-    (fn [f] (flow/scale flow-scale   f)) 
-    (fn [f] (flow/unscale flow-scale f)) (eval (flow/flow-fn flow/*flow-options*))))
+(def scaled-mincost-flow (flow/->scaled-mincost-flow (flow/->variable-scaled-flow current-scale)))
+
+;; (def scaled-mincost-flow 
+;;   (flow/with-altered-flow 
+;;     (fn [f] (flow/scale flow-scale   f)) 
+;;     (fn [f] (flow/unscale flow-scale f)) (eval (flow/flow-fn flow/*flow-options*))))
 
 ;;Allows us to use a global flow scaling, and to quickly switch out scales.
 (defmacro with-flow-scaling [qty & body]
@@ -709,7 +578,7 @@
    infinite capacity are left untouched.  Edges with 0 capacity cannot be decremented 
    below 0.  Only visits predecessor edges once."
   [net node amt]
-   (flow/edge-map net node 
+   (flow/edge-map-from net node 
     (fn [e] 
       (let [cap (flow/edge-capacity e)]
         (if (== cap flow/posinf) e
