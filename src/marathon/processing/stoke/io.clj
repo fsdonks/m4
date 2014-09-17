@@ -7,52 +7,6 @@
             [marathon   [schemas :as schemas]]
             [spork.util [temporal :as temporal]]
             [spork.util.excel [core :as xl]]))
-
-
-(in-ns 'spork.util.temporal)
-
-(require '[spork.data [priorityq :as pq]])
-(defn temporal-profile
-  "Extracts an event-driven profile of the concurrent records over time from a 
-   sequence of values, where start-func is a function that yields a start time 
-   for each record, and duration-func is a function that yields a numeric 
-   duration for each record."
-  [xs & {:keys [start-func duration-func]
-         :or {start-func :Start duration-func :Duration}}] 
-  (let [add-demand  (fn [t x] {:t t :type :add  :data x})
-        drop-demand (fn [t x] {:t t :type :drop :data x})
-        resample    (fn [t]   {:t t :type :resampling :data nil})
-        earliest    (fn [l r] (compare (:t l) (:t r)))
-        handle (fn [e [es actives state]]
-                 (let [t (:t e)
-                       data (:data e)]
-                  (case (:type e)
-;                    :resampling [es actives :changed]
-                    :add (let [to-drop (drop-demand (+ t (duration-func data)) data)
-                               nxt (conj es [to-drop (:t to-drop)])]
-                           [nxt
-                            (conj actives data)
-                            :added])
-                    :drop (let [res (disj actives data)]
-                             [es res :dropped])
-                    (throw (Exception. "uknown event")))))
-        initial-events (into spork.data.priorityq/emptyq 
-                             (map (fn [x] [(add-demand (start-func x) x) (start-func x)]) xs))]
-    (loop [state [initial-events #{} :init]
-           acc   []]
-      (if (empty? (first state)) acc
-          (let [es (first state)
-                xs (second state)
-                s (nth state 2)]
-            (let [event               (peek es)
-                  remaining-events    (pop es)
-                  current-time        (:t event)]
-              (recur (handle event [remaining-events xs s])
-                     (conj acc state))))))))
-
-;;END PATCH
-(in-ns 'marathon.processing.stoke.io)
-
 ;;ADDED
 ;;=====
 ;;We need to determine, from a time series, not only what our peak is,

@@ -368,34 +368,6 @@
          (sample/->transform flatten)
          (assoc {} name))))
 
-;; (defn legacy-rule-record->sample-rule
-;;   "Converts a raw legacy record into a sample-rule, as defined in util.sampling.
-;;    We build a set of rules from the legacy rule records, forming them into a 
-;;    sampling network, and then apply the ruleset to source data - usually demand 
-;;    records."
-;;   [rule-record]
-;;   (let [parsed (parse-legacy-record rule-record 
-;;                       :expected-fields legacy-rule-keys)
-;;         distributions (get-computed-fields parsed)
-;;         [name freq pool] (rec/get-fields parsed [:Rule :Frequency :Pool])]
-;;     (->> (if (include-all? pool)
-;;            (sample/->transform flatten 
-;;                (sample/->replications 1 (subvec pool 1)))           
-;;            (sample/->choice pool))
-;;          ((fn [nd] (if (empty? distributions) nd 
-;;                      (sample/->transform 
-;;                        (fn [xs] 
-;;                          (let [sampled-fields ((sample/merge-stochastic
-;;                                                 distributions) {})
-;;                                f (partial apply-computed-fields sampled-fields)]
-;;                                (map f xs))) nd))))
-;;          ((fn [nd] (if (> freq 1)                              
-;;                      (sample/->replications freq [(->record-draw nd)])
-;;                      (->record-draw nd))))
-;;          (sample/->transform flatten)
-;;          (assoc {} name))))
-
-
 (defn read-legacy-population
   "Given a table of demand-records, converts the table into a map of records 
    according to legacy processing rules.  Specifically, we add two fields to 
@@ -442,26 +414,6 @@
        (butlast)
        (apply str)
        (keyword)))
-                   
-;;Changes from DemandGroup to Vignette, changed operation to be concatenation 
-;;of vignette and draw index. 
-;; (defn build-case 
-;;   [case-name case-rules future-count duration-max seed tfinal replacement]
-;;   {case-name 
-;;    (sample/->constrain {:tfinal tfinal :duration-max duration-max  :seed seed}
-;;      (sample/->transform 
-;;        (fn [case-futures] 
-;;          (map-indexed 
-;;            (fn [i rule-reps]               
-;;                (map #(let [vig (str (:Vignette %) "_" (:draw-index %))]
-;;                        (merge % {:case-name  (tbl/field->string case-name)
-;;                                  :case-future i
-;;                                  :Vignette    vig
-;;                                  :Operation   (str vig  "_" (:Operation %))})) 
-;;                     (flatten rule-reps)))
-;;            (first case-futures)))                     
-;;        (sample/->replications future-count [case-rules])))})
-
 
 ;;Patched to fix a memory leak....Replacement for build-case. We now
 ;;encode the specified amount of futures in an intermediate sampler
@@ -520,16 +472,6 @@
                                   (map parse-legacy-case)
                                   (filter :Enabled)))
 
-;; (defn compose-cases [case-records case-rules]
-;;   (reduce (fn [acc case-record] 
-;;             (let [{:keys [Futures Tfinal RandomSeed Enabled MaxDuration CaseName 
-;;                           Replacement]} case-record]
-;;               (conj acc 
-;;                     (build-case CaseName (get case-rules CaseName) 
-;;                                 Futures MaxDuration RandomSeed 
-;;                                 Tfinal Replacement))))
-;;           {} case-records))
-
 ;;Patched to use case->sampler, for lazy sampling of futures.
 (defn compose-cases [case-records case-rules]
   (reduce (fn [acc case-record] 
@@ -563,31 +505,6 @@
         validation  {:ValidationRules (get db "ValidationRules")}
         demandsplit {:DemandSplit (get db "DemandSplit")}]
     (merge cases population validation demandsplit)))
-
-
-;;___Patches__
-;;group-by is superfluous here, and quite undesirable.  The use case
-;;is to cleanly compile a set of 
-;; (defn compile-cases
-;;   "Given a map of tables, process each case, building its associated rule set, 
-;;    drawing from a sample population.  The results from each case are returned 
-;;    as a map of {case-name [records]}, where records are a list of records from
-;;    futures.  Each record will have the case-name and the case-future added as 
-;;    fields.  The table map, or the database, is expected to have at least the 
-;;    following fields [:ValidationRules :DemandRecords :Cases], where each value
-;;    is a table.  Each enabled case will be evaluated, returning a map of 
-;;    {[case-name case-future] records}"
-;;   [db & {:keys [field-merges] 
-;;                :or   {field-merges {:start :StartDay 
-;;                                     :duration :Duration}}}]
-;;   (let [case-key (juxt :case-name :case-future)
-;;         fix-fields (comp (partial collapse-fields field-merges) integral-times)]
-;;     (into {} 
-;;           (for [[case-name c] (:Cases db)]
-;;             (->> (sample/sample-from (:Population db) c)
-;;               (map      fix-fields) 
-;;               (group-by case-key)
-;;         (seq))))))
 
 ;;Patched.
 ;;Changed from original, patched to use lazy sequences and to eschew
@@ -644,23 +561,6 @@
 
 ;;Changed the lookup field to use a column called DemandSplit, with 
 ;;corresponding column in the population of records.
-
-;; (defn post-process-cases
-;;   "Default post processing for each case.  We validate the case records by 
-;;    handling collisions, and split the resulting data according to the 
-;;    rules defined by DemandSplit."
-;;   [db futures & {:keys [log? processes]}]
-;;   (let [splitmap (validate-splitmap 
-;;                    (table->lookup db :DemandSplit     :DemandSplit))
-;;         classes  (table->lookup db   :ValidationRules :DependencyClass)]    
-;;     (into {} 
-;;       (for [[case-key case-records] futures]
-;;         [case-key
-;;          (->> case-records 
-;;               (process-if (:collide processes)
-;;                 #(collision/process-collisions classes % :log? log?))
-;;               (process-if false ;(:split processes) 
-;;                 #(split/split-future splitmap %)))])))) 
 
 ;;Patched to avoid intermediate hash-map.
 (defn post-process-cases
