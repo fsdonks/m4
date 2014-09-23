@@ -348,11 +348,11 @@
         [name freq pool] (rec/get-fields parsed [:Rule :Frequency :Pool])]
     (->> (cond (include-all? pool)
                   (sample/->transform flatten 
-                        (sample/->replications 1 (subvec pool 1)))           
+                        (sample/->replications 1 (subvec pool 1)))    ;;this looks suspect       
                (no-replace? pool)
                   (let [xs (second pool)]
                     (assert  (vector? xs) (str "invalid pool sample :" pool ", expected a nested vector!"))
-                    (sample/->without-replacement xs))                                        
+                    (sample/->without-replacement xs))
                :else
                  (sample/->choice pool))
          ((fn [nd] (if (empty? distributions) nd 
@@ -402,7 +402,7 @@
 
 (def case-keys (vec (map keyword case-fields)))
 
-(defn parse-legacy-case [record]
+(defn parse-legacy-case [record] 
   (parse-legacy-record record :expected-fields case-keys))
 
 (defn compound-key [xs]
@@ -448,14 +448,13 @@
          (sample/->transform 
           (fn [case-futures] 
             (let [i (next-idx!)]
-              (->>  (first (first case-futures)) ;extract the only future
-                    (flatten) ;slim down the concatenated rules
+              (->>  case-futures
                     (map #(let [vig (str (:Vignette %) "_" (:draw-index %))] ;tag
-                            (merge % {:case-name  (tbl/field->string case-name)
-                                      :case-future i
-                                      :Vignette    vig
-                                      :Operation   (str vig  "_" (:Operation %))}))))))                     
-          (sample/->replications 1 [case-rules]))))}}))
+                               (merge % {:case-name  (tbl/field->string case-name)
+                                         :case-future i
+                                         :Vignette    vig
+                                         :Operation   (str vig  "_" (:Operation %))}))))))
+          (sample/->concatenate case-rules))))}}))
 
 (defn sampler->stream 
   "Given a sampling environment - typically the population from a helmet case 
@@ -531,10 +530,10 @@
         fix-fields (comp (partial collapse-fields field-merges) integral-times)]
     (concat
      (for [[case-name sampler]  (:Cases db)
-           xs  (sampler->stream (:Population db) sampler)] ;generate stream of futures 
-       (->> xs
+           records-in-future  (sampler->stream (:Population db) sampler)] ;generate stream of futures 
+       (->> records-in-future
             (map      fix-fields)  ;window dressing
-            (vector (case-key (first xs))))))))
+            (vector (case-key (first records-in-future))))))))
   
 (defn collide-and-split
   "Given a seq of records, a map of split timings and a map of collision 
@@ -593,8 +592,8 @@
                          (into demand-keys [:case-name :case-future])}}]
   (for [[case-name records] futures]
     [case-name  (->> (tbl/records->table records)
-                  (tbl/order-fields-by field-order)
-                  (tbl/stringify-field-names))])) 
+                     (tbl/order-fields-by field-order)
+                     (tbl/stringify-field-names))])) 
 
 (comment ;testing
 ;;our test record fields...
