@@ -99,18 +99,15 @@
    available :dwelling 
    deployed :bogging
    Overlapping :overlapping})
-(def default-routes 
-  [[reset train           182]
-   [train ready           183]
-   [ready available       365]
-   [available reset       365]
-   [deployed Overlapping  365]
-   [Overlapping reset     0]])
+
 
 (defn overlapping? [x] (= x Overlapping))
 (defn ensure-positive [msgf x] 
-  (if (pos? x) x
+  (if (not (neg? x)) x
       (throw (Exception. (str (msgf  x))))))
+
+;;it seems like a nice, high-level way to describe policy alterations
+;;is to define transforms, like insertions
 
 (defn modified-routes [rts overlap deltas]
   (mapv (fn [[from to t]]
@@ -131,53 +128,99 @@
 ;;    deployed, (- 365 overlap),
 ;;    Overlapping, overlap})
 
+(defn compute-cycle-length [p]
+  (let [{:keys [startstate endstate positiongraph]} p
+        res  (graph/depth-first-search positiongraph startstate endstate {:weightf graph/arc-weight})
+        lngth (get-in res [:distance endstate])]
+    (+ lngth (graph/arc-weight positiongraph endstate startstate))))    
+
+
+(defn altered-routes [routes deltas]
+  `[~@ (for [[from to time] routes]
+         `[~from ~to (+ ~time (get-delta ~deltas ~from))])])
+
+;;A registry of all defined templates.  Gives us easy access.
+;;For the most part, templates will be defined  (or even redefined)
+;;here.....Consider these built-ins, with the ability of power users 
+;;to define new templates.
+(def templates (atom nil))
+(defn get-template [nm] 
+  (if-let [res (get @templates nm)]
+    res
+    (throw (Exception. (str "undefined policy template name: " nm)))))
+
+(defmacro deftemplate 
+  "Defines a named policy constructor useful for deriving new policies."
+  [name & {:keys [overlap startstate endstate routes] 
+           :or {overlap 45 startstate reset endstate available routes default-routes}}]
+  `(do 
+     (defn ~name [& {:keys [~'name ~'deltas ~'startstate ~'endstate ~'overlap] 
+                     :or {~'name ~(str name) 
+                          ~'deltas nil 
+                          ~'starstate ~startstate
+                          ~'endstate ~endstate
+                          ~'overlap ~overlap}}]
+       (-> (policydata/make-policy :name ~'name :overlap ~'overlap :startstate ~'startstate :endstate ~'endstate)
+           (core/add-positions ~default-positions)
+           (core/add-routes (modified-routes ~routes ~'overlap ~'deltas))))
+     (swap! templates assoc ~(str name) ~name)
+     ~name))
+
+;;The entire point of defining policies is defining state transition
+;;graphs...really..
+;;Entities interpret policies to determine what to do/where to
+;;go/when, etc.  
+
+;;For our generic policies, they ALL have an overlap...they all have 
+;;a start state at Reset and and end state at Available.
+
+;;It'd be nice to be able to define basic templates 
+
+(def default-routes 
+  [[reset train           182]
+   [train ready           183]
+   [ready available       365]
+   [available reset       365]
+   [deployed Overlapping  365]
+   [Overlapping reset     0]])
+
 ;;template for AC policies, we use the parameters to grow and shrink pools
-(defn ac12-template [name overlap & {:keys [deltas]}]
-    (-> (policydata/make-policy :name name :overlap overlap)
+(defn ac12-template [name & {:keys [deltas startstate endstate overlap] 
+                             :or {deltas nil 
+                                  starstate reset
+                                  endstate available
+                                  overlap 45}}]
+    (-> (policydata/make-policy :name name :overlap overlap :startstate reset :endstate available )
         (core/add-positions default-positions)
         (core/add-routes (modified-routes default-routes overlap deltas))))
 
-;; (defmacro deftemplate [name args & {:keys [name positions routes]}]
-;;   `(defn ~name [~@args & {:keys [~'deltas]}]
-;;      (-> (policydata/make-policy :name ~(str name))
-;;          (generic/add-positions ~positions)
-;;          (add-routes ~(for [[from to t] routes]
-;;                         [from to `(get-deltas ~from ~'deltas)])))))
+(deftemplate ac12 :overlap 45)
+(deftemplate ac12-enabler :overlap 30)
 
-;; (deftemplate ac12-template [overlap]
-;;   {:positions {reset "Dwelling" 
-;;                train "Dwelling" 
-;;                ready "Dwelling" 
-;;                available "Dwelling" 
-;;                deployed "Bogging" 
-;;                Overlapping "Overlapping"}
-;;    :routes [[reset train (+ 182  (get-delta reset deltas))]
-;;             [train ready (+ 183  (get-delta train deltas))]
-;;             [ready available (+ 365  (get-delta ready deltas))]
-;;             [available reset (+ 365  (get-delta available deltas))]
-;;             [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
-;;             [Overlapping reset (+ overlap (get-delta Overlapping deltas))]]})
+;;Can we drastically simplify the policy creation/definition process?
+;;Currently, it's not bad, but can we use a variant of deftemplate to 
+;;get us some more mileage?
 
 ;;These are default policy routes for AC entities in arforgen.
 ;;Used as scaffolding for templates.
 (defn ac-routes [overlap & [deltas]]
-  [["Reset" "Train" (max-float 1 (get-deltas "Available" deltas))]
-   ["Train" "Ready" (max-float 1 (get-deltas "Train" deltas))]
-   ["Ready" "Available" (max-float 1 (get-deltas "Ready" deltas))]
-   ["Available" "Reset" (max-float 1 (get-deltas "Available" deltas))]
-   ["Deployed" "Overlapping" (max-float 1 (- (get-deltas "Deployed" deltas)  overlap))]
-   ["Overlapping" "Reset" (max-float 1 (get-deltas "Overlapping" deltas))]])
+  [["Reset" "Train" (max 1 (get-deltas "Available" deltas))]
+   ["Train" "Ready" (max 1 (get-deltas "Train" deltas))]
+   ["Ready" "Available" (max 1 (get-deltas "Ready" deltas))]
+   ["Available" "Reset" (max 1 (get-deltas "Available" deltas))]
+   ["Deployed" "Overlapping" (max 1 (- (get-deltas "Deployed" deltas)  overlap))]
+   ["Overlapping" "Reset" (max 1 (get-deltas "Overlapping" deltas))]])
 
 ;;These are default policy routes for RC entities in arforgen.
 ;;Used as scaffolding for templates.
 (defn rc-routes [overlap demob & [deltas]]
-  [["Reset" "Train"          (max-float 1 (get-deltas "Reset" deltas))]
-   ["Train" "Ready"          (max-float 1 (get-deltas "Train" deltas))]
-   ["Ready" "Available"      (max-float 1 (get-deltas "Ready" deltas))]
-   ["Available" "Reset"      (max-float 1 (get-deltas "Available" deltas))]
-   ["Deployed" "Overlapping" (max-float 1 (- (get-deltas "Deployed" deltas)  overlap))]
-   ["Overlapping" "DeMobilization" (max-float 1 (+ overlap (get-deltas "Ready" deltas)))]
-   ["DeMobilization" "Reset" (max-float 1 (+ demob  (get-deltas "Ready" deltas)))]])
+  [["Reset" "Train"          (max 1 (get-deltas "Reset" deltas))]
+   ["Train" "Ready"          (max 1 (get-deltas "Train" deltas))]
+   ["Ready" "Available"      (max 1 (get-deltas "Ready" deltas))]
+   ["Available" "Reset"      (max 1 (get-deltas "Available" deltas))]
+   ["Deployed" "Overlapping" (max 1 (- (get-deltas "Deployed" deltas)  overlap))]
+   ["Overlapping" "DeMobilization" (max 1 (+ overlap (get-deltas "Ready" deltas)))]
+   ["DeMobilization" "Reset" (max 1 (+ demob  (get-deltas "Ready" deltas)))]])
 
 ;;These are default routes for ghost entities. they are significantly different than AC/RC
 ;;Used as scaffolding for templates.
@@ -198,39 +241,29 @@
      available 270 
      deployed (- 270 overlap) 
      Overlapping overlap})
+    
 
 ;; (defn waits->routes [ws]
 ;;   (assert (even? (count ws)) "wait schedule must have a set number of routes."
 ;;           (map (fn [(partition 3 21 (cycle ws))
 
-(defn altered-routes [routes deltas]
-  `[~@ (for [[from to time] routes]
-         `[~from ~to (+ ~time (get-delta ~deltas ~from))])])
-
-;;This is becoming tempting again...
-(defmacro deftemplate [name overlap routes]
-  `(let [base# (-> (policydata/make-policy :name ~(str  name) :overlap ~overlap)
-                   (add-positions default-positions)
-                   (add-routes ~routes))         ]         
-     (defn ~name [name#  & {:keys [~'deltas ~'overlap]}]
-       (-> base#
-           (add-routes (altered-routes ~routes ~'deltas))))))
-
 
 (defn ac13-template [name overlap & {:keys [deltas]}]
     (-> (policydata/make-policy :name name :overlap overlap)
-        (generic/add-positions default-positions)
-        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
-                     [train ready (+ 183  (get-delta train deltas))]
-                     [ready available (+ 460  (get-delta ready deltas))]
-                     [available reset (+ 270  (get-delta available deltas))]
-                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
-                     [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
+        (core/add-positions default-positions)
+        (core/add-routes [[reset train (+ 182  (get-delta reset deltas))]
+                          [train ready (+ 183  (get-delta train deltas))]
+                          [ready available (+ 460  (get-delta ready deltas))]
+                          [available reset (+ 270  (get-delta available deltas))]
+                          [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+                          [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
+
+(deftemplate ac13 :routes ac13-defaults 
 
 (defn ac11-template [name overlap & {:keys [deltas]}]
   (-> (policydata/make-policy :name name :overlap overlap)
-      (generic/add-positions default-positions)
-      (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+      (core/add-positions default-positions)
+      (core/add-routes [[reset train (+ 182  (get-delta reset deltas))]
                    [train ready (+ 183  (get-delta train deltas))]
                    [available reset (+ 365  (get-delta available deltas))]
                    [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
