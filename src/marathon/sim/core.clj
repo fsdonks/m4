@@ -26,7 +26,7 @@
                         [tags :as tag]
                         [table :as tbl]
                         [reducers]
-                        [cellular :refer cell]]
+                        [cellular :as cells]]
             [spork.entitysystem.store]
             [spork.sim.simcontext :as sim]
             [marathon.data.simstate :as simstate]
@@ -117,20 +117,35 @@
 ;;structure.
 
 
-;;Imports from spork.util.cellular.....
-(def  assoc-any  cells/assoc-any)
-(def  conj-any   cells/conj-any)
-(def  dissoc-any cells/dissoc-any)
-(def  disj-any   cells/disj-any)
-(def  assoc-in-any cells/assoc-in-any)
-(def  update-in-any cells/update-in-any)
-(def  contains-any? cells/contains-any?)
-(def  with-cells cells/with-cells)
-(def  with-transient-cells cells/with-transient-cells)
-(def  swap-cell! cells/swap-cell!)
+;;Imports from spork.util.cellular and simcontext
+(util/import-vars 
+ [spork.util.cellular
+  assoc-any
+  conj-any
+  dissoc-any
+  disj-any
+  assoc-in-any
+  update-in-any
+  contains-any?
+  with-cells
+  with-transient-cells
+  swap-cell!]
+ [spork.sim.simcontext 
+  merge-updates])
+
+;; (def  assoc-any  cells/assoc-any)
+;; (def  conj-any   cells/conj-any)
+;; (def  dissoc-any cells/dissoc-any)
+;; (def  disj-any   cells/disj-any)
+;; (def  assoc-in-any cells/assoc-in-any)
+;; (def  update-in-any cells/update-in-any)
+;; (def  contains-any? cells/contains-any?)
+;; (def  with-cells cells/with-cells)
+;; (def  with-transient-cells cells/with-transient-cells)
+;; (def  swap-cell! cells/swap-cell!)
 
 
-(def merge-updates sim/merge-updates)
+;(def merge-updates sim/merge-updates)
 
 ;;Experimental...
 ;;Overloading of simcontext/merge-updates, in that we short-circuit 
@@ -316,6 +331,15 @@
     ([new-idx] (do (reset! idx new-idx)
                    new-idx))))
 
+
+;;Imported from spork.util.general
+(util/import-vars 
+ [spork.util.general  
+  deep-assoc
+  deep-get
+  deep-update 
+  deep-dissoc])
+
 ;;##Developer Notes
 
 ;;#Transitioning from Effectful Simulation and State Updating#
@@ -425,8 +449,3 @@
 ;;Operations optimized for speed.  the -in and friends 
 ;;are not sufficient...
 
-;;Imported from spork.util.general
-(def deep-assoc gen/deep-assoc)
-(def deep-get   gen/deep-get)
-(def deep-update gen/deep-update)
-(def deep-dissoc gen/deep-dissoc)

@@ -1,6 +1,7 @@
 (ns marathon.sim.policyops
   (:require [spork.util.metaprogramming :refer [keyvals->constants]]
-            [marathon.policy.policydata :as policydata]
+            [spork.cljgraph.core :as graph]
+            [marathon.policy.policydata :as policydata]            
             [marathon.data.protocols :as core :refer [Bogging 
                                                       Dwelling 
                                                       BogDeployable 
@@ -100,7 +101,6 @@
    deployed :bogging
    Overlapping :overlapping})
 
-
 (defn overlapping? [x] (= x Overlapping))
 (defn ensure-positive [msgf x] 
   (if (not (neg? x)) x
@@ -149,23 +149,6 @@
     res
     (throw (Exception. (str "undefined policy template name: " nm)))))
 
-(defmacro deftemplate 
-  "Defines a named policy constructor useful for deriving new policies."
-  [name & {:keys [overlap startstate endstate routes] 
-           :or {overlap 45 startstate reset endstate available routes default-routes}}]
-  `(do 
-     (defn ~name [& {:keys [~'name ~'deltas ~'startstate ~'endstate ~'overlap] 
-                     :or {~'name ~(str name) 
-                          ~'deltas nil 
-                          ~'starstate ~startstate
-                          ~'endstate ~endstate
-                          ~'overlap ~overlap}}]
-       (-> (policydata/make-policy :name ~'name :overlap ~'overlap :startstate ~'startstate :endstate ~'endstate)
-           (core/add-positions ~default-positions)
-           (core/add-routes (modified-routes ~routes ~'overlap ~'deltas))))
-     (swap! templates assoc ~(str name) ~name)
-     ~name))
-
 ;;The entire point of defining policies is defining state transition
 ;;graphs...really..
 ;;Entities interpret policies to determine what to do/where to
@@ -183,6 +166,24 @@
    [available reset       365]
    [deployed Overlapping  365]
    [Overlapping reset     0]])
+
+(defmacro deftemplate 
+  "Defines a named policy constructor useful for deriving new policies."
+  [name & {:keys [overlap startstate endstate routes] 
+           :or {overlap 45 startstate reset endstate available routes default-routes}}]
+  `(do 
+     (defn ~name [& {:keys [~'name ~'deltas ~'startstate ~'endstate ~'overlap] 
+                     :or {~'name ~(str name) 
+                          ~'deltas nil 
+                          ~'starstate ~startstate
+                          ~'endstate ~endstate
+                          ~'overlap ~overlap}}]
+       (-> (policydata/make-policy :name ~'name :overlap ~'overlap :startstate ~'startstate :endstate ~'endstate)
+           (core/add-positions ~default-positions)
+           (core/add-routes (modified-routes ~routes ~'overlap ~'deltas))))
+     (swap! templates assoc ~(str name) ~name)
+     ~name))
+
 
 ;;template for AC policies, we use the parameters to grow and shrink pools
 (defn ac12-template [name & {:keys [deltas startstate endstate overlap] 
