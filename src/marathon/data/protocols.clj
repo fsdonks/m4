@@ -59,6 +59,12 @@
    :BogDeployable "BoggingDeployable"
    :DwellDeployable "DwellingDeployable"
    :Deployable "Deployable"
+   :Spawning   "Spawning"
+   :Deploying  "Deploying"
+   :Overlapping "Overlapping"
+   :Waiting     "Waiting"
+   :NotDeployable "NotDeployable"
+   :ReturnToDeployable "ReturnToDeployable"
    :AC12 "AC12" 
    :AC13 "AC13" 
    :RC14 "RC14" 
@@ -75,9 +81,10 @@
    :ready "Ready"
    :available "Available"
    :deployed "Deployed"
-   :Overlapping "Overlapping"
+   :demobilization "DeMobilization"
    :SubSymbol  "{>"
    :EquivSymbol "="})
+
 (keyvals->constants policyconstants) ;make the constants first class symbols.
 ;inherited from substitution rules, may be vestigial.
 (keyvals->constants {:Equivalence :Equivalence :Substitution :Substitution})

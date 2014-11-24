@@ -7,6 +7,12 @@
                                                       BogDeployable 
                                                       DwellDeployable 
                                                       Deployable 
+                                                      Overlapping
+                                                      ReturnToDeployable
+                                                      NotDeployable
+                                                      Spawning
+                                                      Waiting
+                                                      Deploying
                                                       AC12  
                                                       AC13  
                                                       RC14  
@@ -22,8 +28,8 @@
                                                       train 
                                                       ready 
                                                       available 
-                                                      deployed 
-                                                      Overlapping]]))
+                                                      deployed
+                                                      demobilization]]))
 
 ;;The functions in this library focus on quickly deriving policies from existing templates.  There are a
 ;;multitude of hard-coded templates in here that describe canonical policies, which are used in
@@ -93,13 +99,6 @@
                            :Recovered :Recovered})
       (core/add-routes [[:Recovery :Recovered recoverytime]])))
  
-(def default-positions 
-  {reset :dwelling 
-   train :dwelling 
-   ready :dwelling 
-   available :dwelling 
-   deployed :bogging
-   Overlapping :overlapping})
 
 (defn overlapping? [x] (= x Overlapping))
 (defn ensure-positive [msgf x] 
@@ -159,6 +158,16 @@
 
 ;;It'd be nice to be able to define basic templates 
 
+(def default-positions 
+  {reset :dwelling 
+   train :dwelling 
+   ready :dwelling 
+   available :dwelling 
+   deployed :bogging
+   Overlapping :overlapping})
+
+
+;;this is really ac12 routes.
 (def default-routes 
   [[reset train           182]
    [train ready           183]
@@ -167,128 +176,65 @@
    [deployed Overlapping  365]
    [Overlapping reset     0]])
 
-(defmacro deftemplate 
-  "Defines a named policy constructor useful for deriving new policies."
-  [name & {:keys [overlap startstate endstate routes] 
-           :or {overlap 45 startstate reset endstate available routes default-routes}}]
-  `(do 
-     (defn ~name [& {:keys [~'name ~'deltas ~'startstate ~'endstate ~'overlap] 
-                     :or {~'name ~(str name) 
-                          ~'deltas nil 
-                          ~'starstate ~startstate
-                          ~'endstate ~endstate
-                          ~'overlap ~overlap}}]
-       (-> (policydata/make-policy :name ~'name :overlap ~'overlap :startstate ~'startstate :endstate ~'endstate)
-           (core/add-positions ~default-positions)
-           (core/add-routes (modified-routes ~routes ~'overlap ~'deltas))))
-     (swap! templates assoc ~(str name) ~name)
-     ~name))
+;;State transitions, used to define a range of policies that 
+;;vary by time in state.
+(def default-routing [[reset train ready available reset]  
+                      [deployed Overlapping reset]])
 
+(def rc-routing      [[reset train ready available reset]  
+                      [deployed Overlapping demobilization reset]])
 
-;;template for AC policies, we use the parameters to grow and shrink pools
-(defn ac12-template [name & {:keys [deltas startstate endstate overlap] 
-                             :or {deltas nil 
-                                  starstate reset
-                                  endstate available
-                                  overlap 45}}]
-    (-> (policydata/make-policy :name name :overlap overlap :startstate reset :endstate available )
-        (core/add-positions default-positions)
-        (core/add-routes (modified-routes default-routes overlap deltas))))
+(def ghost-routing [[Spawning Deployable Waiting Deploying NotDeployable 
+                     deployed Overlapping ReturnToDeployable Deployable]])
 
-(deftemplate ac12 :overlap 45)
-(deftemplate ac12-enabler :overlap 30)
+(defn waits->routes 
+  [wait-times routing]
+  (mapcat (fn [xs] (map (fn [[from to]] 
+                          [from to (get wait-times from)])
+                        (partition 2 1 xs)))   routing))
 
-;;Can we drastically simplify the policy creation/definition process?
-;;Currently, it's not bad, but can we use a variant of deftemplate to 
-;;get us some more mileage?
-
-;;These are default policy routes for AC entities in arforgen.
-;;Used as scaffolding for templates.
-(defn ac-routes [overlap & [deltas]]
-  [["Reset" "Train" (max 1 (get-deltas "Available" deltas))]
-   ["Train" "Ready" (max 1 (get-deltas "Train" deltas))]
-   ["Ready" "Available" (max 1 (get-deltas "Ready" deltas))]
-   ["Available" "Reset" (max 1 (get-deltas "Available" deltas))]
-   ["Deployed" "Overlapping" (max 1 (- (get-deltas "Deployed" deltas)  overlap))]
-   ["Overlapping" "Reset" (max 1 (get-deltas "Overlapping" deltas))]])
-
-;;These are default policy routes for RC entities in arforgen.
-;;Used as scaffolding for templates.
-(defn rc-routes [overlap demob & [deltas]]
-  [["Reset" "Train"          (max 1 (get-deltas "Reset" deltas))]
-   ["Train" "Ready"          (max 1 (get-deltas "Train" deltas))]
-   ["Ready" "Available"      (max 1 (get-deltas "Ready" deltas))]
-   ["Available" "Reset"      (max 1 (get-deltas "Available" deltas))]
-   ["Deployed" "Overlapping" (max 1 (- (get-deltas "Deployed" deltas)  overlap))]
-   ["Overlapping" "DeMobilization" (max 1 (+ overlap (get-deltas "Ready" deltas)))]
-   ["DeMobilization" "Reset" (max 1 (+ demob  (get-deltas "Ready" deltas)))]])
-
-;;These are default routes for ghost entities. they are significantly different than AC/RC
-;;Used as scaffolding for templates.
-(defn ghost-routes [& {:keys [bog overlap deltas] :or {bog 0 overlap 0 deltas 0}}]
-  [["Spawning" "Deployable" 0]
-   ["Deployable" "Waiting" 0]
-   ["Waiting" "Deploying" +inf+]
-   ["Deploying" "NotDeployable" 0]
-   ["NotDeployable" "Deployed" 0]
-   ["Deployed" Overlapping (- bog overlap)]
-   [Overlapping "ReturnToDeployable" overlap]
-   ["ReturnToDeployable" "Deployable" 0]])
-
-(defn ac13-defaults [overlap]
-    {reset     182 
-     train     183 
-     ready     460 
-     available 270 
-     deployed (- 270 overlap) 
-     Overlapping overlap})
-    
-
-;; (defn waits->routes [ws]
-;;   (assert (even? (count ws)) "wait schedule must have a set number of routes."
-;;           (map (fn [(partition 3 21 (cycle ws))
-
-
-(defn ac13-template [name overlap & {:keys [deltas]}]
-    (-> (policydata/make-policy :name name :overlap overlap)
-        (core/add-positions default-positions)
-        (core/add-routes [[reset train (+ 182  (get-delta reset deltas))]
-                          [train ready (+ 183  (get-delta train deltas))]
-                          [ready available (+ 460  (get-delta ready deltas))]
-                          [available reset (+ 270  (get-delta available deltas))]
-                          [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
-                          [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
-
-(deftemplate ac13 :routes ac13-defaults 
-
-(defn ac11-template [name overlap & {:keys [deltas]}]
-  (-> (policydata/make-policy :name name :overlap overlap)
-      (core/add-positions default-positions)
-      (core/add-routes [[reset train (+ 182  (get-delta reset deltas))]
-                   [train ready (+ 183  (get-delta train deltas))]
-                   [available reset (+ 365  (get-delta available deltas))]
-                   [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
-                   [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
-
-;;an example...
-;; (deftemplate ac11 [name overlap]
-;;   [reset train          182]
-;;   [train ready          183]
-;;   [available reset      365]
-;;   [deployed Overlapping (- 365 overlap)]
-;;   [Overlapping reset    overlap])
-  
-
-(defn ac11-defaults [overlap]
+;;These are wait times based on state transition graphs.
+;;We can probably abstract this out further, but for now it'll work...
+(defn ac11-waits [overlap]
   {reset       182 
    train       183 
    available   365
    deployed    (- 365 overlap) 
    Overlapping overlap})
 
-(def default-rc-positions (assoc default-positions demobilization "DeMobilizing"))
+(defn ac12-waits [overlap]
+  {reset       182 
+   train       183 
+   ready       365
+   available   365
+   deployed    (- 365 overlap) 
+   Overlapping overlap})
 
-(defn rc14-defaults [overlap]
+(defn ac13-waits [overlap]
+    {reset     182 
+     train     183 
+     ready     460 
+     available 270 
+     deployed (- 270 overlap) 
+     Overlapping overlap})
+
+(defn rc11-waits [overlap]
+  {reset 182 
+   train 183 
+   available 365
+   deployed (- 270 overlap)
+   Overlapping overlap
+   demobilization 95})
+
+(defn rc12-waits [overlap]
+  {reset 365 
+   train 365 
+   available 365
+   deployed (- 270 overlap)
+   Overlapping overlap
+   demobilization 95})
+
+(defn rc14-waits [overlap]
    {reset 365 
     train 365 
     ready 730 
@@ -297,31 +243,7 @@
     Overlapping overlap 
     demobilization 95})
 
-(defn rc14-template [name overlap & {:keys [deltas]}]
-  (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
-      (generic/add-positions default-rc-positions)
-      (add-routes [[reset train (+ 365  (get-delta reset deltas))]
-                   [train ready (+ 365  (get-delta train deltas))]
-                   [ready available (+ 730  (get-delta ready deltas))]
-                   [available reset (+ 365  (get-delta available deltas))]
-                   [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
-                   [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
-                   [demobilization reset   (+ 95 (get-delta demobilization deltas))]
-                   ])))
-
-(defn rc15-template [name overlap deltas]
-    (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
-        (generic/add-positions default-rc-positions)
-        (add-routes [[reset train (+ 730  (get-delta reset deltas))]
-                     [train ready (+ 365  (get-delta train deltas))]
-                     [ready available (+ 730  (get-delta ready deltas))]
-                     [available reset (+ 365  (get-delta available deltas))]
-                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
-                     [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
-                     [demobilization reset   (+ 95 (get-delta demobilization deltas))]
-                     ])))
-
-(defn rc15-defaults [overlap]
+(defn rc15-waits [overlap]
   {reset 730 
    train 365
    ready 730 
@@ -330,111 +252,280 @@
    Overlapping overlap
    demobilization 95})
 
-(defn rc11-defaults [overlap]
-  {reset 182 
-   train 183 
-   available 365
-   deployed (- 270 overlap)
-   Overlapping overlap
-   demobilization 95})
+(defn ghost-waits [bog overlap]
+  {Spawning 0
+   Deployable 0
+   waiting +inf+
+   Deploying 0
+   NotDeployable 0
+   deployed (- bog overlap)
+   Overlapping overlap 
+   ReturnToDeployable 0})
+
+(def template-data
+ '[{:name ac12 :overlap 45  :doc "AC 1:2 template for MCU"              :routes (waits->routes (ac12-waits   45) default-routing)}
+   {:name ac12-enabler :overlap 30 :doc "AC 12 template for enablers"   :routes (waits->routes (ac12-waits   30) default-routing)}
+   {:name ac13 :overlap 45  :doc "AC 1:3 template for MCU"              :routes (waits->routes (ac13-routes  45) default-routing)}
+   {:name ac13-enabler :overlap 30  :doc "AC 13 template for MCU"       :routes (waits->routes (ac13-waits   30) default-routing)}
+   {:name ac11 :overlap 0   :doc "AC 1:1 template for MCU"              :routes (waits->routes (ac11-waits    0) default-routing)}
+   {:name rc11 :overlap 45   :doc "RC 1:4 template for MCU"             :routes (waits->routes (rc14-waits 45) rc-routing)}
+   {:name rc11-enabler :overlap 30 :doc "RC 1:4 template for enablers"  :routes (waits->routes (rc14-waits 30) rc-routing)}
+   {:name rc14 :overlap 45   :doc "RC 1:4 template for MCU"             :routes (waits->routes (rc14-waits 45) rc-routing)}
+   {:name rc14-enabler :overlap 30 :doc "RC 1:4 template for enablers"  :routes (waits->routes (rc14-waits 30) rc-routing)}
+   {:name rc15 :overlap 45   :doc "RC 1:5 template for MCU"             :routes (waits->routes (rc15-waits 45) rc-routing)}
+   {:name rc15-enabler :overlap 30 :doc "RC 1:5 template for enablers"  :routes (waits->routes (rc15-waits 30) rc-routing)}
+   {:name ghost :overlap 45 :doc "Ghost template"                       :routes (waits->routes (ghost-waits 365 45) ghost-routing)}
+   {:name ghost-enabler :overlap 30 :doc "Ghost template for enablers"          :routes (waits->routes (ghost-waits 365 45) ghost-routing)}])
+
+(defmacro deftemplate 
+  "Defines a named policy constructor useful for deriving new policies."
+  [name & {:keys [overlap startstate endstate routes positions doc] 
+           :or {overlap 45 startstate reset endstate available routes default-routes positions default-positions}}]
+  (let [doc (or doc (str "Policy constructor for " name " takes options [:name :deltas :startstate :endstate :overlap]"))]
+    `(do 
+       (defn ~name ~doc 
+         [& {:keys [~'name ~'deltas ~'startstate ~'endstate ~'overlap] 
+             :or {~'name ~(str name) 
+                  ~'deltas nil 
+                  ~'starstate ~startstate
+                  ~'endstate ~endstate
+                  ~'overlap ~overlap}}]
+         (-> (policydata/make-policy :name ~'name :overlap ~'overlap :startstate ~'startstate :endstate ~'endstate)
+             (core/add-positions ~positions)
+             (core/add-routes (modified-routes ~routes ~'overlap ~'deltas))))
+       (swap! templates assoc ~(str name) ~name)
+       ~name)))
+
+;; (defn ac12-template [name & {:keys [deltas startstate endstate overlap] 
+;;                              :or {deltas nil 
+;;                                   starstate reset
+;;                                   endstate available
+;;                                   overlap 45}}]
+;;     (-> (policydata/make-policy :name name :overlap overlap :startstate reset :endstate available )
+;;         (core/add-positions default-positions)
+;;         (core/add-routes (modified-routes default-routes overlap
+;;                              deltas))))
+
+;;template for AC policies, we use the parameters to grow and shrink pools
+(deftemplate ac12 :overlap 45 :doc "AC 12 template for MCU")
+(deftemplate ac12-enabler :overlap 30 :doc "AC 12 template for enablers")
+
+
+;;Can we drastically simplify the policy creation/definition process?
+;;Currently, it's not bad, but can we use a variant of deftemplate to 
+;;get us some more mileage?
+
+;;These are default policy routes for AC entities in arforgen.
+;;Used as scaffolding for templates.
+
+;; (defn ac13-routes [overlap]
+;;   [[reset train 182]
+;;    [train ready 183]
+;;    [ready available 460]
+;;    [available reset 270]
+;;    [deployed Overlapping (- 270 overlap)]
+;;    [Overlapping reset overlap]])
+     
+
+;;These are default policy routes for RC entities in arforgen.
+;;Used as scaffolding for templates.
+;; (defn rc-routes [overlap demob & [deltas]]
+;;   [[reset train          (max 1 (get-deltas reset deltas))]
+;;    [train ready          (max 1 (get-deltas train deltas))]
+;;    [ready available      (max 1 (get-deltas ready deltas))]
+;;    [available reset      (max 1 (get-deltas available deltas))]
+;;    [deployed overlapping (max 1 (- (get-deltas deployed deltas)  overlap))]
+;;    [overlapping demobilization (max 1 (+ overlap (get-deltas ready deltas)))]
+;;    [demobilization reset (max 1 (+ demob  (get-deltas ready deltas)))]])
+
+;;These are default routes for ghost entities. they are significantly different than AC/RC
+;;Used as scaffolding for templates.
+;; (defn ghost-routes [& {:keys [bog overlap deltas] :or {bog 0 overlap 0 deltas 0}}]
+;;   [[Spawning Deployable 0]
+;;    [Deployable waiting 0]
+;;    [waiting deploying +inf+]
+;;    [deploying notDeployable 0]
+;;    [notDeployable deployed 0]
+;;    [deployed Overlapping (- bog overlap)]
+;;    [Overlapping ReturnToDeployable overlap]
+;;    [ReturnToDeployable Deployable 0]]) 
+
+
+;; (defn ac13-template [name overlap & {:keys [deltas]}]
+;;     (-> (policydata/make-policy :name name :overlap overlap)
+;;         (core/add-positions default-positions)
+;;         (core/add-routes [[reset train (+ 182  (get-delta reset deltas))]
+;;                           [train ready (+ 183  (get-delta train deltas))]
+;;                           [ready available (+ 460  (get-delta ready deltas))]
+;;                           [available reset (+ 270  (get-delta available deltas))]
+;;                           [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+;;                           [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
+
+
+
+;; (defn ac-routes [overlap & [deltas]]
+;;   [[reset train (max 1 (get-deltas available deltas))]
+;;    [train ready (max 1 (get-deltas train deltas))]
+;;    [ready available (max 1 (get-deltas ready deltas))]
+;;    [available reset (max 1 (get-deltas available deltas))]
+;;    [deployed overlapping (max 1 (- (get-deltas deployed deltas)  overlap))]
+;;    [overlapping reset (max 1 (get-deltas overlapping deltas))]])
+
+;; (defn rc-routes [overlap demob & [deltas]]
+;;   [[reset train          (max 1 (get-deltas reset deltas))]
+;;    [train ready          (max 1 (get-deltas train deltas))]
+;;    [ready available      (max 1 (get-deltas ready deltas))]
+;;    [available reset      (max 1 (get-deltas available deltas))]
+;;    [deployed overlapping (max 1 (- (get-deltas deployed deltas)  overlap))]
+;;    [overlapping demobilization (max 1 (+ overlap (get-deltas ready deltas)))]
+;;    [demobilization reset (max 1 (+ demob  (get-deltas ready deltas)))]])
+
+;;These are default routes for ghost entities. they are significantly different than AC/RC
+;;Used as scaffolding for templates.
+;; (defn ghost-routes [& {:keys [bog overlap deltas] :or {bog 0 overlap 0 deltas 0}}]
+;;   [[Spawning Deployable 0]
+;;    [Deployable waiting 0]
+;;    [waiting deploying +inf+]
+;;    [deploying notDeployable 0]
+;;    [notDeployable deployed 0]
+;;    [deployed Overlapping (- bog overlap)]
+;;    [Overlapping ReturnToDeployable overlap]
+;;    [ReturnToDeployable Deployable 0]]) 
+
+
+;; (defn ac11-template [name overlap & {:keys [deltas]}]
+;;   (-> (policydata/make-policy :name name :overlap overlap)
+;;       (core/add-positions default-positions)
+;;       (core/add-routes [[reset train (+ 182  (get-delta reset deltas))]
+;;                         [train ready (+ 183  (get-delta train deltas))]
+;;                         [available reset (+ 365  (get-delta available deltas))]
+;;                         [deployed Overlapping (+ (- 365 overlap)  (get-delta deployed deltas))]
+;;                         [Overlapping reset (+ overlap (get-delta Overlapping deltas))]])))
+
+
+;; (defn rc14-template [name overlap & {:keys [deltas]}]
+;;   (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+;;       (generic/add-positions default-rc-positions)
+;;       (add-routes [[reset train (+ 365  (get-delta reset deltas))]
+;;                    [train ready (+ 365  (get-delta train deltas))]
+;;                    [ready available (+ 730  (get-delta ready deltas))]
+;;                    [available reset (+ 365  (get-delta available deltas))]
+;;                    [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+;;                    [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+;;                    [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+;;                    ])))
+
+;; (defn rc15-template [name overlap deltas]
+;;     (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+;;         (generic/add-positions default-rc-positions)
+;;         (add-routes [[reset train (+ 730  (get-delta reset deltas))]
+;;                      [train ready (+ 365  (get-delta train deltas))]
+;;                      [ready available (+ 730  (get-delta ready deltas))]
+;;                      [available reset (+ 365  (get-delta available deltas))]
+;;                      [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+;;                      [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+;;                      [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+;;                      ])))
   
-(defn rc11-template [name overlap deltas]
-    (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
-        (generic/add-positions default-rc-positions)
-        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
-                     [train available (+ 183  (get-delta train deltas))]
-                     [available reset (+ 365  (get-delta available deltas))]
-                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
-                     [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
-                     [demobilization reset   (+ 95 (get-delta demobilization deltas))]
-                     ])))
+;; (defn rc11-template [name overlap deltas]
+;;     (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+;;         (generic/add-positions default-rc-positions)
+;;         (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+;;                      [train available (+ 183  (get-delta train deltas))]
+;;                      [available reset (+ 365  (get-delta available deltas))]
+;;                      [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+;;                      [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+;;                      [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+;;                      ])))
 
-(defn rc12-defaults [overlap]
-  {reset 365 
-   train 365 
-   available 365
-   deployed (- 270 overlap)
-   Overlapping overlap
-   demobilization 95})
+;(def default-rc-positions (assoc default-positions demobilization "DeMobilizing"))
 
 
-Public Function RC12Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
-Set RC12Template = New TimeStep_Policy
+;; Public Function RC12Template(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
+;; Set RC12Template = New TimeStep_Policy
 
-With RC12Template
-    .MaxMOB = 95
-    .overlap = overlap
-    ;;.AlterPositions ("RC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping", _
-        demobilization, "DeMobilizing"
-    .AddRoute reset, train, 365 + getdelta(reset, deltas)
-    .AddRoute train, available, 365 + getdelta(train, deltas)
-    .AddRoute available, reset, 365 + getdelta(available, deltas)
+;; With RC12Template
+;;     .MaxMOB = 95
+;;     .overlap = overlap
+;;     ;;.AlterPositions ("RC")
+;;     .name = name
+;;     .AddPosition reset, "Dwelling", train, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping", _
+;;         demobilization, "DeMobilizing"
+;;     .AddRoute reset, train, 365 + getdelta(reset, deltas)
+;;     .AddRoute train, available, 365 + getdelta(train, deltas)
+;;     .AddRoute available, reset, 365 + getdelta(available, deltas)
     
-    .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
+;;     .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
     
-    ;;TOM Change 13 July 2011
-    ;;.AddRoute Overlapping, Reset, overlap + getdelta(Overlapping, deltas)
-    .AddRoute Overlapping, demobilization, overlap + getdelta(ready, deltas)
-    .AddRoute demobilization, reset, 95 + getdelta(ready, deltas)
-End With
+;;     ;;TOM Change 13 July 2011
+;;     ;;.AddRoute Overlapping, Reset, overlap + getdelta(Overlapping, deltas)
+;;     .AddRoute Overlapping, demobilization, overlap + getdelta(ready, deltas)
+;;     .AddRoute demobilization, reset, 95 + getdelta(ready, deltas)
+;; End With
 
-End Function
+;; End Function
 
-(defn rc12-template [name overlap deltas]
-    (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
-        (generic/add-positions default-rc-positions)
-        (add-routes [[reset train (+ 182  (get-delta reset deltas))]
-                     [train available (+ 183  (get-delta train deltas))]
-                     [available reset (+ 365  (get-delta available deltas))]
-                     [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
-                     [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
-                     [demobilization reset   (+ 95 (get-delta demobilization deltas))]
-                     ])))
+;; (defn rc12-template [name overlap deltas]
+;;     (-> (policydata/make-policy :name name :overlap overlap :MaxMOB 95)
+;;         (generic/add-positions default-rc-positions)
+;;         (add-routes [[reset train (+ 182  (get-delta reset deltas))]
+;;                      [train available (+ 183  (get-delta train deltas))]
+;;                      [available reset (+ 365  (get-delta available deltas))]
+;;                      [deployed Overlapping (+ (- 270 overlap)  (get-delta deployed deltas))]
+;;                      [Overlapping demobilization (+ overlap (get-delta Overlapping deltas))]
+;;                      [demobilization reset   (+ 95 (get-delta demobilization deltas))]
+;;                      ])))
 
 
-Public Function RC12Defaults(overlap As Long) As Dictionary
-Set RC12Defaults = _
-    newdict(reset, 365, train, 365, available, 365, _
-                deployed, 270 - overlap, Overlapping, overlap, demobilization, 95)
-End Function
+;; Public Function RC12Defaults(overlap As Long) As Dictionary
+;; Set RC12Defaults = _
+;;     newdict(reset, 365, train, 365, available, 365, _
+;;                 deployed, 270 - overlap, Overlapping, overlap, demobilization, 95)
+;; End Function
 
-Public Function GhostTemplate(name As String, bog As Single, overlap As Single) As TimeStep_Policy
-Set GhostTemplate = New TimeStep_Policy
-With GhostTemplate
-    .overlap = overlap
-    ;;.AlterPositions ("Ghost")
-    .name = name
-    .AddPosition "Spawning", "Spawning", "Deployable", "Deployable", "Waiting", "Nothing", _
-                "Deploying", "Deploying", "NotDeployable", "NotDeployable", _
-                    deployed, "Bogging", Overlapping, "Overlapping", _
-                            "BehaviorChange", "BehaviorChange", "ReturnToDeployable", "Nothing"
-    .AddRoute "Spawning", "Deployable", 0
-    .AddRoute "Deployable", "Waiting", 0
-    .AddRoute "Waiting", "Deploying", inf
-    .AddRoute "Deploying", "NotDeployable", 0
-    .AddRoute "NotDeployable", deployed, 0
-    .AddRoute deployed, Overlapping, bog - overlap
-    .AddRoute Overlapping, "ReturnToDeployable", overlap
-    .AddRoute "ReturnToDeployable", "Deployable", 0
-    .startstate = "Deployable"
-    .endstate = "ReturnToDeployable"
-    .cyclelength = inf
-End With
+;; Public Function GhostTemplate(name As String, bog As Single, overlap As Single) As TimeStep_Policy
+;; Set GhostTemplate = New TimeStep_Policy
+;; With GhostTemplate
+;;     .overlap = overlap
+;;     ;;.AlterPositions ("Ghost")
+;;     .name = name
+;;     .AddPosition "Spawning", "Spawning", "Deployable", "Deployable", "Waiting", "Nothing", _
+;;                 "Deploying", "Deploying", "NotDeployable", "NotDeployable", _
+;;                     deployed, "Bogging", Overlapping, "Overlapping", _
+;;                             "BehaviorChange", "BehaviorChange", "ReturnToDeployable", "Nothing"
+;;     .AddRoute "Spawning", "Deployable", 0
+;;     .AddRoute "Deployable", "Waiting", 0
+;;     .AddRoute "Waiting", "Deploying", inf
+;;     .AddRoute "Deploying", "NotDeployable", 0
+;;     .AddRoute "NotDeployable", deployed, 0
+;;     .AddRoute deployed, Overlapping, bog - overlap
+;;     .AddRoute Overlapping, "ReturnToDeployable", overlap
+;;     .AddRoute "ReturnToDeployable", "Deployable", 0
+;;     .startstate = "Deployable"
+;;     .endstate = "ReturnToDeployable"
+;;     .cyclelength = inf
+;; End With
 
-End Function
+;; End Function
 
-Public Function GhostDefaults(bog As Long, overlap As Long) As Dictionary
-Set GhostDefaults = newdict("Spawning", 0, _
-                            "Deployable", 0, _
-                            "Waiting", inf, _
-                            "Deploying", 0, _
-                            "NotDeployable", 0, _
-                            deployed, bog - overlap, _
-                            Overlapping, overlap, _
-                            "ReturnToDeployable", 0)
-End Function
+
+
+;; Public Function GhostDefaults(bog As Long, overlap As Long) As Dictionary
+;; Set GhostDefaults = newdict("Spawning", 0, _
+;;                             "Deployable", 0, _
+;;                             "Waiting", inf, _
+;;                             "Deploying", 0, _
+;;                             "NotDeployable", 0, _
+;;                             deployed, bog - overlap, _
+;;                             Overlapping, overlap, _
+;;                             "ReturnToDeployable", 0)
+;; End Function
+
+
+
+
+
+
 
 ;;template for RC policies with a remob time, we use the parameters to grow and shrink pools
 ;;Allows 2 deployments.  Recovery time dictates the amount of time spent in between bogs.
@@ -495,8 +586,8 @@ With maxUtilizationTemplate
     .maxbog = bog
     .mindwell = mindwell
     .maxdwell = inf
-    .startdeployable = mindwell
-    .stopdeployable = inf
+    .startDeployable = mindwell
+    .stopDeployable = inf
     .startstate = reset
     .endstate = available
 End With
@@ -523,7 +614,7 @@ With FFGMissionTemplate
     .AddRoute deployed, Overlapping, 365 - overlap + getdelta(deployed, deltas)
     .AddRoute Overlapping, reset, overlap + getdelta(Overlapping, deltas)
     ;;TOM Change 27 Sep 2012
-    .startdeployable = inf
+    .startDeployable = inf
 End With
 ;;policyname, from, to, time, state
 End Function
@@ -555,7 +646,7 @@ End Function
 
 ;;TOM Hack 24 July 2012 -> Operational and Sustainment template.
 ;;The difference with the O&S policy, is that upon returning from deployment, they should not go back
-;;to O&S, they should remain in roto status.  Another difference is that they;;re deployable window is
+;;to O&S, they should remain in roto status.  Another difference is that they;;re Deployable window is
 ;;shorter than an equivalent RC....and it takes longer for any of them to deploy.
 Public Function RCOpSusTemplate(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
 Set RCOpSusTemplate = New TimeStep_Policy
@@ -1100,8 +1191,8 @@ End Function
 ;;    .MaxBOG = bog
 ;;    .mindwell = mindwell
 ;;    .MaxDwell = 9999999
-;;    .startdeployable = mindwell
-;;    .stopdeployable = 9999999
+;;    .startDeployable = mindwell
+;;    .stopDeployable = 9999999
 ;;    .startstate = reset
 ;;    .endstate = available
 ;;End With
@@ -1124,7 +1215,7 @@ End Function
 ;;    .AddRoute available, reset, 9999999 + getdelta(available, deltas)
 ;;    .AddRoute deployed, Overlapping, 365 - overlap + getdelta(deployed, deltas)
 ;;    .AddRoute Overlapping, reset, overlap + getdelta(Overlapping, deltas)
-;;    .startdeployable = 9999999
+;;    .startDeployable = 9999999
 ;;End With
 ;;;;policyname, from, to, time, state
 ;;End Function
@@ -1154,7 +1245,7 @@ End Function
 ;;
 ;;;;TOM Hack 24 July 2012 -> Operational and Sustainment template.
 ;;;;The difference with the O&S policy, is that upon returning from deployment, they should not go back
-;;;;to O&S, they should remain in roto status.  Another difference is that they;;re deployable window is
+;;;;to O&S, they should remain in roto status.  Another difference is that they;;re Deployable window is
 ;;;;shorter than an equivalent RC....and it takes longer for any of them to deploy.
 ;;Public Function RCOpSusTemplate(name As String, overlap As Long, Optional deltas As Dictionary) As TimeStep_Policy
 ;;Set RCOpSusTemplate = New TimeStep_Policy
