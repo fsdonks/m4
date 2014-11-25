@@ -192,9 +192,9 @@
 
 (defn waits->routes 
   [wait-times routing]
-  (mapcat (fn [xs] (map (fn [[from to]] 
+  (vec (mapcat (fn [xs] (map (fn [[from to]] 
                           [from to (get wait-times from)])
-                        (partition 2 1 (filter #(get wait-times %) xs))))   routing))
+                        (partition 2 1 (filter #(get wait-times %) xs))))   routing)))
   
  
 ;;These are wait times based on state transition graphs.
@@ -287,19 +287,19 @@
   [name & {:keys [routes positions doc stats] :or 
            {routes     default-routes 
             positions  default-positions
-            stats      *stats*}}]
+            stats      '*stats*}}]
   (let [doc (or doc (str "Policy constructor for " name " takes options [:name :deltas :startstate :endstate :overlap]"))]
     `(do 
        (defn ~name ~doc 
          [& {:keys [~'name ~'deltas ~'stats] 
              :or {~'name ~(str name)      ~'deltas nil }}]       
          (let [stats#  (merge ~stats ~'stats)]
-           (-> (apply policydata/make-policy (assoc stats# :name ~'name))
-;               (core/merge-policy-stats stats#)
+           (-> (apply policydata/make-policy (unzip (seq (assoc stats# :name ~'name))))
+               (core/merge-policy-stats stats#)
                (core/add-positions ~positions)
-               (core/add-routes (modified-routes ~routes (:overlap stats#) ~'deltas))))
+               (core/add-routes (modified-routes ~routes (:overlap stats#) ~'deltas)))))
          (swap! templates assoc ~(str name) ~name)
-         (quote ~name)))))
+         (quote ~name))))
 
 (defmacro simple-template [name doc routes & optional-stats]
   `{:name (quote ~name) :doc ~doc :routes ~routes :stats (and-stats ~@optional-stats)})
@@ -309,32 +309,54 @@
 
 (defmacro deftemplates [& xs]
   (doseq [x xs]
-    (eval-template x)))
-
-(defmacro simple-templates [& xs]
-  (doseq [[name doc routes & optional-stats] xs]
-    (eval-template (eval `(simple-template ~name ~doc ~routes ~@optional-stats)))))
-
-
-(comment 
+    (if (vector? x) 
+      (let [[name doc routes & optional-stats] x]
+        (eval-template (eval `(simple-template ~name ~doc ~routes ~@optional-stats))))
+      (eval-template x))))
 
 ;;these are basic policies that we can easily derive other policies from.
 (deftemplates 
-  (simple-templates 
    [ac12          "AC 1:2 template for MCU"       (waits->routes (ac12-waits   45) default-routing)  :overlap 45]
    [ac12-enabler  "AC 12 template for enablers"   (waits->routes (ac12-waits   30) default-routing)  :overlap 30]
    [ac13          "AC 1:3 template for MCU"       (waits->routes (ac13-waits   45) default-routing)  :overlap 45]
-   [ac13-enabler  "AC 13 template for MCU"        (waits->routes (ac13-waits   30) default-routig)   :overlap 30]
-   [ac11          "AC 1:1 template for MCU"       (waits->routes (ac11-waits    0) default-routing)  :overlap 0]
-   [rc11          "RC 1:4 template for MCU"       (waits->routes (rc14-waits   45) rc-routing)       :overlap 45]
-   [rc11-enabler  "RC 1:4 template for enablers"  (waits->routes (rc14-waits   30) rc-routing)  :overlap 30]
-   [rc14          "RC 1:4 template for MCU"       (waits->routes (rc14-waits   45) rc-routing)   :overlap 45]
-   [rc14-enabler   "RC 1:4 template for enablers" (waits->routes (rc14-waits   30) rc-routing) :overlap 30]
-   [rc15    "RC 1:5 template for MCU"             (waits->routes (rc15-waits   45) rc-routing) :overlap 45 ]
-   [rc15-enabler  "RC 1:5 template for enablers"  (waits->routes (rc15-waits   30) rc-routing)  :overlap 30]
-   [ghost  "Ghost template"                       (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 45 ]
-   [ghost-enabler   "Ghost template for enablers" (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 30]))
+   [ac13-enabler  "AC 13 template for MCU"        (waits->routes (ac13-waits   30) default-routing)   :overlap 30]
+   [ac11          "AC 1:1 template for MCU"       (waits->routes (ac11-waits    0) default-routing)  :overlap 0])
 
+(binding [*stats*  {:startstate reset
+                    :endstate   available
+                    :overlap    45 
+                    :recovery   90
+                    :bogbudget  270
+                    :maxbog     270
+                    :maxdwell   +inf+
+                    :maxMob     270                   
+                    :mindwell   0 }]
+  (deftemplates 
+    [rc11           "RC 1:1 template for MCU"       (waits->routes (rc14-waits   45) rc-routing) :overlap 45 ]
+    [rc11-enabler   "RC 1:1 template for enablers"  (waits->routes (rc14-waits   30) rc-routing)  :overlap 30]   
+    [rc14           "RC 1:4 template for MCU"       (waits->routes (rc14-waits   45) rc-routing)   :overlap 45]
+    [rc14-enabler   "RC 1:4 template for enablers" (waits->routes (rc14-waits   30) rc-routing) :overlap 30]
+    [rc15           "RC 1:5 template for MCU"             (waits->routes (rc15-waits   45) rc-routing) :overlap 45 ]
+    [rc15-enabler   "RC 1:5 template for enablers"  (waits->routes (rc15-waits   30) rc-routing)  :overlap 30]
+    [rc14-remob     "Template for rc that enables multiple mobs" 
+                    :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95]
+    [rc14-remob-enabler     "Template for rc that enables multiple mobs" 
+     :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95])
+
+(binding [*stats*  {:startstate Deployable
+                    :endstate   ReturnToDeployable
+                    :overlap    45 
+                    :recovery   90
+                    :bogbudget  365
+                    :maxbog     365
+                    :maxdwell   +inf+
+                    :maxMob     270                   
+                    :mindwell   0 }]
+  (deftemplates
+    [ghost           "Ghost template"       (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 45]
+    [ghost-enabler   "Ghost template for enablers" (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 30]))
+
+(comment 
 
 
 ;;template for RC policies with a remob time, we use the parameters to grow and shrink pools
