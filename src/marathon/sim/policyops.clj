@@ -268,19 +268,19 @@
 
 (defn unzip [xs]  (reduce (fn [acc [x y]]  (-> acc (conj x) (conj y))) [] xs))
 
-(def ^:dynamic *stats* 
-  {:startstate reset
-   :endstate   available
-   :overlap    45 
-   :recovery   90
-   :bogbudget  365
-   :maxbog     365
-   :maxdwell   +inf+
-   :maxMob     365                   
-   :mindwell   0})
+;; (def ^:dynamic *stats* 
+;;   {:startstate reset
+;;    :endstate   available
+;;    :overlap    45 
+;;    :recovery   90
+;;    :bogbudget  365
+;;    :maxbog     365
+;;    :maxdwell   +inf+
+;;    :maxMob     365                   
+;;    :mindwell   0})
 
-(defn and-stats [& kvps] 
-  (reduce (fn [m [k v]] (assoc m k v)) *stats* (partition 2 kvps)))
+(defn and-stats [base-stats & kvps] 
+  (reduce (fn [m [k v]] (assoc m k v)) base-stats (partition 2 kvps)))
 
 (defmacro deftemplate 
   "Defines a named policy constructor useful for deriving new policies."
@@ -301,97 +301,71 @@
          (swap! templates assoc ~(str name) ~name)
          (quote ~name))))
 
-(defmacro simple-template [name doc routes & optional-stats]
-  `{:name (quote ~name) :doc ~doc :routes ~routes :stats (and-stats ~@optional-stats)})
+(defmacro simple-template [name doc routes base-stats & optional-stats]
+  `{:name (quote ~name) :doc ~doc :routes ~routes :stats (and-stats ~base-stats ~@optional-stats)})
 
 (defn eval-template [td]
   (eval `(deftemplate ~(:name td) ~@(unzip (dissoc td :name)))))
 
-(defmacro deftemplates [& xs]
+(defmacro deftemplates [base-stats & xs]
   (doseq [x xs]
     (if (vector? x) 
       (let [[name doc routes & optional-stats] x]
-        (eval-template (eval `(simple-template ~name ~doc ~routes ~@optional-stats))))
+        (eval-template (eval `(simple-template ~name ~doc ~routes ~base-stats ~@optional-stats))))
       (eval-template x))))
 
-;;these are basic policies that we can easily derive other policies from.
-(deftemplates 
-   [ac12          "AC 1:2 template for MCU"       (waits->routes (ac12-waits   45) default-routing)  :overlap 45]
-   [ac12-enabler  "AC 12 template for enablers"   (waits->routes (ac12-waits   30) default-routing)  :overlap 30]
-   [ac13          "AC 1:3 template for MCU"       (waits->routes (ac13-waits   45) default-routing)  :overlap 45]
-   [ac13-enabler  "AC 13 template for MCU"        (waits->routes (ac13-waits   30) default-routing)   :overlap 30]
-   [ac11          "AC 1:1 template for MCU"       (waits->routes (ac11-waits    0) default-routing)  :overlap 0])
+;;these are basic policies that we can easily derive other policies
+;;from.
+(deftemplates {:startstate reset
+               :endstate   available
+               :overlap    45 
+               :recovery   90
+               :bogbudget  365
+               :maxbog     365
+               :maxdwell   +inf+
+               :maxMob     365                   
+               :mindwell   0}
+  [ac12          "AC 1:2 template for MCU"       (waits->routes (ac12-waits   45) default-routing)  :overlap 45]
+  [ac12-enabler  "AC 12 template for enablers"   (waits->routes (ac12-waits   30) default-routing)  :overlap 30]
+  [ac13          "AC 1:3 template for MCU"       (waits->routes (ac13-waits   45) default-routing)  :overlap 45]
+  [ac13-enabler  "AC 13 template for MCU"        (waits->routes (ac13-waits   30) default-routing)  :overlap 30]
+  [ac11          "AC 1:1 template for MCU"       (waits->routes (ac11-waits    0) default-routing)  :overlap 0])
 
-(binding [*stats*  {:startstate reset
-                    :endstate   available
-                    :overlap    45 
-                    :recovery   90
-                    :bogbudget  270
-                    :maxbog     270
-                    :maxdwell   +inf+
-                    :maxMob     270                   
-                    :mindwell   0 }]
-  (deftemplates 
-    [rc11           "RC 1:1 template for MCU"       (waits->routes (rc14-waits   45) rc-routing) :overlap 45 ]
-    [rc11-enabler   "RC 1:1 template for enablers"  (waits->routes (rc14-waits   30) rc-routing)  :overlap 30]   
-    [rc14           "RC 1:4 template for MCU"       (waits->routes (rc14-waits   45) rc-routing)   :overlap 45]
-    [rc14-enabler   "RC 1:4 template for enablers" (waits->routes (rc14-waits   30) rc-routing) :overlap 30]
-    [rc15           "RC 1:5 template for MCU"             (waits->routes (rc15-waits   45) rc-routing) :overlap 45 ]
-    [rc15-enabler   "RC 1:5 template for enablers"  (waits->routes (rc15-waits   30) rc-routing)  :overlap 30]
-    [rc14-remob     "Template for rc that enables multiple mobs" 
-                    :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95]
-    [rc14-remob-enabler     "Template for rc that enables multiple mobs" 
-     :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95])
+(deftemplates   {:startstate reset
+                 :endstate   available
+                 :overlap    45 
+                 :recovery   90
+                 :bogbudget  270
+                 :maxbog     270
+                 :maxdwell   +inf+
+                 :maxMob     270                   
+                 :mindwell   0 }
+  [rc11           "RC 1:1 template for MCU"       (waits->routes (rc14-waits   45) rc-routing) :overlap 45 ]
+  [rc11-enabler   "RC 1:1 template for enablers"  (waits->routes (rc14-waits   30) rc-routing)  :overlap 30]   
+  [rc14           "RC 1:4 template for MCU"       (waits->routes (rc14-waits   45) rc-routing)   :overlap 45]
+  [rc14-enabler   "RC 1:4 template for enablers" (waits->routes (rc14-waits   30) rc-routing) :overlap 30]
+  [rc15           "RC 1:5 template for MCU"             (waits->routes (rc15-waits   45) rc-routing) :overlap 45 ]
+  [rc15-enabler   "RC 1:5 template for enablers"  (waits->routes (rc15-waits   30) rc-routing)  :overlap 30]
+  [rc14-remob     "Template for rc that enables multiple mobs" 
+   :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95]
+  [rc14-remob-enabler     "Template for rc that enables multiple mobs" 
+   :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95])
 
-(binding [*stats*  {:startstate Deployable
-                    :endstate   ReturnToDeployable
-                    :overlap    45 
-                    :recovery   90
-                    :bogbudget  365
-                    :maxbog     365
-                    :maxdwell   +inf+
-                    :maxMob     270                   
-                    :mindwell   0 }]
-  (deftemplates
-    [ghost           "Ghost template"       (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 45]
-    [ghost-enabler   "Ghost template for enablers" (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 30]))
+(deftemplates {:startstate Deployable
+               :endstate   ReturnToDeployable
+               :overlap    45 
+               :recovery   90
+               :bogbudget  365
+               :maxbog     365
+               :maxdwell   +inf+
+               :maxMob     270                   
+               :mindwell   0 }
+  [ghost           "Ghost template"       (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 45]
+  [ghost-enabler   "Ghost template for enablers" (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 30])
+
+
 
 (comment 
-
-
-;;template for RC policies with a remob time, we use the parameters to grow and shrink pools
-;;Allows 2 deployments.  Recovery time dictates the amount of time spent in between bogs.
-Public Function RC14ReMobTemplate(name As String, overlap As Long, Optional deltas As Dictionary, _
-                                    Optional recoverytime As Long, Optional bogbudget As Long) As TimeStep_Policy
-Set RC14ReMobTemplate = New TimeStep_Policy
-If recoverytime = 0 Then recoverytime = 365
-If bogbudget = 0 Then bogbudget = 270 * 2 ;;default to 2 deployments
-With RC14ReMobTemplate
-    .MaxMOB = 95
-    .overlap = overlap
-    ;;.AlterPositions ("RC")
-    .name = name
-    .AddPosition reset, "Dwelling", train, "Dwelling", ready, "Dwelling", available, "Dwelling", _
-                 deployed, "Bogging", Overlapping, "Overlapping", demobilization, "DeMobilizing", _
-                    recovery, Recovering, Recovered, Recovered
-    .AddRoute reset, train, 365 + getdelta(reset, deltas)
-    .AddRoute train, ready, 365 + getdelta(train, deltas)
-    .AddRoute ready, available, 730 + getdelta(ready, deltas)
-    .AddRoute available, reset, 365 + getdelta(available, deltas)
-    .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
-    
-    ;;TOM Change 13 July 2011
-    ;;.AddRoute Overlapping, Reset, overlap + getdelta(Overlapping, deltas)
-    ;;.AddRoute Overlapping, demobilization, overlap + getdelta(ready, deltas)
-;;    .AddRoute demobilization, reset, 95 + getdelta(ready, deltas)
-    .AddRoute Overlapping, recovery, overlap + getdelta(Overlapping, deltas)
-    .AddRoute recovery, Recovered, CSng(recoverytime)
-    .AddRoute Recovered, demobilization, 95 + getdelta(ready, deltas)
-    .AddRoute demobilization, reset, 0
-    .bogbudget = bogbudget
-End With
-;;policyname, from, to, time, state
-End Function
 
 
 ;;TOM Hack 24 July 2012
@@ -1325,5 +1299,38 @@ End Function
 ;; End Function
 
 
+;;template for RC policies with a remob time, we use the parameters to grow and shrink pools
+;;Allows 2 deployments.  Recovery time dictates the amount of time spent in between bogs.
+;; Public Function RC14ReMobTemplate(name As String, overlap As Long, Optional deltas As Dictionary, _
+;;                                     Optional recoverytime As Long, Optional bogbudget As Long) As TimeStep_Policy
+;; Set RC14ReMobTemplate = New TimeStep_Policy
+;; If recoverytime = 0 Then recoverytime = 365
+;; If bogbudget = 0 Then bogbudget = 270 * 2 ;;default to 2 deployments
+;; With RC14ReMobTemplate
+;;     .MaxMOB = 95
+;;     .overlap = overlap
+;;     ;;.AlterPositions ("RC")
+;;     .name = name
+;;     .AddPosition reset, "Dwelling", train, "Dwelling", ready, "Dwelling", available, "Dwelling", _
+;;                  deployed, "Bogging", Overlapping, "Overlapping", demobilization, "DeMobilizing", _
+;;                     recovery, Recovering, Recovered, Recovered
+;;     .AddRoute reset, train, 365 + getdelta(reset, deltas)
+;;     .AddRoute train, ready, 365 + getdelta(train, deltas)
+;;     .AddRoute ready, available, 730 + getdelta(ready, deltas)
+;;     .AddRoute available, reset, 365 + getdelta(available, deltas)
+;;     .AddRoute deployed, Overlapping, 270 - overlap + getdelta(deployed, deltas)
+    
+;;     ;;TOM Change 13 July 2011
+;;     ;;.AddRoute Overlapping, Reset, overlap + getdelta(Overlapping, deltas)
+;;     ;;.AddRoute Overlapping, demobilization, overlap + getdelta(ready, deltas)
+;; ;;    .AddRoute demobilization, reset, 95 + getdelta(ready, deltas)
+;;     .AddRoute Overlapping, recovery, overlap + getdelta(Overlapping, deltas)
+;;     .AddRoute recovery, Recovered, CSng(recoverytime)
+;;     .AddRoute Recovered, demobilization, 95 + getdelta(ready, deltas)
+;;     .AddRoute demobilization, reset, 0
+;;     .bogbudget = bogbudget
+;; End With
+;; ;;policyname, from, to, time, state
+;; End Function
 
 
