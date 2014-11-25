@@ -125,14 +125,13 @@
   (set-deployable-stop  [p cycletime]     )
   (add-position         [p name state]    )
   (add-route            [p start destination transfer-time] )
-  (set-position-graph   [p g] ))
+  (set-position-graph   [p g])
+  (merge-policy-stats   [p m]))
 
 ;;Functions for working with composite policies.
 (defprotocol IPolicyContainer
   (add-policy       [p policy] 
                     [p period policy]))
-
-
 
 ;;Helper function to allow us to push maps into policies as positions.
 ;;Basically sets the state associated with a policy position.

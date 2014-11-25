@@ -73,7 +73,10 @@
   (set-position-graph   [p g]          (assoc p :positiongraph g)) 
   (add-position         [p name state] (assoc p :positiongraph (graph/conj-node positiongraph name state)))
   (add-route            [p start destination transfer-time] 
-      (assoc p :positiongraph (graph/conj-arc positiongraph start destination transfer-time))))
+      (assoc p :positiongraph (graph/conj-arc positiongraph start destination transfer-time)))
+  (merge-policy-stats   [p stats] (merge p stats)))
+
+
 
 (def empty-policy (make-policy))
 
