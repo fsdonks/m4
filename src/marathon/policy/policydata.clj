@@ -36,10 +36,10 @@
   (get-active-policy   [p] p)
   (get-policy          [p period] p)
   (policy-name         [p] name)
-  (next-position       [p position] (first (graph/sinks positiongraph)))
+  (next-position       [p position] (first (graph/sinks positiongraph position)))
   (overlap             [p] overlap) 
   (get-position-graph  [p] positiongraph)  
-  (previous-position    [p position] (first (graph/sources positiongraph)))
+  (previous-position    [p position] (first (graph/sources positiongraph position)))
   (start-deployable     [p] startdeployable)
   (stop-deployable      [p] stopdeployable)
   (start-state          [p] startstate)
@@ -54,7 +54,7 @@
   (get-position     [p cycletime] (loop [pos startstate
                                          t   0]
                                     (if-let [nxt (first (graph/sinks positiongraph pos))]
-                                      (let [tnxt (+ t   (long (graph/arc-weight pos nxt)))]
+                                      (let [tnxt (+ t   (long (graph/arc-weight positiongraph pos nxt)))]
                                         (if (>= tnxt cycletime) pos
                                             (recur nxt tnxt)))
                                       (throw (Exception. "Cycletime exceeds policy!")))))                                    
@@ -66,8 +66,9 @@
   (get-locations    [p]           (graph/get-node-labels positiongraph))
   core/IAlterablePolicy
   (set-deployable       [p tstart tfinal] (-> p 
-                                              (core/insert-modifier tstart :name :deployable)
-                                              (core/insert-modifier tfinal :name :non-deployable)))
+                                              (core/insert-modifier tstart {:name :deployable})
+                                              (core/insert-modifier tfinal {:name :non-deployable})
+                                              (core/mark-deployable-region)))
   (set-deployable-start [p cycletime]  (core/insert-modifier p cycletime :name :deployable))
   (set-deployable-stop  [p cycletime]  (core/insert-modifier p cycletime :name :non-deployable))
   (set-position-graph   [p g]          (assoc p :positiongraph g)) 

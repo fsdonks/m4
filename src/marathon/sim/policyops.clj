@@ -196,17 +196,40 @@
                           [from to (get wait-times from)])
                         (partition 2 1 (filter #(get wait-times %) xs))))   routing)))
   
+
+;;wait-times are parametric, and usually dependent on the policy...
+;;we can embed this information in the policy, and have the wait times 
+;;constructed as a function of the policy....
+
+;; (defmacro defwaits [name args & body]
+;;   (let [stats (gensym "stats")]
+;;     `(defn ~name 
+;;        (~args ~@body)
+;;        ([~stats] (~name ~@(map (fn [arg] `(get ~stats ~(keyword arg))) args))))))
+
  
 ;;These are wait times based on state transition graphs.
 ;;We can probably abstract this out further, but for now it'll work...
-(defn ac11-waits [overlap]
+(defn ac11-waits [{:keys [overlap]}]
   {reset       182 
    train       183 
    available   365
    deployed    (- 365 overlap) 
    Overlapping overlap})
 
-(defn ac12-waits [overlap]
+
+;;see if we can roll all these guys up....there's no need to 
+;;really have them explicit like that...
+
+;; (defn ac-waits [{:keys [overlap maxbog]}]
+;;     {reset       182 
+;;      train       183 
+;;      ready       maxbog
+;;      available   maxbog
+;;      deployed    (- maxbog overlap) 
+;;      Overlapping overlap})
+
+(defn ac12-waits [{:keys [overlap]}]
   {reset       182 
    train       183 
    ready       365
@@ -214,15 +237,15 @@
    deployed    (- 365 overlap) 
    Overlapping overlap})
 
-(defn ac13-waits [overlap]
-    {reset     182 
-     train     183 
-     ready     460 
-     available 270 
-     deployed (- 270 overlap) 
-     Overlapping overlap})
+(defn ac13-waits [{:keys [overlap]}]
+  {reset     182 
+   train     183 
+   ready     460 
+   available 270 
+   deployed (- 270 overlap) 
+   Overlapping overlap})
 
-(defn rc11-waits [overlap]
+(defn rc11-waits [{:keys [overlap]}]
   {reset 182 
    train 183 
    available 365
@@ -230,7 +253,7 @@
    Overlapping overlap
    demobilization 95})
 
-(defn rc12-waits [overlap]
+(defn rc12-waits [{:keys [overlap]}]
   {reset 365 
    train 365 
    available 365
@@ -238,16 +261,16 @@
    Overlapping overlap
    demobilization 95})
 
-(defn rc14-waits [overlap]
-   {reset 365 
-    train 365 
-    ready 730 
-    available 365 
-    deployed (- 270 overlap) 
-    Overlapping overlap 
-    demobilization 95})
+(defn rc14-waits [{:keys [overlap]}]
+  {reset 365 
+   train 365 
+   ready 730 
+   available 365 
+   deployed (- 270 overlap) 
+   Overlapping overlap 
+   demobilization 95})
 
-(defn rc15-waits [overlap]
+(defn rc15-waits [{:keys [overlap]}]
   {reset 730 
    train 365
    ready 730 
@@ -256,15 +279,28 @@
    Overlapping overlap
    demobilization 95})  
 
-(defn ghost-waits [bog overlap]
+(defn ghost-waits [{:keys [maxbog overlap]}]
   {Spawning 0
    Deployable 0
    Waiting +inf+
    Deploying 0
    NotDeployable 0
-   deployed (- bog overlap)
+   deployed (- maxbog overlap)
    Overlapping overlap 
    ReturnToDeployable 0})
+
+;;max utilization is pretty simple too...
+(defn max-util-waits [{:keys [overlap maxbog mindwell]}]
+  {reset mindwell
+   Deployable 0
+   available +inf+
+   NotDeployable 0
+   deployed (- maxbog overlap)
+   Overlapping overlap})
+
+(defn route-by [waitfn routes]
+  (fn [stats] 
+    (waits->routes (waitfn stats) routes)))
 
 (defn unzip [xs]  (reduce (fn [acc [x y]]  (-> acc (conj x) (conj y))) [] xs))
 
@@ -282,6 +318,25 @@
 (defn and-stats [base-stats & kvps] 
   (reduce (fn [m [k v]] (assoc m k v)) base-stats (partition 2 kvps)))
 
+;;We end up needing to vary policies (that is the scheduled state
+;;changes for entities) a LOT.  Consequently, rather than hardcode
+;;them in (as we did in previous versions), there's a desire to make
+;;policies highly data driven and user-defined.  The initial
+;;implementation had a minimal set of built-in, or template, policies,
+;;which the users could parametrically alter via a simple table of
+;;data.  Additionally, users could define new policies by composing
+;;the atomic policies via sequencing and period-mapping, creating 
+;;stacked policies and policies mapped to periods of time. 
+
+;;We still provide that functionality here, but in a much more refined
+;;and extensible (and short!) form via deftemplate and friends.  We 
+;;define a set of macros that provide legacy policy templates,
+;;allowing users to compose them in aforementioned ways.  However, 
+;;we also will expose the api so that users can define their own
+;;template policies for additional composition.  There is probably 
+;;room for a specific DSL here, but right now we just provide a simple
+;;API for policy constructors.
+
 (defmacro deftemplate 
   "Defines a named policy constructor useful for deriving new policies."
   [name & {:keys [routes positions doc stats] :or 
@@ -293,16 +348,24 @@
        (defn ~name ~doc 
          [& {:keys [~'name ~'deltas ~'stats] 
              :or {~'name ~(str name)      ~'deltas nil }}]       
-         (let [stats#  (merge ~stats ~'stats)]
+         (let [stats#  (merge ~stats ~'stats)
+               routes# ~routes 
+               routes# (if (fn? routes#) (routes# stats#) routes#)]
            (-> (apply policydata/make-policy (unzip (seq (assoc stats# :name ~'name))))
                (core/merge-policy-stats stats#)
                (core/add-positions ~positions)
-               (core/add-routes (modified-routes ~routes (:overlap stats#) ~'deltas)))))
+               (core/add-routes (modified-routes routes# (:overlap stats#) ~'deltas)))))
          (swap! templates assoc ~(str name) ~name)
          (quote ~name))))
 
-(defmacro simple-template [name doc routes base-stats & optional-stats]
-  `{:name (quote ~name) :doc ~doc :routes ~routes :stats (and-stats ~base-stats ~@optional-stats)})
+;;It may be easier to just push a base policy through multiple
+;;transforms, that constitutes a "template"...
+
+(defmacro simple-template 
+  ([name doc routes base-stats & optional-stats]
+     `{:name (quote ~name) :doc ~doc :routes (quote ~routes) :stats (and-stats ~base-stats ~@optional-stats)})
+  ([[name doc routes base-stats & optional-stats]]  
+     `{:name (quote ~name) :doc ~doc :routes (quote ~routes) :stats (and-stats ~base-stats ~@optional-stats)}))
 
 (defn eval-template [td]
   (eval `(deftemplate ~(:name td) ~@(unzip (dissoc td :name)))))
@@ -325,11 +388,11 @@
                :maxdwell   +inf+
                :maxMob     365                   
                :mindwell   0}
-  [ac12          "AC 1:2 template for MCU"       (waits->routes (ac12-waits   45) default-routing)  :overlap 45]
-  [ac12-enabler  "AC 12 template for enablers"   (waits->routes (ac12-waits   30) default-routing)  :overlap 30]
-  [ac13          "AC 1:3 template for MCU"       (waits->routes (ac13-waits   45) default-routing)  :overlap 45]
-  [ac13-enabler  "AC 13 template for MCU"        (waits->routes (ac13-waits   30) default-routing)  :overlap 30]
-  [ac11          "AC 1:1 template for MCU"       (waits->routes (ac11-waits    0) default-routing)  :overlap 0])
+  [ac12          "AC 1:2 template for MCU"       (route-by ac12-waits default-routing)]
+  [ac12-enabler  "AC 12 template for enablers"   (route-by ac12-waits default-routing)  :overlap 30]
+  [ac13          "AC 1:3 template for MCU"       (route-by ac13-waits default-routing)  :overlap 45]
+  [ac13-enabler  "AC 13 template for MCU"        (route-by ac13-waits default-routing)  :overlap 30]
+  [ac11          "AC 1:1 template for MCU"       (route-by ac11-waits default-routing)  :overlap 0])
 
 (deftemplates   {:startstate reset
                  :endstate   available
@@ -340,12 +403,12 @@
                  :maxdwell   +inf+
                  :maxMob     270                   
                  :mindwell   0 }
-  [rc11           "RC 1:1 template for MCU"       (waits->routes (rc14-waits   45) rc-routing) :overlap 45 ]
-  [rc11-enabler   "RC 1:1 template for enablers"  (waits->routes (rc14-waits   30) rc-routing)  :overlap 30]   
-  [rc14           "RC 1:4 template for MCU"       (waits->routes (rc14-waits   45) rc-routing)   :overlap 45]
-  [rc14-enabler   "RC 1:4 template for enablers" (waits->routes (rc14-waits   30) rc-routing) :overlap 30]
-  [rc15           "RC 1:5 template for MCU"             (waits->routes (rc15-waits   45) rc-routing) :overlap 45 ]
-  [rc15-enabler   "RC 1:5 template for enablers"  (waits->routes (rc15-waits   30) rc-routing)  :overlap 30]
+  [rc11           "RC 1:1 template for MCU"       (route-by rc14-waits  rc-routing)  :overlap 45]
+  [rc11-enabler   "RC 1:1 template for enablers"  (route-by rc14-waits  rc-routing)  :overlap 30]   
+  [rc14           "RC 1:4 template for MCU"       (route-by rc14-waits  rc-routing)  :overlap 45]
+  [rc14-enabler   "RC 1:4 template for enablers"  (route-by rc14-waits  rc-routing)  :overlap 30]
+  [rc15           "RC 1:5 template for MCU"       (route-by rc15-waits  rc-routing)  :overlap 45]
+  [rc15-enabler   "RC 1:5 template for enablers"  (route-by rc15-waits  rc-routing)  :overlap 30]
   [rc14-remob     "Template for rc that enables multiple mobs" 
    :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95]
   [rc14-remob-enabler     "Template for rc that enables multiple mobs" 
@@ -360,44 +423,152 @@
                :maxdwell   +inf+
                :maxMob     270                   
                :mindwell   0 }
-  [ghost           "Ghost template"       (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 45]
-  [ghost-enabler   "Ghost template for enablers" (waits->routes (ghost-waits  365 45) ghost-routing) :overlap 30])
+  [ghost           "Ghost template"              (route-by ghost-waits  ghost-routing) :overlap 45]
+  [ghost-enabler   "Ghost template for enablers" (route-by ghost-waits  ghost-routing) :overlap 30])
+
+(deftemplates 
+  {:overlap         45 
+   :recovery        90
+   :bogbudget       365
+   :maxdwell        +inf+
+   :mindwell        0 
+   :cyclelength     +inf+
+   :maxbog          365
+   :startdeployable 0
+   :stopdeployable  +inf+
+   :startstate      reset 
+   :endstate        available}
+  [max-utilization              "Max Utilization policy for AC 45" (route-by max-util-waits  default-routing)]
+  [max-utilization-enabler      "Max Utilization policy for AC 30" (route-by max-util-waits  default-routing) :overlap 30]
+  [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :bogbudget 270]
+  [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :overlap 30 :bogbudget 270])
 
 
+(comment
+(defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
+  (if-let [ctor (get @templates name (get @templates (keyword name)))]
+    (let [stats {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
+          stats (if overlap (assoc stats :overlap overlap) stats)]
+      (-> (ctor :deltas deltas :stats stats)
+          (core/set-deployable startdeployable stopdeployable)))
+    (throw (Exception. (str "Unknown template: " name)))))
+)          
 
+;;Constructor for building policy instances ...
+;;We want to flexibly create Marathon policies .....
+;;A policy:
+;;defines the structure of a Rotational lifecycle ...
+;;Location transitions, time spent at locations, etc.
+;;edges on a graph, where nodes are states (locations) and weights are time
+;;At least one location must be the starting point for a cycle, one is the end.
+;;defines parameters for availability
+;;Deployment windows (Megan;;s parameter)
+;;Strict vs. Non-Strict (single day available/lifecycle vs. else)
+;;defines
+
+
+;; Public Function RegisterTemplate(name As String, MaxDwellDays As Long, MinDwellDays As Long, _
+;;     maxbogdays As Long, startdeployable As Long, stopdeployable As Long, Optional overlap As Long, _
+;;         Optional deltas As Dictionary, Optional deployableAlreadySet As Boolean) As TimeStep_Policy
+
+;; Dim res As TimeStep_Policy
+
+;; Set RegisterTemplate = FromTemplate(name, overlap, deltas, , maxbogdays, MinDwellDays)
+
+;; ;;parameterize the policy
+;; With RegisterTemplate
+;;     .maxdwell = MaxDwellDays
+;;     .mindwell = MinDwellDays
+;;     .maxbog = maxbogdays ;;TOM NOTE 21 Mar 2011 -> I think this is backwards
+;;     .startdeployable = startdeployable
+;;     .stopdeployable = stopdeployable
+;; ;;    .StartIndex = LocatiOnMap(.StartState) ;;TOM TODO fix this .
+;; ;;    .EndIndex = LocatiOnMap(.EndState)  ;;TOM TODO fix this.
+;;     If deployableAlreadySet = False Then
+;;         Set res = .setDeployable(.startdeployable, .stopdeployable) ;;mutates the policygraph.
+;;     Else
+;;         Set res = RegisterTemplate
+;;     End If
+;; End With
+
+;; Set RegisterTemplate = res
+
+;; End Function
+
+                            
+    
 (comment 
+                                                                                         
 
 
-;;TOM Hack 24 July 2012
-Public Function maxUtilizationTemplate(name As String, bog As Single, overlap As Single, mindwell As Single) As TimeStep_Policy
-Set maxUtilizationTemplate = New TimeStep_Policy
-With maxUtilizationTemplate
-    .name = name
-    .overlap = overlap
-    .name = name
-    .AddPosition reset, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping", _
-        "Deployable", "Deployable", "NotDeployable", "NotDeployable"
-    .AddRoute reset, "Deployable", mindwell
-    .AddRoute "Deployable", available, 0
-    .AddRoute available, "NotDeployable", inf
-    .AddRoute "NotDeployable", reset, 0
-    .AddRoute deployed, Overlapping, bog - overlap
-    .AddRoute Overlapping, reset, overlap
-    .cyclelength = inf
-    .maxbog = bog
-    .mindwell = mindwell
+
+Public Function RegisterGhostTemplate(name As String, maxbogdays As Single, Optional overlap As Single) As TimeStep_Policy
+
+Set RegisterGhostTemplate = GhostTemplate(name, maxbogdays, overlap)
+
+;;parameterize the policy
+With RegisterGhostTemplate
     .maxdwell = inf
-    .startDeployable = mindwell
-    .stopDeployable = inf
-    .startstate = reset
-    .endstate = available
+    .mindwell = 0
+    .maxbog = maxbogdays ;;TOM NOTE 21 Mar 2011 -> I think this is backwards
+    .startdeployable = 0
+    .stopdeployable = inf
+    ;;.StartIndex = 9999999 ;;LocatiOnMap(.StartState) ;;TOM TODO fix this .
+    ;;.EndIndex = LocatiOnMap(.EndState)  ;;TOM TODO fix this.
 End With
 
 End Function
-;;MaxUtilization
-;;ACFFG
-;;RCOpSus
-;;RCFFG
+
+
+
+
+Public Function FromTemplate(name As String, Optional overlap As Long, Optional deltas As Dictionary, _
+                                Optional recoverytime As Long, Optional maxbog As Long, Optional mindwell As Long) As TimeStep_Policy
+Select Case name
+    Case Is = AC12
+        Set FromTemplate = AC12Template(AC12, overlap, deltas)
+    Case Is = AC13
+        Set FromTemplate = AC13Template(AC13, overlap, deltas)
+    Case Is = AC11
+        Set FromTemplate = AC11Template(AC11, overlap, deltas)
+    Case Is = RC14
+        Set FromTemplate = RC14Template(RC14, overlap, deltas)
+    Case Is = RC15
+        Set FromTemplate = RC15Template(RC15, overlap, deltas)
+    Case Is = RC11
+        Set FromTemplate = RC11Template(RC11, overlap, deltas)
+    Case Is = RC12
+        Set FromTemplate = RC12Template(RC12, overlap, deltas)
+    Case Is = RC14ReMob
+        Set FromTemplate = RC14ReMobTemplate(RC14ReMob, overlap, deltas, recoverytime)
+        ;;Added 24 July 2012
+    Case Is = MarathonEnumsAndConstants.FFGMission ;;Added 10 Sep 2012
+        Set FromTemplate = FFGMissionTemplate(name, overlap, deltas)
+    Case Is = MarathonEnumsAndConstants.ACFFG
+        Set FromTemplate = ACFFGTemplate(name, overlap, deltas)
+    Case Is = MarathonEnumsAndConstants.RCFFG
+        Set FromTemplate = RCFFGTemplate(name, overlap, deltas)
+    Case Is = MarathonEnumsAndConstants.RCOpSus
+        Set FromTemplate = RCOpSusTemplate(name, overlap, deltas)
+    Case MarathonEnumsAndConstants.MaxUtilization, MarathonEnumsAndConstants.NearMaxUtilization
+        Set FromTemplate = maxUtilizationTemplate(name, CSng(maxbog), CSng(overlap), CSng(mindwell))
+    Case Else
+        Err.Raise 101, , "Template " & name & " does not exist!"
+End Select
+
+With FromTemplate
+    If .startstate = vbNullString Then .startstate = reset
+    If .endstate = vbNullString Then .endstate = available
+    
+    ;;Err.Raise 101, , "Fix the line below, need to update cyclelength!"
+    ;;.cyclelength = .PositionGraph.pathlength(.PositionGraph.getPath(.PositionGraph.FindCycle(.StartState, .EndState)))
+    .cyclelength = cycleSearch(.PositionGraph, makeDepthFringe(), .startstate).distance(.startstate)
+    If .cyclelength = 0 Then Err.Raise 101, , "Cycle length is 0, check your rotational policy!"
+End With
+
+End Function
+
+
 
 ;;TOM Hack 24 july 2012
 ;;Mission Pool template
@@ -477,6 +648,10 @@ With RCOpSusTemplate
     .endstate = os & available
 End With
 End Function
+
+
+;;We define a way to read policy specs....
+
 
 ;;TOM TODO ->
 ;;Need a more declarative way to do this, the numerical values hide what;;s going on in the function
@@ -1334,3 +1509,30 @@ End Function
 ;; End Function
 
 
+
+;; ;;TOM Hack 24 July 2012
+;; Public Function maxUtilizationTemplate(name As String, bog As Single, overlap As Single, mindwell As Single) As TimeStep_Policy
+;; Set maxUtilizationTemplate = New TimeStep_Policy
+;; With maxUtilizationTemplate
+;;     .name = name
+;;     .overlap = overlap
+;;     .name = name
+;;     .AddPosition reset, "Dwelling", available, "Dwelling", deployed, "Bogging", Overlapping, "Overlapping", _
+;;         "Deployable", "Deployable", "NotDeployable", "NotDeployable"
+;;     .AddRoute reset, "Deployable", mindwell
+;;     .AddRoute "Deployable", available, 0
+;;     .AddRoute available, "NotDeployable", inf
+;;     .AddRoute "NotDeployable", reset, 0
+;;     .AddRoute deployed, Overlapping, bog - overlap
+;;     .AddRoute Overlapping, reset, overlap
+;;     .cyclelength = inf
+;;     .maxbog = bog
+;;     .mindwell = mindwell
+;;     .maxdwell = inf
+;;     .startDeployable = mindwell
+;;     .stopDeployable = inf
+;;     .startstate = reset
+;;     .endstate = available
+;; End With
+
+;;End Function

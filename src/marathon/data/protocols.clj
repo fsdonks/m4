@@ -227,7 +227,7 @@
                      (get :distance)
                      (get x))
            offset (- cycletime tprev)
-           dnxt   (- (graph/arc-weight x nxt) offset)]                          
+           dnxt   (- (graph/arc-weight pg x nxt) offset)]                          
        (set-position-graph policy
             (-> pg 
                 (graph/disj-arc x nxt)
@@ -243,7 +243,7 @@
    indicating the position is an eligible deployable state."
   [policy] 
   (let [pg (get-position-graph policy)]
-    (if-let [path (graph/depth-nodes pg :deployable :non-deployable)]    
+    (if-let [path (graph/first-path (graph/depth-first-search pg :deployable :non-deployable))]    
       (->> (update-nodes pg (drop 1 (butlast path)) #(toggle-tag % :deployable))
            (set-position-graph policy))
       (throw (Exception. (str "No deployable range found between in " policy))))))
