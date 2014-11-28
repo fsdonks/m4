@@ -216,14 +216,17 @@
 (defn update-nodes [g nodes f] 
   (reduce (fn [acc nd] (update-node acc nd f)) g nodes))
 
-(defn toggle-tag [s tg] (if (contains? s tg) (disj s tg) (conj s tg)))
+(defn toggle-tag [s tg] 
+  (if (set? s)      
+    (if (contains? s tg) (disj s tg) (conj s tg))
+    #{tg}))
 
 (defn insert-modifier 
   ([policy cycletime {:keys [name weight] :or {name :modified weight 0}}]
      (let [x     (get-position policy cycletime)
            nxt   (next-position policy x)      
            pg    (get-position-graph policy)
-           tprev (-> (graph/depth-first-search pg (start-state policy) x)
+           tprev (-> (graph/depth-first-search pg (start-state policy) x {:weightf graph/arc-weight})
                      (get :distance)
                      (get x))
            offset (- cycletime tprev)
