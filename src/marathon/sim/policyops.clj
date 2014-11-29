@@ -443,17 +443,6 @@
   [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :bogbudget 270]
   [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :overlap 30 :bogbudget 270])
 
-
-(comment
-(defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
-  (if-let [ctor (get @templates name (get @templates (keyword name)))]
-    (let [stats {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
-          stats (if overlap (assoc stats :overlap overlap) stats)]
-      (-> (ctor :deltas deltas :stats stats)
-          (core/set-deployable startdeployable stopdeployable)))
-    (throw (Exception. (str "Unknown template: " name)))))
-)          
-
 ;;Constructor for building policy instances ...
 ;;We want to flexibly create Marathon policies .....
 ;;A policy:
@@ -466,59 +455,30 @@
 ;;Strict vs. Non-Strict (single day available/lifecycle vs. else)
 ;;defines
 
+(defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
+  (if-let [ctor (get @templates name (get @templates (keyword name)))]
+    (let [stats {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
+          stats (if overlap (assoc stats :overlap overlap) stats)]
+      (-> (ctor :deltas deltas :stats stats)
+          (core/set-deployable startdeployable stopdeployable)))
+    (throw (Exception. (str "Unknown template: " name)))))
 
-;; Public Function RegisterTemplate(name As String, MaxDwellDays As Long, MinDwellDays As Long, _
-;;     maxbogdays As Long, startdeployable As Long, stopdeployable As Long, Optional overlap As Long, _
-;;         Optional deltas As Dictionary, Optional deployableAlreadySet As Boolean) As TimeStep_Policy
+;;Possible vestigial design cruft....we may be able to unify this and
+;;remove excess....
+(defn register-ghost-template [name  maxbog & {:keys [overlap]}]
+   (ghost :name name :stats {:maxbog maxbog :maxdwell +inf+ :mindwell 0 :startdeployable 0 :stopdeployable +inf+}))
 
-;; Dim res As TimeStep_Policy
-
-;; Set RegisterTemplate = FromTemplate(name, overlap, deltas, , maxbogdays, MinDwellDays)
-
-;; ;;parameterize the policy
-;; With RegisterTemplate
-;;     .maxdwell = MaxDwellDays
-;;     .mindwell = MinDwellDays
-;;     .maxbog = maxbogdays ;;TOM NOTE 21 Mar 2011 -> I think this is backwards
-;;     .startdeployable = startdeployable
-;;     .stopdeployable = stopdeployable
-;; ;;    .StartIndex = LocatiOnMap(.StartState) ;;TOM TODO fix this .
-;; ;;    .EndIndex = LocatiOnMap(.EndState)  ;;TOM TODO fix this.
-;;     If deployableAlreadySet = False Then
-;;         Set res = .setDeployable(.startdeployable, .stopdeployable) ;;mutates the policygraph.
-;;     Else
-;;         Set res = RegisterTemplate
-;;     End If
-;; End With
-
-;; Set RegisterTemplate = res
-
-;; End Function
-
-                            
+;;computes the cycle length assuming startnode and end-node are
+;;adjacent members of a cycle.
+(defn cycle-length [g startnode endnode]
+  (when-let [w (graph/arc-weight g endnode startnode)]
+    (-> (graph/depth-first-search g startnode endnode {:weightf graph/arc-weight})
+        (:distance)
+        (get endnode)
+        (+ w))))      
     
+;;(defn from-template [name deltas stats];;
 (comment 
-                                                                                         
-
-
-
-Public Function RegisterGhostTemplate(name As String, maxbogdays As Single, Optional overlap As Single) As TimeStep_Policy
-
-Set RegisterGhostTemplate = GhostTemplate(name, maxbogdays, overlap)
-
-;;parameterize the policy
-With RegisterGhostTemplate
-    .maxdwell = inf
-    .mindwell = 0
-    .maxbog = maxbogdays ;;TOM NOTE 21 Mar 2011 -> I think this is backwards
-    .startdeployable = 0
-    .stopdeployable = inf
-    ;;.StartIndex = 9999999 ;;LocatiOnMap(.StartState) ;;TOM TODO fix this .
-    ;;.EndIndex = LocatiOnMap(.EndState)  ;;TOM TODO fix this.
-End With
-
-End Function
-
 
 
 
@@ -567,6 +527,7 @@ With FromTemplate
 End With
 
 End Function
+
 
 
 
@@ -1536,3 +1497,22 @@ End Function
 ;; End With
 
 ;;End Function
+
+;; Public Function RegisterGhostTemplate(name As String, maxbogdays As Single, Optional overlap As Single) As TimeStep_Policy
+
+;; Set RegisterGhostTemplate = GhostTemplate(name, maxbogdays, overlap)
+
+;; ;;parameterize the policy
+;; With RegisterGhostTemplate
+;;     .maxdwell = inf
+;;     .mindwell = 0
+;;     .maxbog = maxbogdays ;;TOM NOTE 21 Mar 2011 -> I think this is backwards
+;;     .startdeployable = 0
+;;     .stopdeployable = inf
+;;     ;;.StartIndex = 9999999 ;;LocatiOnMap(.StartState) ;;TOM TODO fix this .
+;;     ;;.EndIndex = LocatiOnMap(.EndState)  ;;TOM TODO fix this.
+;; End With
+
+;; End Function
+
+

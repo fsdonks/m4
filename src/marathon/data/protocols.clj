@@ -216,6 +216,7 @@
 (defn update-nodes [g nodes f] 
   (reduce (fn [acc nd] (update-node acc nd f)) g nodes))
 
+;;Adds or removes tg from s, depending on s's presence 
 (defn toggle-tag [s tg] 
   (if (set? s)      
     (if (contains? s tg) (disj s tg) (conj s tg))
