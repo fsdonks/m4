@@ -133,6 +133,16 @@
   (add-policy       [p policy] 
                     [p period policy]))
 
+;;This is a compatibility hack at the moment, I'll probably rip this
+;;out.
+(defprotocol IPeriodicPolicy
+  (change-period [p period]))
+
+(defn on-period-change [p period]
+  (if (satisfies?  IPeriodicPolicy p)
+    (change-period p period)
+    p))
+
 ;;Helper function to allow us to push maps into policies as positions.
 ;;Basically sets the state associated with a policy position.
 (defn add-positions [p xs]
@@ -260,7 +270,6 @@
       "Return the result of changing the unit's finite state machine to a 
        new state using behavior b."))
     
-
 
 ;;Legacy...
     

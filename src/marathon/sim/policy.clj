@@ -540,7 +540,7 @@
 ;Primitive constructore for composite policy.  To define a composite, we need at
 ;least one period and one atomic policy.
 (defn create-composite [policyname period atomic-policy]
-  (-> (assoc p/empty-composite-policy :name policyname) 
+  (-> (assoc p/empty-policymap :name policyname) 
       (append-composite  period atomic-policy))) 
 
 ;TODO -> Add an existence check for the child policies...
@@ -552,7 +552,7 @@
 (defn compose-policies [policyname period-policy-map child-policies]
   (reduce (fn [acc [period childname]] 
             (append-composite-atomic acc period (get child-policies childname)))
-          (-> p/empty-composite-policy (assoc :name policyname)) 
+          (-> p/empty-policymap (assoc :name policyname)) 
           (seq period-policy-map)))
 
 ;TODO -> add existence checks for child policies.
@@ -562,7 +562,7 @@
 ;sequence.
 (defn sequence-policies [policyname names child-policies]
   (reduce (fn [acc child-name] (add-policy acc (get child-policies child-name)))
-          (-> p/empty-composite-policy (assoc :name policyname)) names))
+          (-> p/empty-policyseq (assoc :name policyname)) names))
 
 
 (defn sequential-policy? [p] (coll? p))
@@ -619,7 +619,7 @@
 ;Return the set of policy graphs
 (defn get-policy-graphs [policystore]
   (into {} (for [p (vals (get-policies policystore))]
-             [(protocols/policy-name p) (protocols/position-graph p)])))
+             [(protocols/policy-name p) (protocols/get-position-graph p)])))
 
 
 ;;#Policystore Creation

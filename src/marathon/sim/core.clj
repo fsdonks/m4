@@ -80,7 +80,8 @@
    demandstore   [:demandstore]
    policystore   [:policystore]
    fillstore     [:fillstore]
-   fill-function [:fillstore :fillfunction]})
+   fill-function [:fillstore :fillfunction]
+   behaviors     [:behaviormanager]})
 
 (defmacro with-simstate 
   "Given a destructuring of [[path1 path2...] the-simstate], paired
@@ -91,9 +92,11 @@
   (let [symb->path {'parameters    get-parameters
                     'supplystore   get-supplystore
                     'demandstore   get-demandstore
+                    'behaviors     get-behaviors
                     'policystore   get-policystore
                     'fillstore     get-fillstore
-                    'fill-function get-fill-function}]
+                    'fill-function get-fill-function
+                    }]
     `(let [~@(reduce (fn [acc [p v]]
                        (-> acc (conj p) (conj v)))
                      []
@@ -129,7 +132,8 @@
   contains-any?
   with-cells
   with-transient-cells
-  swap-cell!]
+  swap-cell!
+  ->cell]
  [spork.sim.simcontext 
   merge-updates])
 
