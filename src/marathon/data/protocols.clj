@@ -181,6 +181,7 @@
 ;;this is inconsistent.  Need to alter...
 (defn dwell-at? [p position] (= (get-state p position) Dwelling))
 
+(def find-position (memoize get-position))
 
 
 ;Note ---->
@@ -234,7 +235,7 @@
 
 (defn insert-modifier 
   ([policy cycletime {:keys [name weight] :or {name :modified weight 0}}]
-     (let [x     (get-position policy cycletime)
+     (let [x     (find-position policy cycletime)
            nxt   (next-position policy x)      
            pg    (get-position-graph policy)
            tprev (-> (graph/depth-first-search pg (start-state policy) x {:weightf graph/arc-weight})
