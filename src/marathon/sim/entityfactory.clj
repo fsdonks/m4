@@ -640,11 +640,30 @@
         "Demand should be scheduled for deactivation")
     (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
-    (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation")) 
+    (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation"))
+  (def earliest (reduce min (map :startday ds)))
+  (def latest   (reduce max (map #(+ (:startday %) (:duration %)) ds)))
+
+  (def multiple-demands (demand/register-demands! ds testctx))
+  (def m-dstore (core/get-demandstore multiple-demands))
+  (deftest scheduled-demands-correctly 
+    (is (= ((juxt  :startday :duration) first-demand)
+           [ 901 1080])
+        "Sampledata should not change.  Naming should be deterministic.")
+    (is (= (first (demand/get-activations m-dstore tstart))
+           (:name first-demand))
+        "Demand should register as an activation on startday.")
+    (is (= (first (demand/get-deactivations m-dstore tfinal)) (:name first-demand)) 
+        "Demand should be scheduled for deactivation")
+    (is (zero? (sim/get-time multiple-demands)) "Simulation time should still be at zero.")
+    (is (== (sim/get-next-time multiple-demands) earliest) "Next event should be demand activation")
+    (is (== (sim/get-next-time (sim/advance-time multiple-demands)) latest) "Next event should be demand activation"))
+  
 )
 
 
 (comment ;testing
+  (require '[spork.util.reducers])
   (require '[clojure.core.reducers :as r])
 
   ;;much faster....more efficient.
@@ -708,7 +727,7 @@
           (assoc  activations    start n)
           (assoc  deactivations  (+ start (get d :duration)) n))))
 
-  (defn test-demands [n] (r/map (fn [n] {:name n :startday n :duration  55}) (range-reducer n)))
+  (defn test-demands [n] (r/map (fn [n] {:name n :startday n :duration  55}) (r/range n)))
   (defn add-demands! [dstore ds]
     (core/with-cells [{dmap          [:demandmap]
                        activations   [:activations]
@@ -717,8 +736,8 @@
       (do (core/with-transient-cells [dmap activations deactivations]
             (reduce (fn [acc d] 
                       (add-demand!!! dmap activations deactivations d))
-                    nil ds)
-            (update-state!)))))
+                    nil ds))
+            (update-state!))))
 
   ;;nested cell defs also work fine.
   (defn add-demands!! [dstore ds]
@@ -733,8 +752,8 @@
         (do (core/with-transient-cells [dmap activations deactivations]
               (reduce (fn [acc d] 
                         (add-demand!!! dmap activations deactivations d))
-                      nil ds)
-              (update-state2!))))))
+                      nil ds))
+              (update-state2!)))))
 
 
 ;;can we define a macro that uses the cell infrastructure? 

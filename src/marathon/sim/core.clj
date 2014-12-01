@@ -133,6 +133,7 @@
   with-cells
   with-transient-cells
   swap-cell!
+  reset-cell!
   ->cell]
  [spork.sim.simcontext 
   merge-updates])
