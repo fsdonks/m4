@@ -392,7 +392,7 @@
   [ac12-enabler  "AC 12 template for enablers"   (route-by ac12-waits default-routing)  :overlap 30]
   [ac13          "AC 1:3 template for MCU"       (route-by ac13-waits default-routing)  :overlap 45]
   [ac13-enabler  "AC 13 template for MCU"        (route-by ac13-waits default-routing)  :overlap 30]
-  [ac11          "AC 1:1 template for MCU"       (route-by ac11-waits default-routing)  :overlap 0])
+  [ac11          "AC 1:1 template for MCU"       (route-by ac11-waits default-routing)  :overlap 0 ])
 
 (deftemplates   {:startstate reset
                  :endstate   available
@@ -403,8 +403,10 @@
                  :maxdwell   +inf+
                  :maxMob     270                   
                  :mindwell   0 }
-  [rc11           "RC 1:1 template for MCU"       (route-by rc14-waits  rc-routing)  :overlap 45]
-  [rc11-enabler   "RC 1:1 template for enablers"  (route-by rc14-waits  rc-routing)  :overlap 30]   
+  [rc11           "RC 1:1 template for MCU"       (route-by rc11-waits  rc-routing)  :overlap 45]
+  [rc11-enabler   "RC 1:1 template for enablers"  (route-by rc11-waits  rc-routing)  :overlap 30]   
+  [rc12           "RC 1:2 template for MCU"       (route-by rc12-waits  rc-routing)  :overlap 45]
+  [rc12-enabler   "RC 1:2 template for enablers"  (route-by rc12-waits  rc-routing)  :overlap 30]     
   [rc14           "RC 1:4 template for MCU"       (route-by rc14-waits  rc-routing)  :overlap 45]
   [rc14-enabler   "RC 1:4 template for enablers"  (route-by rc14-waits  rc-routing)  :overlap 30]
   [rc15           "RC 1:5 template for MCU"       (route-by rc15-waits  rc-routing)  :overlap 45]
@@ -476,6 +478,37 @@
         (:distance)
         (get endnode)
         (+ w))))      
+
+;;adding a bunch of default templates, these are basically just
+;;aliases....
+
+(def aliases
+  {"AC12"  ac12
+   "AC13"  ac13
+   "AC11"  ac11
+   "RC14" rc14
+   "RC15" rc15 
+   "RC12" rc12 
+   "Ghost" ghost
+   "RC14ReMob" rc14-remob
+   "MaxUtilization" max-utilization
+   "NearMaxUtilization" near-max-utilization
+   ;temporarily aliased until I get them ported....
+   "ACFFG" ac13
+   "RCFFG" ac13
+   "FFGMission" ac11
+   "RCOpSus" rc14
+   })
+
+
+(doseq [[k ctor] aliases]
+   (swap! templates merge 
+          {k ctor
+           (keyword k) ctor}))
+      
+         
+ 
+
     
 ;;(defn from-template [name deltas stats];;
 (comment 

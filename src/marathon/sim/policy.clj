@@ -621,7 +621,6 @@
   (into {} (for [p (vals (get-policies policystore))]
              [(protocols/policy-name p) (protocols/get-position-graph p)])))
 
-
 ;;#Policystore Creation
 ;'TODO -> get this constructor back online.
 ;'Rewire this....

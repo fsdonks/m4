@@ -683,9 +683,14 @@
     (is (= (last times) (:tlastdeactivation m-dstore))
         "Last event should be a deactivation time.")) 
 
-  (def supply-records    (sd/get-sample-records :SupplyRecords))
-  (def us       (units-from-records supply-records testctx))
-  (def first-demand (first ds))
+
+  ;;we can't build supply without policy....initializing supply with
+  ;;an understanding of policy...
+
+  (def pstore            (core/get-policystore testctx ))
+  (def supply-records    (sd/get-sample-records :SupplyRecords) pstore)
+  (def us                (units-from-records supply-records testctx))
+  (def first-demand      (first ds))
 )
 
 

@@ -54,8 +54,8 @@
 
 ;(Type    Name    FromDay ToDay)
 (defn record->period [r]
-  (->> (named-period (:Name r))
-       (period-across (parse-inf (:FromDay r)) (parse-inf (:ToDay r)))))
+  (->> (period-across (parse-inf (:FromDay r)) (parse-inf (:ToDay r)))
+        (named-period (:Name r))))
 
 
 (def ^:constant +default-period+
@@ -65,6 +65,7 @@
 ;----------OBSOLETE--------?
 (defn make-temporal-period [& [start-day end-day period-name & rest]]
   (let [name (or period-name :Default)] (->period name start-day end-day)))
+
 
 ;Public Function toString(p As GenericPeriod) As String
 ;toString = p.name & "'[" & p.from-day & ":" & p.to-day & "]'"
