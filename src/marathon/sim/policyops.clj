@@ -411,9 +411,9 @@
   [rc14-enabler   "RC 1:4 template for enablers"  (route-by rc14-waits  rc-routing)  :overlap 30]
   [rc15           "RC 1:5 template for MCU"       (route-by rc15-waits  rc-routing)  :overlap 45]
   [rc15-enabler   "RC 1:5 template for enablers"  (route-by rc15-waits  rc-routing)  :overlap 30]
-  [rc14-remob     "Template for rc that enables multiple mobs" 
+  [rc14-remob     "Template for rc that enables multiple mobs" (route-by rc14-waits  rc-routing)
    :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95]
-  [rc14-remob-enabler     "Template for rc that enables multiple mobs" 
+  [rc14-remob-enabler     "Template for rc that enables multiple mobs" (route-by rc14-waits  rc-routing)
    :overlap 45 :recovery 365 :bogbudget (* 270 2) :maxmob 95])
 
 (deftemplates {:startstate Deployable

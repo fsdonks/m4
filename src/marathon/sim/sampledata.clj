@@ -822,10 +822,10 @@ Promotion" {}},
 4/23/2012 18:52	PolicyRecord	Day	RC15_Enabler	RC15	2190	1095	270	1645	2005	30	0	Auto	{}	RC15 with 30 day overlap
 4/23/2012 18:52	PolicyRecord	Day	RC14Loose_Enabler	RC14	1825	730	270	730	1735	30	0	Auto	{}	RC14Loose with 30 day overlap
 4/23/2012 18:52	PolicyRecord	Day	Ghost365_30	Ghost	999999999	0	365	0	9999999	30	0	Auto	{}	Ghost with 30 day overlap
-4/23/2012 18:52	PolicyRecord	Day	RC14Loose_3Year	RC14	2190	730	270	730	2100	45	0	Auto	#JSON{\"Available\":365}	Added for Trudy
-4/23/2012 18:52	PolicyRecord	Day	RC14ReMob	RC14ReMob	2555	730	270	730	2465	45	365	540	#JSON{\"Available\":730}	Added for Trudy
-4/23/2012 18:52	PolicyRecord	Day	RC14Loose_3Year_Enabler	RC14	2190	730	270	730	2100	45	0	Auto	#JSON{\"Available\":365}	Added for Trudy
-4/23/2012 18:52	PolicyRecord	Day	RC14ReMob_Enabler	RC14ReMob	2555	730	270	730	2465	45	365	540	#JSON{\"Available\":730}	Added for Trudy
+4/23/2012 18:52	PolicyRecord	Day	RC14Loose_3Year	RC14	2190	730	270	730	2100	45	0	Auto	{\"Available\" 365}	Added for Trudy
+4/23/2012 18:52	PolicyRecord	Day	RC14ReMob	RC14ReMob	2555	730	270	730	2465	45	365	540	{\"Available\" 730}	Added for Trudy
+4/23/2012 18:52	PolicyRecord	Day	RC14Loose_3Year_Enabler	RC14	2190	730	270	730	2100	45	0	Auto	{\"Available\" 365}	Added for Trudy
+4/23/2012 18:52	PolicyRecord	Day	RC14ReMob_Enabler	RC14ReMob	2555	730	270	730	2465	45	365	540	{\"Available\" 730}	Added for Trudy
 7/24/2012 11:11	PolicyRecord	Day	MaxUtilization	MaxUtilization	999999999	0	365	0	999999999	45	0	Auto	{}	Unconstrained Policy for AC
 7/24/2012 11:11	PolicyRecord	Day	MaxUtilization_Enabler	MaxUtilization	999999999	0	365	0	999999999	30	0	Auto	{}	Unconstrained Policy for AC Enablers
 7/24/2012 11:11	PolicyRecord	Day	NearMaxUtilization	NearMaxUtilization	999999999	730	270	730	999999999	45	0	Auto	{}	Unconstrained Policy for RC, injects some minimum dwell

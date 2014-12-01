@@ -42,12 +42,14 @@
 (defn record->policy 
   [{:keys [Template PolicyName MaxBOG MaxDwell MinDwell Overlap 
            StartDeployable StopDeployable Deltas]}]
-  (let [deltas (or (read-string Deltas) {})]
+  (let [deltas (or (clojure.edn/read-string Deltas) {})]
     (-> (if (= Template "Ghost") 
-          (policyops/register-ghost-template PolicyName MaxBOG Overlap)
+          (policyops/register-ghost-template PolicyName MaxBOG  :overlap Overlap)
           (policyops/register-template Template MaxDwell MinDwell MaxBOG 
-                                 StartDeployable StopDeployable Overlap deltas 
-                                 (deployable-set? Template)))
+                                 StartDeployable StopDeployable
+                                 :overlap Overlap 
+                                 :deltas  deltas
+                                 :deployable-set? (deployable-set? Template)))
         (assoc :name PolicyName))))           
 
 ;generate a sequence of relations from the table records
