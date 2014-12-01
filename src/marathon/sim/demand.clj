@@ -48,12 +48,13 @@
 ;inject appropriate tags into the GenericTags
 (defn tag-demand 
   ([demand demandstore extras]
-     (->> (tag/multi-tag (:tags demandstore) (:name demand) 
+     (->> (tag/multi-tag (:tags demandstore) 
+                         (:name demand) 
                          (into   [(core/msg "FILLRULE_" (:src demand)) ;USE KEYWORD
                                   (core/msg "PRIORITY_" (:priority demand)) ;USE KEYWORD
                                   :enabled]
                                   extras))
-       (assoc demandstore :tags)))
+          (assoc demandstore :tags)))
   ([demand demandstore] (tag-demand demand demandstore nil)))
 
 (defn tag-demand-sink [demandstore sink]
@@ -235,8 +236,7 @@
 ;  updates in the component-based model.  Might be easy to port...
 (defn add-deactivation [t demandname demandstore]
   (let [inactives (get-deactivations demandstore t)
-        tlast     (max (:tlastdeactivation demandstore) t)
-        _ (println [tlast (:tlastdeactivation demandstore) t])]   
+        tlast     (max (:tlastdeactivation demandstore) t)]   
     (-> (assoc demandstore :tlastdeactivation tlast)
         (set-deactivations t (conj inactives demandname)))))
 

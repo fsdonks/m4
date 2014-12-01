@@ -346,7 +346,7 @@
    nil       ;description of the categories this unit serve as a followon to.
    :spawning ;the current physical location of the unit.
    :spawning ;the current position of the unit in its policy space.
-    ;the current cycle data structure for the unit.
+   nil ;the current cycle data structure for the unit.
    [] ;an ordered collection of the cycles that the unit has completed.
    -1 ;the time in which the unit spawned.
    oititle ;the description of the unit.
@@ -434,7 +434,7 @@
             (distribute-cycle-times acc policy)
             (let [nm       (generate-name idx  src  compo)
                   new-unit (create-unit nm src oititle compo 0 
-                                        policy behavior policy)]                
+                                        policy behavior)]                
               (recur (unchecked-inc idx)
                      (conj acc new-unit))))))))
 
@@ -447,7 +447,7 @@
 ;;we do all the minute prepatory tasks to "fill in the details", 
 ;;like associating the units with a supply, establishing unit 
 ;;subscriptions to policies, etc..
-(defn units-from-records [recs supply]
+(defn units-from-records [recs supply pstore]
   (let [unit-count (atom (-> supply :unitmap (count)))
         ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
         normal-beh (-> supply :behaviors :defaultACBehavior)
@@ -456,7 +456,7 @@
         conj-unit  (fn [acc x] (do (swap! unit-count inc)
                                    (conj acc x)))]
     (->> recs 
-         (r/filter valid-record?)
+;         (r/filter valid-record?) ;;We need to add data validation, we'll do that later....
          (reduce (fn [acc r]                    
                    (if (> (:Quantity r) 1) 
                      (conj-units acc 
@@ -464,7 +464,9 @@
                                      (:SRC r) 
                                      (:OITitle r) 
                                      (:Component r)  
-                                     (:Policy r) @unit-count normal-beh))
+                                     (plcy/find-policy pstore (:Policy r))
+                                     @unit-count 
+                                     normal-beh))
                      (conj-unit  acc (record->unitdata r)))) []))))
         
 ;;we have two methods of initializing unit cycles.
@@ -647,40 +649,43 @@
 
 ;  (def multiple-demands (demand/register-demands! ds testctx))
 ;;slow way...
-  (def multiple-demands (reduce #(demand/register-demand %2 %1) testctx ds))
+;  (def multiple-demands (reduce #(demand/register-demand %2 %1) testctx ds))
+  (def multiple-demands (demand/register-demands! ds testctx))
+
   (def m-dstore (core/get-demandstore multiple-demands))
   (def times    (map sim/get-time (take-while spork.sim.agenda/still-time? (iterate sim/advance-time multiple-demands))))
   (def events   (spork.sim.data/event-seq multiple-demands))
+  (def expected-events (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
+            {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
+            {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
+            {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
+            {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
+            {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
+            {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
+            {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
+            {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
+            {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time}))
   (def activations481 (demand/get-activations m-dstore 481))
   (deftest scheduled-demands-correctly 
     (is (= times
            '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
                778 811 901 963 991 1048 1051 1081 1261 1330 1351 1441 1531 1621 1711 1801 1981 2071 2095 2341 2521))
         "Scheduled times from sampledata should be consistent, in sorted order.")
-    (is (= events
-           '({:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
-             {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
-             {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
-             {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
-             {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
-             {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
-             {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
-             {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
-             {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
-             {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time})
-           "The only events scheduled should be time changes."))
-    (is (= activtions481 
+    (is (= events expected-events)           
+        "The only events scheduled should be time changes.")
+    (is (= activations481 
            '("1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-8_SRC1[481...554]"))
         "Should have actives on 481...")       
-    (is (= (first (demand/get-activations m-dstore tstart))
-           (:name first-demand))
+    (is (some (fn [d] (= d (:name first-demand))) (demand/get-activations m-dstore tstart))
         "Demand should register as an activation on startday.")
-    (is (= (first (demand/get-deactivations m-dstore tfinal)) (:name first-demand)) 
-        "Demand should be scheduled for deactivation")
     (is (zero? (sim/get-time multiple-demands)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time multiple-demands) earliest) "Next event should be demand activation")
-    (is (== (sim/get-next-time (sim/advance-time multiple-demands)) latest) "Last event should be demand activation"))
-  
+    (is (= (last times) (:tlastdeactivation m-dstore))
+        "Last event should be a deactivation time.")) 
+
+  (def supply-records    (sd/get-sample-records :SupplyRecords))
+  (def us       (units-from-records supply-records testctx))
+  (def first-demand (first ds))
 )
 
 
