@@ -644,12 +644,34 @@
   (def earliest (reduce min (map :startday ds)))
   (def latest   (reduce max (map #(+ (:startday %) (:duration %)) ds)))
 
-  (def multiple-demands (demand/register-demands! ds testctx))
+
+;  (def multiple-demands (demand/register-demands! ds testctx))
+;;slow way...
+  (def multiple-demands (reduce #(demand/register-demand %2 %1) testctx ds))
   (def m-dstore (core/get-demandstore multiple-demands))
+  (def times    (map sim/get-time (take-while spork.sim.agenda/still-time? (iterate sim/advance-time multiple-demands))))
+  (def events   (spork.sim.data/event-seq multiple-demands))
+  (def activations481 (demand/get-activations m-dstore 481))
   (deftest scheduled-demands-correctly 
-    (is (= ((juxt  :startday :duration) first-demand)
-           [ 901 1080])
-        "Sampledata should not change.  Naming should be deterministic.")
+    (is (= times
+           '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
+               778 811 901 963 991 1048 1051 1081 1261 1330 1351 1441 1531 1621 1711 1801 1981 2071 2095 2341 2521))
+        "Scheduled times from sampledata should be consistent, in sorted order.")
+    (is (= events
+           '({:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
+             {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
+             {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
+             {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
+             {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
+             {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
+             {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
+             {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
+             {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
+             {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time})
+           "The only events scheduled should be time changes."))
+    (is (= activtions481 
+           '("1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-8_SRC1[481...554]"))
+        "Should have actives on 481...")       
     (is (= (first (demand/get-activations m-dstore tstart))
            (:name first-demand))
         "Demand should register as an activation on startday.")
@@ -657,7 +679,7 @@
         "Demand should be scheduled for deactivation")
     (is (zero? (sim/get-time multiple-demands)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time multiple-demands) earliest) "Next event should be demand activation")
-    (is (== (sim/get-next-time (sim/advance-time multiple-demands)) latest) "Next event should be demand activation"))
+    (is (== (sim/get-next-time (sim/advance-time multiple-demands)) latest) "Last event should be demand activation"))
   
 )
 

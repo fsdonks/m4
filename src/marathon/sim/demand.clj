@@ -49,7 +49,7 @@
 (defn tag-demand 
   ([demand demandstore extras]
      (->> (tag/multi-tag (:tags demandstore) (:name demand) 
-                         (into   [(core/msg "FILLRULE_" (:primaryunit demand)) ;USE KEYWORD
+                         (into   [(core/msg "FILLRULE_" (:src demand)) ;USE KEYWORD
                                   (core/msg "PRIORITY_" (:priority demand)) ;USE KEYWORD
                                   :enabled]
                                   extras))
@@ -235,7 +235,8 @@
 ;  updates in the component-based model.  Might be easy to port...
 (defn add-deactivation [t demandname demandstore]
   (let [inactives (get-deactivations demandstore t)
-        tlast     (max (:tlastdeactivation demandstore) t)]   
+        tlast     (max (:tlastdeactivation demandstore) t)
+        _ (println [tlast (:tlastdeactivation demandstore) t])]   
     (-> (assoc demandstore :tlastdeactivation tlast)
         (set-deactivations t (conj inactives demandname)))))
 
@@ -250,7 +251,7 @@
          (core/merge-updates 
           {:demandstore
            (->>  demandstore
-                 (add-activation   startday name )
+                 (add-activation   startday name)
                  (add-deactivation endday name))}))))
 
 ;;Maybe we make this reaallllly simple and focused.  WE only use this 
@@ -293,6 +294,17 @@
          ;;this should still be fast.  Alternately just modify locs directly...
          (schedule-demand demand newstore))))  
 
+
+;;Note -> there's a setup here for bad things to happen.  I forgot
+;;that the reduction function I was using, while happily
+;;side-effecting as an optimization, was actually tossing out 
+;;(i.e. not aggregating) the activation and deactivations for 
+;;the demands.  Good news was it wasn't a bug in the cellular 
+;;stuff, it was a bug in my logic...I was retaining persistent 
+;;information in dstore.  So, the net effect is that if you 
+;;want to take advantage of fine-grained mutation, you have 
+;;to call out where the mutation lies.  This could lead to some 
+;;problems and oversight if we're not careful....
 (defn register-demands! 
   ([register-f xs ctx]
      ;;Cleaner representation, allow multiple cells to be defined in a
@@ -300,16 +312,35 @@
      (core/with-cells [{locations     [:state :policystore :locationmap]
                         demandtags    [:state :demandstore :tags]  
                         demands       [:state :demandstore :demandmap]
+                        activations   [:state :demandstore :activations] ;forgot this guy, has
+                        deactivations [:state :demandstore :deactivations]
                         :as txn}    ctx]
        (update-txn!
-        (core/with-transient-cells [locations demandtags demands]
-          (let [pstore    (core/get-policystore txn) ;has mutable cells inside txn
-                dstore    (core/get-demandstore txn) ;has mutable cells inside txn                
-                ]
+        (core/with-transient-cells [locations demandtags demands activations deactivations]
           (reduce  (fn [acc demand]                     
-                     (-> (register-demand! acc demand demands dstore pstore)
-                         (register-f  demand))) txn xs))))))
+                     (-> (register-demand! acc demand demands (core/get-demandstore acc) (core/get-policystore acc))
+                         (register-f  demand))) txn xs)))))
   ([xs ctx] (register-demands! (fn [ctx d] ctx) xs ctx)))
+
+;; (defn register-demands! 
+;;   ([register-f xs ctx]
+;;      ;;Cleaner representation, allow multiple cells to be defined in a
+;;      ;;single binding.
+;;      (core/with-cells [{locations     [:state :policystore :locationmap]
+;;                         demandtags    [:state :demandstore :tags]  
+;;                         demands       [:state :demandstore :demandmap]
+;;                         activations   [:state :demandstore :activations] ;forgot this guy, has
+;;                         deactivations [:state :demandstore :deactivations]
+;;                         :as txn}    ctx]
+;;        (update-txn!
+;;         (core/with-transient-cells [locations demandtags demands activations deactivations]
+;;           (let [pstore    (core/get-policystore txn) ;has mutable cells inside txn
+;;                 dstore    (core/get-demandstore txn) ;has mutable cells inside txn                
+;;                 ]
+;;           (reduce  (fn [acc demand]                     
+;;                      (-> (register-demand! acc demand demands (core/get-demandstore acc) (core/get-policystore acc))
+;;                          (register-f  demand))) txn xs))))))
+;;   ([xs ctx] (register-demands! (fn [ctx d] ctx) xs ctx)))
 
 ;;Non-mutable version...
 (defn register-demand 
