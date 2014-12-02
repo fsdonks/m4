@@ -77,6 +77,14 @@
               (assoc m (:name p) p)))
           {} (tbl/table-records t))) 
 
+(def literals #{"#" "[" "(" "{"})
+(defn data-literal?  [s] (literals (subs s 0 1)))
+(defn implicit-seq? [^String s] (.contains s ","))
+(defn read-composition [x]
+  (cond (data-literal? x) (clojure.edn/read-string x)
+        (implicit-seq? x) (mapv str (clojure.edn/read-string (str "[" x "]")))
+        :else x))
+
 ;MAY BE OBSOLETE...
 ;Reads an expression from a record
 ;with keys (CompositeName Policy), 
@@ -96,7 +104,7 @@
       (case CompositionType 
         "Periodic" (update-in acc [CompositeName] assoc (:Period r) (:Policy r))
         "Sequential" (do (assert (not (contains? acc CompositeName)))
-                       (assoc-in acc [CompositeName] (read-string (:Policy r))))
+                       (assoc-in acc [CompositeName] (read-composition (:Policy r))))
         (throw (Exception. "Error parsing composition policy!" 
                            CompositeName))))))
 
