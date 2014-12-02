@@ -25,6 +25,8 @@
   (->> (initialize-sim core/emptysim +end-time+)
        (sim/add-times [44 100 203 55])))
 
+
+;;#Tests for basic simulation engine invariants.
 (deftest basic-engine-testing
   (is (keep-simulating?  core/emptysim)
       "We should be able to simulate, since there is time, 
@@ -37,6 +39,8 @@
       "nothing scheduled, should be no more work.")
 )
 
+
+;;#Tests for minimal simulation context invariants.
 (deftest primed-engine-testing 
   (is (keep-simulating? primed-sim)
       "We should be able to simulate, since there is time, 
@@ -47,23 +51,28 @@
   (is (sim/has-time-remaining? primed-sim) "we have time scheduled")
 )
 
+
+
+
+;;#Event propogation tests.
 (defn push-message! [ctx edata name]
-  (let [s    (sim/get-state ctx)
+  (let [s    (:state ctx)
         msgs (get-in s [:state :messages] [])]
     (->> (assoc-in s [:state :messages] (conj msgs [name edata]))
         (assoc ctx :state))))
 
 (def listener-ctx (assoc core/emptysim :propogator 
-                     (:propogator (sim/make-debug-context :debug-handler push-message!))))
+                     (:propogator (sim/make-debug-context 
+                                   :debug-handler push-message!))))
 
 (deftest event-propogation-testing
   (is (= (:messages (sim/get-state (sim/trigger-event :hello :dee :dumb "test!" nil listener-ctx)))
-         [[:debugger #spork.sim.simcontext.packet{:t nil, :type :hello, :from :dee, :to :dumb, :msg "test!", :data nil}]])
+         [[:debugger #spork.sim.simcontext.packet{:t 0, :type :hello, :from :dee, :to :dumb, :msg "test!", :data nil}]])
       "Should have one message logged."))
-  
-
-  
-      
  
-
+;;Mocking up a sample run....
+;;When we go to "run" marathon, we're really loading data from a
+;;project.  The easiest way to do that is to provide marathon an API
+;;for instantiating a project from tables.  Since we have canonical
+;;references for project data, it's pretty easy to do this...
 
