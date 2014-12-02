@@ -53,7 +53,7 @@
         (assoc :name PolicyName))))           
 
 (def reltbl {"SUB" :sub
-               "EQUIVALENCE" :equivalence})
+             "EQUIVALENCE" :equivalence})
 (defn rel->key [r]
   (get reltbl (clojure.string/upper-case (clojure.string/trim r))))
     
@@ -72,8 +72,10 @@
 ;generate a dictionary of atomic policies from a table, where the keys are
 ;policy names.  Enforces unique policy names.
 (defn table->policy-map [t]
-  (->> (tbl/table-records t)
-       (map record->policy))) 
+  (reduce (fn [m r]
+            (let [p (record->policy r)]
+              (assoc m (:name p) p)))
+          {} (tbl/table-records t))) 
 
 ;MAY BE OBSOLETE...
 ;Reads an expression from a record
@@ -162,7 +164,7 @@
 ;;            (set-position-graph policy))
 ;;       (throw (Exception. (str "No deployable range found between in " policy))))))
 
-)
+;;)
 
 ;;testing
 (comment
@@ -175,5 +177,6 @@
 (def composites  (get sd/sample-tables :CompositePolicyRecords))
 (def rels        (get sd/sample-tables :RelationRecords))
 (def pers        (get sd/sample-tables :PeriodRecords))
+(def pstore      (tables->policystore rels pers atomics composites))
 
 )

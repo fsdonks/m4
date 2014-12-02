@@ -577,7 +577,7 @@
               (conj acc ((policy-func p) policy-name p)))  [] compositions)))
 
 (defn permanent-record? [r] (= (get r :Period) "Permanent"))
-(defn equivalence-key [delim recepient donor] (keyword recepient delim donor))
+(defn equivalence-key [delim recepient donor] (keyword (str  recepient delim donor)))
 ;accesor for equivalency relations in a policystore
 (defn get-equivalencies [policystore] 
   (get-in policystore [:rules :equivalencies]))
@@ -601,7 +601,7 @@
 (defn add-relation [policystore relation recepient donor & [cost]]
   (case relation 
     :equivalence (add-equivalence recepient donor policystore)   
-    :sub      (add-equivalence recepient donor cost policystore)
+    :sub         (add-substitution recepient donor cost policystore)
     (throw (Exception. (str "unknown relation " relation)))))
 ;Assuming a list of (relation, recepient, donor, cost) entries, maps 
 ;add-relation to each entry.
