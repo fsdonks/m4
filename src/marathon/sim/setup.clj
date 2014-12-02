@@ -15,7 +15,6 @@
   ([name]      (get *tables* name (get *tables* (alt-name name))))
   ([name tbls] (get tbls name (get tbls (alt-name name)))))
 
-
 ;; 'Automates the building of a default behavior manager, linking it to a supply store.
 
 ;; Public Function defaultBehaviorManager(state As TimeStep_SimState, Optional bm As TimeStep_ManagerOfBehavior) As TimeStep_ManagerOfBehavior
@@ -24,20 +23,45 @@
 ;; Set defaultBehaviorManager = bm
 ;; End Function
 
-
-
-
 ;; 'creates a default set of parameters derived from a paramters table and an SRCTag table.
 ;; Public Function defaultParameters() As TimeStep_Parameters
 ;; Set defaultParameters = tablesToParameters(getTable("Parameters"), getTable("SRCTagRecords"))
 ;; End Function
 
 
+
+;;Function to read in data from the existing table of [ParameterName
+;;Value] records.  Produces a map of parameters with the param names keyworded.
+(defn table->parameters [paramtbl]
+  (persistent!
+   (reduce (fn [acc {:keys [ParameterName Value]}]
+             (assoc! acc (keyword ParameterName) Value)) 
+           (transient {}) paramtbl)))
+
+;; 'A simple function to automate buildings a TimeStep_Parameters object from two tables.
+;; Public Function tablesToParameters(paramstbl As GenericTable, Optional srctagtable As GenericTable) As TimeStep_Parameters
+;; Dim tags As GenericTags
+;; Set tablesToParameters = tableToParameters(paramstbl)
+;; 
+;; If exists(srctagtable) Then
+;;     Set tags = tablesToParameters.srcTags
+;;     Set tags = getSRCTags(srctagtable, tags) 'adds srctags to the parameters.
+;; End If
+;; 
+;; End Function
+
 ;; 'creates a default fill store.
 ;; Public Function defaultPolicyStore(context As TimeStep_SimContext) As TimeStep_ManagerOfPolicy
 ;; Set defaultPolicyStore = MarathonPolicyIO.policyStoreFromExcel
 ;; MarathonOpPolicy.initializePolicyStore defaultPolicyStore, context
 ;; End Function
+
+;;creates a default policy store.
+(defn default-policystore [ctx]
+  (policyio/tables->policystore (get-table :RelationRecords)
+                                (get-table :PeriodRecords)
+                                (get-table :PolicyRecords)
+                                (get-table :CompositePolicyRecords)))
 
 ;; 'Creates a fill store and scopes the state as a side effect.
 ;; Public Function defaultFillStore(state As TimeStep_SimState) As TimeStep_ManagerOfFill
@@ -244,49 +268,8 @@
 ;; End Sub
 
 
-;; 'A simple function to automate buildings a TimeStep_Parameters object from two tables.
-;; Public Function tablesToParameters(paramstbl As GenericTable, Optional srctagtable As GenericTable) As TimeStep_Parameters
-;; Dim tags As GenericTags
-;; Set tablesToParameters = tableToParameters(paramstbl)
-;; 
-;; If exists(srctagtable) Then
-;;     Set tags = tablesToParameters.srcTags
-;;     Set tags = getSRCTags(srctagtable, tags) 'adds srctags to the parameters.
-;; End If
-;; 
-;; End Function
-;; 
 
 
-;; 'Function to read in data from the existing table.
-;; 'Basically, we incorporate all the legacy stuff here, using legacy
-;; 'named ranges. Notice, I have encapsulated functionality specific to the parameters here.
-;; 'Supply and demand data ARE NO LONGER in this routine, they are not parameters.
-;; Public Function tableToParameters(Optional tbl As GenericTable, _
-;;                                     Optional params As TimeStep_Parameters) As TimeStep_Parameters
-;; Dim i As Long
-;; Dim options As Range
-;; Dim rules As Range
-;; Dim newperiod As GenericPeriod
-;; Dim startRowCell As Long, startColCell As Long
-;; Dim numOfPeriods As Long
-;; Dim n As Long
-;; Dim priorityColumns As Long
-;; 
-;; If tbl Is Nothing Then Set tbl = getTable("Parameters")
-;; 
-;; If params Is Nothing Then
-;;     Set tableToParameters = New TimeStep_Parameters
-;; Else
-;;     Set tableToParameters = params
-;; End If
-;; 
-;; While Not tbl.EOF
-;;     tableToParameters.SetKey tbl.getField("ParameterName"), tbl.getField("Value")
-;;     tbl.moveNext
-;; Wend
-;; 
-;; End Function
 
 
 
