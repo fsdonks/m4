@@ -363,7 +363,6 @@
 (defn update-policy [policystore p] 
   (gen/deep-assoc policystore [:policies (:name p)] p))
 
-
 (defn alter-unit-policies
   "Affects a change in policy.  This is currently only caused when periods 
    change in a composite policy.  I'd really like to get more reactive behavior 
@@ -372,9 +371,7 @@
   (->> (map #(queue-policy-change %1 newpolicy period) subscribers) 
        (reduce #(sim/merge-updates %1 %2) ctx)))
 
-
 (defn policy-name [p] (if (keyword? p) p (:name p)))
-
 (defn get-subscribers [policy policystore] 
   (-> policystore 
       :subscriptions
