@@ -115,7 +115,7 @@
   (min-dwell        [p]            (.min-dwell activepolicy))
   (get-locations    [p]            (.get-locations activepolicy))
   core/IPolicyContainer
-  (add-policy       [p period policy]   (policymap. name activepolicy activeperiod (assoc policies period policy)))
+  (add-policy       [p period policy]   (policymap. name (or activepolicy policy) (or activeperiod period) (assoc policies period policy)))
   (add-policy       [p keyval] (if (coll? keyval) 
                                  (let [[k v] keyval] (.add-policy p k v))
                                  (throw (Exception. "Expected a [period policy] pair for arity 2 add-policy on a policymap")))))

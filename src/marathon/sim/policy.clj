@@ -519,18 +519,7 @@
 
 ;;#Policy Construction and Composition
 
-;Primitive wrapper for appending atomic policies to composite policies.
-;TODO -> extend this to incorporate the semantics for generalized rotation 
-;policies....specifically, allow composite policies to be defined over composite
-;policies as the intersection of periods across the policies.
-(defn append-composite [composite period atomic-policy] 
-  (add-policy composite atomic-policy period))
 
-;REDUNDANT
-;This is the typical append operation.  When we compose an atomic policy with a 
-;composite, we simply register the atomic as a sub policy under the key period.
-(defn append-composite-atomic [composite period sub-policy]
-  (add-policy composite sub-policy period)) 
 
 ;Currently, composite policies are built purely from atomic policies.  In 
 ;theory, one could compose a new policy from atomic OR composite policies.  
@@ -541,7 +530,7 @@
 ;least one period and one atomic policy.
 (defn create-composite [policyname period atomic-policy]
   (-> (assoc p/empty-policymap :name policyname) 
-      (append-composite  period atomic-policy))) 
+      (protocols/add-policy  period atomic-policy))) 
 
 ;TODO -> Add an existence check for the child policies...
 ;creates a composite policy from n policies defined in periodpolicymap 
@@ -551,7 +540,7 @@
 ;We only need a dictionary<string,string>, or ::string->string
 (defn compose-policies [policyname period-policy-map child-policies]
   (reduce (fn [acc [period childname]] 
-            (append-composite-atomic acc period (get child-policies childname)))
+            (protocols/add-policy acc period (get child-policies childname)))
           (-> p/empty-policymap (assoc :name policyname)) 
           (seq period-policy-map)))
 
@@ -561,20 +550,24 @@
 ;child policies.  At this point, only atomic policies may be members of a 
 ;sequence.
 (defn sequence-policies [policyname names child-policies]
-  (reduce (fn [acc child-name] (add-policy acc (get child-policies child-name)))
-          (-> p/empty-policyseq (assoc :name policyname)) names))
+  (if (== (count names) 1) ;single policy...no need to sequence
+    (-> (get child-policies (first names))
+        (assoc :name policyname))
+    (reduce (fn [acc child-name] (protocols/add-policy acc (get child-policies child-name)))
+            (-> p/empty-policyseq (assoc :name policyname)) names)))
 
-
-(defn sequential-policy? [p] (coll? p))
+(defn sequential-policy? [p] (vector? p))
+(defn build-policy [name pieces policy-lib] 
+  (cond  (vector? pieces)   (sequence-policies name pieces policy-lib)
+         (map? pieces)      (compose-policies  name pieces policy-lib)         
+         :else ; (sequence-policies name [pieces] policy-lib)))
+         (throw (Exception. (str "unknown policy type: " [name pieces])))))
 
 ;Given a set of composite policy descriptions, and a set of child policies, 
 ;produces a list of composite policies derived from the compositions.
 (defn compositions->composites [compositions child-policies]
-  (let [policy-func #(if (sequential-policy? %) 
-                         sequence-policies 
-                         compose-policies)] 
-    (reduce (fn [acc [policy-name p]]
-              (conj acc ((policy-func p) policy-name p)))  [] compositions)))
+  (reduce (fn [acc [policy-name pieces]]
+            (conj acc (build-policy policy-name pieces child-policies)))  [] compositions))
 
 (defn permanent-record? [r] (= (get r :Period) "Permanent"))
 (defn equivalence-key [delim recepient donor] (keyword (str  recepient delim donor)))
@@ -650,3 +643,22 @@
        (add-policies (vals atomics))
        (add-policies (compositions->composites compositions atomics))))
 
+
+;#####;Redundant, replaced by protocols/add-policy 
+
+(comment 
+
+;Primitive wrapper for appending atomic policies to composite policies.
+;TODO -> extend this to incorporate the semantics for generalized rotation 
+;policies....specifically, allow composite policies to be defined over composite
+;policies as the intersection of periods across the policies.
+(defn append-composite [composite period atomic-policy] 
+  (protocols/add-policy composite atomic-policy period))
+
+;REDUNDANT
+;This is the typical append operation.  When we compose an atomic policy with a 
+;composite, we simply register the atomic as a sub policy under the key period.
+(defn append-composite-atomic [composite period sub-policy]
+  (protocols/add-policy composite sub-policy period)) 
+
+)
