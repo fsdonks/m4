@@ -457,35 +457,4 @@
 
 
 
-;;#notes from fillgraph 
 
-;; TOM Note 21 Mar ->
-;;    Although we have the capacity to divide a very large run into N independent runs,
-;;    we arent currently doing that.  There is some necessary bookeeping to perform to pull that off,
-;;    primarily for output metrics stuff, since we have essentially N different system states, with
-;;    a non-synchronous number of events triggering different sampling rates.
-;;    It makes a LOT of sense to do this tough, because you get to take advantage of the event stepping
-;;    even more.  With a large, synchronized system, as N goes up, you spread out your sampling as well,
-;;    so you end up sampling almost every day.  This is inefficient, especially when there is a lot of
-;;    change.
-;;    One possible way to implement this approach is to perform the graph decomposition as intended,
-;;    developing our N independent sets.  We then add tags to each demand and uic associated with
-;;    a particular set (should be really easy to derive from the GenericTags actually).
-;;    As a result, when we iterate through our N independent runs, we just catalog the name of the set
-;;    were running.  We only affect the tagged supply (constant time lookup) in the unitmap, and the
-;;    tagged demands (constant time lookup) in the demandmap.  Policy changes are essentially global,
-;;    so they have to be kept track of during each run (unless we revert the policy to its original
-;;    setting).
-;;    The only hiccup is capturing all the output, artificially synchronizing it in accordance with
-;;    the independent runs.  This CAN be done as a separate measure (via an accumulating observer that
-;;    keeps statistics up-to-date across all runs.  Basically, we do our n independent runs, then
-;;    calculate all the sample days.  All we do then is accumulate the sampledays from the n independent
-;;    runs.  We shouldnt have an egregious amount of runs to do....so it will probably be ok.
-;;    We have the option of spewing out all of our run data, or just accumulating it in place.
-;;    Seems like wed want to capture all deployments, this is cumulative/trivial.
-;;    Also want to capture all summary statistics.
-;;     This is also cumulative.
-;;    SandTrends for each SRC, with a cumulative total at the end?
-;;     This can lead to a large history file....
-;;     Might want to just target specific SRCs, or tagged groups.
-;;     Id stick this in a DB and let sql sort it out....
