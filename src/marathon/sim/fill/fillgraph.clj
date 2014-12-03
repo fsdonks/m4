@@ -1,7 +1,7 @@
 ;;Fillgraph is a special case of the generic graph that enforces some structural constraints.
 ;;it is designed to provide a simple, consistent interface for building fillgraphs by adding supply,
 ;;demand, and substitutions.
-(ns marathon.sim.fillgraph
+(ns marathon.sim.fill.fillgraph
   (:require [marathon.sim.core :as core]
             [spork.cljgraph.core :as graph]
             [clojure.core.reducers :as r]))
@@ -47,43 +47,24 @@
 
 
 (defn inherit-node [g parent child exclude]
-  (assert (not (graph/has-node? g newname)) (str "Trying to inherit to a node that already exists: " newname))
+  (assert (not (graph/has-node? g child)) (str "Trying to inherit to a node that already exists: " child))
   (->> (graph/sink-map g parent)
        (reduce-kv  (fn [acc snk w]
                      (if (exclude snk) acc
                          (graph/conj-arc acc child snk w))) g)))
 
+;;This is similar to inheritNode, except we remove the connecting arcs from the original node...
+;;We insert a new connecting arc from the sourcenode to the new node, who now has all of the
+;;outbound arcs from the sourcenode. This is like...inserting...into a n-ary tree.
 (defn subvert-node [g parent child newcost]
-  (assert (not (graph/has-node? g newname)) (str "Trying to inherit to a node that already exists: " newname))
-  (let [newg (inherit-node g parent child)
-        newg (reduce-kv 
-                 
-
- 260:  'This is similar to inheritNode, except we remove the connecting arcs from the original node...
- 261:  'We insert a new connecting arc from the sourcenode to the new node, who now has all of the
- 262:  'outbound arcs from the sourcenode. This is like...inserting...into a n-ary tree.
-
---------------------------------------------------------------------------------
-
- 263:   Public Sub subvertNode(ByRef sourceNode As String, Optional ByRef newname As String, Optional newcost As Single)
- 264:   Dim snk
- 265:   Dim localsinks As Dictionary
- 266:   If nodeExists(sourceNode) Then
- 267:       If newname = vbNullString Then newname = sourceNode & "_subverter"
- 268:       inheritNode sourceNode, newname'create the new node, with sourcenode's outgoing arcs.
- 269:       Set localsinks = sinks(sourceNode)
- 270:       For Each snk In localsinks'these have just been subverted
- 271:           RemoveArc EncodeArc(sourceNode, CStr(snk))'delink the source's outbound arcs
- 272:       Next snk
- 273:      'connect the sourcenode to its new sole sink, the subverter...
- 274:       addArc sourceNode, newname, newcost
- 275:   End If
- 276:       
- 277:   Set localsinks = Nothing
- 278:       
- 279:   End Sub
-
-
+  (assert (not (graph/has-node? g child)) (str "Trying to inherit to a node that already exists: " child))
+  (let [newg (inherit-node g parent child)]
+    (reduce-kv (fn [acc snk w]
+                 (-> acc 
+                     (graph/disj-arc parent snk)
+                     (graph/conj-arc child snk))) 
+               (graph/conj-arc  newg parent child)
+               (graph/sink-map newg parent))))
 
 ;;Substitutions are associated with the :sub operator.  Substitutions contain positive-cost edges that relate a
 ;;Donor node to a Recipient node that can receive substitutions via an intermediate donation node
@@ -100,9 +81,9 @@
      (let [nodename (donation-label recepient donor)
            complement (donation-label donor recepient)]
        (-> g
-           (graph/inherit-node donor nodename {complement 0}) ;inherit the outbound edges of the donor.
+           (inherit-node donor nodename #{complement}) ;inherit the outbound edges of the donor.
            ;now connect the recepient to the new node, nodename
-           (graph/add-arc recepient nodename cost)))
+           (graph/conj-arc recepient nodename cost)))
            ;net result is a new path for the recepient through the new substitution node, which contains outbound
            ;edges inherited from the donor.
      )
@@ -116,7 +97,7 @@
 ;--------------------------------------------------------------------------------
 (defn relate [g sink source {:keys [weight relation] :or {weight 0}}]
   (if (nil? type) 
-    (graph/add-arc g sink source weight)
+    (graph/conj-arc g sink source weight)
     (case relation 
       :equivalence  (add-equivalence g sink source)
       :substitution (add-substitution g sink source weight)
@@ -136,7 +117,7 @@
 (defn add-sink [g sink]
   (if (graph/has-node? g sink) 
     g
-    (graph/add-arc g (sink-label sink) :unfilled 0)))
+    (graph/conj-arc g (sink-label sink) :unfilled 0)))
 
 (defn conj-arc-info [g arc-info]
   (case (first arc-info)
@@ -166,11 +147,11 @@
           (r/filter :Enabled tbl)))
 
 ;;was fromRelationTable 
-(defn append-reltationtable [g tbl]
+(defn append-relationtable [g tbl]
   (reduce (fn [acc {:keys [Recepient Donor Cost Relation]}]
             (case (clojure.string/lower-case (clojure.string/trim  Relation))
-              "sub"        (relate acc recepient donor cost :substitution)
-              "equivalence" (relate acc recepient donor 0 :equivalence)
+              "sub"        (relate acc Recepient Donor Cost :substitution)
+              "equivalence" (relate acc Recepient Donor 0 :equivalence)
               (throw (Exception. (str "unrecognized relation: " Relation)))))
           g (r/filter :Enabled tbl)))
 
@@ -183,6 +164,17 @@
 
 
 ;;-------
+
+
+;'Composes tables defining supply, demand, and relation records into a fillgraph
+(defn tables->fillgraph 
+  ([g supply demand policy]
+     (-> g 
+         (append-sourcetable supply)
+         (append-relationtable policy)
+         (append-sinktable demand)))
+  ([supply demand policy] (tables->fillgraph graph/empty-graph))) 
+
 
 ;;Use SSP path finding to find all paths from each node in sourcenodes to filled.
 ;;convert these paths into weighted edges in an undirected graph.
@@ -204,18 +196,10 @@
 ;;We also get reduction information from this...
 ;; 
 
+(comment 
 (defn get-reduced-fillgraph [g]
-  (let [
-  )
-
-;'Composes tables defining supply, demand, and relation records into a fillgraph
-(defn tables->fillgraph 
-  ([g supply demand policy]
-     (-> g 
-         (append-sourcetable supply)
-         (append-relationtable policy)
-         (append-sinktable demand)))
-  ([supply demand policy] (tables->fillgraph graph/empty-graph))) 
+  (let []  ))
+)
 
 ;----------------------------------------
 ;;#Deferred
