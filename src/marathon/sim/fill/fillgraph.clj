@@ -176,15 +176,6 @@
          (append-sinktable demand)))
   ([supply demand policy] (tables->fillgraph graph/empty-graph))) 
 
-;'Performs a large scoping operation on core data, using any fillgraph.
-;Public Function scopeSimState(fillgraph As TimeStep_FillGraph, 
-;                          simstate As TimeStep_SimState) As TimeStep_SimState
-;scope fillgraph.reducedgraph, simstate.fillstore, simstate.parameters, 
-;                simstate.supplystore, simstate.demandstore, simstate.context
-;Set scopeSimState = simstate
-;End Function
-
-
 (defn scope-simstate [g  ctx]
   (core/with-simstate [[parameters 
                         fillstore 
@@ -192,8 +183,56 @@
                         demandstore] ctx]
     (scope (reduced-graph g)
            fillstore parameters supplystore demandstore ctx)))
-         
-         
+
+;;Given graph g, finds the islands (components of size 1 when :filled
+;;and :unfilled are disabled)  Returns a map of srcs that are out of
+;;scope and the reason, as well as srcs that are in scope.         
+(defn derive-scope [g]
+  (let [islands      (find-islands g)
+        out-supply   (get islands :supply)
+        out-demand   (get islands :demand)]
+    {:out-of-scope 
+     (->as scoped  (reduce (fn [outofscope isle]
+                             (assoc outofscope (source-root isle) "No Demand")) {}
+                             supply)
+           
+           (reduce (fn [outofscope isle]
+                     (assoc outofscope (sink-root isle) "No Supply")) scoped
+                     demand))
+     :in-scope
+     (reduce-kv (fn [scope label reason]
+                  (let [src  (case reason
+                               :supply (source-root label)
+                               :demand (sink-root label))]
+                    (assoc scope src reason))) 
+                in-scope (get islands :in-scope))
+     :islands islands}))
+
+(defn scoped-supply! [islands ctx]
+  (let [recs (:supply islands)]
+    (sim/trigger-event :ScopedSupply :Anonymous :Anonymous 
+        (core/msg "FillManager found " (count recs) " Unused Supply Sources") recs ctx)))
+
+(defn scoped-demand! [islands ctx] 
+  (let [recs (:demand islands)]
+    (sim/trigger-event :ScopedDemand :Anonymous :Anonymous 
+        (core/msg "FillManager found " (count recs) " Unfillable Demand Sinks") recs ctx)))
+  
+(defn apply-scope    [scopeinfo ctx]
+  (core/with-simstate [[demandstore supplystore parameters] ctx]
+    (let [outs (:SRCs-In-Scope     parameters)
+          ins  (:SRCs-Out-Of-Scope parameters)
+          {:keys [in-scope out-of-scope islands]} scopeinfo]
+      (->> ctx
+           (scoped-demand!  islands)
+           (scoped-supply!  islands)
+           (core/merge-updates 
+            {:demandstore (demand/scope-demand demandstore (:demand islands))
+             :supplystore (supply/scope-supply supplystore (:supply islands))
+             :parameters  (-> parameters 
+                              (update-in [:SRCs-In-Scope] merge in-scope)
+                              (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))})))))
+
 ;----------------------------------------
 
 ;'Composes pre-built stores of supply, demand, and policy into a fillgraph.
