@@ -3,7 +3,10 @@
 ;;form of a fully prepped simstate.
 
 (ns marathon.sim.setup
-  (:require [marathon.sim.sampledata :as sd]))
+  (:require [marathon.sim.sampledata :as sd]
+            [marathon.sim [policy :as policy]
+                          [policyio :as policyio]]
+            [spork.util.tags :as tags]))
 
 ;;A central resource for getting tables.  
 (def ^:dynamic *tables*  sd/sample-tables)
@@ -23,12 +26,6 @@
 ;; Set defaultBehaviorManager = bm
 ;; End Function
 
-;; 'creates a default set of parameters derived from a paramters table and an SRCTag table.
-;; Public Function defaultParameters() As TimeStep_Parameters
-;; Set defaultParameters = tablesToParameters(getTable("Parameters"), getTable("SRCTagRecords"))
-;; End Function
-
-
 
 ;;Function to read in data from the existing table of [ParameterName
 ;;Value] records.  Produces a map of parameters with the param names keyworded.
@@ -38,30 +35,43 @@
              (assoc! acc (keyword ParameterName) Value)) 
            (transient {}) paramtbl)))
 
-;; 'A simple function to automate buildings a TimeStep_Parameters object from two tables.
-;; Public Function tablesToParameters(paramstbl As GenericTable, Optional srctagtable As GenericTable) As TimeStep_Parameters
-;; Dim tags As GenericTags
-;; Set tablesToParameters = tableToParameters(paramstbl)
-;; 
-;; If exists(srctagtable) Then
-;;     Set tags = tablesToParameters.srcTags
-;;     Set tags = getSRCTags(srctagtable, tags) 'adds srctags to the parameters.
-;; End If
-;; 
-;; End Function
+;;Reads SRC tags from a table, either returning a new set of tags, or adding them to existing tags.
+(defn get-src-tags [tagtbl & {:keys [tags] :or {tags tags/empty-tags}}]
+  (reduce (fn [acc {:keys [SRC Tag]}]
+            (tags/tag-subject acc tag src))
+          tags tagtbl))
 
-;; 'creates a default fill store.
-;; Public Function defaultPolicyStore(context As TimeStep_SimContext) As TimeStep_ManagerOfPolicy
-;; Set defaultPolicyStore = MarathonPolicyIO.policyStoreFromExcel
-;; MarathonOpPolicy.initializePolicyStore defaultPolicyStore, context
-;; End Function
+;;A simple function to automate buildings a map of parameters from a
+;;table of parameters [ParameterName Value]+ and a table of SRC Tags,
+;;[SRC Tag]+.
+(defn tables->parameters [paramtbl srctagtbl]
+  (let [ps (table->parameters paramtbl)]
+    (->> (get ps :src-tags tags/empty-tags)
+         (get-src-tags srctagtbl)
+         (assoc ps :src-tags))))
 
-;;creates a default policy store.
-(defn default-policystore [ctx]
-  (policyio/tables->policystore (get-table :RelationRecords)
-                                (get-table :PeriodRecords)
-                                (get-table :PolicyRecords)
-                                (get-table :CompositePolicyRecords)))
+;;Creates a default set of parameters derived from a paramters table and an SRCTag table.
+(defn default-parameters [] 
+  (tables->parameters (get-table :Parameters) (get-table :SRCTagRecords)))
+
+
+;;#TODO decomplect the need for a simulation context here due to 
+;;policy/initialize-policystore.
+
+;;creates a default policy store.  We should relook this to see if we
+;;really need an event context...All we're using the context for is 
+;;scheduling policy updates for the periods in question.  It seems
+;;like we may be able to separate that out and decomplect it.
+;;Ideally, we should be returning just the policy store that's been
+;;built, and initializing it (scheduling policy changes in the
+;;periods) at a later time....
+(defn default-policystore [] ;[ctx]
+  (-> (policyio/tables->policystore (get-table :RelationRecords)
+                                    (get-table :PeriodRecords)
+                                    (get-table :PolicyRecords)
+                                    (get-table :CompositePolicyRecords))
+      ;(policy/initialize-policystore ctx)
+      ))
 
 ;; 'Creates a fill store and scopes the state as a side effect.
 ;; Public Function defaultFillStore(state As TimeStep_SimState) As TimeStep_ManagerOfFill
@@ -70,6 +80,9 @@
 ;;                                                       getTable("RelationRecords"))
 ;; 
 ;; End Function
+
+(defn default-fillstore [simstate] 
+  (
 
 
 ;; 'Return a scoped set of supply and demand, based on the information in the fillgraph of the local
@@ -274,25 +287,7 @@
 
 
 
-;; 'Reads SRC tags from a table, either returning a new set of tags, or adding them to existing tags.
-;; 'TOM Change 16 Aug 2011
-;; Public Function getSRCTags(Optional tbl As GenericTable, Optional tags As GenericTags) As GenericTags
-;; Dim src As String
-;; If tbl Is Nothing Then Set tbl = getTable("SRCTagRecords")
-;; 
-;; If tags Is Nothing Then
-;;     Set getSRCTags = New GenericTags
-;; Else
-;;     Set getSRCTags = tags
-;; End If
-;; 
-;; While Not tbl.EOF
-;;     src = Trim(tbl.getField("SRC"))
-;;     getSRCTags.addTag tbl.getField("Tag"), src
-;;     tbl.moveNext
-;; Wend
-;; 
-;; End Function
+
 
 
 ;;##Nice to have / Future 
