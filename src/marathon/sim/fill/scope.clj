@@ -58,7 +58,6 @@
                               (update-in [:SRCs-In-Scope] merge in-scope)
                               (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))})))))
 
-
 ;;Although we have the capacity to divide a very large run into N independent runs,
 ;;we arent currently doing that.  There is some necessary bookeeping to perform to pull that off,
 ;;primarily for output metrics stuff, since we have essentially N different system states, with

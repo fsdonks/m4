@@ -42,8 +42,48 @@
 (defn add-equivalence [g sink source]
   (let [intermediate (eqlabel sink source)]
     (-> g 
-        (graph/add-arc sink intermediate 0)
-        (graph/add-arc intermedite source 0))))
+        (graph/conj-arc sink intermediate 0)
+        (graph/conj-arc intermediate source 0))))
+
+
+(defn inherit-node [g parent child exclude]
+  (assert (not (graph/has-node? g newname)) (str "Trying to inherit to a node that already exists: " newname))
+  (->> (graph/sink-map g parent)
+       (reduce-kv  (fn [acc snk w]
+                     (if (exclude snk) acc
+                         (graph/conj-arc acc child snk w))) g)))
+
+(defn subvert-node [g parent child newcost]
+  (assert (not (graph/has-node? g newname)) (str "Trying to inherit to a node that already exists: " newname))
+  (let [newg (inherit-node g parent child)
+        newg (reduce-kv 
+                 
+
+ 260:  'This is similar to inheritNode, except we remove the connecting arcs from the original node...
+ 261:  'We insert a new connecting arc from the sourcenode to the new node, who now has all of the
+ 262:  'outbound arcs from the sourcenode. This is like...inserting...into a n-ary tree.
+
+--------------------------------------------------------------------------------
+
+ 263:   Public Sub subvertNode(ByRef sourceNode As String, Optional ByRef newname As String, Optional newcost As Single)
+ 264:   Dim snk
+ 265:   Dim localsinks As Dictionary
+ 266:   If nodeExists(sourceNode) Then
+ 267:       If newname = vbNullString Then newname = sourceNode & "_subverter"
+ 268:       inheritNode sourceNode, newname'create the new node, with sourcenode's outgoing arcs.
+ 269:       Set localsinks = sinks(sourceNode)
+ 270:       For Each snk In localsinks'these have just been subverted
+ 271:           RemoveArc EncodeArc(sourceNode, CStr(snk))'delink the source's outbound arcs
+ 272:       Next snk
+ 273:      'connect the sourcenode to its new sole sink, the subverter...
+ 274:       addArc sourceNode, newname, newcost
+ 275:   End If
+ 276:       
+ 277:   Set localsinks = Nothing
+ 278:       
+ 279:   End Sub
+
+
 
 ;;Substitutions are associated with the :sub operator.  Substitutions contain positive-cost edges that relate a
 ;;Donor node to a Recipient node that can receive substitutions via an intermediate donation node
@@ -82,7 +122,8 @@
       :substitution (add-substitution g sink source weight)
       (throw (Exception. (str "unknown relation : " relation))))))
 
-
+;;Node labeling conventions.  We used to use strings, may go back to
+;;that if the compound keys end up being rough.
 (defn source-label [nm] [:source nm])
 (defn source-root  [nm] (second nm))
 
@@ -163,7 +204,9 @@
 ;;We also get reduction information from this...
 ;; 
 
-(defn get-reduced-fillgraph [g])
+(defn get-reduced-fillgraph [g]
+  (let [
+  )
 
 ;'Composes tables defining supply, demand, and relation records into a fillgraph
 (defn tables->fillgraph 
@@ -174,68 +217,9 @@
          (append-sinktable demand)))
   ([supply demand policy] (tables->fillgraph graph/empty-graph))) 
 
-(defn scope-simstate [g  ctx]
-  (core/with-simstate [[parameters 
-                        fillstore 
-                        supplystore
-                        demandstore] ctx]
-    (scope (reduced-graph g)
-           fillstore parameters supplystore demandstore ctx)))
-
-;;Given a fill graph  g, finds the islands (components of size 1 when :filled
-;;and :unfilled are disabled)  Returns a map of srcs that are out of
-;;scope and the reason, as well as srcs that are in scope.         
-(defn derive-scope [g]
-  (let [islands      (find-islands g)
-        out-supply   (get islands :supply)
-        out-demand   (get islands :demand)]
-    {:out-of-scope 
-     (->as scoped  (reduce (fn [outofscope isle]
-                             (assoc outofscope (source-root isle) "No Demand")) {}
-                             supply)
-           
-           (reduce (fn [outofscope isle]
-                     (assoc outofscope (sink-root isle) "No Supply")) scoped
-                     demand))
-     :in-scope
-     (reduce-kv (fn [scope label reason]
-                  (let [src  (case reason
-                               :supply (source-root label)
-                               :demand (sink-root label))]
-                    (assoc scope src reason))) 
-                in-scope (get islands :in-scope))
-     :islands islands}))
-
-;;Notify listeners that we found unused supply and removed them from scope.
-(defn scoped-supply! [islands ctx]
-  (let [recs (:supply islands)]
-    (sim/trigger-event :ScopedSupply :Anonymous :Anonymous 
-        (core/msg "FillManager found " (count recs) " Unused Supply Sources") recs ctx)))
-
-;;Notify listeners that we found unfillable demand and removed them from scope.
-(defn scoped-demand! [islands ctx] 
-  (let [recs (:demand islands)]
-    (sim/trigger-event :ScopedDemand :Anonymous :Anonymous 
-        (core/msg "FillManager found " (count recs) " Unfillable Demand Sinks") recs ctx)))
-
-;;Given  scopeing information, specifically a nested map of srcs that 
-;;are in scope or out of scope, applies the implicit scoping rules to
-;;the simulation context, removing entities are unnecessary.  
-(defn apply-scope    [scopeinfo ctx]
-  (core/with-simstate [[demandstore supplystore parameters] ctx]
-    (let [outs (:SRCs-In-Scope     parameters)
-          ins  (:SRCs-Out-Of-Scope parameters)
-          {:keys [in-scope out-of-scope islands]} scopeinfo]
-      (->> ctx
-           (scoped-demand!  islands)
-           (scoped-supply!  islands)
-           (core/merge-updates 
-            {:demandstore (demand/scope-demand demandstore (:demand islands))
-             :supplystore (supply/scope-supply supplystore (:supply islands))
-             :parameters  (-> parameters 
-                              (update-in [:SRCs-In-Scope] merge in-scope)
-                              (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))})))))
 ;----------------------------------------
+;;#Deferred
+
 
 ;'Composes pre-built stores of supply, demand, and policy into a fillgraph.
 ;Public Function composeFillGraph(supplystore As TimeStep_ManagerOfSupply, 
@@ -244,10 +228,6 @@
 ;Set composeFillGraph = BuildFillGraph(New TimeStep_FillGraph, supplystore, 
 ;                           demandstore, policystore)
 ;End Function
-
-
-
-;;#Deferred
 
 ;; 'Methods to enable dynamic changes to the topology of the network.
 
