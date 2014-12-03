@@ -97,13 +97,11 @@
     g
     (graph/add-arc g (sink-label sink) :unfilled 0)))
 
-
 (defn conj-arc-info [g arc-info]
   (case (first arc-info)
     :source (add-source g (second arc-info))
     :sink   (add-sink   g (second arc-info))
     :rel    (throw (Exception. (str "not implemented : parse-arc :rel")))))
-
 
 (defn supplystore->arc-info [supplystore]
   (->> (:unitmap supplystore)
@@ -132,7 +130,7 @@
             (case (clojure.string/lower-case (clojure.string/trim  Relation))
               "sub"        (relate acc recepient donor cost :substitution)
               "equivalence" (relate acc recepient donor 0 :equivalence)
-              (throw (Exception. (str "unrecgonized relation: " Relation)))))
+              (throw (Exception. (str "unrecognized relation: " Relation)))))
           g (r/filter :Enabled tbl)))
 
 (defn record->sink-arc   [{:keys [SRC] :as rec}] [(sink-label SRC) 0])
@@ -184,7 +182,7 @@
     (scope (reduced-graph g)
            fillstore parameters supplystore demandstore ctx)))
 
-;;Given graph g, finds the islands (components of size 1 when :filled
+;;Given a fill graph  g, finds the islands (components of size 1 when :filled
 ;;and :unfilled are disabled)  Returns a map of srcs that are out of
 ;;scope and the reason, as well as srcs that are in scope.         
 (defn derive-scope [g]
@@ -208,16 +206,21 @@
                 in-scope (get islands :in-scope))
      :islands islands}))
 
+;;Notify listeners that we found unused supply and removed them from scope.
 (defn scoped-supply! [islands ctx]
   (let [recs (:supply islands)]
     (sim/trigger-event :ScopedSupply :Anonymous :Anonymous 
         (core/msg "FillManager found " (count recs) " Unused Supply Sources") recs ctx)))
 
+;;Notify listeners that we found unfillable demand and removed them from scope.
 (defn scoped-demand! [islands ctx] 
   (let [recs (:demand islands)]
     (sim/trigger-event :ScopedDemand :Anonymous :Anonymous 
         (core/msg "FillManager found " (count recs) " Unfillable Demand Sinks") recs ctx)))
-  
+
+;;Given  scopeing information, specifically a nested map of srcs that 
+;;are in scope or out of scope, applies the implicit scoping rules to
+;;the simulation context, removing entities are unnecessary.  
 (defn apply-scope    [scopeinfo ctx]
   (core/with-simstate [[demandstore supplystore parameters] ctx]
     (let [outs (:SRCs-In-Scope     parameters)
@@ -232,7 +235,6 @@
              :parameters  (-> parameters 
                               (update-in [:SRCs-In-Scope] merge in-scope)
                               (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))})))))
-
 ;----------------------------------------
 
 ;'Composes pre-built stores of supply, demand, and policy into a fillgraph.
