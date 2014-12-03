@@ -2,7 +2,9 @@
 ;;it is designed to provide a simple, consistent interface for building fillgraphs by adding supply,
 ;;demand, and substitutions.
 (ns marathon.sim.fillgraph
-  (:require [spork.cljgraph.core :as graph]))
+  (:require [marathon.sim.core :as core]
+            [spork.cljgraph.core :as graph]
+            [clojure.core.reducers :as r]))
 
 ;;1.  The structure of the graph should be similar to the following...
 ;;   Filled -> Some Supply -> Some Demand
@@ -80,14 +82,12 @@
       :substitution (add-substitution g sink source weight)
       (throw (Exception. (str "unknown relation : " relation))))))
 
-;--------------------------------------------------------------------------------
+
 (defn source-label [nm] [:source nm])
 (defn source-root  [nm] (second nm))
 
 (defn sink-label [sink] [:fillrule sink])
 (defn sink-root  [sink] (second sink))
-
-;--------------------------------------------------------------------------------
 
 (defn add-source [g source]  
   (relate g (source-label source) :filled))
@@ -104,32 +104,6 @@
     :sink   (add-sink   g (second arc-info))
     :rel    (throw (Exception. (str "not implemented : parse-arc :rel")))))
 
-;--------------------------------------------------------------------------------
-
-;;  Public Function fromsupply(supply As TimeStep_ManagerOfSupply, _
-;;                                  Optional source As TimeStep_FillGraph) As TimeStep_FillGraph
-;;  Dim nm
-;;  Dim uic As TimeStep_UnitData
-;;  Dim units As Dictionary
-;;  Dim src As String
-;;  If source Is Nothing Then Set source = Me
-;; 
-;;  Set fromsupply = source
-;; 
-;;  Set units = supply.unitmap
-;; 
-;;  For Each nm In units
-;;      Set uic = units(nm)
-;;      src = uic.src
-;;      If Not graph.nodeExists(src) Then
-;;         'we generate source nodes from units automatically
-;;         'attributes that guide source nodes -> SRC, others?  note, we could have uic-specific fill rules...nice.
-;;          addSource src'register a new source, using the SRC as its rootname
-;;          relate src, sourceLabel(src)'also register the src as an intermediate node pointing to the source.
-;;      End If
-;;  Next nm
-;; 
-;;  End Function
 
 (defn supplystore->arc-info [supplystore]
   (->> (:unitmap supplystore)
@@ -138,38 +112,143 @@
        (map (fn [src] 
               [:source src]))))
 
-;--------------------------------------------------------------------------------
-
-;;  Public Function FromSourceTable(tbl As GenericTable, _
-;;                                   Optional source As TimeStep_FillGraph) As TimeStep_FillGraph
-;;  Dim src As String
-;;  If source Is Nothing Then Set source = Me
-;; 
-;;  Set FromSourceTable = source
-;; 
-;;  With tbl
-;;      While Not .EOF
-;;          If .getField("Enabled") = True Then
-;;              src = .getField("SRC")
-;;              If Not graph.nodeExists(src) Then
-;;                 'we generate source nodes from units automatically
-;;                 'attributes that guide source nodes -> SRC, others?  note, we could have uic-specific fill rules...nice.
-;;                  addSource src'register a new source, using the SRC as its rootname
-;;                  relate src, sourceLabel(src)'also register the src as an intermediate node pointing to the source.
-;;              End If
-;;          End If
-;;          .moveNext
-;;      Wend
-;;  End With
-;; 
-;;  End Function
-;; 
-
+;;was fromsourcetable
 (defn append-sourcetable [g tbl]
   (reduce (fn [acc {:keys [SRC]}]
-            (
-            
-  
+            (add-source g SRC))
+          g 
+          (r/filter :Enabled tbl)))
+
+;;this is fromDemandrecords kinda
+(defn append-sinktable [g tbl]
+  (reduce (fn [acc {:keys [SRC]}]
+              (add-sink g SRC))
+          g 
+          (r/filter :Enabled tbl)))
+
+;;was fromRelationTable 
+(defn append-reltationtable [g tbl]
+  (reduce (fn [acc {:keys [Recepient Donor Cost Relation]}]
+            (case (clojure.string/lower-case (clojure.string/trim  Relation))
+              "sub"        (relate acc recepient donor cost :substitution)
+              "equivalence" (relate acc recepient donor 0 :equivalence)
+              (throw (Exception. (str "unrecgonized relation: " Relation)))))
+          g (r/filter :Enabled tbl)))
+
+(defn record->sink-arc   [{:keys [SRC] :as rec}] [(sink-label SRC) 0])
+    
+
+;;From a fully built fillgraph, we can leverage the graph topology to quickly decompose it into
+;;n subgraphs of 1 or more nodes.  Subgraphs with only 1 node are islands, i.e. they have no logical
+;;connections in the simulation.  They cannot be utilized(sources) or filled(sinks).
+
+
+;;-------
+
+;;Use SSP path finding to find all paths from each node in sourcenodes to filled.
+;;convert these paths into weighted edges in an undirected graph.
+;;Ultimately, when we prune this out, we don't necessarily need to know all the intermediate nodes..
+;;unless we're allowing the fillgraph to be dynamically changed.  Assume we aren't for now.
+;;We perform a reduction step on the "potentially" complex fillgraph.  Essentially, we calculate all
+;;the shortest paths from sinks to filled.  For each of these paths, we extract the node prior to
+;;filled, which by virtue of the fillgraph properties "must" be a sourcenode.  This forms a set
+;;of sink, source pairs.  We want to build a directed graph from these pairs, but we want to retain
+;;all information from the higher-order graph.  The reduced directed graph will then be a set of
+;;valid sink nodes pointing to valid source nodes.  The complex path information from the
+;;higher order graph, contained in the shortest path results, will be cataloged in a dictionary...
+;;where each sink, source pair
+;; 
+;;TOM change 15 Sep 2011 -> The old way of doing this was ineffecient.  Now, we use Djikstra's algorithm to
+;;calculate the shortest path tree from a fillrule to its supply source (we simply let Djikstra loose from the sink
+;;node to "filled", and it'll tell us all the paths (plus distances) to supply nodes).
+;;We then condense these down into a simple 1-arc-weighted path.
+;;We also get reduction information from this...
+;; 
+
+(defn get-reduced-fillgraph [g])
+
+;'Composes tables defining supply, demand, and relation records into a fillgraph
+(defn tables->fillgraph 
+  ([g supply demand policy]
+     (-> g 
+         (append-sourcetable supply)
+         (append-relationtable policy)
+         (append-sinktable demand)))
+  ([supply demand policy] (tables->fillgraph graph/empty-graph))) 
+
+;'Performs a large scoping operation on core data, using any fillgraph.
+;Public Function scopeSimState(fillgraph As TimeStep_FillGraph, 
+;                          simstate As TimeStep_SimState) As TimeStep_SimState
+;scope fillgraph.reducedgraph, simstate.fillstore, simstate.parameters, 
+;                simstate.supplystore, simstate.demandstore, simstate.context
+;Set scopeSimState = simstate
+;End Function
+
+
+(defn scope-simstate [g  ctx]
+  (core/with-simstate [[parameters 
+                        fillstore 
+                        supplystore
+                        demandstore] ctx]
+    (scope (reduced-graph g)
+           fillstore parameters supplystore demandstore ctx)))
+         
+         
+;----------------------------------------
+
+;'Composes pre-built stores of supply, demand, and policy into a fillgraph.
+;Public Function composeFillGraph(supplystore As TimeStep_ManagerOfSupply, 
+;   demandstore As TimeStep_ManagerOfDemand, 
+;      policystore As TimeStep_ManagerOfPolicy) As TimeStep_FillGraph
+;Set composeFillGraph = BuildFillGraph(New TimeStep_FillGraph, supplystore, 
+;                           demandstore, policystore)
+;End Function
+
+
+
+;;#Deferred
+
+;; 'Methods to enable dynamic changes to the topology of the network.
+
+;;  Public Sub enableSource(source As String)
+;;  graph.EnableNode (sourceLabel(source))
+;;  End Sub
+
+
+;; 'Methods to enable dynamic changes to the topology of the network.
+
+;--------------------------------------------------------------------------------
+
+;;  Public Sub disableSource(source As String)
+;;  graph.DisableNode (sourceLabel(source))
+;;  End Sub
+;; 'Methods to enable dynamic changes to the topology of the network.
+
+;--------------------------------------------------------------------------------
+
+
+;;  Public Sub enableRelation(sink As String, source As String)
+;;  graph.EnableArc EncodeArc(sink, source)
+;;  End Sub
+;; 'Methods to enable dynamic changes to the topology of the network.
+
+;--------------------------------------------------------------------------------
+
+;;  Public Sub disableRelation(sink As String, source As String)
+;;  graph.DisableArc EncodeArc(sink, source)
+;;  End Sub
+;; 'Utility method to generate default fill rules from supply en-masse
+;; 'We do assume that all supply has been tagged upon processing, thus supply.tags has sources in it.
+;; 'Our goal then, is to traverse the tags, looking for sources.
+;; 'When we find new sources, we register them with the fillgraph.  This is just the naive sourcing.  We'll
+;; 'assign buckets after we get substitutions in place.  Then we'll replace the original sources with
+;; 'buckets.  We need to tag each uic with its bucket.....maybe using a supplytag.
+
+
+
+
+
+;;#Maybe later....
 
 
 ;; 'Read in substitution rules and equivalencies from the policy manager.
@@ -211,51 +290,17 @@
 ;; 
 ;;  End Function
 
-;--------------------------------------------------------------------------------
-
-;;  Public Function fromRelationTable(policy As GenericTable, _
-;;                                  Optional source As TimeStep_FillGraph) As TimeStep_FillGraph
-;;  Dim subs As Dictionary
-;;  Dim equivs As Dictionary
-;;  Dim rule
-;;  Dim cost As Single
-;;  Dim tmp
-;;  Dim recepient As String, donor As String
-;;  Dim delim As String
-;; 
-;;  If source Is Nothing Then Set source = Me
-;;  Set fromRelationTable = source
-;; 
-;;  With policy
-;;      While Not .EOF
-;;         'TOm change 22 Aug 2012
-;;          If .getField("Enabled") Then
-;;              recepient = .getField("Recepient")
-;;              donor = .getField("Donor")
-;;              cost = .getField("Cost")
-;;              Select Case .getField("Relation")
-;;                  Case Is = "sub"
-;;                      relate recepient, donor, cost, Substitution
-;;                  Case Is = "equivalence"
-;;                       relate recepient, donor, 0, Equivalence
-;;                  Case Else
-;;                      Err.Raise 101, , "Unrecognized relation"
-;;              End Select
-;;          End If
-;;          .moveNext
-;;      Wend
-;;  End With
-;; 
-;;  End Function
 
 
+;; (defn append-policystore [g pstore]
+;;   (reduce (fn [acc {:keys [Recepient Donor Cost Relation]}]
+;;             (case (clojure.string/lower-case (clojure.string/trim  Relation))
+;;               "sub"        (relate acc recepient donor cost :substitution)
+;;               "equivalence" (relate acc recepient donor 0 :equivalence)
+;;               (throw (Exception. (str "unrecgonized relation: " Relation)))))
+;;           g (r/filter :Enabled tbl)))
 
-(defn relation-record->arc [{:keys [Recepient Donor Cost]}]
-  (
-  
 
-
-;; 
 ;; 'Utility method to generate default fill rules from demand en-masse
 ;; 'Demand nodes (sinks) are the last to be processed.  They are input after supply and substitutions have a go.
 ;; 'Basically, supply and substitutions are calculated, then processed into buckets.  The buckets then become
@@ -290,69 +335,9 @@
 ;; 
 ;;  End Function
 
-;--------------------------------------------------------------------------------
-
-;;  Public Function FromSinkTable(tbl As GenericTable, _
-;;                                   Optional source As TimeStep_FillGraph) As TimeStep_FillGraph
-;;  Dim src As String
-;;  Dim newsink As String
-;; 
-;;  If source Is Nothing Then Set source = Me
-;; 
-;;  Set FromSinkTable = source
-;; 
-;;  With tbl
-;;      While Not .EOF
-;;          If .getField("Enabled") = True Then
-;;              src = .getField("SRC")
-;;             'If Not graph.NodeExists(src) Then
-;;                  newsink = sinklabel(src)
-;;                  If Not graph.nodeExists(newsink) Then
-;;                     'we generate source nodes from units automatically
-;;                     'attributes that guide source nodes -> SRC, others?  note, we could have uic-specific fill rules...nice.
-;;                      addSink src'for now, only overtly reading in srcs.
-;;                      relate newsink, src
-;;                  End If
-;;             'End If
-;;          End If
-;;          .moveNext
-;;      Wend
-;;  End With
-;; 
-;;  End Function
-
-(defn record->sink-arc   [{:keys [SRC] :as rec}] [(sink-label SRC) 0])
-
-   
-    
-
-;; 'From a fully built fillgraph, we can leverage the graph topology to quickly decompose it into
-;; 'n subgraphs of 1 or more nodes.  Subgraphs with only 1 node are islands, i.e. they have no logical
-;; 'connections in the simulation.  They cannot be utilized(sources) or filled(sinks).
 
 
-;;-------
-
-;; 'Use SSP path finding to find all paths from each node in sourcenodes to filled.
-;; 'convert these paths into weighted edges in an undirected graph.
-;; 'Ultimately, when we prune this out, we don't necessarily need to know all the intermediate nodes..
-;; 'unless we're allowing the fillgraph to be dynamically changed.  Assume we aren't for now.
-;; 'We perform a reduction step on the "potentially" complex fillgraph.  Essentially, we calculate all
-;; 'the shortest paths from sinks to filled.  For each of these paths, we extract the node prior to
-;; 'filled, which by virtue of the fillgraph properties "must" be a sourcenode.  This forms a set
-;; 'of sink, source pairs.  We want to build a directed graph from these pairs, but we want to retain
-;; 'all information from the higher-order graph.  The reduced directed graph will then be a set of
-;; 'valid sink nodes pointing to valid source nodes.  The complex path information from the
-;; 'higher order graph, contained in the shortest path results, will be cataloged in a dictionary...
-;; 'where each sink, source pair
-;; 
-;; 'TOM change 15 Sep 2011 -> The old way of doing this was ineffecient.  Now, we use Djikstra's algorithm to
-;; 'calculate the shortest path tree from a fillrule to its supply source (we simply let Djikstra loose from the sink
-;; 'node to "filled", and it'll tell us all the paths (plus distances) to supply nodes).
-;; 'We then condense these down into a simple 1-arc-weighted path.
-;; 'We also get reduction information from this...
-;; 
-
+;;#Tom Note -> I think we can do this much much easier using cljgraph.
 ;--------------------------------------------------------------------------------
 
 ;;  Private Function GetReducedGraph(Optional keepislands As Boolean, Optional sourcegraph As GenericGraph) As GenericGraph
@@ -489,98 +474,3 @@
 ;sourcegraph.decompose
 
 ;End Function
-
-
-;------------------------------------------------------------------------
-;'TODO ->  Do a better job separating concerns here... Building a fill graph and
-; viewing the intermediate results are likely orthogonal...
-;'Accumulate a fill graph from supplymanager, policymanager and demands...
-;Public Function FillGraphFromTables
-;          (sourcegraph As TimeStep_FillGraph, _
-;             supply As GenericTable, _
-;                demand As GenericTable, _
-;                   policy As GenericTable) As TimeStep_FillGraph
-;
-;Set FillGraphFromTables = sourcegraph
-;
-;With sourcegraph
-;    Set FillGraphFromTables = .FromSourceTable(supply)
-;    Set FillGraphFromTables = .fromRelationTable(policy)
-;    Set FillGraphFromTables = .FromSinkTable(demand)
-;End With
-;
-;'Tom note -> these are debug tools.
-;'renderGraph "FullGraph", BuildFillGraph.graph
-;'currently we build this into the fillgraph build process.  We want to know
-;'where there are islands....
-;sourcegraph.decompose
-;
-;End Function
-
-
-;'Composes tables defining supply, demand, and relation records into a fillgraph
-;Public Function tablesToFillgraph(sourcesTbl As GenericTable, 
-;  sinksTbl As GenericTable, relationsTbl As GenericTable) As TimeStep_FillGraph
-;Set tablesToFillgraph = FillGraphFromTables(New TimeStep_FillGraph, sourcesTbl,
-;                             sinksTbl, relationsTbl)
-;End Function
-
-;----------------------------------------
-
-;'Performs a large scoping operation on core data, using any fillgraph.
-;Public Function scopeSimState(fillgraph As TimeStep_FillGraph, 
-;                          simstate As TimeStep_SimState) As TimeStep_SimState
-;scope fillgraph.reducedgraph, simstate.fillstore, simstate.parameters, 
-;                simstate.supplystore, simstate.demandstore, simstate.context
-;Set scopeSimState = simstate
-;End Function
-
-;----------------------------------------
-
-;'Composes pre-built stores of supply, demand, and policy into a fillgraph.
-;Public Function composeFillGraph(supplystore As TimeStep_ManagerOfSupply, 
-;   demandstore As TimeStep_ManagerOfDemand, 
-;      policystore As TimeStep_ManagerOfPolicy) As TimeStep_FillGraph
-;Set composeFillGraph = BuildFillGraph(New TimeStep_FillGraph, supplystore, 
-;                           demandstore, policystore)
-;End Function
-
-
-
-;;#Deferred
-
-;; 'Methods to enable dynamic changes to the topology of the network.
-
-;;  Public Sub enableSource(source As String)
-;;  graph.EnableNode (sourceLabel(source))
-;;  End Sub
-
-
-;; 'Methods to enable dynamic changes to the topology of the network.
-
-;--------------------------------------------------------------------------------
-
-;;  Public Sub disableSource(source As String)
-;;  graph.DisableNode (sourceLabel(source))
-;;  End Sub
-;; 'Methods to enable dynamic changes to the topology of the network.
-
-;--------------------------------------------------------------------------------
-
-
-;;  Public Sub enableRelation(sink As String, source As String)
-;;  graph.EnableArc EncodeArc(sink, source)
-;;  End Sub
-;; 'Methods to enable dynamic changes to the topology of the network.
-
-;--------------------------------------------------------------------------------
-
-;;  Public Sub disableRelation(sink As String, source As String)
-;;  graph.DisableArc EncodeArc(sink, source)
-;;  End Sub
-;; 'Utility method to generate default fill rules from supply en-masse
-;; 'We do assume that all supply has been tagged upon processing, thus supply.tags has sources in it.
-;; 'Our goal then, is to traverse the tags, looking for sources.
-;; 'When we find new sources, we register them with the fillgraph.  This is just the naive sourcing.  We'll
-;; 'assign buckets after we get substitutions in place.  Then we'll replace the original sources with
-;; 'buckets.  We need to tag each uic with its bucket.....maybe using a supplytag.
