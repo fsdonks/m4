@@ -112,12 +112,18 @@
 (defn sink-root  [sink] (second sink))
 
 (defn add-source [g source]  
-  (relate g (source-label source) :filled nil))
+  (let [nd (source-label source)]
+    (-> g
+        (relate  nd :filled nil)
+        (graph/conj-arc source nd 0))))
 
 (defn add-sink [g sink]
-  (if (graph/has-node? g sink) 
-    g
-    (graph/conj-arc g (sink-label sink) :unfilled 0)))
+  (let [lbl (sink-label sink)]
+    (if (graph/has-node? g lbl)
+      g
+      (-> g
+          (graph/conj-arc  :unfilled  lbl 0)
+          (graph/conj-arc  lbl sink 0)))))
 
 (defn conj-arc-info [g arc-info]
   (case (first arc-info)
@@ -135,14 +141,14 @@
 ;;was fromsourcetable
 (defn append-sourcetable [g tbl]
   (reduce (fn [acc {:keys [SRC]}]
-            (add-source g SRC))
+            (add-source acc SRC))
           g 
           (r/filter :Enabled tbl)))
 
 ;;this is fromDemandrecords kinda
 (defn append-sinktable [g tbl]
   (reduce (fn [acc {:keys [SRC]}]
-              (add-sink g SRC))
+              (add-sink acc SRC))
           g 
           (r/filter :Enabled tbl)))
 
@@ -208,7 +214,7 @@
 (require '[marathon.sim.sampledata :as sd])
 (require '[spork.cljgraph.jungapi :as jung])
 
-(defn visualize [g] (jung/view-graph g jung/kk))
+(defn visualize [g & {:keys [layout] :or {layout jung/fr}}]  (jung/view-graph g jung/fr))
 (def fg (tables->fillgraph (get sd/sample-tables :SupplyRecords)
                            (get sd/sample-tables :DemandRecords)
                            (get sd/sample-tables :RelationRecords)))
