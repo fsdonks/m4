@@ -96,7 +96,7 @@
 ;;substitutions, #{:equivalence :substitution}.
 ;--------------------------------------------------------------------------------
 (defn relate [g sink source {:keys [weight relation] :or {weight 0}}]
-  (if (nil? type) 
+  (if (nil? relation) 
     (graph/conj-arc g sink source weight)
     (case relation 
       :equivalence  (add-equivalence g sink source)
@@ -112,7 +112,7 @@
 (defn sink-root  [sink] (second sink))
 
 (defn add-source [g source]  
-  (relate g (source-label source) :filled))
+  (relate g (source-label source) :filled nil))
 
 (defn add-sink [g sink]
   (if (graph/has-node? g sink) 
@@ -150,8 +150,8 @@
 (defn append-relationtable [g tbl]
   (reduce (fn [acc {:keys [Recepient Donor Cost Relation]}]
             (case (clojure.string/lower-case (clojure.string/trim  Relation))
-              "sub"        (relate acc Recepient Donor Cost :substitution)
-              "equivalence" (relate acc Recepient Donor 0 :equivalence)
+              "sub"        (relate acc Recepient Donor {:weight Cost :relation :substitution})
+              "equivalence" (relate acc Recepient Donor {:weight 0 :relation :equivalence})
               (throw (Exception. (str "unrecognized relation: " Relation)))))
           g (r/filter :Enabled tbl)))
 
@@ -168,12 +168,12 @@
 
 ;'Composes tables defining supply, demand, and relation records into a fillgraph
 (defn tables->fillgraph 
-  ([g supply demand policy]
+  ([g supply demand relations]
      (-> g 
          (append-sourcetable supply)
-         (append-relationtable policy)
+         (append-relationtable relations)
          (append-sinktable demand)))
-  ([supply demand policy] (tables->fillgraph graph/empty-graph))) 
+  ([supply demand relations] (tables->fillgraph graph/empty-graph supply demand relations))) 
 
 
 ;;Use SSP path finding to find all paths from each node in sourcenodes to filled.
@@ -199,6 +199,19 @@
 (comment 
 (defn get-reduced-fillgraph [g]
   (let []  ))
+)
+
+
+
+;;testing 
+(comment 
+(require '[marathon.sim.sampledata :as sd])
+(require '[spork.cljgraph.jungapi :as jung])
+
+(defn visualize [g] (jung/view-graph g jung/kk))
+(def fg (tables->fillgraph (get sd/sample-tables :SupplyRecords)
+                           (get sd/sample-tables :DemandRecords)
+                           (get sd/sample-tables :RelationRecords)))
 )
 
 ;----------------------------------------
