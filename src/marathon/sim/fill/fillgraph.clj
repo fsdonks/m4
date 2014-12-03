@@ -203,11 +203,47 @@
 ;; 
 
 (comment 
+
 (defn get-reduced-fillgraph [g]
   (let []  ))
+
 )
 
 
+;;use ssp to derive the all pairs shortest path (although floy
+;;warshall is way better)
+(defn naive-all-pairs [g fromnodes tonodes]
+  (for [from fromnodes 
+        to tonodes]
+    (let [res (graph/dijkstra g from to)]
+      (when-let [d (get-in res [:distance to])]
+        [(graph/first-path res) d]))))
+  
+(defn reduced-arcs [g] 
+  (for [[path w] (filter identity 
+                         (naive-all-pairs g (graph/sinks g :unfilled) 
+                                          (graph/sources g :filled)))]
+    [(last path)  (first path) w]))
+
+(defmacro it-> [
+
+
+(defn reduced-graph [g]
+  (let [sources   (atom (transient #{}))
+        sinks     (atom (transient #{}))]
+    (as-> (reduce (fn [acc [src snk w]]
+                    (do (swap! sources conj! src)
+                        (swap! sinks conj!   snk)
+                        (graph/conj-arc acc snk src w)))
+                  graph/empty-graph (reduced-arcs g)) 
+          basegraph
+     (as-> (reduce (fn [acc src]
+                     (graph/conj-arc acc src :filled 0))
+                   basegraph
+                   (persistent! @sources))
+           sinkgraph
+      (reduce (fn [acc snk]
+                (graph/conj-arc acc :unfilled snk 0)) sinkgraph (persistent! @sinks))))))
 
 ;;testing 
 (comment 
@@ -218,6 +254,10 @@
 (def fg (tables->fillgraph (get sd/sample-tables :SupplyRecords)
                            (get sd/sample-tables :DemandRecords)
                            (get sd/sample-tables :RelationRecords)))
+
+(def decomps (graph/decompose fg))
+
+
 )
 
 ;----------------------------------------
