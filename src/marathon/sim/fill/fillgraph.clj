@@ -210,15 +210,14 @@
 )
 
 
-;;use ssp to derive the all pairs shortest path (although floy
-;;warshall is way better)
+;;use ssp to derive the all pairs shortest path (although floyd
+;;warshall is way better).
 (defn naive-all-pairs [g fromnodes tonodes]
   (for [from fromnodes 
         to   tonodes]
     (let [res (graph/dijkstra g from to)]
       (when-let [d (get-in res [:distance to])]
-        (for [path (graph/get-paths res)]
-          [(graph/first-path res) d])))))
+        [(graph/first-path res) d]))))
   
 (defn reduced-arcs [g] 
   (for [[path w] (filter identity 
@@ -226,23 +225,34 @@
                                           (graph/sources g :filled)))]
     [(last path)  (first path) w]))
 
-
+;;If the fillgraph is a dag, which it should be by construction
+;;(absent any funky data), then we can reduce it by finding the paths
+;;between each source node and each sink node, and collapsing the
+;;paths into a single arc between the source and sink with the weight
+;;of the path.  Since we were careful to codify substitutions and
+;;equivalences as specific extra nodes, and defined operations on the
+;;fill graph that enforced structure changes (rather than just adding
+;;arcs willy nilly), we can get away with this kind of reduction.  The
+;;net result should be much faster pathfinding when we go to query the
+;;fillgraph.
 (defn reduced-graph [g]
-  (let [sources   (atom (transient #{}))
-        sinks     (atom (transient #{}))]
-    (as-> (reduce (fn [acc [src snk w]]
-                    (do (swap! sources conj! src)
-                        (swap! sinks conj!   snk)
-                        (graph/conj-arc acc snk src w)))
-                  graph/empty-graph (reduced-arcs g)) 
-          basegraph
-     (as-> (reduce (fn [acc src]
-                     (graph/conj-arc acc src :filled 0))
-                   basegraph
-                   (persistent! @sources))
-           sinkgraph
-      (reduce (fn [acc snk]
-                (graph/conj-arc acc :unfilled snk 0)) sinkgraph (persistent! @sinks))))))
+  (let [cycs (graph/directed-cycles g)]
+    (assert (empty? cycs) (str "Your dependency graph should be a DAG, cycles are present along " cycs))
+    (let [sources   (atom (transient #{}))
+          sinks     (atom (transient #{}))]
+      (as-> (reduce (fn [acc [src snk w]]
+                      (do (swap! sources conj! src)
+                          (swap! sinks conj!   snk)
+                          (graph/conj-arc acc snk src w)))
+                    graph/empty-graph (reduced-arcs g)) 
+            basegraph
+            (as-> (reduce (fn [acc src]
+                            (graph/conj-arc acc src :filled 0))
+                          basegraph
+                          (persistent! @sources))
+                  sinkgraph
+                  (reduce (fn [acc snk]
+                            (graph/conj-arc acc :unfilled snk 0)) sinkgraph (persistent! @sinks)))))))
 
 ;;testing 
 (comment 
