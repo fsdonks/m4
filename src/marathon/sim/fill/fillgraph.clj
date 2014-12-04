@@ -214,10 +214,11 @@
 ;;warshall is way better)
 (defn naive-all-pairs [g fromnodes tonodes]
   (for [from fromnodes 
-        to tonodes]
+        to   tonodes]
     (let [res (graph/dijkstra g from to)]
       (when-let [d (get-in res [:distance to])]
-        [(graph/first-path res) d]))))
+        (for [path (graph/get-paths res)]
+          [(graph/first-path res) d])))))
   
 (defn reduced-arcs [g] 
   (for [[path w] (filter identity 
