@@ -226,8 +226,6 @@
                                           (graph/sources g :filled)))]
     [(last path)  (first path) w]))
 
-(defmacro it-> [
-
 
 (defn reduced-graph [g]
   (let [sources   (atom (transient #{}))
