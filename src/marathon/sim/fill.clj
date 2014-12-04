@@ -552,7 +552,6 @@
 ;
 ;End Function
 
-
 ;'Constructor for building fill stores from component pieces.
 ;'Note, the fill store has a fillgraph, a fill function, and a supply generator.
 ;Public Function makeFillStore(fillgraph As TimeStep_FillGraph, fillfunction As 
@@ -590,7 +589,6 @@
 ;End Function
 
 
-
 ;'This is the simplest initializer for building and initializing a fill store.  
 ;'Closest to the legacy stuff as well.
 ;Public Function fillStoreFromTables(simstate As TimeStep_SimState, 
@@ -613,201 +611,6 @@
 ;Set fg = Nothing
 ;
 ;End Function
-
-
-
-
-;'add the keys from outofscope to the outofscope in fillstore.
-;Private Sub scopeOut(fs As TimeStep_ManagerOfFill, outofscope As Dictionary)
-;Dim k
-;Set fs.outofscope = SetLib.union(fs.outofscope, outofscope)
-;End Sub
-
-
-;'TOM change 24 Mar 2011 -> Utilize the reduced fillgraph to determine which 
-;'elements of supply and demand should be scoped out of the study, remove these 
-;'elements from demand and supply.
-;Public Sub scope
-;    (reduced As GenericGraph, fillstore As TimeStep_ManagerOfFill, 
-;       parameters As TimeStep_Parameters, _
-;          supplystore As TimeStep_ManagerOfSupply, 
-;             demandstore As TimeStep_ManagerOfDemand, _
-;                ctx As TimeStep_SimContext, Optional csv As Boolean)
-;Dim island
-;Dim islands As Dictionary
-;Dim strm As IRecordStream
-;Dim scoperec As GenericRecord
-;Dim msg As String
-;Dim src As String
-;Dim isle
-;Dim res As Dictionary
-;
-;'TOM change 26 Ovt 2012
-;'Set islands = findIslands(reduced, fillstore)
-;Set islands = findIslands(reduced)
-;scopeOut fillstore, islands("OutOfScope")
-;
-;'Decoupled
-;With parameters.outofscope
-;
-;    'todo....check this, seems hard coded.
-;    If csv Then
-;        Set strm = New Streamer_CSV
-;    Else
-;        Set strm = New Streamer_xl
-;    End If
-;    
-;    Set scoperec = New GenericRecord
-;    scoperec.AddField "TimeStamp", Now()
-;    scoperec.AddField "SRC", vbNullString
-;    scoperec.AddField "Reason", vbNullString
-;
-;    'TOM Change 20 April 2012
-;    'Application.ScreenUpdating = False
-;    DisableScreenUpdates
-;
-;    If csv Then
-;        strm.init scoperec.fieldnames, "OutOfScope.csv"
-;    Else
-;        strm.init scoperec.fieldnames, "OutOfScope"
-;    End If
-;
-;    For Each isle In islands("Supply")
-;        src = replace(CStr(isle), "SOURCE_", vbNullString)
-;        .add src, "No Demand"
-;        scoperec.UpdateField "SRC", src
-;        scoperec.UpdateField "Reason", "No Demand"
-;        strm.writeGeneric scoperec
-;    Next isle
-;    
-;    For Each isle In islands("Demand")
-;        src = replace(CStr(isle), "FILLRULE_", vbNullString)
-;        .add src, "No Supply"
-;        scoperec.UpdateField "SRC", src
-;        scoperec.UpdateField "Reason", "No Supply"
-;        strm.writeGeneric scoperec
-;        
-;    Next isle
-;    
-;    strm.Terminate
-;
-;    If csv Then
-;        Set strm = New Streamer_CSV
-;        strm.init scoperec.fieldnames, "InScope.csv"
-;
-;    Else
-;        Set strm = New Streamer_xl
-;        strm.init scoperec.fieldnames, "InScope"
-;    End If
-;
-;    Set res = islands("InScope")
-;    For Each isle In res
-;        If res(isle) = "Demand" Then
-;            src = replace(CStr(isle), "FILLRULE_", vbNullString)
-;            If Not parameters.SRCsInScope.exists(src) Then _
-;                parameters.SRCsInScope.add src, "Demand"
-;        ElseIf res(isle) = "Supply" Then
-;            src = replace(CStr(isle), "SOURCE_", vbNullString)
-;            If Not parameters.SRCsInScope.exists(src) Then _
-;                parameters.SRCsInScope.add src, "Supply"
-;        Else
-;            Err.Raise 101, , "unknown characterization of fill validity"
-;        End If
-;        scoperec.UpdateField "SRC", src
-;        scoperec.UpdateField "Reason", res(isle)
-;        strm.writeGeneric scoperec
-;    Next isle
-;
-;    strm.Terminate
-;End With
-;
-;'TOM Change 20 April 2012
-;EnableScreenUpdates
-;'Application.ScreenUpdating = True
-;
-;Set strm = Nothing
-;
-;msg = "FillManager found " & islands("Supply").count & " Unused Supply Sources"
-;'Decoupled
-;SimLib.triggerEvent ScopedSupply, fillstore.name, supplystore.name, msg, , ctx
-;'Tom change 16 June; inserted True into scope, removes units from supply.
-;'Decoupled
-;MarathonOpSupply.scopeSupply supplystore, islands("Supply"), True
-;msg = "FillManager found " & islands("Demand").count & 
-;          " Unfillable Demand Sinks"
-;'Decoupled
-;SimLib.triggerEvent ScopedDemand, fillstore.name, demandstore.name, msg, , ctx
-;'Tom change; inserted True into scope, removes demands from demand.
-;'Decoupled
-;MarathonOpDemand.scopeDemand demandstore, islands("Demand"), True
-;
-;End Sub
-
-
-;'Discovers islands in a graph, annotating them in the fillstore and in/out of 
-;'scope rules.
-;Public Function findIslands(source As GenericGraph, 
-;                Optional fillstore As TimeStep_ManagerOfFill) As Dictionary
-;Dim res As Dictionary
-;Dim islands As Dictionary
-;Dim outofscope As Dictionary
-;Dim dependencies As Dictionary
-;Dim nd
-;Dim grph
-;Dim subgraph As GenericGraph
-;
-;Set res = New Dictionary
-;
-;'TOM Change 26 Oct 2012 -> making this more generic.
-;'Rather than needing a fillstore as an arg, all we really need is
-;'to capture the items that are OutOfScope.  We can do that in the function
-;'and return OutOfScope as an entry in the result, which can then be processed
-;'externally in a fillstore.
-;
-;'res.add "Supply", New Dictionary
-;'res.add "Demand", New Dictionary
-;'res.add "InScope", New Dictionary
-;Set outofscope = New Dictionary
-;'res.add "OutOfScope", outofscope
-;Set dependencies = New Dictionary
-;
-;Set res = newdict("Supply", New Dictionary, _
-;                  "Demand", New Dictionary, _
-;                  "InScope", New Dictionary, _
-;                  "OutOfScope", outofscope, _
-;                  "Dependencies", dependencies)
-;
-;'TOM Change 26 Oct 2012
-;'With fillstore
-;    For Each grph In source.subgraphs
-;        Set subgraph = source.subgraphs(grph)
-;        'add all the SRCs from this equivalence class
-;        dependencies.add CStr(grph), getDependencies(subgraph)
-;        If subgraph.nodes.count = 1 Then 'it's an island.
-;            For Each nd In subgraph.nodes
-;                Set islands = res(islandType(CStr(nd)))
-;                islands.add CStr(nd), 0
-;                'TOM change 26 OCt 2012
-;                '.outofscope.add CStr(nd), 0
-;                outofscope.add CStr(nd), 0
-;                source.RemoveNode CStr(nd) 'eliminate the island
-;                source.subgraphs.Remove (grph) 'eliminate the subgraph
-;                Set subgraph = Nothing
-;            Next nd
-;        Else 'the source is in scope...
-;            Set islands = res("InScope")
-;            For Each nd In subgraph.nodes
-;                islands.add CStr(nd), islandType(CStr(nd))
-;            Next nd
-;        End If
-;    Next grph
-;'End With
-;
-;Set findIslands = res
-;Set res = Nothing
-;
-;End Function
-
 
 
 ;Private Function getDependencies(gr As IGraph) As Dictionary
@@ -836,6 +639,7 @@
 ;      "Irregular rule :" & inrule & " should be delimited by a single _ "
 ;End If
 ;End Function
+
 ;'Aux function to describe the type of island, whether a source or a sink.
 ;Private Function islandType(nodename As String) As String
 ;If InStr(1, nodename, "SOURCE") > 0 Then
@@ -847,23 +651,6 @@
 ;End If
 ;
 ;End Function
-
-
-
-
-;'Public Sub fromExcel()
-;''Decouple
-;'init parent
-;'End Sub
-
-
-
-;'Public Sub FromTables(sources As GenericTable, sinks As GenericTable, 
-;                            relations As GenericTable)
-;''Decouple
-;'init parent, True, sources, sinks, relations
-;'End Sub
-;'        
 
 
 
