@@ -7,10 +7,11 @@
                           [demand :as demand]
                           [policy :as policy]
                           [policyio :as policyio]
-                          [sampledata :as sd]]                        
+                          [sampledata :as sd]
+                          [entityfactory :as ent]]                        
             [marathon.data [simstate :as simstate]]
             [spork.sim     [simcontext :as sim]]            
-            [clojure.test :as test]))
+            [clojure.test :as test :refer :all]))
 
 ;;Testing for the core Engine Infrastructure
 ;;==========================================
@@ -24,7 +25,6 @@
 (def primed-sim
   (->> (initialize-sim core/emptysim +end-time+)
        (sim/add-times [44 100 203 55])))
-
 
 ;;#Tests for basic simulation engine invariants.
 (deftest basic-engine-testing
@@ -52,8 +52,6 @@
 )
 
 
-
-
 ;;#Event propogation tests.
 (defn push-message! [ctx edata name]
   (let [s    (:state ctx)
@@ -74,5 +72,76 @@
 ;;When we go to "run" marathon, we're really loading data from a
 ;;project.  The easiest way to do that is to provide marathon an API
 ;;for instantiating a project from tables.  Since we have canonical
-;;references for project data, it's pretty easy to do this...
+;;references for project data, it's pretty easy to do this...  
+(def testctx  (assoc-in core/emptysim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+(def debugctx (assoc-in core/debugsim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
 
+(def demand-records    (sd/get-sample-records :DemandRecords))
+(def ds       (ent/demands-from-records demand-records testctx))
+(def first-demand (first ds))
+(def tstart   (:startday first-demand))
+(def tfinal   (+ tstart (:duration first-demand)))
+(def res      (demand/register-demand  first-demand testctx))
+(def dstore   (core/get-demandstore res))
+(deftest scheduled-demand-correctly 
+  (is (= ((juxt  :startday :duration) first-demand)
+         [ 901 1080])
+      "Sampledata should not change.  Naming should be deterministic.")
+  (is (= (first (demand/get-activations dstore tstart))
+         (:name first-demand))
+      "Demand should register as an activation on startday.")
+  (is (= (first (demand/get-deactivations dstore tfinal)) (:name first-demand)) 
+        "Demand should be scheduled for deactivation")
+  (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
+  (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
+  (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation"))
+(def earliest (reduce min (map :startday ds)))
+(def latest   (reduce max (map #(+ (:startday %) (:duration %)) ds)))
+
+(def multiple-demands (demand/register-demands! ds testctx))
+
+(def m-dstore (core/get-demandstore multiple-demands))
+(def times    (map sim/get-time (take-while spork.sim.agenda/still-time? (iterate sim/advance-time multiple-demands))))
+(def events   (spork.sim.data/event-seq multiple-demands))
+(def expected-events (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
+            {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
+            {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
+            {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
+            {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
+            {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
+            {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
+            {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
+            {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
+            {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time}))
+
+(def activations481 (demand/get-activations m-dstore 481))
+(deftest scheduled-demands-correctly 
+  (is (= times
+         '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
+             778 811 901 963 991 1048 1051 1081 1261 1330 1351 1441 1531 1621 1711 1801 1981 2071 2095 2341 2521))
+      "Scheduled times from sampledata should be consistent, in sorted order.")
+  (is (= events expected-events)           
+      "The only events scheduled should be time changes.")
+  (is (= activations481 
+         '("1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-8_SRC1[481...554]"))
+      "Should have actives on 481...")       
+  (is (some (fn [d] (= d (:name first-demand))) (demand/get-activations m-dstore tstart))
+      "Demand should register as an activation on startday.")
+  (is (zero? (sim/get-time multiple-demands)) "Simulation time should still be at zero.")
+  (is (== (sim/get-next-time multiple-demands) earliest) "Next event should be demand activation")
+  (is (= (last times) (:tlastdeactivation m-dstore))
+      "Last event should be a deactivation time.")) 
+
+
+;;we can't build supply without policy....initializing supply with
+;;an understanding of policy...
+
+(def pstore            (core/get-policystore testctx ))
+
+(def supply-records    (sd/get-sample-records :SupplyRecords))
+;(def us                (units-from-records supply-records testctx))
+;(def first-demand      (first ds))
+
+
+;;our canonical test data...
+(def test-dstore m-dstore)

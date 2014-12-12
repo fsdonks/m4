@@ -36,18 +36,18 @@
            (transient {}) paramtbl)))
 
 ;;Reads SRC tags from a table, either returning a new set of tags, or adding them to existing tags.
-(defn get-src-tags [tagtbl & {:keys [tags] :or {tags tags/empty-tags}}]
+(defn get-src-tags [tagtbl & {:keys [init-tags] :or {init-tags tags/empty-tags}}]
   (reduce (fn [acc {:keys [SRC Tag]}]
-            (tags/tag-subject acc tag src))
-          tags tagtbl))
+            (tags/tag-subject acc Tag SRC))
+          init-tags tagtbl))
 
 ;;A simple function to automate buildings a map of parameters from a
 ;;table of parameters [ParameterName Value]+ and a table of SRC Tags,
 ;;[SRC Tag]+.
 (defn tables->parameters [paramtbl srctagtbl]
   (let [ps (table->parameters paramtbl)]
-    (->> (get ps :src-tags tags/empty-tags)
-         (get-src-tags srctagtbl)
+    (->> (get ps :src-tags tags/empty-tags) 
+         (get-src-tags srctagtbl :init-tags)
          (assoc ps :src-tags))))
 
 ;;Creates a default set of parameters derived from a paramters table and an SRCTag table.
@@ -81,8 +81,11 @@
 ;; 
 ;; End Function
 
-(defn default-fillstore [simstate] 
-  (
+;;so far the fillstore is kind of unnecessary.
+(defn default-fillstore [simstate]
+  
+  )
+   
 
 
 ;; 'Return a scoped set of supply and demand, based on the information in the fillgraph of the local
@@ -104,6 +107,73 @@
 ;; MarathonOpDemand.fromExcel state
 ;; Set defaultDemand = state.demandstore
 ;; End Function
+
+
+
+;;---------------------------------------------------
+
+
+;;    Public Function SupplyfromExcel(policystore As TimeStep_ManagerOfPolicy, parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;;                                        ctx As TimeStep_SimContext, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
+;;    Dim tbl As GenericTable
+;;    Dim gunit As TimeStep_UnitData
+  
+;;    Set SupplyfromExcel = New TimeStep_ManagerOfSupply
+;;   'TODO -> turn this into a function.
+;;    UnitsFromSheet "SupplyRecords", SupplyfromExcel, behaviors, parameters, policystore, ctx
+  
+;;    If ensureghost Then
+;;        If Not SupplyfromExcel.hasGhosts Then
+;;            Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;;            Set gunit = associateUnit(gunit, SupplyfromExcel, ctx)
+;;            registerUnit SupplyfromExcel, behaviors, gunit, True, ctx
+;;            Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;;                "added Default ghost unit to unitmap in supplymanager."
+;;        End If
+;;    End If
+  
+;;    End Function
+
+
+;;    Public Sub fromExcel(supplystore As TimeStep_ManagerOfSupply, policystore As TimeStep_ManagerOfPolicy, _
+;;                            parameters As TimeStep_Parameters, behaviors As TimeStep_ManagerOfBehavior, _
+;;                                ctx As TimeStep_SimContext, Optional ensureghost As Boolean)
+  
+;;    Dim gunit As TimeStep_UnitData
+  
+;;    UnitsFromSheet "SupplyRecords", supplystore, behaviors, parameters, policystore, ctx
+  
+;;    If ensureghost Then
+;;        If Not supplystore.hasGhosts Then
+;;            Set gunit = createUnit("Auto", "Ghost", "Anything", "Ghost", 0, "Auto", parameters, policystore)
+;;           'Decoupled
+;;            Set gunit = associateUnit(gunit, supplystore, ctx)
+;;           'decoupled
+;;            Set supplystore = registerUnit(supplystore, behaviors, gunit, True, ctx)
+;;            Debug.Print "Asked to do requirements analysis without a ghost, " & _
+;;                "added Default ghost unit to unitmap in supplymanager."
+;;        End If
+;;    End If
+  
+;;    End Sub
+
+;; --------------------------------------------------------------------------------
+
+;;    Public Sub UnitsFromSheet(sheetname As String, supplystore As TimeStep_ManagerOfSupply, behaviors As TimeStep_ManagerOfBehavior, _
+;;                                parameters As TimeStep_Parameters, policystore As TimeStep_ManagerOfPolicy, _
+;;                                    ctx As TimeStep_SimContext)
+;;    Dim tbl As GenericTable
+  
+;;    Set tbl = New GenericTable
+;;    tbl.FromSheet Worksheets(sheetname)
+  
+;;    MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, policystore, ctx
+  
+  
+;;    End Sub 
+
+
+
 ;; Public Function defaultSimState(Optional forRequirements As Boolean) As TimeStep_SimState
 ;;  Set defaultSimState = makeSimState()
 ;;     With defaultSimState

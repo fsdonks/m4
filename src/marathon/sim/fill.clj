@@ -16,7 +16,8 @@
             [marathon.supply [unitdata :as udata]]
             [marathon.sim [core :as core] [demand :as dem] [supply :as supply]
                           [policy :as policy] [unit :as u] 
-                          [deployment :as deployment]]           
+                          [deployment :as deployment]]
+            [marathon.sim.fill [fillgraph :as fg]]
             [spork.sim  [simcontext :as sim] [updates :as updates]]
             [spork.util [tags :as tag]]))
 
@@ -208,32 +209,15 @@
 ;;to and from the graph encoding in the legacy implementation.
 
 ;;Standard labels for defining source and sink rules.  Maybe memoize these.
-(defn sink-label   [x] [x :sink]  )   
-(defn source-label [x] [x :source]) 
+(def sink-label   (memoize (fn [x] (fg/sink-label x))))
+(def source-label (memoize (fn [x] (fg/source-label x))))
 
-;;Refactor -> we don't need a separate rule here really, just wrapping 
-;sink-label.  Note: we're passing in a new notion of categories when we 
-;fill demands now.  This means we can't just derive the rule and be done.
-;We need to dispatch on the category, and map the demand category into an 
-;appropriate rule that query can apply to the supply to find elements of supply.
-(defmulti derive-supply-rule 
-  (fn [demand fillstore & [category]]  
-    (let [cat (or category (:src demand))]  (core/category-type category))))
 
-;for simple categories, ala "SRC_1" or :SRC_1, we just use the existing 
-;label for the demand, which maps to a node in the fill graph.  This label is 
-;typically a standard alphanumeric SRC, but it could be any identifier the user
-;chooses.
-(defmethod derive-supply-rule :simple 
-  [demand fillstore & [category]]
-  (sink-label category))
-
-;For categories that require a demand group, namely follow-on fills, we 
-;just inject the sink-label into the vector: 
-;     [src group] ->  [(sink-label src) group]
-(defmethod derive-supply-rule :src-and-group 
-  [demand fillstore & [category]]
-  [(sink-label (first category)) (second category)])
+;;Dispatch function for reading demands as demand rules.
+(defn supply-cat 
+  ([demand]                    (core/category-type (get demand :src)))
+  ([demand fillstore]          (core/category-type (get demand :src)))
+  ([demand fillstore category] (core/category-type category)))
 
 ;Not yet implemented, but the intent is to have a simple idiom for parsing 
 ;abstract categories into rules that can be used to query supply or demand 
@@ -241,11 +225,41 @@
 (defn rule->supply-rule [rule]
   (throw (Exception. "Not implemented!")))
 
-;For complex categories that contain information in a map structure, we 
-;will have an way to parse the supply rule, which could be arbitrarily complex.
-(defmethod derive-supply-rule :rule-map
-  [demand fillstore & [category]]
-  (rule->supply-rule category))
+;;Refactor -> we don't need a separate rule here really, just wrapping 
+;sink-label.  Note: we're passing in a new notion of categories when we 
+;fill demands now.  This means we can't just derive the rule and be done.
+;We need to dispatch on the category, and map the demand category into an 
+;appropriate rule that query can apply to the supply to find elements
+;of supply.
+
+;;Originally implemented as a multimethod, currently refactored into a
+;;function for performance (and ostensibly simpler).  We'll see if we
+;;need to expand beyond this and go with a protocol or a multimethod.  
+;;Doubtful.
+
+(defn derive-supply-rule [demand fillstore & {:keys [category] :or {category (get demand :src)}}]
+  (case (supply-cat demand fillstore category)
+  ;for simple categories, ala "SRC_1" or :SRC_1, we just use the existing 
+  ;label for the demand, which maps to a node in the fill graph.  This label is 
+  ;typically a standard alphanumeric SRC, but it could be any identifier the user
+  ;chooses.
+  :simple         (sink-label category)
+  ;For categories that require a demand group, namely follow-on fills, we 
+  ;just inject the sink-label into the vector: 
+  ;     [src group] ->  [(sink-label src) group]
+  :src-and-group  [(sink-label (first category)) (second category)]
+  ;For complex categories that contain information in a map structure, we 
+  ;will have a way to parse the supply rule, which could be arbitrarily complex.
+  :rule-map       (rule->supply-rule category)))
+
+
+;;testing
+(comment 
+
+(require '[marathon.sim.sampledata :as sd])
+;some dumb demands 
+;(def demands 
+)
 
 ;;##Finding and Ordering Supply  
 
