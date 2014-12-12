@@ -256,7 +256,27 @@
 ;;testing
 (comment 
 
-(require '[marathon.sim.sampledata :as sd])
+(require '[marathon.sim.testing :as test])
+(require '[clojure.test :refer [deftest is run-tests]])
+
+(defn count-by [keyf xs] 
+  (reduce-kv (fn [acc k v] 
+               (assoc acc k (count v))) {} (group-by keyf xs)))
+
+(def fillstore (core/get-fillstore test/testctx))
+(def ds (vals (:demandmap test/test-dstore)))
+(def rules (map #(derive-supply-rule % fillstore) ds))
+(def complex-rule (derive-supply-rule (first ds) fillstore :category ["Alpha" "SomeGroup"]))
+
+(deftest supply-rules 
+  (is (= (count-by second rules)
+         {"SRC1" 21, "SRC2" 14, "SRC3" 36})
+      "Should have consistent number of srcs in supply rules.")
+  (is (= complex-rule 
+         [[:fillrule "Alpha"] "SomeGroup"])
+      "Should have a simple pair of [fillrule group] as a result."))
+        
+
 ;some dumb demands 
 ;(def demands 
 )
