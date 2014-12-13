@@ -254,6 +254,17 @@
                   (reduce (fn [acc snk]
                             (graph/conj-arc acc :unfilled snk 0)) sinkgraph (persistent! @sinks)))))))
 
+(defn fill-paths [g from]
+  (vec (sort-by second (seq (graph/sink-map g from)))))
+
+;;Collapses us down to a simple map of rule->candidates, where
+;;candidates are [rule, cost] pairs, stored in ascending order of 
+;;cost.
+(defn fill-map [g]
+  (reduce (fn [acc from]
+            (assoc acc from (fill-paths g from)))
+          {} (graph/sinks g :unfilled))) 
+
 ;;testing 
 (comment 
 (require '[marathon.sim.sampledata :as sd])
@@ -265,6 +276,7 @@
                            (get sd/sample-tables :RelationRecords)))
 
 (def decomps (graph/decompose fg))
+(def rgraph (reduced-graph fg))
 
 
 )

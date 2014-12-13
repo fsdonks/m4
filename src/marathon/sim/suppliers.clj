@@ -75,6 +75,10 @@
     [new-unit ctx]))
 
 
+
+
+
+
 ;;FMCA represents a complex set of rules for generating units...
 ;;For a rule like:
 
@@ -317,3 +321,22 @@
 ;;The naive view is that there is a single generator, that sits atop the 
 ;;deployable supply in the supplystore.  
 
+;;------------------Pending---------------------------------------
+
+
+;;The default fill function.  We'll look at one that can interpret
+;;rules internally later.
+(defn fill-function [fillgraph]
+  (let [rules  (fg/fill-map fillgraph)
+        src-map (reduce-kv (fn [acc [_ snk] sources]
+                             (assoc acc 
+                               (reduce (fn [xs [[_ source] cost]]
+                                         (conj xs [source cost])) [] sources)))
+                           {} rules)
+        rule->src (memoize (fn [rule] (let [[nd src] (fill/derive-supply-rule nil)]
+                                       src)))]
+  (reify fill/ISupplier 
+    (query [s rule store] 
+      (let [[nd src] 
+            (fill/derive-supply-rule rule nil)]
+        

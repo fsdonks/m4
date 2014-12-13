@@ -19,7 +19,9 @@
                           [deployment :as deployment]]
             [marathon.sim.fill [fillgraph :as fg]]
             [spork.sim  [simcontext :as sim] [updates :as updates]]
-            [spork.util [tags :as tag]]))
+            [spork.util [tags :as tag]]
+            [spork.util.reducers]
+            [clojure.core [reducers :as r]]))
 
 ;The old ManagerOfFill class actually handled the creation of a couple of
 ;dependent chunks of data; namely a FillFunction, a FillGraph,
@@ -394,7 +396,8 @@
   (query [s rule store] 
   "Given a rule that orders eligible supply, s applies the
    rule to store to return an ordered sequence of promised supply."))
-
+    
+  
 ;;__TODO__ Provide a default implementation of the ISupplier that can parse 
 ;;simple rules.  Specifically, one that can match src to src for instance.
 ;;__TODO__ Provide a set of extended Supplier definitions, possibly combinators
