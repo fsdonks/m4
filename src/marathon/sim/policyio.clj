@@ -38,6 +38,11 @@
 (defn record->relation [inrec] 
   ((juxt :Relation :Donor :Recepient :Cost) inrec))
 
+
+;;TODO -- Defer policy loading so that these are delayed.  Or make
+;policy generation faster (we're bottlenecking there a bit).  We don't
+;use all the policies, so we simply defer them until necessary, and
+;throw in a check for realized? when we go to lookup a policy.
 ;(_   _    _  PolicyName Template MaxDwell MinDwell MaxBOG StartDeployable StopDeployable Overlap Recovery BOGBudget Deltas  _)
 (defn record->policy 
   [{:keys [Template PolicyName MaxBOG MaxDwell MinDwell Overlap 

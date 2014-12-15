@@ -337,6 +337,7 @@
                                        src)))]
   (reify fill/ISupplier 
     (query [s rule store] 
-      (let [[nd src] 
-            (fill/derive-supply-rule rule nil)]
+      (let [buckets get-in 
+      
+
         

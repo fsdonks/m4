@@ -617,7 +617,7 @@
                  (core/set-parameter ctx :TotalUnits (count (:unitmap supply)))
                  (:unitmap supply))))
 
-(comment ;testing -- incorporated in testing.clj
+(comment ;testing -- incorporated in testing.clj, auto
   (require '[marathon.sim.sampledata :as sd])
   (require '[clojure.test :as test :refer [deftest is]])
   

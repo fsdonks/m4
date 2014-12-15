@@ -8,7 +8,8 @@
                           [policy :as policy]
                           [policyio :as policyio]
                           [sampledata :as sd]
-                          [entityfactory :as ent]]                        
+                          [entityfactory :as ent]
+                          [setup :as setup]]                        
             [marathon.data [simstate :as simstate]]
             [spork.sim     [simcontext :as sim]]            
             [clojure.test :as test :refer :all]))
@@ -135,13 +136,17 @@
 
 ;;we can't build supply without policy....initializing supply with
 ;;an understanding of policy...
-
-(def pstore            (core/get-policystore testctx ))
-
-(def supply-records    (sd/get-sample-records :SupplyRecords))
-;(def us                (units-from-records supply-records testctx))
-;(def first-demand      (first ds))
-
+(def pstore            (setup/default-policystore))
 
 ;;our canonical test data...
 (def test-dstore m-dstore)
+
+
+
+;;#unit processing#
+;;build a supply store...
+(def supply-records    (sd/get-sample-records :SupplyRecords))
+(def sstore            (core/get-supplystore testctx))
+(def us                (ent/units-from-records supply-records testctx))
+
+

@@ -50,6 +50,8 @@
          (get-src-tags srctagtbl :init-tags)
          (assoc ps :src-tags))))
 
+;;#TODO -> ensure numeric conversions for numeric params, like
+;;LastDayDefault and friends.
 ;;Creates a default set of parameters derived from a paramters table and an SRCTag table.
 (defn default-parameters [] 
   (tables->parameters (get-table :Parameters) (get-table :SRCTagRecords)))
@@ -583,3 +585,14 @@
 ;; 
 ;; End Function
 
+
+
+
+
+          
+          
+          
+         
+         
+         
+      
