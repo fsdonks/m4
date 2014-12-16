@@ -90,6 +90,10 @@
 (keyvals->constants {:Equivalence :Equivalence :Substitution :Substitution})
 
 
+;;look into replacing this with a universal constant, or upperbound
+;;for longs
+(def ^:constant +inf+ 9999999)
+
 ;RECONCILE BETWEEN THIS ONE AND ABOVE
 ;need a protocol for policies...
 (defprotocol IRotationPolicy 
@@ -270,7 +274,22 @@
   (change-state [b unit to-state deltat duration following-state] 
       "Return the result of changing the unit's finite state machine to a 
        new state using behavior b."))
-    
+
+
+;;#TODO# add inspection services to visualize the entity state.
+;;I'd like to add in some useful visuals to inspect the repl state in
+;;a friendly manner.
+(comment     
+
+;;TODO Move this to spork.data.protocols at some point
+(defprotocol IVisual
+  (visualize [obj] "renders obj in some visual format"))
+
+(extend-protocol IVisual 
+   spork.util.table.column-table
+   (visualize [obj] (spork.util.table/visualize obj)))
+
+)
 
 ;;Legacy...
     

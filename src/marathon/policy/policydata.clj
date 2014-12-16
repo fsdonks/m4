@@ -10,7 +10,7 @@
 ;;graph with special properties.  
 (ns marathon.policy.policydata
   (:use [spork.util.record :only [defrecord+]])
-  (:require [marathon.data [protocols :as core]]
+  (:require [marathon.data  [protocols :as core]]
             [spork.cljgraph [core :as graph]]))
 
 ;__TODO__ Extend core/IRotationPolicy protocol to policy and
@@ -18,14 +18,14 @@
 
 ;a structure for unit entity policies.
 (defrecord+ policy [[name "BlankPolicy"]
-                    [cyclelength :inf]
+                    [cyclelength core/+inf+]
                     [mindwell 0]
-                    [maxdwell  :inf]
-                    [maxbog    :inf]
-                    [maxMOB    :inf]
+                    [maxdwell  core/+inf+]
+                    [maxbog    core/+inf+]
+                    [maxMOB    core/+inf+]
                     [recovery  90]
                     [startdeployable 0]
-                    [stopdeployable :inf]
+                    [stopdeployable core/+inf+]
                     [positiongraph  graph/empty-graph]
                     [startstate    :spawn]
                     [endstate      :spawn]

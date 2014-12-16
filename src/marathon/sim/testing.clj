@@ -141,12 +141,10 @@
 ;;our canonical test data...
 (def test-dstore m-dstore)
 
-
-
 ;;#unit processing#
 ;;build a supply store...
 (def supply-records    (sd/get-sample-records :SupplyRecords))
 (def sstore            (core/get-supplystore testctx))
-(def us                (ent/units-from-records supply-records testctx))
+(def us                (ent/units-from-records supply-records sstore pstore))
 
 

@@ -604,7 +604,9 @@
 (defn policy-names [policystore] (keys (get-policies policystore)))
 ;Get a policy associated with Pname, relative to the policystore.
 (defn find-policy [pname policystore] 
-  (-> (get-policies policystore) (get pname)))
+  (if-let [p (get (get-policies policystore) pname)]
+    p
+    (throw (Exception. (str "Unknown policy! " pname)))))
 
 ;Return the set of policy graphs
 (defn get-policy-graphs [policystore]

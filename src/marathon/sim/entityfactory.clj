@@ -311,12 +311,12 @@
   (let [clength (generic/cycle-length policy)
         clength (if (> clength +max-cycle-length+) +default-cycle-length+)
         uniform-interval (atom (compute-interval clength (count units)))
-        last-interval (atom (- uniform-interval))
+        last-interval (atom (- @uniform-interval))
         remaining     (atom (count units))
         next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
                                    nxt (if (> nxt clength) 0 nxt)]
                                (do (when (< @remaining clength)
-                                     (reset! @uniform-interval 
+                                     (reset! uniform-interval 
                                              (compute-interval clength  @remaining)))
                                    (reset! last-interval nxt)
                                    (swap! remaining dec)
@@ -324,7 +324,7 @@
     (reduce (fn [acc  unit]
                  (let [cycletime (next-interval)
                        unit      (assoc unit :cycletime cycletime)]
-                   (do (assert  (pos? cycletime) "Negative cycle time during distribution.")
+                   (do (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")
                        (conj acc unit))))
            []
            units)))
@@ -456,7 +456,7 @@
         conj-unit  (fn [acc x] (do (swap! unit-count inc)
                                    (conj acc x)))]
     (->> recs 
-;         (r/filter valid-record?) ;;We need to add data validation, we'll do that later....
+         (r/filter #(pos? (:Quantity %))) ;;We need to add data validation, we'll do that later....
          (reduce (fn [acc r]                    
                    (if (> (:Quantity r) 1) 
                      (conj-units acc 
@@ -464,7 +464,7 @@
                                      (:SRC r) 
                                      (:OITitle r) 
                                      (:Component r)  
-                                     (plcy/find-policy pstore (:Policy r))
+                                     (plcy/find-policy  (:Policy r) pstore)
                                      @unit-count 
                                      normal-beh))
                      (conj-unit  acc (record->unitdata r)))) []))))

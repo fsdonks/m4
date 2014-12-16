@@ -345,6 +345,12 @@
   deep-update 
   deep-dissoc])
 
+;;TODO de-duplicate this from marathon.data.protocols
+;;look into replacing this with a universal constant, or upperbound
+;;for longs
+(def ^:constant +inf+ 9999999)
+
+
 ;;##Developer Notes
 
 ;;#Transitioning from Effectful Simulation and State Updating#

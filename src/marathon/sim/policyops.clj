@@ -1,6 +1,7 @@
 (ns marathon.sim.policyops
   (:require [spork.util.metaprogramming :refer [keyvals->constants]]
             [spork.cljgraph.core :as graph]
+            [marathon.sim.core :refer [+inf+]]
             [marathon.policy.policydata :as policydata]            
             [marathon.data.protocols :as core :refer [Bogging 
                                                       Dwelling 
@@ -40,12 +41,8 @@
 ;;to add new templates to the library, which end users can stitch together and derive from.  Additionally,
 ;;pushing the specification outside of VBA should allow for specialized, graphical tools to build policies,
 ;;which are then imported into Marathon during pre-processing.
-
-
 (def ^:constant +century+ (* 100 365))
-;;look into replacing this with a universal constant, or upperbound
-;;for longs
-(def ^:constant +inf+ 9999999)
+
 (defn century-ceiling [length] (if (> length +century+) +inf+ length))
 
 ;;helper function.  Determines the type of cycle transform.
