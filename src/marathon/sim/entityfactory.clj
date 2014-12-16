@@ -453,9 +453,9 @@
         ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
         normal-beh (-> supply :behaviors :defaultACBehavior)
         conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
-                                    (into acc xs)))
+                                    (reduce conj! acc xs)))
         conj-unit  (fn [acc x] (do (swap! unit-count inc)
-                                   (conj acc x)))]
+                                   (conj! acc x)))]
     (->> recs 
          (r/filter #(pos? (:Quantity %))) ;;We need to add data validation, we'll do that later....
          (reduce (fn [acc r]                    
@@ -471,7 +471,8 @@
                      (->> (generate-name @unit-count (:SRC r) (:Component r))
                           (assoc r :Name)
                           (record->unitdata)
-                          (conj-unit  acc)))) []))))
+                          (conj-unit  acc)))) (transient []))
+         (persistent!))))
         
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
