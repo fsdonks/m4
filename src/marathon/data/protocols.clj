@@ -128,8 +128,6 @@
   (set-position-graph   [p g])
   (merge-policy-stats   [p m]))
 
-(defprotocol IDeferredPolicy)
-
 ;;Functions for working with composite policies.
 (defprotocol IPolicyContainer
   (add-policy       [p policy] 
