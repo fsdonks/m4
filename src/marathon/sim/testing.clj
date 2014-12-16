@@ -146,5 +146,9 @@
 (def supply-records    (sd/get-sample-records :SupplyRecords))
 (def sstore            (core/get-supplystore testctx))
 (def us                (ent/units-from-records supply-records sstore pstore))
+;;processing units, adding stuff.
+(def processed        (ent/process-units us testctx))
+
+
 
 

@@ -246,7 +246,7 @@
   (update-in store [:tags] tag/tag-subject :enabled item))
 (defn disable [store item]
   (update-in store [:tags] tag/untag-subject :enabled item))
-(defn special-src? [tags src]  (tag/has-tag? tags src "Special"))
+(defn special-src? [tags src] (when tags (tag/has-tag? tags src "Special")))
 
 ;;#Fill Related Functions
 

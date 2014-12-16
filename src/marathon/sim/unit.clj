@@ -43,7 +43,9 @@
                                     newlocation))))
 
 
-  
+;;#TODO Figure out a way more effecient way to express this, 
+;;we're going to have lots of location changes.  I have a feeling 
+;;the associng is going to kill us when we have a lot of movement.
 (defn change-location [unit newlocation ctx]
   (core/with-simstate [[supplystore] ctx]
     (if (= newlocation (:locationname unit))

@@ -27,8 +27,18 @@
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
-(defn assign-behavior [behaviors unit behaviorname]
-  (missing/assign-behavior unit behaviorname))
+
+;;#TODO  Generalize this.  We have a single case statement for
+;;assigning behaviors.  Works okay, but it's kind of a choke point...
+(defn assign-behavior [behaviors unit]
+(do
+  (println [unit (:component unit)])
+  (case (clojure.string/upper-case (:component unit))
+    "AC" :ac
+    ("NG" "RC") :rc
+    "GHOST" :ghost 
+    (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit)))))))
+
 (defn empty-position? [unit] (nil? (:position-policy unit)))
 
 ;;#Keyword Tag Builders

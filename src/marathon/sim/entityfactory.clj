@@ -545,8 +545,10 @@
  ;; 503:  
  ;; 504:   End Function
 
+;;TODO - this returns a ctx, we're using it like we have a unit.
+;;Alter the signature to [newunit, newctx]
 (defn prep-cycle [unit ctx]
-  (initialize-cycle (:policy unit) (core/ghost? unit) ctx))
+  (initialize-cycle unit (:policy unit) (core/ghost? unit) ctx))
 
 (defn prep-unit 
   "Given a raw-unit, ensures its name is good with the supplystore, 
@@ -575,10 +577,10 @@
   (let [prepped   (-> raw-unit       
                       (associate-unit supplystore true)
                       (assign-policy policystore parameters)      
-                      (prep-cycle))]
+                      (prep-cycle ctx))]
     (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
         (core/set-policystore 
-         (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)))))  
+          (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)))))  
 
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
