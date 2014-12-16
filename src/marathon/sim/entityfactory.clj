@@ -358,7 +358,7 @@
 ;;Vestigial policy objects and behavior fields are not defined.  We
 ;;may allow different behaviors in the future, but for now they are
 ;;determined at runtime via the legacy processes (by component).
-(defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy]}]
+(defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy]}]  
     (create-unit  Name SRC OITitle Component CycleTime Policy :default))
 
 (defn generate-name 
@@ -367,6 +367,7 @@
      (core/msg idx "_" (:SRC unit) "_" (:component unit)))
   ([idx src compo]
      (core/msg idx "_" src "_" compo)))
+      
 
 (defn check-name 
   "Ensures the unit is uniquely named, unless non-strictness rules are 
@@ -467,7 +468,10 @@
                                      (plcy/find-policy  (:Policy r) pstore)
                                      @unit-count 
                                      normal-beh))
-                     (conj-unit  acc (record->unitdata r)))) []))))
+                     (->> (generate-name @unit-count (:SRC r) (:Component r))
+                          (assoc r :Name)
+                          (record->unitdata)
+                          (conj-unit  acc)))) []))))
         
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
