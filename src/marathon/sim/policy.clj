@@ -403,8 +403,8 @@
         new-policy (policy-name policy)
         nm         (:name unit)
         s          (:subscriptions policystore)
-        oldsubs    (disj (get s old-policy)  nm)
-        newsubs    (conj  (get s new-policy) nm)]
+        oldsubs    (disj (get s old-policy #{})  nm)
+        newsubs    (conj  (get s new-policy #{}) nm)]
     (->> (-> s
              (assoc old-policy oldsubs)
              (assoc new-policy newsubs))

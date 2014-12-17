@@ -254,9 +254,13 @@
         (throw (Exception. (str "Default Policy is set at "  
                                 policyname  " which does not exist!")))))))
 
+(defn policy? [x] (satisfies? marathon.data.protocols/IRotationPolicy x))
+(defn has-policy? [u] (policy? (:policy u)))
+
 (defn assign-policy [unit policystore params]
-  (assoc unit :policy 
-     (choose-policy (:policy unit) (:component unit) policystore params (:src unit))))
+  (if (has-policy? unit) unit
+      (assoc unit :policy 
+             (choose-policy (:policy unit) (:component unit) policystore params (:src unit)))))
 
 ;;Given a unit, initialize it's currentcycle based on policy information
 
@@ -584,7 +588,7 @@
                       (prep-cycle ctx))]
     (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
         (core/set-policystore 
-          (plcy/subscribe-unit prepped (:policy prepped) prepped policystore)))))  
+          (plcy/subscribe-unit prepped (:policy prepped)  policystore)))))  
 
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.

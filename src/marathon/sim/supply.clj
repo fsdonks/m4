@@ -31,13 +31,11 @@
 ;;#TODO  Generalize this.  We have a single case statement for
 ;;assigning behaviors.  Works okay, but it's kind of a choke point...
 (defn assign-behavior [behaviors unit]
-(do
-  (println [unit (:component unit)])
   (case (clojure.string/upper-case (:component unit))
     "AC" :ac
     ("NG" "RC") :rc
     "GHOST" :ghost 
-    (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit)))))))
+    (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit))))))
 
 (defn empty-position? [unit] (nil? (:positionpolicy unit)))
 
@@ -301,12 +299,11 @@
            {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
          (out-of-stock! (:src unit)))))
 
-
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
    unit's policy state."
   ([supply unit followon spawning ctx]
-     (assert (not (empty-position? unit)) "invalid position!")
+;     (assert (not (empty-position? unit)) (str "invalid position!" (:positionpolicy unit)))
      (let [position (:position-policy unit)
            src      (:src unit)]
        (if (or followon (u/can-deploy? unit spawning))                         ;1)
