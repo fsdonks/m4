@@ -1,12 +1,13 @@
 ;A module for unit behaviors...
 (ns marathon.sim.unit
   (:require [spork.sim [simcontext :as sim]]
-            [marathon.sim.core :as core]))
+            [spork.util [general :as gen]]
+            [marathon.sim.core :as core]
+            [marathon.data.protocols :as pol]))
 
 ;TEMPORARILY ADDED for marathon.sim.demand, marathon.sim.policy
-(declare change-state update can-deploy? change-location! 
-         re-deploy-unit deploy-unit change-policy
-         valid-deployer?) 
+(declare change-state update change-location! 
+         re-deploy-unit deploy-unit change-policy) 
 
 ;;Copied from supply to avoid circular dependencies....
 ;;This is problematic.  Should be pulled into supply protocols.
@@ -42,7 +43,6 @@
       (assoc :locationhistory (conj (:locationhistory unit) 
                                     newlocation))))
 
-
 ;;#TODO Figure out a way more effecient way to express this, 
 ;;we're going to have lots of location changes.  I have a feeling 
 ;;the associng is going to kill us when we have a lot of movement.
@@ -51,10 +51,57 @@
     (if (= newlocation (:locationname unit))
       ctx
       (let [nextu   (push-location unit newlocation)
-            ctx (core/set-supplystore (add-unit supplystore nextu))]
+            ctx     (core/set-supplystore (add-unit supplystore nextu))]
         (if (:moved unit)              
           (unit-moved-event! nextu newlocation ctx)                                          
           (unit-first-moved-event! (assoc nextu :moved true) newlocation ctx))))))
+
+
+;Predicate to indicate unit U's ability to bog.
+(defn bog-remains? [u]
+  (pos? (gen/deep-get u [:currentcycle :bogbuget] 0)))
+
+;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated
+;'with the unit state, i.e the empirical cycle time.  Since we've got a separation between the cycle
+;'length experienced by the unit, and the nominal policy length that unit is operating under (i.e.
+;'it changed rotational policies and is currently under a different policy), we need to change the
+;'deployment criteria from the empirical or experienced cycletime (unitdata.cycletime), to the notion
+;'of cycletime relative to active rotational policy, which is kept in currentcycle.duration.
+(defn can-deploy? 
+  ([u spawning? policy]  (valid-deployer? u spawning? policy))
+  ([u spawning?] (valid-deployer? u spawning? (:policy u)))
+  ([u] (valid-deployer? u nil (:policy u))))
+
+
+(defn unit-state [u] (-> u :statedata :currentstate))
+
+;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
+;Note, this implicitly hardcodes deployed states.  We could probably yank this out into
+;a data-driven definition that's more dynamic.  TBD.
+(defn deployed? [u] 
+  (case (unit-state u)
+    (:bogging :deploying) true
+    false))   
+
+;Indicates whether unit u is eligible for a follow on deployment.
+;Units eligible for follow on deployments are units that have "any" followon code.
+;The followon code indicates the context of the followon deployment.
+(defn can-followon? [u] (:followoncode u))
+
+;Determine if a unit falls within the deployable window of a given policy.  If no
+;policy is supplied, the unit's associated policy will be consulted.
+(defn in-deployable-window? [u policy]
+  (let [ct (:cycletime u)]
+    (and  (>= ct (pol/start-deployable policy))
+          (< ct (pol/stop-deployable policy)))))
+
+;Determines if u is capable of deploying, as a function of u's associated policy.
+(defn valid-deployer? [u spawning? policy]
+  (if spawning? 
+    (pol/deployable-at? policy (:positionpolicy u))
+    (and (bog-remains? u) 
+         (not (deployed? u)) 
+         (or (can-followon? u) (in-deployable-window? u policy))))) 
 
 ;;#Needs Porting#
 
@@ -230,69 +277,8 @@
 ;End Sub
 
 
-;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated
-;'with the unit state, i.e the empirical cycle time.  Since we've got a separation between the cycle
-;'length experienced by the unit, and the nominal policy length that unit is operating under (i.e.
-;'it changed rotational policies and is currently under a different policy), we need to change the
-;'deployment criteria from the empirical or experienced cycletime (unitdata.cycletime), to the notion
-;'of cycletime relative to active rotational policy, which is kept in currentcycle.duration.
-;Public Function CanDeploy(u As TimeStep_UnitData, Optional spawning As Boolean, Optional policy As IRotationPolicy) As Boolean
-;If policy Is Nothing Then Set policy = u.policy
-;CanDeploy = validDeployer(u, spawning, policy)
-;End Function
 
 
-;'Determines if u is capable of deploying, as a function of u's associated policy.
-;Public Function validDeployer(u As TimeStep_UnitData, Optional spawning As Boolean, Optional policy As IRotationPolicy) As Boolean
-;If policy Is Nothing Then Set policy = u.policy
-;If spawning Then
-;    validDeployer = policy.Deployable(u.PositionPolicy)
-;Else
-;    validDeployer = bogRemains(u) And Not isDeployed(u) 'bogbudget > 0
-;
-;    If validDeployer Then
-;        validDeployer = canFollowOn(u) Or inDeployableWindow(u, policy)
-;    End If
-;End If
-;
-;End Function
-
-
-
-;'Consults the unit's state to determine if it's in a Bogging or Overlapping state.
-;'Note, this implicitly hardcodes deployed states.  We could probably yank this out into
-;'a data-driven definition that's more dynamic.  TBD.
-;Public Function isDeployed(u As TimeStep_UnitData) As Boolean
-;Dim state As String
-;Select Case u.StateData.CurrentState
-;    Case Bogging, Overlapping
-;        isDeployed = True
-;    Case Else
-;        isDeployed = False
-;End Select
-;End Function
-
-
-;'Predicate to indicate unit U's ability to bog.
-;Public Function bogRemains(u As TimeStep_UnitData) As Boolean
-;bogRemains = u.CurrentCycle.bogbudget > 0
-;End Function
-
-
-;'Indicates whether unit u is eligible for a follow on deployment.
-;'Units eligible for follow on deployments are units that have "any" followon code.
-;'The followon code indicates the context of the followon deployment.
-;Public Function canFollowOn(u As TimeStep_UnitData) As Boolean
-;canFollowOn = u.followoncode <> vbNullString
-;End Function
-
-
-;'Determine if a unit falls within the deployable window of a given policy.  If no
-;'policy is supplied, the unit's associated policy will be consulted.
-;Public Function inDeployableWindow(u As TimeStep_UnitData, Optional policy As IRotationPolicy) As Boolean
-;If policy Is Nothing Then Set policy = u.policy
-;inDeployableWindow = u.cycletime >= policy.startdeployable And cycletime < policy.stopdeployable
-;End Function
 
 
 ;Public Function getBog(u As TimeStep_UnitData) As Single

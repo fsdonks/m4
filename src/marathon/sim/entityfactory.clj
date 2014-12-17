@@ -290,7 +290,8 @@
         (assoc :policy policy)
         (assoc :positionpolicy newpos)
         (assoc :locationname "Spawning")  
-        (unitsim/change-location newpos ctx))))
+;        (unitsim/change-location newpos ctx)
+        )))
 
 (def ^:constant +max-cycle-length+     10000)
 (def ^:constant +default-cycle-length+ 1095)
@@ -567,10 +568,13 @@
     (let [prepped   (-> raw-unit       
                         (associate-unit supplystore true)
                         (assign-policy policystore parameters)      
-                        (prep-cycle))]
-      (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
-          (core/set-policystore 
-           (plcy/subscribe-unit prepped (:policy prepped) prepped policystore))))))  
+                        (prep-cycle ctx))]
+      (->> (core/set-policystore 
+              (plcy/subscribe-unit prepped (:policy prepped) policystore))
+           (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
+           ;CHECK added this guy, lifted out from initialize-cycle,
+           ;since it operates on a context, not a unit directly.
+           (unitsim/change-location (:policyposition prepped))))))
 
 ;;Mutable version for bulk updates.
 (defn process-unit! [raw-unit extra-tags parameters behaviors supplystore policystore ctx]

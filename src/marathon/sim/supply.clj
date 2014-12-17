@@ -39,7 +39,7 @@
     "GHOST" :ghost 
     (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit)))))))
 
-(defn empty-position? [unit] (nil? (:position-policy unit)))
+(defn empty-position? [unit] (nil? (:positionpolicy unit)))
 
 ;;#Keyword Tag Builders
 (core/defkey source-key "SOURCE_")
@@ -305,19 +305,20 @@
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
    unit's policy state."
-  [unit & [followon spawning ctx]]
-  (assert (not (empty-position? unit)) "invalid position!")
-  (let [position (:position-policy unit)
-        src      (:src unit)
-        supply   (core/get-supplystore ctx)]
-    (if (or followon (u/can-deploy? unit spawning))                         ;1)
-      (->> (if followon  ;notifiying of followon data...
-             (new-followon! unit ctx) 
-             (new-deployable! unit ctx))
-           (add-deployable-supply supply src unit)) ;add stuff to buckets...   
-      ;unit is not deployable
+  ([supply unit followon spawning ctx]
+     (assert (not (empty-position? unit)) "invalid position!")
+     (let [position (:position-policy unit)
+           src      (:src unit)]
+       (if (or followon (u/can-deploy? unit spawning))                         ;1)
+         (->> (if followon  ;notifiying of followon data...
+                (new-followon! unit ctx) 
+                (new-deployable! unit ctx))
+              (add-deployable-supply supply src unit)) ;add stuff to buckets...   
+                                        ;unit is not deployable
       (->> (not-deployable! unit ctx)
            (remove-deployable-supply supply src unit)))))
+  ([unit followon spawning ctx] 
+     (update-deployability (core/get-supplystore ctx) unit followon spawning ctx)))
 
 ;;__TODO__Determine if we can yank this and just use update-deployability.
 ;;We used to have this as a firewall that would, depending onthe unit's followon 
@@ -325,8 +326,8 @@
 ;;supply status via tags now, we don't need to partition the buckets separately.
 ;;I removed the buckets args, and this function got hollowed out.  
 ;;__DEPRECATE__
-(defn update-deploy-status [supply unit [followon? spawning? ctx]]
-    (update-deployability unit followon? spawning? ctx))
+(defn update-deploy-status [supply unit followon? spawning? ctx]
+    (update-deployability supply unit followon? spawning? ctx))
 
 ;;#Registering New Supply
 
@@ -346,7 +347,7 @@
       (->> (spawning-ghost! unit ctx)
            (set-ghosts true))
       (->> (spawning-unit! unit ctx)
-           (update-deploy-status supply unit)))))
+           (update-deployability supply unit nil nil)))))
 
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
