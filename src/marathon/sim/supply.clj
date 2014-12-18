@@ -23,9 +23,9 @@
 
 ;;Note -> modified these to be compatible with cellular updates.
 (defn add-unit   [supply unit]     
-  (core/assoc-in-any supply [:unitmap (:name unit)] unit))
+  (assoc-in supply [:unitmap (:name unit)] unit))
 (defn drop-unit  [supply unitname] 
-  (core/update-in-any supply [:unit-map] dissoc unitname))
+  (update-in supply [:unit-map] dissoc unitname))
 
 
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
@@ -123,7 +123,7 @@
 (defn add-bucket [supply bucket-name]
   (let [buckets (:deployable-buckets supply)]
     (if (contains? buckets bucket-name) supply 
-      (core/assoc-in-any supply [:deployable-buckets bucket-name] {}))))
+      (assoc-in supply [:deployable-buckets bucket-name] {}))))
 
 ;;#Tag-Related Supply Queries
 (defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
@@ -287,7 +287,7 @@
 ;Consolidated this from update-deployability, formalized into a function.
 (defn add-deployable-supply [supply src unit ctx]
   (->> (sim/merge-updates 
-         {:supplystore (core/assoc-in-any supply [:buckets src (:name unit)] unit)} ctx)
+         {:supplystore (assoc-in supply [:buckets src (:name unit)] unit)} ctx)
        (update-availability unit supply)))
 
 ;;follow on supply was treated as special, but now it's not.  We expected 
@@ -300,7 +300,7 @@
   (if-let [newstock (-> (get-in supply [:buckets src (:name unit)])
                         (dissoc (:name unit)))]
     (sim/merge-updates 
-      {:supplystore (core/assoc-in-any supply [:buckets src] newstock)} ctx)
+      {:supplystore (assoc-in supply [:buckets src] newstock)} ctx)
     (->> (sim/merge-updates 
            {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
          (out-of-stock! (:src unit)))))
@@ -353,9 +353,7 @@
            (update-deployability supply unit nil nil)))))
 
 (defn register-unit! [supply behaviors unit ghost extra-tags ctx]
-  (let [
-        unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-;        _      (println [:registering (:name unit) :in (:unitmap supply)])
+  (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
         supply (-> (add-unit supply unit)
                    (tag-unit unit extra-tags)
                    (add-src (:src unit)))]
@@ -405,7 +403,7 @@
 (defn add-followon
   "Registers the unit as eligible for follow on status."
   [supply unit ctx] 
-  (-> (core/assoc-in-any supply [:followons (:name unit)] unit)
+  (-> (assoc-in supply [:followons (:name unit)] unit)
       (update-deploy-status unit true nil ctx)))
 
 (defn remove-followon
@@ -418,7 +416,7 @@
     (-> store 
         (update-in [:followons] dissoc unitname)
         (core/prune-in  [:followonbuckets fcode src] dissoc unitname)
-        (core/assoc-in-any  [:unit-map unitname] 
+        (assoc-in  [:unit-map unitname] 
           (assoc unit :followoncode nil)))))
 
 (defn followon-unit?
@@ -469,7 +467,7 @@
 
 (defn get-next-deploymentid [s] (inc (:uniqedeployments s)))
 (defn tag-as-deployed [unit store] 
-  (core/update-in-any store [:tags] tag/tag-subject (:name unit) :hasdeployed))
+  (update-in store [:tags] tag/tag-subject (:name unit) :hasdeployed))
                                          
 ;NOTE -> this should be OBSOLETE after the port, since we can handle policies 
 ;much more gracefully.

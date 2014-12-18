@@ -155,6 +155,9 @@
 ;;bulk updates where possible.  
 (def processed        (ent/process-units us testctx))
 
+;;TODO# add tests for mutable version of process-units!
+
+
 
 
 

@@ -565,6 +565,9 @@
       (assign-policy policystore parameters)      
       (prep-cycle ctx)))
 
+
+;;Persistent version for testing...OBE when the mutable version works.
+
 ;;All we need to do is eat a unit, returning the updated context.
 ;;A raw unit is a unitdata that is freshly parsed, via create-unit.
 (defn process-unit [raw-unit extra-tags parameters behaviors ctx]

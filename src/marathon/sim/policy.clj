@@ -409,6 +409,7 @@
 ;;          (assoc new-policy newsubs))
 ;;          (assoc policystore :subscriptions)))
 
+;;TODO clean up the if's in here, the conditions are pretty nasty.
 (defn subscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in
    the policy store.  Rather than storing subscriptions in the policy, we now
@@ -420,10 +421,32 @@
         newsubs    (conj  (get scripts new-policy #{}) nm)
         s          (assoc scripts  new-policy newsubs)]
     (->>  (if-let [old-policy (policy-name (:policy unit))]
-            (let [oldsubs    (disj (get s old-policy #{})  nm)]
-              (assoc s old-policy oldsubs))
+            (if (identical? old-policy new-policy) 
+              s
+              (let [oldsubs    (disj (get s old-policy #{})  nm)]
+                (assoc s old-policy oldsubs)))
             s)
           (assoc policystore :subscriptions))))
+
+;;TODO  faster mutable version.  lots of map and set munging.
+(comment 
+(defn subscribe-unit! 
+  "Subscribes a unit to policy by establishing a relation with the policy in
+   the policy store.  Rather than storing subscriptions in the policy, we now
+   keep them in the policystore."
+  [unit policy policystore scripts]
+  (let [new-policy (policy-name policy)
+        nm         (:name unit)
+        newsubs    (conj  (get scripts new-policy (transient #{})) nm)
+        s          (assoc scripts  new-policy newsubs)]
+    (->>  (if-let [old-policy (policy-name (:policy unit))]
+            (if (identical? old-policy new-policy) 
+              s
+              (let [oldsubs    (disj (get s old-policy #{})  nm)]
+                (assoc s old-policy oldsubs)))
+            s)
+          policystore)))
+)
 
 (defn unsubscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in
