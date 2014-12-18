@@ -8,7 +8,8 @@
                           [core :as core] [policy :as policy] 
                           [unit :as u]]           
             [spork.sim    [simcontext :as sim] [updates :as updates]]
-            [spork.util   [tags :as tag]]))
+            [spork.util   [tags :as tag]
+                          [general :as gen]]))
 
 ;;#Primitive Operations and Supply Queries
 
@@ -21,9 +22,16 @@
 (defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
 (defn set-ghosts [x ctx] (assoc-in ctx [:state :supplystore :has-ghosts] x))
 
+
 ;;Note -> modified these to be compatible with cellular updates.
+
+(comment
+  (defn add-unit   [supply unit]     
+           (assoc-in supply [:unitmap (get unit :name)] unit)))
+
 (defn add-unit   [supply unit]     
-  (assoc-in supply [:unitmap (:name unit)] unit))
+  (gen/assoc2 supply :unitmap (get unit :name) unit))
+
 (defn drop-unit  [supply unitname] 
   (update-in supply [:unit-map] dissoc unitname))
 
@@ -71,7 +79,6 @@
     (-> (tag/untag-subject tags unitname :fenced)
         (tag/tag-subject unitname :dropped-fence))
     tags)) 
-
 ;default unit tags
 (defn default-tags [{:keys [src component behavior oi-title policy]}] 
   [(compo-key component) (behavior-key behavior) (title-key oi-title) 
@@ -95,7 +102,7 @@
 ;inject appropriate tags into the supply tags.
 (defn tag-unit
   ([supply unit extra-tags]
-   (let [sourcename (source-key (:src unit))]
+   (let [sourcename (source-key (get unit :src))]
       (->> ; (into (default-tags unit) extra-tags)) 
            (tag/multi-tag (:tags supply) (:name unit) (default-tags unit))
            (tag-source sourcename)
@@ -227,7 +234,7 @@
       (str "Unit " (:name unit) " able to followon for demandgroup " 
            (:followoncode unit)) nil ctx))
 (defn more-src-available! [unit ctx]
-  (let [src (:src unit)]
+  (let [src (get unit :src)]
     (sim/trigger-event :MoreSRCAvailable "SupplyManager" src 
        (str "Unit " (:name unit) " at position " (:position-policy unit) 
             "has just been added to deployables for SRC " src) nil ctx))) 
@@ -256,14 +263,14 @@
 ;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
 (defn log-position! [t frompos topos unit & [duration ctx]]
   (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
-     (str "UIC " (:name unit) " has repositioned from " frompos " to " topos)
+     (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
      nil ctx))
 
 ;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
   [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
   (sim/trigger-event :deploy "SupplyManager" (:name unit)               
-     (str "Deployed unit " (:name unit) 
+     (core/msg "Deployed unit " (:name unit) 
           " from " fromname " to demand " (:name demand))
      {:fromloc   fromname  :unit unit :demand demand :fill filldata 
       :fillcount fillcount :period period :t t :deploydate deploydate}  ctx))
@@ -271,19 +278,19 @@
 ;When a unit engages in a followon deployment, we notify the context.
 (defn unit-followon-event! [unit demand ctx]
   (sim/trigger-event :FollowingOn  (:name unit) (:name demand) 
-     (str "Unit " (:name unit) " is following on to demand " (:name demand))
+     (core/msg "Unit " (:name unit) " is following on to demand " (:name demand))
         nil ctx))
 
 (defn first-deployment! [supply unit ctx]
   (sim/trigger-event :firstDeployment (:name supply) (:name supply) 
-       (str "Unit " (:name unit) " Deployed for the First Time") nil ctx))  
+       (core/msg "Unit " (:name unit) " Deployed for the First Time") nil ctx))  
 
 ;;#Supply Availability
 
 (defn update-availability [unit supply ctx]
-  (if (contains? (get-buckets supply) (:src unit))
+  (if (contains? (get-buckets supply) (get unit :src))
     (more-src-available! unit ctx)
-    (->> (new-src-available! (:src unit) ctx)
+    (->> (new-src-available! (get unit :src) ctx)
       (new-deployable! unit))))
 
 ;Consolidated this from update-deployability, formalized into a function.
@@ -299,21 +306,21 @@
 
 ;Consolidated this from update-deployability, formalized into a function.
 (defn remove-deployable-supply [supply src unit ctx]
-  (if-let [newstock (-> (get-in supply [:buckets src (:name unit)])
-                        (dissoc (:name unit)))]
+  (if-let [newstock (-> (get-in supply [:buckets src (get unit :name)])
+                        (dissoc (get unit :name)))]
     (sim/merge-updates 
       {:supplystore (assoc-in supply [:buckets src] newstock)} ctx)
     (->> (sim/merge-updates 
            {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
-         (out-of-stock! (:src unit)))))
+         (out-of-stock! (get unit :src)))))
 
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
    unit's policy state."
   ([supply unit followon spawning ctx]
-;     (assert (not (empty-position? unit)) (str "invalid position!" (:positionpolicy unit)))
+;     (assert (not (empty-position? unit)) (core/msg "invalid position!" (:positionpolicy unit)))
      (let [position (:position-policy unit)
-           src      (:src unit)]
+           src      (get unit :src)]
        (if (or followon (u/can-deploy? unit spawning))                         ;1)
          (->> (if followon  ;notifiying of followon data...
                 (new-followon! unit ctx) 
@@ -346,7 +353,7 @@
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
         supply (-> (add-unit supply unit)
                    (tag-unit unit extra-tags)
-                   (add-src (:src unit)))
+                   (add-src (get unit :src)))
         ctx    (core/set-supplystore ctx supply) ;this happens in a
                                                  ;pure context,
                                                  ;cellular need not do
@@ -362,7 +369,7 @@
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
         supply (-> (add-unit supply unit)
                    (tag-unit unit extra-tags)
-                   (add-src (:src unit)))]
+                   (add-src (get unit :src)))]
     (if ghost 
       (->> (spawning-ghost! unit ctx)
            (set-ghosts true))
@@ -412,7 +419,7 @@
 (defn add-followon
   "Registers the unit as eligible for follow on status."
   [supply unit ctx] 
-  (-> (assoc-in supply [:followons (:name unit)] unit)
+  (-> (assoc-in supply [:followons (get unit :name)] unit)
       (update-deploy-status unit true nil ctx)))
 
 (defn remove-followon
@@ -421,7 +428,7 @@
   [store unitname]
   (let [unit     (get-unit store unitname)
         fcode    (:followoncode unit)
-        src      (:src unit)]
+        src      (get unit :src)]
     (-> store 
         (update-in [:followons] dissoc unitname)
         (core/prune-in  [:followonbuckets fcode src] dissoc unitname)
@@ -430,7 +437,7 @@
 
 (defn followon-unit?
   "Determines if a particular unit is known to be eligible for follow-on use."
-  [store unit] (contains? (:followons store) (:name unit)))
+  [store unit] (contains? (:followons store) (get unit :name)))
 
 ;;__TODO__Detangle release-followon-unit.
 
@@ -471,18 +478,18 @@
 ;;announce that the unit is in fact following on, remove it from followons.
 (defn record-followon [supply unit demand ctx]
   (->> (sim/merge-updates 
-         {:supplystore (remove-followon supply (:name unit))} ctx)
+         {:supplystore (remove-followon supply (get unit :name))} ctx)
        (unit-followon-event! unit demand)))
 
 (defn get-next-deploymentid [s] (inc (:uniqedeployments s)))
 (defn tag-as-deployed [unit store] 
-  (update-in store [:tags] tag/tag-subject (:name unit) :hasdeployed))
+  (update-in store [:tags] tag/tag-subject (get unit :name) :hasdeployed))
                                          
 ;NOTE -> this should be OBSOLETE after the port, since we can handle policies 
 ;much more gracefully.
 ;Jeff had me put in some special case for handling initial deployment logic.
 (defn first-deployment? [unit store]
-  (not (tag/has-tag? (:tags store) (:name unit) :hasdeployed))) 
+  (not (tag/has-tag? (:tags store) (get unit :name) :hasdeployed))) 
 
 ;;##Supply Management
 (defn manage-supply
