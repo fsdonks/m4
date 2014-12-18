@@ -429,24 +429,32 @@
           (assoc policystore :subscriptions))))
 
 ;;TODO  faster mutable version.  lots of map and set munging.
-(comment 
+(defn add-sub! [scripts policy nm]
+  (assoc! scripts policy
+          (conj!  (if-let [xs (get scripts policy)]
+                    xs
+                    (transient #{}))
+                  nm)))
+(defn drop-sub! [scripts policy nm]
+  (assoc! scripts policy
+          (disj!  (if-let [xs (get scripts policy)]
+                    xs
+                    (transient #{}))
+                  nm)))
+          
 (defn subscribe-unit! 
   "Subscribes a unit to policy by establishing a relation with the policy in
    the policy store.  Rather than storing subscriptions in the policy, we now
    keep them in the policystore."
-  [unit policy policystore scripts]
+  [unit policy  scriptsref]
   (let [new-policy (policy-name policy)
         nm         (:name unit)
-        newsubs    (conj  (get scripts new-policy (transient #{})) nm)
-        s          (assoc scripts  new-policy newsubs)]
-    (->>  (if-let [old-policy (policy-name (:policy unit))]
-            (if (identical? old-policy new-policy) 
-              s
-              (let [oldsubs    (disj (get s old-policy #{})  nm)]
-                (assoc s old-policy oldsubs)))
-            s)
-          policystore)))
-)
+        scriptsref (swap! scriptsref add-sub! new-policy nm)]
+    (if-let [old-policy (policy-name (:policy unit))]
+      (if (identical? old-policy new-policy) 
+        scriptsref
+        (do (swap! scriptsref drop-sub! old-policy nm) 
+            scriptsref)))))
 
 (defn unsubscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in

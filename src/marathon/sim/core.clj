@@ -298,10 +298,13 @@
         (assoc-in m path (dissoc parent (last ks))))
       updated)))
 
+;;#TODO evaluate memoize here and see if we're paying a useless
+;penalty.
 (defn key-tag-maker
   "Creates a little keyword factory that allows to to define descriptive 
    tags using keywords efficiently and consistently."
-  [base] (memoize (fn [tag] (keyword (str base tag)))))
+  [base] (gen/memo-1
+          (fn [tag] (keyword (str base tag)))))
 
 ;helper macro for defining key-building functions.
 (defmacro defkey [name base] `(def ~name (key-tag-maker ~base)))
@@ -459,8 +462,4 @@
 
 ;;Operations optimized for speed.  the -in and friends 
 ;;are not sufficient...
-
-
-
-
 

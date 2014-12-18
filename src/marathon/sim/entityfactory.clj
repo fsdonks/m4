@@ -601,27 +601,45 @@
                       (assign-policy policystore parameters)      
                       (prep-cycle ctx))]
     (do (supply/register-unit! supplystore behaviors prepped nil extra-tags ctx)
-        (plcy/subscribe-unit prepped (:policy prepped)  policystore)
+;        (plcy/subscribe-unit prepped (get u :policy)  policystore)
         ctx)))
+
+;;for each unit in unitmap, we just subscribe it's name to its policy.
+(defn subscribe-units! [units policystore]
+  (->> units
+       (group-by #(plcy/policy-name (get % :policy)))
+       (reduce-kv (fn [scripts pol us]
+                    (let [us (r/map #(get % :name) us)]
+                      (assoc scripts pol 
+                             (if-let [newscripts (get scripts pol)]
+                               (into newscripts us)
+                               (into #{} us)))))                    
+                  (get policystore :subscriptions))
+       (assoc policystore :subscriptions)))
 
 ;;#TODO implement mutable versions for register-units! and subscribe-units!
 
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
 (defn process-units! [raw-units ctx]
-  (core/with-simstate [[parameters behaviors] ctx]
-    (core/with-cells [{supplystore   [:state :supplystore]
-                       policystore   [:state :policystore]
-                       unitmap       [:state :supplystore :unitmap]
-                       unittags      [:state :supplystore :tags]
-                       subscriptions [:state :policystore :subscriptions]
-                       :as ctx2}         ctx]
-      (update-ctx2!
-       (core/with-transient-cells [unittags]
-         (-> (reduce (fn [acc unit]
-                       (process-unit! unit nil parameters behaviors supplystore policystore acc))
-                     ctx2 
-                     raw-units)))))))
+    (core/with-simstate [[parameters behaviors] ctx]
+      (core/with-cells [{supplystore   [:state :supplystore]
+                         policystore   [:state :policystore]
+                         subscriptions [:state :policystore :subscriptions]
+                         unitmap       [:state :supplystore :unitmap]
+                         unittags      [:state :supplystore :tags]
+                         :as ctx2}         ctx]
+        (let [newctx  (update-ctx2!
+                       (core/with-transient-cells [unittags subscriptions]
+                         (-> (reduce (fn [acc unit]
+                                       (process-unit! unit nil parameters behaviors supplystore policystore acc))
+                                     ctx2 
+                                     raw-units))))]
+          (core/with-simstate [[supplystore policystore] newctx]
+            (core/merge-updates 
+             {:policystore (subscribe-units! (vals (get supplystore :unitmap)) policystore)}
+             newctx))))))              
+
  ;;Are there any abstractions we can level?  Any patterns that are
   ;;becoming apparent?
 

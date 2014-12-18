@@ -104,7 +104,7 @@
   ([supply unit extra-tags]
    (let [sourcename (source-key (get unit :src))]
       (->> ; (into (default-tags unit) extra-tags)) 
-           (tag/multi-tag (:tags supply) (:name unit) (default-tags unit))
+           (tag/multi-tag (get  supply :tags) (get unit :name) (default-tags unit))
            (tag-source sourcename)
            (tag-extras unit extra-tags)
            (assoc supply :tags))))
