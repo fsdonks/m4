@@ -61,16 +61,6 @@
 (defn bog-remains? [u]
   (pos? (gen/deep-get u [:currentcycle :bogbuget] 0)))
 
-;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated
-;'with the unit state, i.e the empirical cycle time.  Since we've got a separation between the cycle
-;'length experienced by the unit, and the nominal policy length that unit is operating under (i.e.
-;'it changed rotational policies and is currently under a different policy), we need to change the
-;'deployment criteria from the empirical or experienced cycletime (unitdata.cycletime), to the notion
-;'of cycletime relative to active rotational policy, which is kept in currentcycle.duration.
-(defn can-deploy? 
-  ([u spawning? policy]  (valid-deployer? u spawning? policy))
-  ([u spawning?] (valid-deployer? u spawning? (:policy u)))
-  ([u] (valid-deployer? u nil (:policy u))))
 
 
 (defn unit-state [u] (-> u :statedata :currentstate))
@@ -102,6 +92,19 @@
     (and (bog-remains? u) 
          (not (deployed? u)) 
          (or (can-followon? u) (in-deployable-window? u policy))))) 
+
+
+
+;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated
+;'with the unit state, i.e the empirical cycle time.  Since we've got a separation between the cycle
+;'length experienced by the unit, and the nominal policy length that unit is operating under (i.e.
+;'it changed rotational policies and is currently under a different policy), we need to change the
+;'deployment criteria from the empirical or experienced cycletime (unitdata.cycletime), to the notion
+;'of cycletime relative to active rotational policy, which is kept in currentcycle.duration.
+(defn can-deploy? 
+  ([u spawning? policy]  (valid-deployer? u spawning? policy))
+  ([u spawning?] (valid-deployer? u spawning? (:policy u)))
+  ([u] (valid-deployer? u nil (:policy u))))
 
 ;;#Needs Porting#
 

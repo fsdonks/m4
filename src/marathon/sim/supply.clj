@@ -93,13 +93,15 @@
 (defn tag-source [source tags] (tag/tag-subject tags source :sources))
 
 ;inject appropriate tags into the supply tags.
-(defn tag-unit [supply unit [extra-tags]]
-  (let [sourcename (source-key (:src unit))]
-    (->> (into (default-tags unit) extra-tags) 
-         (tag/multi-tag (:tags supply) (:name unit))
-         (tag-source sourcename)
-         (tag-extras unit extra-tags)
-         (assoc supply :tags))))
+(defn tag-unit
+  ([supply unit extra-tags]
+   (let [sourcename (source-key (:src unit))]
+      (->> ; (into (default-tags unit) extra-tags)) 
+           (tag/multi-tag (:tags supply) (:name unit) (default-tags unit))
+           (tag-source sourcename)
+           (tag-extras unit extra-tags)
+           (assoc supply :tags))))
+  ([supply unit] (tag-unit supply unit nil)))
 
 ;helper function for dropping a tag from multiple units at once.
 (defn untag-units [supplystore tag units]
@@ -345,7 +347,11 @@
         supply (-> (add-unit supply unit)
                    (tag-unit unit extra-tags)
                    (add-src (:src unit)))
-        ctx    (core/set-supplystore ctx supply)]
+        ctx    (core/set-supplystore ctx supply) ;this happens in a
+                                                 ;pure context,
+                                                 ;cellular need not do
+                                                 ;anything here.
+        ]
     (if ghost 
       (->> (spawning-ghost! unit ctx)
            (set-ghosts true))
@@ -362,6 +368,9 @@
            (set-ghosts true))
       (->> (spawning-unit! unit ctx)
            (update-deployability supply unit nil nil)))))
+
+
+
 
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.

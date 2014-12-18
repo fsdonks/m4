@@ -613,44 +613,78 @@
     (core/with-cells [{supplystore   [:state :supplystore]
                        policystore   [:state :policystore]
                        unitmap       [:state :supplystore :unitmap]
+                       unittags      [:state :supplystore :tags]
                        subscriptions [:state :policystore :subscriptions]
-                       :as ctx2}         ctx] 
-    (-> (reduce (fn [acc unit]
-                  (process-unit! unit nil parameters behaviors supplystore policystore acc))
-                ctx2 
-                raw-units)
-        (update-ctx2!)))))
+                       :as ctx2}         ctx]
+      (update-ctx2!
+       (core/with-transient-cells [unittags]
+         (-> (reduce (fn [acc unit]
+                       (process-unit! unit nil parameters behaviors supplystore policystore acc))
+                     ctx2 
+                     raw-units)))))))
+ ;;Are there any abstractions we can level?  Any patterns that are
+  ;;becoming apparent?
+
+  ;;We typically have a set of batch updates that work with cellular
+  ;;members and (possibly) the context.
+
+  ;;Can we create cells lazily?
+  ;;For a structure...we could pack cells into the meta..
+  ;;that's another option...
+  ;;Another nice thing would be propogating cells..or detecting if
+  ;;something is cellular...if we operate on any of its elements, maybe
+  ;;we promote them to cells?
+
+  ;;It'd be nice to just allow the caller to operate on the structure as
+  ;;if it were a persistent structure, but have the cellular
+  ;;optimizations available on the side...
+
+  ;;Right now, I'm calling out specific bits or paths that can be
+  ;;operated on, then defining (possibly duplicate) functions that
+  ;;operate on the cells and don't actually bother to repack them
+  ;;into a persistent structure.
+
+  ;;It would be nice to have a generic, composable method for
+  ;;operating in a cellular manner.
+
+  ;;Can we do this with monads?
+  ;;For instance, define cellular operations that expect
+  ;;a cellular environment.
+
+                                        ;(with-cells [[]])
 
 
 
-;;- WIP
-;;An alternative is to call register-units and subscribe-units
-;;separately...makes a bit more sense to me from the FP perspective.
-;; (defn process-units [raw-units ctx]
-;;   (core/with-simstate [[parameters behaviors] ctx]
-;;     (-> ctx
-;;         (supply/register-units supplystore behaviors)
-;;         (plcy/subscribe-units 
-;;     (-> (reduce (fn [acc unit]
-;;                   (process-unit! unit nil parameters behaviors supplystore policystore acc))
-;;                 ctx2 
-;;                 raw-units)
-;;         (update-ctx2!)))))
+
+  ;;- WIP
+  ;;An alternative is to call register-units and subscribe-units
+  ;;separately...makes a bit more sense to me from the FP perspective.
+  ;; (defn process-units [raw-units ctx]
+  ;;   (core/with-simstate [[parameters behaviors] ctx]
+  ;;     (-> ctx
+  ;;         (supply/register-units supplystore behaviors)
+  ;;         (plcy/subscribe-units 
+  ;;     (-> (reduce (fn [acc unit]
+  ;;                   (process-unit! unit nil parameters behaviors supplystore policystore acc))
+  ;;                 ctx2 
+  ;;                 raw-units)
+  ;;         (update-ctx2!)))))
 
 
-;;Flesh this out, high level API for adding units to supply.  
-;;Convenience function.
-;;We really want to add prepped units.
+  ;;Flesh this out, high level API for adding units to supply.  
+  ;;Convenience function.
+  ;;We really want to add prepped units.
 
-;; (defn add-units [amount src oititle compo policy supply ghost ctx]
-;;   (if (== amount 1))
+  ;; (defn add-units [amount src oititle compo policy supply ghost ctx]
+  ;;   (if (== amount 1))
 
-;;#Entity Initialization        
+  ;;#Entity Initialization
+
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
-      (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :Spawning 0 nil ctx))
-                 (core/set-parameter ctx :TotalUnits (count (:unitmap supply)))
-                 (:unitmap supply))))
+    (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :Spawning 0 nil ctx))
+               (core/set-parameter ctx :TotalUnits (count (:unitmap supply)))
+               (:unitmap supply))))
 
 (comment ;testing -- incorporated in testing.clj, auto
   (require '[marathon.sim.sampledata :as sd])
