@@ -12,7 +12,7 @@
 ;;Copied from supply to avoid circular dependencies....
 ;;This is problematic.  Should be pulled into supply protocols.
 (defn add-unit [supplystore unit]
-  (assoc-in supplystore [:unitmap (:name unit)] unit))
+  (gen/assoc2 supplystore :unitmap (:name unit) unit))
 
 ;;Records unit movement between locations.
 (defn unit-moved-event!  [unit newlocation ctx]
@@ -51,7 +51,7 @@
     (if (= newlocation (:locationname unit))
       ctx
       (let [nextu   (push-location unit newlocation)
-            ctx     (core/set-supplystore (add-unit supplystore nextu))]
+            ctx     (core/set-supplystore ctx (add-unit supplystore nextu))]
         (if (:moved unit)              
           (unit-moved-event! nextu newlocation ctx)                                          
           (unit-first-moved-event! (assoc nextu :moved true) newlocation ctx))))))

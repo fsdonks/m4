@@ -394,21 +394,36 @@
              (sim/merge-updates 
                {:policystore (update-policy policystore new-policy)}))))
 
+;; (defn subscribe-unit 
+;;   "Subscribes a unit to policy by establishing a relation with the policy in
+;;    the policy store.  Rather than storing subscriptions in the policy, we now
+;;    keep them in the policystore."
+;;   [unit policy policystore]
+;;   (let [old-policy (policy-name (:policy unit))
+;;         new-policy (policy-name policy)
+;;         nm         (:name unit)
+;;         s          (:subscriptions policystore)
+;;         oldsubs    (disj (get s old-policy #{})  nm)
+;;         newsubs    (conj  (get s new-policy #{}) nm)]
+;;     (->> (assoc s old-policy oldsubs)
+;;          (assoc new-policy newsubs))
+;;          (assoc policystore :subscriptions)))
+
 (defn subscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in
    the policy store.  Rather than storing subscriptions in the policy, we now
    keep them in the policystore."
   [unit policy policystore]
-  (let [old-policy (policy-name (:policy unit))
-        new-policy (policy-name policy)
+  (let [new-policy (policy-name policy)
         nm         (:name unit)
-        s          (:subscriptions policystore)
-        oldsubs    (disj (get s old-policy #{})  nm)
-        newsubs    (conj  (get s new-policy #{}) nm)]
-    (->> (-> s
-             (assoc old-policy oldsubs)
-             (assoc new-policy newsubs))
-         (assoc policystore :subscriptions))))
+        scripts    (:subscriptions policystore)
+        newsubs    (conj  (get scripts new-policy #{}) nm)
+        s          (assoc scripts  new-policy newsubs)]
+    (->>  (if-let [old-policy (policy-name (:policy unit))]
+            (let [oldsubs    (disj (get s old-policy #{})  nm)]
+              (assoc s old-policy oldsubs))
+            s)
+          (assoc policystore :subscriptions))))
 
 (defn unsubscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in

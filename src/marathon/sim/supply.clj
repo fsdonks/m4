@@ -21,9 +21,13 @@
 (defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
 (defn set-ghosts [x ctx] (assoc-in ctx [:state :supplystore :has-ghosts] x))
 
-(defn add-unit [supply unit]    (assoc-in supply [:unitmap (:name unit)] unit))
-(defn drop-unit [supply unitname] 
-  (update-in supply [:unit-map] dissoc unitname))
+;;Note -> modified these to be compatible with cellular updates.
+(defn add-unit   [supply unit]     
+  (core/assoc-in-any supply [:unitmap (:name unit)] unit))
+(defn drop-unit  [supply unitname] 
+  (core/update-in-any supply [:unit-map] dissoc unitname))
+
+
 (defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
@@ -31,11 +35,12 @@
 ;;#TODO  Generalize this.  We have a single case statement for
 ;;assigning behaviors.  Works okay, but it's kind of a choke point...
 (defn assign-behavior [behaviors unit]
-  (case (clojure.string/upper-case (:component unit))
-    "AC" :ac
-    ("NG" "RC") :rc
-    "GHOST" :ghost 
-    (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit))))))
+  (->>  (case (clojure.string/upper-case (:component unit))
+          "AC" :ac
+          ("NG" "RC") :rc
+          "GHOST" :ghost 
+          (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit)))))
+        (assoc unit :behavior)))
 
 (defn empty-position? [unit] (nil? (:positionpolicy unit)))
 
@@ -106,6 +111,7 @@
   (let [scoped (:srcs-in-scope supply)]
     (if (contains? scoped src) supply 
       (assoc-in supply [:srcs-in-scope src] (count scoped)))))
+
 (defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
 
 ;DOUBLE CHECK....do we really mean to drop the entire src? 
@@ -117,7 +123,7 @@
 (defn add-bucket [supply bucket-name]
   (let [buckets (:deployable-buckets supply)]
     (if (contains? buckets bucket-name) supply 
-      (assoc-in supply [:deployable-buckets bucket-name] {}))))
+      (core/assoc-in-any supply [:deployable-buckets bucket-name] {}))))
 
 ;;#Tag-Related Supply Queries
 (defn get-sources [supply] (tag/get-subjects (:tags supply) :sources))
@@ -281,7 +287,7 @@
 ;Consolidated this from update-deployability, formalized into a function.
 (defn add-deployable-supply [supply src unit ctx]
   (->> (sim/merge-updates 
-         {:supplystore (assoc-in supply [:buckets src (:name unit)] unit)} ctx)
+         {:supplystore (core/assoc-in-any supply [:buckets src (:name unit)] unit)} ctx)
        (update-availability unit supply)))
 
 ;;follow on supply was treated as special, but now it's not.  We expected 
@@ -294,7 +300,7 @@
   (if-let [newstock (-> (get-in supply [:buckets src (:name unit)])
                         (dissoc (:name unit)))]
     (sim/merge-updates 
-      {:supplystore (assoc-in supply [:buckets src] newstock)} ctx)
+      {:supplystore (core/assoc-in-any supply [:buckets src] newstock)} ctx)
     (->> (sim/merge-updates 
            {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
          (out-of-stock! (:src unit)))))
@@ -346,6 +352,19 @@
       (->> (spawning-unit! unit ctx)
            (update-deployability supply unit nil nil)))))
 
+(defn register-unit! [supply behaviors unit ghost extra-tags ctx]
+  (let [
+        unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
+;        _      (println [:registering (:name unit) :in (:unitmap supply)])
+        supply (-> (add-unit supply unit)
+                   (tag-unit unit extra-tags)
+                   (add-src (:src unit)))]
+    (if ghost 
+      (->> (spawning-ghost! unit ctx)
+           (set-ghosts true))
+      (->> (spawning-unit! unit ctx)
+           (update-deployability supply unit nil nil)))))
+
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
 (defn new-unit [supplystore parameters policystore behaviors name src title 
@@ -386,7 +405,7 @@
 (defn add-followon
   "Registers the unit as eligible for follow on status."
   [supply unit ctx] 
-  (-> (assoc-in supply [:followons (:name unit)] unit)
+  (-> (core/assoc-in-any supply [:followons (:name unit)] unit)
       (update-deploy-status unit true nil ctx)))
 
 (defn remove-followon
@@ -399,7 +418,7 @@
     (-> store 
         (update-in [:followons] dissoc unitname)
         (core/prune-in  [:followonbuckets fcode src] dissoc unitname)
-        (assoc-in  [:unit-map unitname] 
+        (core/assoc-in-any  [:unit-map unitname] 
           (assoc unit :followoncode nil)))))
 
 (defn followon-unit?
@@ -450,7 +469,7 @@
 
 (defn get-next-deploymentid [s] (inc (:uniqedeployments s)))
 (defn tag-as-deployed [unit store] 
-  (update-in store [:tags] tag/tag-subject (:name unit) :hasdeployed))
+  (core/update-in-any store [:tags] tag/tag-subject (:name unit) :hasdeployed))
                                          
 ;NOTE -> this should be OBSOLETE after the port, since we can handle policies 
 ;much more gracefully.

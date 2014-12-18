@@ -573,35 +573,52 @@
                         (associate-unit supplystore true)
                         (assign-policy policystore parameters)      
                         (prep-cycle ctx))]
-      (->> (core/set-policystore 
+      (->> (core/set-policystore ctx
               (plcy/subscribe-unit prepped (:policy prepped) policystore))
-           (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
+           (supply/register-unit supplystore behaviors prepped nil extra-tags)
            ;CHECK added this guy, lifted out from initialize-cycle,
            ;since it operates on a context, not a unit directly.
-           (unitsim/change-location (:policyposition prepped))))))
+           (unitsim/change-location prepped (:policyposition prepped))))))
 
-;;Mutable version for bulk updates.
+(defn process-units [raw-units ctx]
+  (core/with-simstate [[parameters behaviors] ctx]
+    (reduce (fn [acc unit]
+              (process-unit unit nil parameters behaviors acc))
+            ctx                 raw-units)))
+
+;;TODO# verify mutable version.
+;;We need to revisit where all the cellular mutation is occuring and
+;;provide cell paths for those areas is we want to use these more
+;;efficient versions.
+
+;;Pending Mutable version for bulk updates.
 (defn process-unit! [raw-unit extra-tags parameters behaviors supplystore policystore ctx]
   (let [prepped   (-> raw-unit       
                       (associate-unit supplystore true)
                       (assign-policy policystore parameters)      
                       (prep-cycle ctx))]
-    (-> (supply/register-unit supplystore behaviors prepped nil extra-tags ctx)
-        (core/set-policystore 
-          (plcy/subscribe-unit prepped (:policy prepped)  policystore)))))  
+    (do (supply/register-unit! supplystore behaviors prepped nil extra-tags ctx)
+        (plcy/subscribe-unit prepped (:policy prepped)  policystore)
+        ctx)))
+
+;;#TODO implement mutable versions for register-units! and subscribe-units!
 
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
-(defn process-units [raw-units ctx]
+(defn process-units! [raw-units ctx]
   (core/with-simstate [[parameters behaviors] ctx]
-    (core/with-cells [{supplystore [:state :supplystore] 
-                       policystore [:state :policystore]
+    (core/with-cells [{supplystore   [:state :supplystore]
+                       policystore   [:state :policystore]
+                       unitmap       [:state :supplystore :unitmap]
+                       subscriptions [:state :policystore :subscriptions]
                        :as ctx2}         ctx] 
     (-> (reduce (fn [acc unit]
                   (process-unit! unit nil parameters behaviors supplystore policystore acc))
                 ctx2 
                 raw-units)
         (update-ctx2!)))))
+
+
 
 ;;- WIP
 ;;An alternative is to call register-units and subscribe-units

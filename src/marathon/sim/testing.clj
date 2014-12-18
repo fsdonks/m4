@@ -11,7 +11,9 @@
                           [entityfactory :as ent]
                           [setup :as setup]]                        
             [marathon.data [simstate :as simstate]]
-            [spork.sim     [simcontext :as sim]]            
+            [spork.sim     [simcontext :as sim]]
+            [spork.util.reducers]
+            [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]))
 
 ;;Testing for the core Engine Infrastructure
@@ -146,8 +148,15 @@
 (def supply-records    (sd/get-sample-records :SupplyRecords))
 (def sstore            (core/get-supplystore testctx))
 (def us                (ent/units-from-records supply-records sstore pstore))
+  
 ;;processing units, adding stuff.
-;(def processed        (ent/process-units us testctx))
+;;Note, this is taking about a second for processing 30000 units.
+;;Most of that bottleneck is due to not using transients and doing
+;;bulk updates where possible.  
+(def processed        (ent/process-units us testctx))
+
+
+
 
 
 
