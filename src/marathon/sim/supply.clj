@@ -52,6 +52,8 @@
 
 (defn empty-position? [unit] (nil? (:positionpolicy unit)))
 
+;;Note: these may become obsolete...
+
 ;;#Keyword Tag Builders
 (core/defkey source-key "SOURCE_")
 (core/defkey sink-key   "SINK_")
