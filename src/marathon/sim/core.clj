@@ -240,8 +240,7 @@
       (count [obj] n)
       clojure.core.protocols/CollReduce
       (coll-reduce [this f1]   (reduce (fn [acc v] (f1 acc v)) (f1) ents))
-      (coll-reduce [_ f1 init] (reduce (fn [acc v] (f1 acc v)) init ents))))) 
-
+      (coll-reduce [_ f1 init] (reduce (fn [acc v] (f1 acc v)) init ents)))))
 
 (defn demands->track [xs] 
    (sketch/->track (map (fn [r] (merge r {:start (:startday r)})) xs) :track-name name))
@@ -250,19 +249,28 @@
   [xs & {:keys [keyf] :or {keyf (juxt :demandgroup :src)}}]
   (for [[g xs] (group-by keyf xs)]
     [g (map (fn [r] (merge r {:start (:startday r)})) xs)]))
-  
-(defn visualize-demand [ctx & {:keys [keyf] :or {keyf (juxt :demandgroup :src)}}]  
-  (let [ds (demands ctx)
-        coloring (zipmap (keys ds) (sketch/palette))
-        tracks   (demand->tracks (vals ds) :keyf keyf)]
-    (sketch/with-event->color (fn [e] (get coloring (:name e) ))
+
+
+(defn visualize-events [es track-keyf color-keyf]  
+  (let [coloring (zipmap (map color-keyf es) (take (count es) (sketch/palette)))
+        tracks   (demand->tracks es :keyf track-keyf)
+        rendered-tracks (sketch/->tracks tracks)
+        track-width    (:width (spork.graphics2d.canvas/shape-bounds rendered-tracks))
+;        lgnd     (sketch/->legend coloring)
+;        lwidth   (:width (spork.graphics2d.canvas/shape-bounds lgnd))
+        ]
+    (sketch/with-event->color (fn [e] (get coloring (color-keyf e)))
       (sketch/sketch-image
        (sketch/scale 1.0 1.5
-                     (sketch/stack [(sketch/->tracks tracks)
-                                        ;(sketch/translate 10 5 (sketch/scale 2.0
-                                        ;2.0 (sketch/->legend event->color)))
+                     (sketch/stack [rendered-tracks
+                                   ; (sketch/translate 10 5 
+                                   ;    (sketch/scale (float (/ track-width lwidth)) 2.0
+                                   ;      lgnd))
                                     ]))))))
 
+(defn visualize-demands [ctx  & {:keys [track-keyf color-keyf] :or {track-keyf (juxt :demandgroup :src)
+                                                                    color-keyf (juxt :vignette)}}]
+  (visualize-events (vals (demands ctx)) track-keyf color-keyf))
 ;;#Shared Functions
 
 ;;These functions were extracted due to use across multiple domains.  I may 

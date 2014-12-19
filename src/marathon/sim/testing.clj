@@ -161,7 +161,7 @@
 ;;TODO# add tests for mutable version of process-units!
 
 (comment 
-(def trk (sketch/->track (map (fn [r] (merge r {:start (:startday r)})) (vals (core/demands processed))) :track-name :name))
+
 )
 
 
