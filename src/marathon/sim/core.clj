@@ -190,6 +190,19 @@
                                    :data (spork.sim.data/event-data  edata)})) ctx))) 
                  (assoc :state emptystate)))
 
+;;#State-wide queries...
+;;tbd
+(defn demands [ctx] (:demandmap (get-demandstore ctx)))
+(defn units   [ctx] (:unitmap   (get-supplystore ctx)))
+(defn periods [ctx] (:periods   (get-policystore ctx)))
+(defn features [ctx & {:keys [where] :or {where identity}}]
+  [:simstate
+   (for [[nm obj] (seq (:state ctx))
+         :when (where nm)]
+     [nm (if (map? obj) (keys obj) obj)]
+     )])
+
+
 ;;#Shared Functions
 
 ;;These functions were extracted due to use across multiple domains.  I may 

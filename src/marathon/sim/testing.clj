@@ -142,6 +142,7 @@
 
 ;;our canonical test data...
 (def test-dstore m-dstore)
+(def testctx (core/set-policystore testctx pstore))
 
 ;;#unit processing#
 ;;build a supply store...
