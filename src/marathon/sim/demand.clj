@@ -12,7 +12,7 @@
                               [policy :as policy]
                               [unit :as u]]           
              [spork.sim       [simcontext :as sim]]
-             [spork.util      [tags :as tag] [general :as gen]]))
+             [spork.util      [tags :as tag] [general :as gen] [temporal :as temporal]]))
 
 ;;##Primitive Demand and DemandStore Operations
 
@@ -805,7 +805,6 @@
                    (assoc demand :units-assigned {}))}))))
 
 ;;#Demand DeActivation
-
 (defn deactivate-demand
   "Frees resources associated with a demand, sending home any units proximate 
    to the demand.  Removes the demand from the active set."
@@ -829,8 +828,14 @@
             ctx 
             (get-deactivations demandstore))))
 
-;;##Demand Management
+;;#Analysis...
+(defn profile 
+  "Builds a temporal profile of all the demands in the store."
+  [store]
+  (temporal/active-intervals 
+   (temporal/activity-profile (vals (:demandmap store)) :start-func :startday :duration-func :duration)))
 
+;;##Demand Management
 (defn manage-demands
   "High level demand management API.  The primary system service used by the 
    simulation engine.  Processes the activation and deactivation of demands 

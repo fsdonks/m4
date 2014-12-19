@@ -27,6 +27,7 @@
                         [table :as tbl]
                         [reducers]
                         [cellular :as cells]]
+            [spork.sketch :as sketch]                        
             [spork.entitysystem.store]
             [spork.sim.simcontext :as sim]
             [marathon.data.simstate :as simstate]            
@@ -241,6 +242,27 @@
       (coll-reduce [this f1]   (reduce (fn [acc v] (f1 acc v)) (f1) ents))
       (coll-reduce [_ f1 init] (reduce (fn [acc v] (f1 acc v)) init ents))))) 
 
+
+(defn demands->track [xs] 
+   (sketch/->track (map (fn [r] (merge r {:start (:startday r)})) xs) :track-name name))
+
+(defn demand->tracks  
+  [xs & {:keys [keyf] :or {keyf (juxt :demandgroup :src)}}]
+  (for [[g xs] (group-by keyf xs)]
+    [g (map (fn [r] (merge r {:start (:startday r)})) xs)]))
+
+  
+(defn visualize-demand [ctx & {:keys [keyf] :or {keyf (juxt :demandgroup :src)}}]  
+  (let [ds (demands ctx)
+        event->color (zipmap (keys ds) (sketch/palette))
+        tracks (demand->tracks (vals ds) :keyf keyf)]
+  (sketch/with-event->color event->color
+    (sketch/sketch-image
+     (sketch/scale 1.0 1.5
+            (sketch/stack [(sketch/->tracks tracks)
+                           ;(sketch/translate 10 5 (sketch/scale 2.0
+                           ;2.0 (sketch/->legend event->color)))
+                           ]))))))
 
 ;;#Shared Functions
 

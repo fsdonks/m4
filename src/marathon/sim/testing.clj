@@ -13,6 +13,7 @@
             [marathon.data [simstate :as simstate]]
             [spork.sim     [simcontext :as sim]]
             [spork.util.reducers]
+            [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]))
 
@@ -142,7 +143,7 @@
 
 ;;our canonical test data...
 (def test-dstore m-dstore)
-(def testctx (core/set-policystore testctx pstore))
+(def testctx (core/merge-updates {:policystore  pstore :demandstore test-dstore} testctx))
 
 ;;#unit processing#
 ;;build a supply store...
@@ -156,9 +157,12 @@
 ;;bulk updates where possible.  
 (def processed        (ent/process-units us testctx))
 
+
 ;;TODO# add tests for mutable version of process-units!
 
-
+(comment 
+(def trk (sketch/->track (map (fn [r] (merge r {:start (:startday r)})) (vals (core/demands processed))) :track-name :name))
+)
 
 
 
