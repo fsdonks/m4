@@ -446,15 +446,15 @@
   "Subscribes a unit to policy by establishing a relation with the policy in
    the policy store.  Rather than storing subscriptions in the policy, we now
    keep them in the policystore."
-  [unit policy  scriptsref]
+  [unit policy  scripts]
   (let [new-policy (policy-name policy)
         nm         (:name unit)
-        scriptsref (swap! scriptsref add-sub! new-policy nm)]
+        scripts (add-sub! scripts new-policy nm)]
     (if-let [old-policy (policy-name (:policy unit))]
       (if (identical? old-policy new-policy) 
-        scriptsref
-        (do (swap! scriptsref drop-sub! old-policy nm) 
-            scriptsref)))))
+        scripts
+        (do (drop-sub! scripts old-policy nm) 
+            scripts)))))
 
 (defn unsubscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in

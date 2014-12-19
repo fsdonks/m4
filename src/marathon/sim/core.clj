@@ -29,7 +29,7 @@
                         [cellular :as cells]]
             [spork.entitysystem.store]
             [spork.sim.simcontext :as sim]
-            [marathon.data.simstate :as simstate]
+            [marathon.data.simstate :as simstate]            
             [clojure.core.reducers :as r]))
 
 ;;Possible use of dynamic context for later....
@@ -201,6 +201,45 @@
          :when (where nm)]
      [nm (if (map? obj) (keys obj) obj)]
      )])
+
+(defn rvals [kvs]
+  (reify
+    clojure.lang.Counted 
+    (count [this] (count kvs))
+    clojure.lang.Seqable 
+    (seq [this] (seq kvs))
+    clojure.core.protocols/CollReduce
+    (coll-reduce [this f1]
+      (reduce-kv (fn [acc k v] (f1 acc v)) (f1) kvs))
+    (coll-reduce [_ f1 init]
+      (reduce-kv (fn [acc k v] (f1 acc v)) init kvs))))
+
+(defn rkeys [kvs]
+  (reify
+    clojure.lang.Counted 
+    (count [this] (count kvs))
+    clojure.lang.Seqable 
+    (seq [this] (seq kvs))
+    clojure.core.protocols/CollReduce
+    (coll-reduce [this f1]
+      (reduce-kv (fn [acc k v] (f1 acc k)) (f1) kvs))
+    (coll-reduce [_ f1 init]
+      (reduce-kv (fn [acc k v] (f1 acc k)) init kvs))))
+
+;;This is a trivial proxy for the entity store.  We'll port this over
+;;once the backend/state management is stable.
+(defn entities [ctx]  
+  (let [xs   (->> ctx  ((juxt demands units periods)))
+        n    (reduce + (map count xs))
+        ents (-> xs  (r/mapcat rvals))]
+    (reify 
+      clojure.lang.Seqable 
+      (seq [obj] (concat (vals (units ctx)) (vals (demands ctx)) (vals (periods ctx))))
+      clojure.lang.Counted 
+      (count [obj] n)
+      clojure.core.protocols/CollReduce
+      (coll-reduce [this f1]   (reduce (fn [acc v] (f1 acc v)) (f1) ents))
+      (coll-reduce [_ f1 init] (reduce (fn [acc v] (f1 acc v)) init ents))))) 
 
 
 ;;#Shared Functions
