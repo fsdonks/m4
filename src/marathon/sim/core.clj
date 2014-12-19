@@ -250,19 +250,18 @@
   [xs & {:keys [keyf] :or {keyf (juxt :demandgroup :src)}}]
   (for [[g xs] (group-by keyf xs)]
     [g (map (fn [r] (merge r {:start (:startday r)})) xs)]))
-
   
 (defn visualize-demand [ctx & {:keys [keyf] :or {keyf (juxt :demandgroup :src)}}]  
   (let [ds (demands ctx)
-        event->color (zipmap (keys ds) (sketch/palette))
-        tracks (demand->tracks (vals ds) :keyf keyf)]
-  (sketch/with-event->color event->color
-    (sketch/sketch-image
-     (sketch/scale 1.0 1.5
-            (sketch/stack [(sketch/->tracks tracks)
-                           ;(sketch/translate 10 5 (sketch/scale 2.0
-                           ;2.0 (sketch/->legend event->color)))
-                           ]))))))
+        coloring (zipmap (keys ds) (sketch/palette))
+        tracks   (demand->tracks (vals ds) :keyf keyf)]
+    (sketch/with-event->color (fn [e] (get coloring (:name e) ))
+      (sketch/sketch-image
+       (sketch/scale 1.0 1.5
+                     (sketch/stack [(sketch/->tracks tracks)
+                                        ;(sketch/translate 10 5 (sketch/scale 2.0
+                                        ;2.0 (sketch/->legend event->color)))
+                                    ]))))))
 
 ;;#Shared Functions
 
