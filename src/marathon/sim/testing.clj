@@ -143,26 +143,26 @@
 
 ;;our canonical test data...
 (def test-dstore m-dstore)
-(def testctx (core/merge-updates {:policystore  pstore :demandstore test-dstore} testctx))
+(def loadedctx (core/merge-updates {:policystore  pstore :demandstore test-dstore} testctx))
 
 ;;#unit processing#
 ;;build a supply store...
 (def supply-records    (sd/get-sample-records :SupplyRecords))
-(def sstore            (core/get-supplystore testctx))
+(def sstore            (core/get-supplystore loadedctx))
 (def us                (ent/units-from-records supply-records sstore pstore))
   
 ;;processing units, adding stuff.
 ;;Note, this is taking about a second for processing 30000 units.
 ;;Most of that bottleneck is due to not using transients and doing
 ;;bulk updates where possible.  
-(def testctx        (ent/process-units us testctx))
+(def loadedctx        (ent/process-units us loadedctx))
 
 
 
 ;;TODO# add tests for mutable version of process-units!
 
 (def test-fillstore (setup/default-fillstore))
-(def testctx        (core/set-fillstore test-fillstore))
+(def loadedctx        (core/set-fillstore loadedctx test-fillstore))
 
 (comment 
 

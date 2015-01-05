@@ -6,7 +6,8 @@
   (:require [marathon.sim.sampledata :as sd]
             [marathon.sim [policy :as policy]
                           [policyio :as policyio]]
-            [marathon.sim.fill [fillgraph :as fillgraph]]
+            [marathon.sim.fill [fillgraph :as fillgraph]
+                               [scope :as scope]]
             [marathon.fill [fillstore :as fillstore]]
             [spork.util.tags :as tags]))
 
