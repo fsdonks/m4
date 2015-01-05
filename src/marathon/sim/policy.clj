@@ -613,22 +613,30 @@
             (conj acc (build-policy policy-name pieces child-policies)))  [] compositions))
 
 (defn permanent-record? [r] (= (get r :Period) "Permanent"))
-(defn equivalence-key [delim recepient donor] (keyword (str  recepient delim donor)))
+
+;;Modified to simplify representation...
+(defn equivalence-key [delim recepient donor] 
+  ;(keyword (str  recepient delim donor))
+  [recepient delim donor])
+
 ;accesor for equivalency relations in a policystore
 (defn get-equivalencies [policystore] 
   (get-in policystore [:rules :equivalencies]))
 ;accessor for substitution relations in a policystore
 (defn get-subs [policystore] (get-in policystore [:rules :substitutions]))
+
 ;Adds an equivalence relationship to the policystore
 (defn add-equivalence [recepient donor policystore]
   (let [delim (:ruledelim policystore)] 
     (gen/deep-assoc policystore 
-        [:rules :equivalencies (equivalence-key delim recepient donor)] 0))) 
+        [:rules :equivalencies (equivalence-key := recepient donor)] 0)))
+ 
 ;Adds a substitution relationship to the policystore
 (defn add-substitution [recepient donor cost policystore]
   (let [delim (:ruledelim policystore)]
     (gen/deep-assoc policystore 
-        [:rules :substitutions (equivalence-key delim recepient donor)] cost)))
+        [:rules :substitutions (equivalence-key :|> recepient donor)] cost)))
+
 ;determine if the policystore has a registered rule
 (defn has-rule? [rule policystore] 
   (or (contains? (get-subs policystore) rule)

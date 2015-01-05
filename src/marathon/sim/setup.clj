@@ -6,6 +6,8 @@
   (:require [marathon.sim.sampledata :as sd]
             [marathon.sim [policy :as policy]
                           [policyio :as policyio]]
+            [marathon.sim.fill [fillgraph :as fillgraph]]
+            [marathon.fill [fillstore :as fillstore]]
             [spork.util.tags :as tags]))
 
 ;;A central resource for getting tables.  
@@ -84,11 +86,13 @@
 ;; End Function
 
 ;;so far the fillstore is kind of unnecessary.
-(defn default-fillstore [simstate]
-  
-  )
-   
-
+(defn default-fillstore []
+  (let [fg (fillgraph/tables->fillgraph 
+            (get-table :SupplyRecords)
+            (get-table :DemandRecords)
+            (get-table :RelationRecords))
+        fm (fillgraph/fill-map fg)]
+    (fillstore/make-fillstore :fillgraph fg :fillmap fm)))
 
 ;; 'Return a scoped set of supply and demand, based on the information in the fillgraph of the local
 ;; 'fillstore.

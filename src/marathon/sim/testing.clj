@@ -155,10 +155,14 @@
 ;;Note, this is taking about a second for processing 30000 units.
 ;;Most of that bottleneck is due to not using transients and doing
 ;;bulk updates where possible.  
-(def processed        (ent/process-units us testctx))
+(def testctx        (ent/process-units us testctx))
+
 
 
 ;;TODO# add tests for mutable version of process-units!
+
+(def test-fillstore (setup/default-fillstore))
+(def testctx        (core/set-fillstore test-fillstore))
 
 (comment 
 

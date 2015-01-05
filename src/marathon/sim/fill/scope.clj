@@ -43,20 +43,26 @@
 ;;Given  scopeing information, specifically a nested map of srcs that 
 ;;are in scope or out of scope, applies the implicit scoping rules to
 ;;the simulation context, removing entities are unnecessary.  
-(defn apply-scope    [scopeinfo ctx]
-  (core/with-simstate [[demandstore supplystore parameters] ctx]
-    (let [outs (:SRCs-In-Scope     parameters)
-          ins  (:SRCs-Out-Of-Scope parameters)
-          {:keys [in-scope out-of-scope islands]} scopeinfo]
-      (->> ctx
-           (scoped-demand!  islands)
-           (scoped-supply!  islands)
-           (core/merge-updates 
-            {:demandstore (demand/scope-demand demandstore (:demand islands))
-             :supplystore (supply/scope-supply supplystore (:supply islands))
-             :parameters  (-> parameters 
-                              (update-in [:SRCs-In-Scope] merge in-scope)
-                              (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))})))))
+(defn apply-scope    
+  ([scopeinfo ctx]
+     (core/with-simstate [[demandstore supplystore parameters fillstore] ctx]
+       (let [{:keys [in-scope out-of-scope islands]} scopeinfo]
+         (->> ctx
+              (scoped-demand!  islands)
+              (scoped-supply!  islands)
+              (core/merge-updates 
+               {:demandstore (demand/scope-demand demandstore (:demand islands))
+                :supplystore (supply/scope-supply supplystore (:supply islands))
+                :parameters  (-> parameters 
+                                 (update-in [:SRCs-In-Scope] merge in-scope)
+                                 (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))
+             ;;temporarily removed, appears vestigial
+             ;; :fillstore   (-> fillstore 
+             ;;                  (update-in [:outofscope] merge out-of-scope))
+                })))))
+  ([ctx] (if-let [g (get (core/get-fillstore ctx) :fillgraph)]
+           (apply-scope (derive-scope g) ctx)
+           (throw (Exception. (str "No fillgraph exists, cannot scope!"))))))
 
 ;;Although we have the capacity to divide a very large run into N independent runs,
 ;;we arent currently doing that.  There is some necessary bookeeping to perform to pull that off,

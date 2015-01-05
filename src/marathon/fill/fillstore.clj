@@ -6,6 +6,7 @@
 ;run, and any other associated data.
 (defrecord+ fillstore [[name :FillStore] 
                        fillgraph 
+                       fillmap
                        fillfunction 
                        [fills {}]
                        rendergraphs  

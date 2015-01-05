@@ -271,6 +271,25 @@
 (defn visualize-demands [ctx  & {:keys [track-keyf color-keyf] :or {track-keyf (juxt :demandgroup :src)
                                                                     color-keyf (juxt :vignette)}}]
   (visualize-events (vals (demands ctx)) track-keyf color-keyf))
+
+(defn visualize-supply [ctx]
+  (->> (units ctx)
+       (vals)
+       (map (fn [u] (update-in u [:policy] :name)))
+       (spork.util.table/records->table)
+       (spork.util.table/visualize)))
+
+(defn visualize-fillmap [ctx]
+  (if-let [fm (:fillmap (get-fillstore ctx))]
+    (->> (for [[parent children] fm
+               [child cost] children]
+           {:donor parent :recepient child :cost cost})
+         (spork.util.table/records->table)
+         (spork.util.table/select :fields [:donor :recepient :cost] :from)
+         (spork.util.table/visualize))
+    (throw (Exception. "No fill map to visualize!"))))
+    
+       
 ;;#Shared Functions
 
 ;;These functions were extracted due to use across multiple domains.  I may 
