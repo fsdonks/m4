@@ -262,7 +262,7 @@
     (sketch/with-event->color (fn [e] (get coloring (color-keyf e)))
       (sketch/sketch-image
        (sketch/scale 1.0 1.5
-                     (sketch/stack [rendered-tracks
+                     (sketch/stack [(sketch/->tracks tracks)
                                    ; (sketch/translate 10 5 
                                    ;    (sketch/scale (float (/ track-width lwidth)) 2.0
                                    ;      lgnd))
@@ -302,7 +302,7 @@
 (defn followon? [u] (:followoncode u))
 (defn ghost-followon? [u] (and (ghost? u) (followon? u)))
 
-(defn interval->date [t ctx]
+(defn interval->date  [t ctx]
   (let [[start-date time-scale] ((juxt [:start-date :time-scale])  
                                   (get-parameters ctx))] 
     (+ start-date (* time-scale t))))
