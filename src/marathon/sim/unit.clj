@@ -14,19 +14,23 @@
 (defn add-unit [supplystore unit]
   (gen/assoc2 supplystore :unitmap (:name unit) unit))
 
+(defn short-policy [u]  (assoc u :policy (:name (:policy u))))
+
+;;CHANGE hiding unit policy 
 ;;Records unit movement between locations.
 (defn unit-moved-event!  [unit newlocation ctx]
   (let [nm  (:name unit) 
         loc (:locationname unit)
         msg (str nm " moved from " loc " to " newlocation " on day " (sim/get-time ctx))]
-   (sim/trigger-event :UnitMoved nm newlocation  msg unit ctx)))
+   (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
+;;CHANGE hiding unit policy 
 ;;Records the first time a unit moved.
 (defn unit-first-moved-event!  [unit newlocation ctx]
   (let [nm  (:name unit) 
         loc (:locationname unit)
         msg (str nm " Started moving from " loc " to " newlocation " on day " (sim/get-time ctx))]
-   (sim/trigger-event :UnitMoved nm newlocation  msg unit ctx)))
+   (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
 
 ;;Typically resides in unit/change-state, but we probably 

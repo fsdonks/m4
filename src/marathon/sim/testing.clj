@@ -177,7 +177,7 @@
 ;;An entire context loaded from the default project.
 ;;Includes scoping information, supply, demand, policy, etc.  This
 ;;will be the new hub for regression testing.
-(def defaultctx       (setup/default-simstate))
+(def defaultctx       (setup/default-simstate core/debugsim))
 
 (def nonzero-supply-srcs
   (into #{} (r/map :SRC (r/filter #(pos? (:Quantity %)) (setup/get-table :SupplyRecords)))))

@@ -219,7 +219,7 @@
 ;;#General Supply Notifications
 
 (defn spawning-unit! [unit ctx]
-  (sim/trigger-event :spawnnit (:name unit) (:name unit)
+  (sim/trigger-event :SpawnUnit (:name unit) (:name unit)
      (str "Spawned Unit " (:name unit)) nil ctx))             
 
 (defn spawning-ghost! [unit ctx]

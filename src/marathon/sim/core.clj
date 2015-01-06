@@ -183,12 +183,13 @@
 (def ^:dynamic *debug* nil)
 (def ^:dynamic *ignored* #{})
 
+
 (defmacro debugging [& expr]
   `(binding [~'marathon.sim.core/*debug* true]
      ~@expr))
 
 (defmacro ignoring [es & expr]
-  `(binding [~'marathon.sim.core/*ignored*  ~es]
+  `(binding [~'marathon.sim.core/*ignored*  (into ~'marathon.sim.core/*ignored* ~es)]
      ~@expr))
 
 (defmacro noisy [es & expr]
@@ -198,10 +199,16 @@
 (defn visible? [edata] 
   (and *debug*
      (not (*ignored* (spork.sim.data/event-type edata)))))
+
+(def ^:dynamic *event-filter* visible?)
+(defmacro with-event-filter [f & expr]
+  `(binding [~'marathon.sim.core/*event-filter* ~f]
+     ~@expr))
+
 (def debugsim   
   (-> (sim/make-debug-context 
        :debug-handler  (fn [ctx edata name] 
-                         (do  (when (visible? edata)
+                         (do  (when (*event-filter* edata)
                                 (println (sim/debug-msg ":debugger saw " 
                                                         {:type (spork.sim.data/event-type  edata) 
                                                          :from (spork.sim.data/event-from edata)
