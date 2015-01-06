@@ -462,7 +462,7 @@
         conj-unit  (fn [acc x] (do (swap! unit-count inc)
                                    (conj! acc x)))]
     (->> recs 
-         (r/filter #(pos? (:Quantity %))) ;;We need to add data validation, we'll do that later....
+         (r/filter #(and (:Enabled %) (pos? (:Quantity %)))) ;;We need to add data validation, we'll do that later....
          (reduce (fn [acc r]                    
                    (if (> (:Quantity r) 1) 
                      (conj-units acc 
@@ -581,7 +581,7 @@
            (supply/register-unit supplystore behaviors prepped nil extra-tags)
            ;CHECK added this guy, lifted out from initialize-cycle,
            ;since it operates on a context, not a unit directly.
-           (unitsim/change-location prepped (:policyposition prepped))))))
+           (unitsim/change-location prepped (:positionpolicy prepped))))))
 
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters behaviors] ctx]

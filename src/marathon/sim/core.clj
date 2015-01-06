@@ -181,6 +181,7 @@
 (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
 ;;A useful debugging context for us.  Prints out everything it sees.
 (def ^:dynamic *debug* nil)
+(def ^:dynamic *verbose* nil)
 (def ^:dynamic *ignored* #{})
 
 
@@ -206,17 +207,20 @@
      ~@expr))
 
 (def debugsim   
-  (-> (sim/make-debug-context 
-       :debug-handler  (fn [ctx edata name] 
-                         (do  (when (*event-filter* edata)
-                                (println (sim/debug-msg ":debugger saw " 
-                                                        {:type (spork.sim.data/event-type  edata) 
-                                                         :from (spork.sim.data/event-from edata)
-                                                         :to   (spork.sim.data/event-to edata)
-                                                         :msg  (sim/packet-message edata)
-                                                         :data (spork.sim.data/event-data  edata)})))
-                              ctx))) 
-      (assoc :state emptystate)))
+  (->> (-> (sim/make-debug-context 
+            :debug-handler  
+            (fn [ctx edata name] 
+              (do  (when (*event-filter* edata)
+                     (println (if *verbose* (sim/debug-msg  ":debugger saw " 
+                                                            {:type (spork.sim.data/event-type  edata) 
+                                                             :from (spork.sim.data/event-from edata)
+                                                             :to   (spork.sim.data/event-to edata)
+                                                             :msg  (sim/packet-message edata)
+                                                             :data (spork.sim.data/event-data  edata)})
+                                  (sim/debug-msg (sim/packet-message edata)))))
+                   ctx))) 
+           (assoc :state emptystate))
+       (sim/add-time 0)))
 
 ;;#State-wide queries...
 ;;tbd
@@ -269,6 +273,7 @@
       (coll-reduce [this f1]   (reduce (fn [acc v] (f1 acc v)) (f1) ents))
       (coll-reduce [_ f1 init] (reduce (fn [acc v] (f1 acc v)) init ents)))))
 
+;;#Useful Vizualizations of the simulation context
 (defn demands->track [xs] 
    (sketch/->track (map (fn [r] (merge r {:start (:startday r)})) xs) :track-name name))
 

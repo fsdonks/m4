@@ -179,18 +179,21 @@
 ;;will be the new hub for regression testing.
 (def defaultctx       (setup/default-simstate core/debugsim))
 
-(def nonzero-supply-srcs
-  (into #{} (r/map :SRC (r/filter #(pos? (:Quantity %)) (setup/get-table :SupplyRecords)))))
+(defn nonzero-srcs [tbl]
+  (into #{} (r/map :SRC (r/filter #(and (:Enabled %)(pos? (:Quantity %))) tbl ))))
 
-(def nonzero-demand-srcs
-  (into #{} (r/map :SRC (r/filter #(pos? (:Quantity %)) (setup/get-table :DemandRecords)))))
+(def nonzero-supply-srcs  (nonzero-srcs (setup/get-table :SupplyRecords)))
+(def nonzero-demand-srcs  (nonzero-srcs (setup/get-table :DemandRecords)))
 
 (def expected-srcs (clojure.set/union nonzero-supply nonzero-demand))
 
 (deftest correct-context
   (is (= nonzero-supply-srcs
          (set (map :src (vals (core/units defaultctx)))))
-      "Should have all the supply loaded."))
+      "Should have all the supply loaded.")
+  (is (= nonzero-demand-srcs
+         (set (map :src (vals (core/demands defaultctx)))))
+      "Should have all the demand loaded."))
   
 ;;can we run a demand simulation?
 

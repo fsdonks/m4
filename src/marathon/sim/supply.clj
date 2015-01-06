@@ -238,14 +238,14 @@
 (defn more-src-available! [unit ctx]
   (let [src (get unit :src)]
     (sim/trigger-event :MoreSRCAvailable "SupplyManager" src 
-       (str "Unit " (:name unit) " at position " (:position-policy unit) 
+       (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
             "has just been added to deployables for SRC " src) nil ctx))) 
 (defn new-src-available! [src ctx]
   (sim/trigger-event :NewSRCAvailable "SupplyManager" src 
      (str "A new category of SRC now has deployable supply " src) nil ctx))
 (defn not-deployable! [unit ctx] 
   (sim/trigger-event :NotDeployable "SupplyManager" (:name unit) 
-     (str "Unit " (:name unit) " at posiotion " (:position-policy unit) 
+     (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
           " is no longer deployable") nil ctx))
 (defn out-of-stock! [src ctx]
   (sim/trigger-event :outofstock "SupplyManager" src 
@@ -321,7 +321,7 @@
    unit's policy state."
   ([supply unit followon spawning ctx]
 ;     (assert (not (empty-position? unit)) (core/msg "invalid position!" (:positionpolicy unit)))
-     (let [position (:position-policy unit)
+     (let [position (:positionpolicy unit)
            src      (get unit :src)]
        (if (or followon (u/can-deploy? unit spawning))                         ;1)
          (->> (if followon  ;notifiying of followon data...
