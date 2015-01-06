@@ -1,11 +1,10 @@
-(ns marathon.data.cycle
-  (:use [spork.util.record :only [defrecord+ with-record]]))
-
-;cyclerecord
 ;Provides a container for an invidual unit's cycle information.  Specifically, 
 ;the policy followed, the unit in the cycle, the component of the unit, the 
 ;accumulated state during the cycle (bog, mob, dwell, etc.), start and end 
 ;of the cycle, transitions in the cycle, and more...
+(ns marathon.data.cycle
+  (:use [spork.util.record :only [defrecord+ with-record]]))
+
 (defrecord+ cyclerecord 
   [uic-name    ;Associated uic
    src        ;The unit-type, or template that identifies the unit's capability.
@@ -39,8 +38,8 @@
     (with-record cyclerec
       :bog-expected  bogtime
       :bogbudget (if (zero? bogbudget) bogtime bogbudget)
-      :bog-to-dwell-expected =  (/ 1 (/ (+ MOBtime bogbudget)  
-                              (-  policyduration (+ bogbudget  MOBtime))))
+      :bog-to-dwell-expected  (/ 1 (/ (+ MOBtime bogbudget)  
+                                      (-  policyduration (+ bogbudget  MOBtime))))
       :duration-expected  policyduration
       :dwell-expected  dwelltime
       :mob-expected  MOBtime

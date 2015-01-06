@@ -11,8 +11,9 @@
 ;;opportunities arise, we may be able to abastract out 
 ;;functionality.
 (ns marathon.sim.entityfactory
-  (:require [marathon        [schemas :as s]]
+  (:require [marathon        [schemas :as s]]            
             [marathon.data.protocols :as generic] ;rename
+            [marathon.data   [cycle :as cyc]]
             [marathon.demand [demanddata :as d]]
             [marathon.sim.demand :as demand]
             [marathon.sim.unit :as unitsim]
@@ -281,6 +282,8 @@
 ;;We need access to multiple spheres of influence.  We used to just
 ;;mutate away and let the changes propgate via effects.  No mas.
 ;;Returns a policystore update and a unit update.
+;;#TODO Implement policy->cycle-record 
+;;#TODO Populate unit's first cycle.
 (defn initialize-cycle 
   "Given a unit's policy, subscribes the unit with said policy, 
    updates the unit's state to initial conditions, broadcasts 
@@ -289,11 +292,15 @@
   [unit policy ghost ctx]
   (let [newpos (if (not ghost) 
                  (generic/get-position policy (:cycletime unit))
-                 "Spawning")] 
+                 "Spawning")
+        ;; cyclerec (cyc/cycle-NewCycle (policy->cycle-record policy (:name unit) 
+        ;;                                                           (:src unit)
+        ;;                                                           (:component unit)))
     (-> unit 
         (assoc :policy policy)
         (assoc :positionpolicy newpos)
         (assoc :locationname "Spawning")  
+        
 ;        (unitsim/change-location newpos ctx)
         )))
 
