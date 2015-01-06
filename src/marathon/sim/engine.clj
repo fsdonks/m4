@@ -26,7 +26,7 @@
             [marathon.sim.core   :refer [now]]           
             [marathon.sim.supply :as supply :refer [manage-supply manage-followons update-all]]
             [marathon.sim.demand :as demand :refer [manage-demands manage-changed-demands]]
-            [marathon.sim.fill.demand    :refer [fill-demands]]
+            [marathon.sim.fill.demand       :refer [fill-demands]]
             [marathon.sim.policy :as policy :refer [manage-policies]]
             [marathon.data [simstate :as simstate]]
             [spork.sim     [simcontext :as sim]]))

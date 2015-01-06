@@ -25,7 +25,7 @@
   ([name]      (get *tables* name (get *tables* (alt-name name))))
   ([name tbls] (get tbls name (get tbls (alt-name name)))))
 
-;; 'Automates the building of a default behavior manager, linking it to a supply store.
+;;Automates the building of a default behavior manager, linking it to a supply store.
 
 ;; Public Function defaultBehaviorManager(state As TimeStep_SimState, Optional bm As TimeStep_ManagerOfBehavior) As TimeStep_ManagerOfBehavior
 ;; If bm Is Nothing Then Set bm = New TimeStep_ManagerOfBehavior
@@ -82,15 +82,8 @@
       ;(policy/initialize-policystore ctx)
       ))
 
-;; 'Creates a fill store and scopes the state as a side effect.
-;; Public Function defaultFillStore(state As TimeStep_SimState) As TimeStep_ManagerOfFill
-;; Set defaultFillStore = MarathonOpFill.fillStoreFromTables(state, getTable("SupplyRecords"), _
-;;                                                       getTable("DemandRecords"), _
-;;                                                       getTable("RelationRecords"))
-;; 
-;; End Function
-
-;;so far the fillstore is kind of unnecessary.
+;;Creates a fill store, which provides information for fill
+;;preferences as well as scoping information.
 (defn default-fillstore []
   (let [fg (fillgraph/tables->fillgraph 
             (get-table :SupplyRecords)
@@ -99,35 +92,21 @@
         fm (fillgraph/fill-map fg)]
     (fillstore/make-fillstore :fillgraph fg :fillmap fm)))
 
-;; 'Return a scoped set of supply and demand, based on the information in the fillgraph of the local
-;; 'fillstore.
-;; Public Function defaultScopedState(state As TimeStep_SimState) As TimeStep_SimState
-;; Set defaultScopedState = MarathonOpFill.scopeSimState(state.fillstore.fillgraph, state)
-;; End Function
-
+;;Return a scoped set of supply and demand, based on the information in the fillgraph of the local
+;;fillstore.
 
 ;;TODO# This guy is not applying scoping rules, and leaving us to
 ;;exclude every demand.
 (defn default-scoped-state [ctx] (scope/apply-scope ctx))
 
-;; 'Creates a default supply.  The default is to derive from Excel worksheets.
-;; Public Function defaultSupply(state As TimeStep_SimState, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
-;; Set defaultSupply = New TimeStep_ManagerOfSupply
-;; MarathonOpSupply.fromExcel defaultSupply, state.policystore, state.parameters, state.behaviormanager, state.context, ensureghost
-;; End Function
-
-
+;;Creates a default supply.  The default is to derive from Excel worksheets.
 (defn default-supply [ctx & {:keys  [records]
                              :or {records (sd/get-sample-records :SupplyRecords)}}]
   (let [sstore (core/get-supplystore ctx)
         pstore (core/get-policystore ctx)]
     (ent/process-units (ent/units-from-records records sstore pstore) ctx)))
 
-;; 'Creates a default demand.  The default is to derive from Excel worksheets.
-;; Public Function defaultDemand(state As TimeStep_SimState) As TimeStep_ManagerOfDemand
-;; MarathonOpDemand.fromExcel state
-;; Set defaultDemand = state.demandstore
-;; End Function
+;;Creates a default demand.  The default is to derive from Excel worksheets.
 (defn default-demand [ctx & {:keys  [records]
                              :or {records (sd/get-sample-records :DemandRecords)}}]
   (let [ds  (ent/demands-from-records records ctx)]
@@ -135,7 +114,6 @@
 
 ;;TODO parameterize this to work off data, rather than the default
 ;;records we have baked in at the moment....
-;;TODO fix problem with scoping not being applied/updated
 (defn default-simstate 
   ([ctx]
       (-> ctx 

@@ -180,16 +180,36 @@
 (def emptystate (simstate/make-simstate))
 (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
 ;;A useful debugging context for us.  Prints out everything it sees.
+(def ^:dynamic *debug* nil)
+(def ^:dynamic *ignored* #{})
+
+(defmacro debugging [& expr]
+  `(binding [~'marathon.sim.core/*debug* true]
+     ~@expr))
+
+(defmacro ignoring [es & expr]
+  `(binding [~'marathon.sim.core/*ignored*  ~es]
+     ~@expr))
+
+(defmacro noisy [es & expr]
+  `(debugging 
+    (ignoring ~es ~@expr)))
+
+(defn visible? [edata] 
+  (and *debug*
+     (not (*ignored* (spork.sim.data/event-type edata)))))
 (def debugsim   
   (-> (sim/make-debug-context 
        :debug-handler  (fn [ctx edata name] 
-                         (do (println (sim/debug-msg ":debugger saw " 
-                                  {:type (spork.sim.data/event-type  edata) 
-                                   :from (spork.sim.data/event-from edata)
-                                   :to (spork.sim.data/event-to edata)
-                                   :msg (sim/packet-message edata)
-                                   :data (spork.sim.data/event-data  edata)})) ctx))) 
-                 (assoc :state emptystate)))
+                         (do  (when (visible? edata)
+                                (println (sim/debug-msg ":debugger saw " 
+                                                        {:type (spork.sim.data/event-type  edata) 
+                                                         :from (spork.sim.data/event-from edata)
+                                                         :to   (spork.sim.data/event-to edata)
+                                                         :msg  (sim/packet-message edata)
+                                                         :data (spork.sim.data/event-data  edata)})))
+                              ctx))) 
+      (assoc :state emptystate)))
 
 ;;#State-wide queries...
 ;;tbd

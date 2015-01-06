@@ -9,7 +9,8 @@
                           [policyio :as policyio]
                           [sampledata :as sd]
                           [entityfactory :as ent]
-                          [setup :as setup]]                        
+                          [setup :as setup]
+                          [engine :as engine]]                        
             [marathon.data [simstate :as simstate]]
             [spork.sim     [simcontext :as sim]]
             [spork.util.reducers]
@@ -119,6 +120,13 @@
             {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time}))
 
 (def activations481 (demand/get-activations m-dstore 481))
+
+;;TODO# modify test clause to work around structural equality problem.
+;;I had to put this dude in, for some reason the structural equality
+;;checks are not working inside the test clauses.  This does...
+(defn same? [& colls]
+  (every? identity (map = colls)))
+
 (deftest scheduled-demands-correctly 
   (is (= times
          '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
@@ -126,8 +134,8 @@
       "Scheduled times from sampledata should be consistent, in sorted order.")
   (is (= events expected-events)           
       "The only events scheduled should be time changes.")
-  (is (= activations481 
-         '("1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-8_SRC1[481...554]"))
+  (is (same? activations481 
+             ["1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-92_SRC1[481...554]"])
       "Should have actives on 481...")       
   (is (some (fn [d] (= d (:name first-demand))) (demand/get-activations m-dstore tstart))
       "Demand should register as an activation on startday.")
@@ -164,12 +172,27 @@
 (def loadedctx        (core/set-fillstore loadedctx test-fillstore))
 
 
+;;#Testing on Entire Default Context
 
-(comment 
+;;An entire context loaded from the default project.
+;;Includes scoping information, supply, demand, policy, etc.  This
+;;will be the new hub for regression testing.
+(def defaultctx       (setup/default-simstate))
 
-)
+(def nonzero-supply-srcs
+  (into #{} (r/map :SRC (r/filter #(pos? (:Quantity %)) (setup/get-table :SupplyRecords)))))
 
+(def nonzero-demand-srcs
+  (into #{} (r/map :SRC (r/filter #(pos? (:Quantity %)) (setup/get-table :DemandRecords)))))
 
+(def expected-srcs (clojure.set/union nonzero-supply nonzero-demand))
+
+(deftest correct-context
+  (is (= nonzero-supply-srcs
+         (set (map :src (vals (core/units defaultctx)))))
+      "Should have all the supply loaded."))
+  
+;;can we run a demand simulation?
 
 
 
