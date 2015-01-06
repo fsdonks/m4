@@ -16,7 +16,7 @@
 ;;supply that cannot be used to fill demand.  We know an element is an
 ;;island if it has no 
 (defn find-islands [g]
-  (let [stripped       (graph/drop-nodes [:filled :unfilled])      
+  (let [stripped       (graph/drop-nodes g [:filled :unfilled])      
         supplies       (get-supplies g)
         demands        (get-demands g)
         isle-type      (fn [nd] (cond (supplies nd) :supply

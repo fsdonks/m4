@@ -4,7 +4,10 @@
 
 (ns marathon.sim.setup
   (:require [marathon.sim.sampledata :as sd]
-            [marathon.sim [policy :as policy]
+            [marathon.sim [core :as core]
+                          [demand :as demand]
+                          [supply :as supply]
+                          [policy :as policy]
                           [policyio :as policyio]
                           [entityfactory :as ent]]
             [marathon.sim.fill [fillgraph :as fillgraph]
@@ -102,6 +105,9 @@
 ;; Set defaultScopedState = MarathonOpFill.scopeSimState(state.fillstore.fillgraph, state)
 ;; End Function
 
+
+;;TODO# This guy is not applying scoping rules, and leaving us to
+;;exclude every demand.
 (defn default-scoped-state [ctx] (scope/apply-scope ctx))
 
 ;; 'Creates a default supply.  The default is to derive from Excel worksheets.
@@ -115,7 +121,7 @@
                              :or {records (sd/get-sample-records :SupplyRecords)}}]
   (let [sstore (core/get-supplystore ctx)
         pstore (core/get-policystore ctx)]
-    (ent/process-units (ent/units-from-records supply-records sstore pstore) ctx)))
+    (ent/process-units (ent/units-from-records records sstore pstore) ctx)))
 
 ;; 'Creates a default demand.  The default is to derive from Excel worksheets.
 ;; Public Function defaultDemand(state As TimeStep_SimState) As TimeStep_ManagerOfDemand
@@ -124,8 +130,25 @@
 ;; End Function
 (defn default-demand [ctx & {:keys  [records]
                              :or {records (sd/get-sample-records :DemandRecords)}}]
-  (let [ds  (ent/demands-from-records records)]
+  (let [ds  (ent/demands-from-records records ctx)]
     (demand/register-demands! ds ctx)))
+
+
+
+
+;;TODO parameterize this to work off data, rather than the default
+;;records we have baked in at the moment....
+;;TODO fix problem with scoping not being applied/updated
+(defn default-simstate 
+  ([ctx]
+      (-> ctx 
+          (core/set-parameters  (default-parameters))
+          (core/set-policystore (default-policystore))
+          (core/set-fillstore   (default-fillstore))
+          (default-scoped-state)         
+          (default-supply)
+          (default-demand)))
+  ([] (default-simstate core/emptysim)))
 
 
 ;;---------------------------------------------------
@@ -186,76 +209,8 @@
 ;;    tbl.FromSheet Worksheets(sheetname)
   
 ;;    MarathonOpFactory.unitsFromTable tbl, supplystore, behaviors, parameters, policystore, ctx
-  
-  
+ 
 ;;    End Sub 
-
-
-
-;; Public Function defaultSimState(Optional forRequirements As Boolean) As TimeStep_SimState
-;;  Set defaultSimState = makeSimState()
-;;     With defaultSimState
-;;         'tom change 10 SEP, needed a place to put this, might move it.
-;;         Set .behaviormanager = defaultBehaviorManager(.supplystore, .behaviormanager)
-;;         'moved from class_initialize
-;;         .supplystore.SupplyTraffic = True
-;;         .demandstore.demandtraffic = True
-;;         .policystore.PolicyTraffic = True
-;;         .parameters.Workstate = Initializing
-;;         'Tom Change
-;;         logStatus "Entering Marathon"
-;;         
-;;         
-;;         'profile "ParameterSetup"
-;;         'TESTING.
-;;         '.parameters.fromExcel
-;;         Set .parameters = defaultParameters()
-;;         'profile "ParameterSetup"
-;;         
-;;         'Allow requirements analysis to shorten sim time to only active demands.
-;;         If forRequirements Then
-;;             .truncateTime = True
-;;         End If
-;;     
-;;         'initialize the policy store
-;;         Set .policystore = defaultPolicyStore(.context)
-;;         
-;;         'Early scoping allows us to identify SRCs that are islands, and identify them.  Additionally,
-;;         'if we label them as out of scope, we don't waste time loading them only to scope them out after
-;;         'the fact.  Scoping basically sets up a filter for us.
-;;         If .earlyscoping Then
-;;             'Create a fillstore from supply, demand, policy, parameters - derived from state.
-;;             Set .fillstore = defaultFillStore(defaultSimState)
-;;             'scope the simulation state.  Mutation.
-;;             Set defaultSimState = defaultScopedState(defaultSimState)
-;;         End If
-;;         
-;;         'profile "SupplySetup"
-;;         Set .supplystore = defaultSupply(defaultSimState)
-;;         '.supplystore.fromExcel Worksheets("SupplyAggregate").Range("SupplyStart"), forRequirements
-;;         'profile "SupplySetup"
-;;         
-;;         'profile "DemandSetup"
-;;         Set .demandstore = defaultDemand(defaultSimState)
-;;         '.demandstore.fromExcel Worksheets("DemandRecords").Range("DemandStart")
-;;         'profile "DemandSetup"
-;;         
-;;         
-;;         'TOM Change 26 October -> separated output initialization.  Allows more freedom in generating multiple
-;;         'simulation states.
-;;         
-;; ''        'profile "OutputSetup"
-;; ''        'TOM Change 7 Jun 2011 -> moved to end to ensure locations are known prior to initialization.
-;; ''        .outputstore.init ActiveWorkbook.path & "\", , .policystore.locations, forRequirements
-;; ''        'profile "OutputSetup"
-;;         
-;;         If forRequirements Then
-;;             .NoSupplyWarning = True
-;;             'SupplyManager.UnitsFromDictionary unitrecords
-;;         End If
-;;     End With
-;; End Function
-
 
 ;; 'Tom Change 26 Oct 2012 -> extracted from simstate creation.  This is a side-effecting function.  forRequirements should
 ;; 'be pulled out...
