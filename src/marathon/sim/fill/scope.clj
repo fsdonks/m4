@@ -1,8 +1,30 @@
 ;;Functions that illuminate dependencies and infeasible data for 
 ;;marathon runs based on the topology of fill graphs.  
-(ns marathon.fill.scope
-  (:require [marathon.sim [core :as core]]
-            [spork.sim    [simcontext :as sim]]))
+(ns marathon.sim.fill.scope
+  (:require [marathon.sim [core :as core] [demand :as demand] [supply :as supply]]
+            [marathon.sim.fill [fillgraph :as fillgraph]]
+            [spork.sim    [simcontext :as sim]]
+            [spork.cljgraph [core :as graph]]))
+
+(defn get-supplies [g] (graph/source-map g :filled))
+(defn get-demands  [g] (graph/sink-map g :unfilled))
+
+;;given a raw fillgraph, returns a map of {:supply ... :demand ...
+;;:in-scope ...}
+;;where vals assocd to :supply are islands of supply that cannot be
+;;used to fill demand, and vals assocd to :demand are elements of
+;;supply that cannot be used to fill demand.  We know an element is an
+;;island if it has no 
+(defn find-islands [g]
+  (let [stripped       (graph/drop-nodes [:filled :unfilled])      
+        supplies       (get-supplies g)
+        demands        (get-demands g)
+        isle-type      (fn [nd] (cond (supplies nd) :supply
+                                     (demands nd) :demand
+                                     :else (throw (Exception.
+                                                   (str "Neither supply nor demand, err. " [nd g])))))]
+    (reduce (fn [acc nd] (update-in acc [(isle-type)] conj nd))
+            {:demand nil :supply nil} (graph/islands stripped))))
 
 ;;Given a fill graph  g, finds the islands (components of size 1 when :filled
 ;;and :unfilled are disabled)  Returns a map of srcs that are out of
@@ -10,22 +32,26 @@
 (defn derive-scope [g]
   (let [islands      (find-islands g)
         out-supply   (get islands :supply)
-        out-demand   (get islands :demand)]
+        out-demand   (get islands :demand)
+        in-supply    (reduce dissoc (get-supplies g) out-supply)
+        in-demand    (reduce dissoc (get-demands  g) out-demand)]
     {:out-of-scope 
-     (->as scoped  (reduce (fn [outofscope isle]
-                             (assoc outofscope (source-root isle) "No Demand")) {}
-                             supply)
-           
+     (as->   (reduce (fn [outofscope isle]
+                               (assoc outofscope (fillgraph/source-root isle) "No Demand")) {}
+                               out-supply)
+           scoped
            (reduce (fn [outofscope isle]
-                     (assoc outofscope (sink-root isle) "No Supply")) scoped
-                     demand))
-     :in-scope
-     (reduce-kv (fn [scope label reason]
-                  (let [src  (case reason
-                               :supply (source-root label)
-                               :demand (sink-root label))]
-                    (assoc scope src reason))) 
-                in-scope (get islands :in-scope))
+                     (assoc outofscope (fillgraph/sink-root isle) "No Supply")) scoped
+                     out-demand))
+     :in-scope ;should be a smarter way to do this.
+     (->> (concat  [(map (fn [[k v] [k :supply]]) in-supply)
+                    (map (fn [[k v] [k :demand]]) in-demand)])
+          (map (fn [scope [label reason]]
+                 (let [src  (case reason
+                              :supply (fillgraph/source-root label)
+                              :demand (fillgraph/sink-root label))]
+                   (assoc scope src reason))) 
+               {} (get islands :in-scope)))
      :islands islands}))
 
 ;;Notify listeners that we found unused supply and removed them from scope.
