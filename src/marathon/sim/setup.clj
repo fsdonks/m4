@@ -131,7 +131,7 @@
 (defn default-demand [ctx & {:keys  [records]
                              :or {records (sd/get-sample-records :DemandRecords)}}]
   (let [ds  (ent/demands-from-records records ctx)]
-    (demand/register-demands! ds ctx)))
+    (demand/register-demands! ds ctx)))  
 
 ;;TODO parameterize this to work off data, rather than the default
 ;;records we have baked in at the moment....
@@ -146,7 +146,6 @@
           (default-supply)
           (default-demand)))
   ([] (default-simstate core/emptysim)))
-
 
 ;;---------------------------------------------------
 
