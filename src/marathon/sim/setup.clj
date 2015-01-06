@@ -5,7 +5,8 @@
 (ns marathon.sim.setup
   (:require [marathon.sim.sampledata :as sd]
             [marathon.sim [policy :as policy]
-                          [policyio :as policyio]]
+                          [policyio :as policyio]
+                          [entityfactory :as ent]]
             [marathon.sim.fill [fillgraph :as fillgraph]
                                [scope :as scope]]
             [marathon.fill [fillstore :as fillstore]]
@@ -101,6 +102,7 @@
 ;; Set defaultScopedState = MarathonOpFill.scopeSimState(state.fillstore.fillgraph, state)
 ;; End Function
 
+(defn default-scoped-state [ctx] (scope/apply-scope ctx))
 
 ;; 'Creates a default supply.  The default is to derive from Excel worksheets.
 ;; Public Function defaultSupply(state As TimeStep_SimState, Optional ensureghost As Boolean) As TimeStep_ManagerOfSupply
@@ -109,12 +111,21 @@
 ;; End Function
 
 
+(defn default-supply [ctx & {:keys  [records]
+                             :or {records (sd/get-sample-records :SupplyRecords)}}]
+  (let [sstore (core/get-supplystore ctx)
+        pstore (core/get-policystore ctx)]
+    (ent/process-units (ent/units-from-records supply-records sstore pstore) ctx)))
+
 ;; 'Creates a default demand.  The default is to derive from Excel worksheets.
 ;; Public Function defaultDemand(state As TimeStep_SimState) As TimeStep_ManagerOfDemand
 ;; MarathonOpDemand.fromExcel state
 ;; Set defaultDemand = state.demandstore
 ;; End Function
-
+(defn default-demand [ctx & {:keys  [records]
+                             :or {records (sd/get-sample-records :DemandRecords)}}]
+  (let [ds  (ent/demands-from-records records)]
+    (demand/register-demands! ds ctx)))
 
 
 ;;---------------------------------------------------
