@@ -133,9 +133,6 @@
   (let [ds  (ent/demands-from-records records ctx)]
     (demand/register-demands! ds ctx)))
 
-
-
-
 ;;TODO parameterize this to work off data, rather than the default
 ;;records we have baked in at the moment....
 ;;TODO fix problem with scoping not being applied/updated

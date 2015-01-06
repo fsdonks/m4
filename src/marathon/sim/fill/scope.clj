@@ -29,6 +29,8 @@
 ;;Given a fill graph  g, finds the islands (components of size 1 when :filled
 ;;and :unfilled are disabled)  Returns a map of srcs that are out of
 ;;scope and the reason, as well as srcs that are in scope.         
+;;TODO# remove the source-root and sink-root, these are just 
+;;calls to second at the moment.
 (defn derive-scope [g]
   (let [islands      (find-islands g)
         out-supply   (get islands :supply)
@@ -40,18 +42,20 @@
                                (assoc outofscope (fillgraph/source-root isle) "No Demand")) {}
                                out-supply)
            scoped
-           (reduce (fn [outofscope isle]
+           (reduce (fn  [outofscope isle]
                      (assoc outofscope (fillgraph/sink-root isle) "No Supply")) scoped
                      out-demand))
      :in-scope ;should be a smarter way to do this.
-     (->> (concat  [(map (fn [[k v] [k :supply]]) in-supply)
-                    (map (fn [[k v] [k :demand]]) in-demand)])
-          (map (fn [scope [label reason]]
-                 (let [src  (case reason
-                              :supply (fillgraph/source-root label)
-                              :demand (fillgraph/sink-root label))]
-                   (assoc scope src reason))) 
-               {} (get islands :in-scope)))
+     (->> 
+      (concat  (map (fn [[k v]] [k :supply]) in-supply)
+               (map (fn [[k v]] [k :demand]) in-demand))          
+      (reduce (fn [scope [label reason]]
+                (let [src  (case reason
+                             :supply (fillgraph/source-root label)
+                             :demand (fillgraph/sink-root label))]
+                  (if (contains? scope src) 
+                    (assoc scope src :both)
+                    (assoc scope src reason))))  {}))
      :islands islands}))
 
 ;;Notify listeners that we found unused supply and removed them from scope.
