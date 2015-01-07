@@ -184,7 +184,7 @@
 
 (def nonzero-supply-srcs  (nonzero-srcs (setup/get-table :SupplyRecords)))
 (def nonzero-demand-srcs  (nonzero-srcs (setup/get-table :DemandRecords)))
-(def expected-srcs        (clojure.set/union nonzero-supply nonzero-demand))
+(def expected-srcs        (clojure.set/union nonzero-supply-srcs nonzero-demand-srcs))
 
 (deftest correct-context
   (is (= nonzero-supply-srcs

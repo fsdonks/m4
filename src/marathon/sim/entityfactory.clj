@@ -284,6 +284,21 @@
 ;;Returns a policystore update and a unit update.
 ;;#TODO Implement policy->cycle-record 
 ;;#TODO Populate unit's first cycle.
+
+(defn policy->cycle-record [p cycletime t  name src compo]
+  (cyc/make-cyclerecord :uic-name name :src src :component compo 
+                        :policyname        (generic/policy-name p)
+                        :duration-expected (generic/cycle-length p)
+                        :available-time    (generic/max-bog p)
+                        :bog-expected      (generic/max-bog p)
+                        :dwell-expected    (generic/cycle-length p)
+                        :bogbudget         (generic/bog-budget p)
+                        :mob-expected      (generic/max-mob p)
+                        :tstart            t 
+                        :tfinal            (+ t (generic/cycle-length p))
+                        :duration          cycletime
+                        :dwell             cycletime))
+       
 (defn initialize-cycle 
   "Given a unit's policy, subscribes the unit with said policy, 
    updates the unit's state to initial conditions, broadcasts 
@@ -292,15 +307,12 @@
   [unit policy ghost ctx]
   (let [newpos (if (not ghost) 
                  (generic/get-position policy (:cycletime unit))
-                 "Spawning")
-        ;; cyclerec (cyc/cycle-NewCycle (policy->cycle-record policy (:name unit) 
-        ;;                                                           (:src unit)
-        ;;                                                           (:component unit)))
+                 "Spawning")]
     (-> unit 
         (assoc :policy policy)
         (assoc :positionpolicy newpos)
         (assoc :locationname "Spawning")  
-        
+        (assoc :currentcycle (policy->cycle-record policy (:cycletime unit) 0 (:name unit) (:src unit) (:component unit)))
 ;        (unitsim/change-location newpos ctx)
         )))
 

@@ -21,7 +21,8 @@
 ;;Even for intrepid readers, the section header __Developer Notes__ may be 
 ;;largely ignored.
 (ns marathon.sim.core
-  (:require [spork.util [metaprogramming :as util]
+  (:require [clojure    [inspector :as inspect]]
+            [spork.util [metaprogramming :as util]
                         [general :as gen]
                         [tags :as tag]
                         [table :as tbl]
@@ -320,7 +321,9 @@
          (spork.util.table/select :fields [:donor :recepient :cost] :from)
          (spork.util.table/visualize))
     (throw (Exception. "No fill map to visualize!"))))
-    
+
+
+(defn visualize-unit [u] (inspect/inspect-tree u))    
        
 ;;#Shared Functions
 
