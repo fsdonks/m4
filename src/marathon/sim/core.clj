@@ -28,6 +28,7 @@
                         [table :as tbl]
                         [reducers]
                         [cellular :as cells]]
+            [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store]
             [spork.sim.simcontext :as sim]
@@ -322,8 +323,14 @@
          (spork.util.table/visualize))
     (throw (Exception. "No fill map to visualize!"))))
 
+(defn visualize-fillgraph [ctx]
+  (if-let [fg (:fillgraph (get-fillstore ctx))]
+    (jung/view-graph fg jung/fr)
+    (throw (Exception. "No fillgraph to visualize!"))))
 
+;;TODO# define a visualization protocol, extend it to core datatypes...
 (defn visualize-unit [u] (inspect/inspect-tree u))    
+
        
 ;;#Shared Functions
 
