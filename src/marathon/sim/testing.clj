@@ -202,7 +202,6 @@
              (keys  (:activedemands (core/get-demandstore (demand/activate-demands 1 defaultctx)))))
       "Should have four demands active at t 1"))
 
-(defn events [ctx]   (spork.sim.data/event-seq ctx))
 (defn demand-step
   "Stripped down demand simulation."
   [day ctx]

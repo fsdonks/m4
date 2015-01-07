@@ -236,6 +236,10 @@
      [nm (if (map? obj) (keys obj) obj)]
      )])
 
+;;TODO# port this over into the API in spork.sim
+(defn events [ctx]   (spork.sim.data/event-seq ctx))
+(defn times [ctx] (map :time (events ctx)))
+
 (defn rvals [kvs]
   (reify
     clojure.lang.Counted 

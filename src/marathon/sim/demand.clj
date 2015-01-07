@@ -506,9 +506,9 @@
         unfilled (:unfilledq demandstore)]
     (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
     (assert (not (nil? demandname)) "Empty demand name!")
-    (let [required (:required demand)
+    (let [required (d/required demand)
           src      (:src demand)]
-      (if (= required 0) ;demand is filled, remove it
+      (if (zero? required) ;demand is filled, remove it
         (if (contains? unfilled src) ;either filled or deactivated
           (let [demandq (dissoc (get unfilled src) fill-key)
                 nextunfilled (if (= 0 (count demandq)) 
@@ -516,14 +516,15 @@
                                  (assoc unfilled src demandq))]
             (->> (removing-unfilled! demandstore demandname ctx)
                  (core/merge-updates 
-                   {:demandstore (assoc demandstore :unfilled nextunfilled)})))              
+                   {:demandstore (assoc demandstore :unfilledq nextunfilled)})))              
           (deactivating-unfilled! demandstore demandname ctx))     ;notification
         ;demand is unfilled, make sure it's added
         (let [demandq (get unfilled src (sorted-map))]  
           (if (contains? demandq fill-key) ctx ;pass-through
             (->> (core/merge-updates ;add to unfilled 
-                   {:demandstore (gen/deep-assoc demandstore [:unfilled src] 
-                       (assoc demandq fill-key demand))} ctx) ;WRONG?
+                   {:demandstore 
+                    (gen/deep-assoc demandstore [:unfilledq src] 
+                         (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
 
 ;;##Describing Categories of Demand To Inform Demand Fill Rules
@@ -693,7 +694,7 @@
   (let [store (-> (gen/deep-assoc demandstore [:activedemands (:name d)] d)
                   (register-change (:name d)))]               
     (->> (activating-demand! store d t ctx)
-      (update-fill store (:name d)))))    
+         (update-fill store (:name d)))))    
 
 (defn activate-demands
   "For the set of demands registered with the context's demand store, relative 
@@ -785,7 +786,7 @@
   (let [demand    (get-in demandstore [:demandmap demandname])
         nextstore (register-change demandstore demandname)
         ctx       (disengage-unit demand demandstore unit ctx overlap)]  
-    (if (zero? (:required demand)) 
+    (if (zero? (d/required demand)) 
       (update-fill demandname (:unfilledq demandstore) demandstore ctx)
       ctx)))
 
@@ -826,7 +827,7 @@
               (let [store (core/get-demandstore ctx)]
                 (deactivate-demand store t (get-demand store dname) ctx))) 
             ctx 
-            (get-deactivations demandstore))))
+            (get-deactivations demandstore t))))
 
 ;;#Analysis...
 (defn profile 
