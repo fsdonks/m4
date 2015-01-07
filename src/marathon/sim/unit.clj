@@ -65,8 +65,6 @@
 (defn bog-remains? [u]
   (pos? (gen/deep-get u [:currentcycle :bogbuget] 0)))
 
-
-
 (defn unit-state [u] (-> u :statedata :currentstate))
 
 ;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
@@ -109,6 +107,9 @@
   ([u spawning? policy]  (valid-deployer? u spawning? policy))
   ([u spawning?] (valid-deployer? u spawning? (:policy u)))
   ([u] (valid-deployer? u nil (:policy u))))
+
+
+
 
 ;;#Needs Porting#
 

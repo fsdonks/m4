@@ -12,7 +12,7 @@
    [deactivations {}]
    [activedemands {}]
    [eligbledemands {}]
-   [changed true]
+   [changed {}]
    demandtraffic  
    tryfill  
    loginfeasibles 

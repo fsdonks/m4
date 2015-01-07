@@ -704,7 +704,7 @@
 	            (let [store (core/get-demandstore ctx)]
 	              (activate-demand store t (get-demand store dname) ctx))) 
 	          ctx 
-	          (get-activations demandstore))))
+	          (get-activations demandstore t))))
 
 ;;#Shifting Elements of Supply To and From Demand
 ;;As supply is selected to fill demand, the supply is actively assigned to a 

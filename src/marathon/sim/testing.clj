@@ -193,9 +193,27 @@
   (is (= nonzero-demand-srcs
          (set (map :src (vals (core/demands defaultctx)))))
       "Should have all the demand loaded."))
-  
+
 ;;can we run a demand simulation?
+(deftest demand-activations
+  (is (empty? (keys  (:activedemands (core/get-demandstore (demand/activate-demands 0 defaultctx)))))
+      "Should have no demands active at t 0")
+  (is (same? '("2_R1_SRC3[1...91]" "2_R2_SRC3[1...2521]" "1_R3_SRC3[1...2521]" "1_R25_SRC3[1...541]")
+             (keys  (:activedemands (core/get-demandstore (demand/activate-demands 1 defaultctx)))))
+      "Should have four demands active at t 1"))
 
-
+(defn events [ctx]   (spork.sim.data/event-seq ctx))
+(defn demand-step
+  "Stripped down demand simulation."
+  [day ctx]
+  (->> ctx 
+    (engine/begin-day day)         ;Trigger beginning-of-day logic and notifications.
+;    (manage-supply day)     ;Update unit positions and policies.
+;    (manage-policies day)   ;Apply policy changes, possibly affecting supply.
+    (demand/manage-demands day)    ;Activate/DeActiveate demands, handle affected units.      
+;    (fill-demands day)      ;Try to fill unfilled demands in priority order. 
+;    (manage-followons day)  ;Resets unused units from follow-on status. 
+    (engine/end-day day)           ;End of day logic and notifications.
+    (demand/manage-changed-demands day)));Clear set of changed demands in demandstore.
 
 
