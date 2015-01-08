@@ -689,8 +689,6 @@
 ;
 ;End Function
 
-
-
 ;#Constructors and Data Munging Functions
 ;Constructors to create all three, independently, now exist in this module.  
 ;Along with decoupled construction, operations for sourcing demands, relative to

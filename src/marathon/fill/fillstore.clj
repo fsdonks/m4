@@ -5,11 +5,12 @@
 ;namely substitution rules, scoping (both in and out of scope) for the current
 ;run, and any other associated data.
 (defrecord+ fillstore [[name :FillStore] 
-                       fillgraph 
+                       fillgraph                       
                        fillmap
                        fillfunction 
                        [fills {}]
                        rendergraphs  
                        [outofscope {}]
-                       allgraphs])
+                       allgraphs
+                       rawfillgraph])
 (def empty-fillstore (make-fillstore))

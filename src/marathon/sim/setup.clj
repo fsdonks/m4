@@ -85,12 +85,13 @@
 ;;Creates a fill store, which provides information for fill
 ;;preferences as well as scoping information.
 (defn default-fillstore []
-  (let [fg (fillgraph/tables->fillgraph 
-            (get-table :SupplyRecords)
-            (get-table :DemandRecords)
-            (get-table :RelationRecords))
+  (let [rawgraph (fillgraph/tables->fillgraph 
+                  (get-table :SupplyRecords)
+                  (get-table :DemandRecords)
+                  (get-table :RelationRecords))
+        fg (fillgraph/reduced-graph rawgraph)
         fm (fillgraph/fill-map fg)]
-    (fillstore/make-fillstore :fillgraph fg :fillmap fm)))
+    (fillstore/make-fillstore :fillgraph fg :fillmap fm :rawfillgraph rawgraph)))
 
 ;;Return a scoped set of supply and demand, based on the information in the fillgraph of the local
 ;;fillstore.

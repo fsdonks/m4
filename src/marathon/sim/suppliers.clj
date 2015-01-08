@@ -160,9 +160,6 @@
                                    gnext)))))
     (capacity [gen] remaining)))
 
-
-
-
 ;;(def ac 
 ;;(generate-unit Generate-AC 
 
@@ -326,8 +323,12 @@
 
 ;;The default fill function.  We'll look at one that can interpret
 ;;rules internally later.
+;;The simplest fill function we can have is to take a fill rule 
+;;and match it to all supply via the fill map.  From here, we 
+;;have supply partitioned into buckets automatically.  We just 
+;;search deployable buckets from there.
 (defn fill-function [fillgraph]
-  (let [rules  (fg/fill-map fillgraph)
+  (let [rules   (fg/fill-map fillgraph)
         src-map (reduce-kv (fn [acc [_ snk] sources]
                              (assoc acc 
                                (reduce (fn [xs [[_ source] cost]]
