@@ -83,11 +83,10 @@
 ;Determine if a unit falls within the deployable window of a given policy.  If no
 ;policy is supplied, the unit's associated policy will be consulted.
 (defn in-deployable-window? 
-  ([u policy]
-     (let [ct (:cycletime u)]
-       (and  (>= ct (pol/start-deployable policy))
-             (< ct (pol/stop-deployable policy)))))
+  ([u policy] (pol/deployable-by? policy  (:cycletime u)))
   ([u] (in-deployable-window? u (:policy u))))
+
+(defn deployable-window [u] (pol/deployable-window (:policy u)))
 
 ;Determines if u is capable of deploying, as a function of u's associated policy.
 (defn valid-deployer? [u spawning? policy]

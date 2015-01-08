@@ -171,7 +171,7 @@
 (defn deployable-state? [s] (:deployable s))
 
 ;;used to be isDeployable
-(defn deployable-when?      [p cycletime]
+(defn deployable-by?      [p cycletime]
   (between? cycletime (start-deployable p) (stop-deployable p)))
 
 ;;used to be deployable
@@ -187,6 +187,9 @@
 
 (def find-position (memoize get-position))
 
+;;Returns the deployable window for the policy [start stop]
+(defn deployable-window [policy]
+  [(start-deployable policy)  (stop-deployable policy)])
 
 ;Note ---->
 ;Deployability is no longer just a function of Position....it's also a function of

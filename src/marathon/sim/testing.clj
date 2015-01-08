@@ -261,3 +261,6 @@
   (is (same? deploynames 
              '("25_SRC3_AC" "28_SRC3_AC" "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC"))
       "Should have 5 units deployable"))
+
+(defn key= [k v]
+  (fn [m] (= (get m k) v)))
