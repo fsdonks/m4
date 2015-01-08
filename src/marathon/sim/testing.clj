@@ -216,20 +216,37 @@
     (demand/manage-changed-demands day)));Clear set of changed demands
                                         ;in demandstore.
 
-(defn ->demand-sim [ctx] 
+(defn ->simreducer [stepf init]  
   (r/take-while identity (r/iterate (fn [ctx] 
                                       (when  (engine/keep-simulating? ctx)
                                         (sim/advance-time
-                                         (demand-step (sim/get-time ctx) ctx))))
-                                    ctx)))
+                                         (stepf (sim/get-time ctx) ctx))))
+                                    init)))
+
+(defn ->simulator [stepf seed]
+  (let [simred (->simreducer stepf seed)]
+    (reify     
+      clojure.lang.Seqable 
+      (seq [this]  
+        (take-while identity (iterate (fn [ctx] 
+                                        (when  (engine/keep-simulating? ctx)
+                                          (sim/advance-time
+                                           (stepf (sim/get-time ctx) ctx))))
+                                      seed)))
+      clojure.core.protocols/CollReduce
+      (coll-reduce [this f1]   (reduce f1 simred))
+      (coll-reduce [_ f1 init] (reduce f1 init simred)))))
+
+(def demand-sim (->simulator demand-step defaultctx))
+
 (defn actives [rctx]
   (into [] (r/map (fn [ctx] [(sim/get-time ctx) (:activedemands (core/get-demandstore ctx))])  rctx)))
 
 (def demandctx         (demand-step 1 defaultctx))
-(def unfilled-demands  (keys (val (first (:unfilledq (core/get-demandstore demandctx))))))
+(def unfilled-ds  (keys (val (first (:unfilledq (core/get-demandstore demandctx))))))
 
 (deftest unfilled-demands
-  (is  (same? unfilled-demands 
+  (is  (same? unfilled-ds
               '(["1_R25_SRC3[1...541]" 1] ["1_R3_SRC3[1...2521]" 1] ["2_R1_SRC3[1...91]" 2] ["2_R2_SRC3[1...2521]" 2]))
       "Should have the same order and set of demands unfilled on day 1."))
 

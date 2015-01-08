@@ -241,6 +241,17 @@
 ;;TODO# port this over into the API in spork.sim
 (defn events [ctx]   (spork.sim.data/event-seq ctx))
 (defn times [ctx] (map :time (events ctx)))
+(defn segments [ctx] 
+  (->> (partition 2 1 (events ctx))
+       (map (fn [[l r]]
+              [(assoc l :duration (- (:time r) (:time l)))
+               r]))
+       (map first)
+       (map (fn [r] (if (:duration r) r (assoc r :duration 1))))))
+       
+       
+         
+         
 
 (defn rvals [kvs]
   (reify
@@ -295,7 +306,7 @@
   (let [coloring (zipmap (map color-keyf es) (take (count es) (sketch/palette)))
         tracks   (demand->tracks es :keyf track-keyf)
         rendered-tracks (sketch/->tracks tracks)
-        track-width    (:width (spork.graphics2d.canvas/shape-bounds rendered-tracks))
+        track-width     (:width (spork.graphics2d.canvas/shape-bounds rendered-tracks))
 ;        lgnd     (sketch/->legend coloring)
 ;        lwidth   (:width (spork.graphics2d.canvas/shape-bounds lgnd))
         ]

@@ -43,6 +43,9 @@
     demandstore 
     (gen/deep-assoc demandstore [:changed demandname]  0)))
 
+(defn active-demand? [demandstore demandname]
+  (contains? (get demandstore :activedemands) demandname))
+
 ;TOM Note 20 May 2013 -> need to abstract fillrule, etc. behind a function, 
 ;preferably one that uses keywords.
 ;inject appropriate tags into the GenericTags
@@ -508,10 +511,11 @@
     (assert (not (nil? demandname)) "Empty demand name!")
     (let [required (d/required demand)
           src      (:src demand)]
-      (if (zero? required) ;demand is filled, remove it
+      (if (or (zero? required) 
+              (not (active-demand? demandstore demandname))) ;demand is filled, remove it
         (if (contains? unfilled src) ;either filled or deactivated
           (let [demandq (dissoc (get unfilled src) fill-key)
-                nextunfilled (if (= 0 (count demandq)) 
+                nextunfilled (if (zero? (count demandq)) 
                                  (dissoc unfilled src) 
                                  (assoc unfilled src demandq))]
             (->> (removing-unfilled! demandstore demandname ctx)
@@ -810,7 +814,7 @@
   "Frees resources associated with a demand, sending home any units proximate 
    to the demand.  Removes the demand from the active set."
   [demandstore t d ctx]
-  (assert (contains? (:activedemands demandstore) (:name d)) 
+  (assert (active-demand? demandstore (:name d))
     (throw (Exception. (str "DeActivating an inactive demand: " (:name d))))) 
   (let [store (-> (gen/deep-update demandstore [:activedemands] dissoc (:name d))
                   (register-change (:name d)))]
