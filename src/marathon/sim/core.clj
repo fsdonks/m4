@@ -195,9 +195,11 @@
   `(binding [~'marathon.sim.core/*ignored*  (into ~'marathon.sim.core/*ignored* ~es)]
      ~@expr))
 
-(defmacro noisy [es & expr]
-  `(debugging 
-    (ignoring ~es ~@expr)))
+(defmacro noisy 
+  ([es  expr]
+     `(debugging 
+       (ignoring ~es ~expr)))
+  ([expr] `(debugging ~expr)))
 
 (defn visible? [edata] 
   (and *debug*

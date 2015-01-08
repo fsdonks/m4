@@ -107,7 +107,7 @@
 
 (def m-dstore (core/get-demandstore multiple-demands))
 (def times    (map sim/get-time (take-while spork.sim.agenda/still-time? (iterate sim/advance-time multiple-demands))))
-(def events   (spork.sim.data/event-seq multiple-demands))
+(def known-events   (core/events multiple-demands))
 (def expected-events (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
             {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
             {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
@@ -132,7 +132,7 @@
          '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
              778 811 901 963 991 1048 1051 1081 1261 1330 1351 1441 1531 1621 1711 1801 1981 2071 2095 2341 2521))
       "Scheduled times from sampledata should be consistent, in sorted order.")
-  (is (= events expected-events)           
+  (is (= known-events expected-events)           
       "The only events scheduled should be time changes.")
   (is (same? activations481 
              ["1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-92_SRC1[481...554]"])
@@ -213,6 +213,23 @@
 ;    (fill-demands day)      ;Try to fill unfilled demands in priority order. 
 ;    (manage-followons day)  ;Resets unused units from follow-on status. 
     (engine/end-day day)           ;End of day logic and notifications.
-    (demand/manage-changed-demands day)));Clear set of changed demands in demandstore.
+    (demand/manage-changed-demands day)));Clear set of changed demands
+                                        ;in demandstore.
 
+(defn ->demand-sim [ctx] 
+  (r/take-while identity (r/iterate (fn [ctx] 
+                                      (when  (engine/keep-simulating? ctx)
+                                        (sim/advance-time
+                                         (demand-step (sim/get-time ctx) ctx))))
+                                    ctx)))
+(defn actives [rctx]
+  (into [] (r/map (fn [ctx] [(sim/get-time ctx) (:activedemands (core/get-demandstore ctx))])  rctx)))
+
+(def demandctx         (demand-step 1 defaultctx))
+(def unfilled-demands  (keys (val (first (:unfilledq (core/get-demandstore demandctx))))))
+
+(deftest unfilled-demands
+  (is  (same? unfilled-demands 
+              '(["1_R25_SRC3[1...541]" 1] ["1_R3_SRC3[1...2521]" 1] ["2_R1_SRC3[1...91]" 2] ["2_R2_SRC3[1...2521]" 2]))
+      "Should have the same order and set of demands unfilled on day 1."))
 
