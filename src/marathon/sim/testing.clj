@@ -13,7 +13,7 @@
                           [setup :as setup]
                           [engine :as engine]]                        
             [marathon.data [simstate :as simstate]
-                           [protocol :as generic]]
+                           [protocols :as generic]]
             [spork.sim     [simcontext :as sim]]
             [spork.util.reducers]
             [spork.sketch :as sketch]

@@ -457,10 +457,14 @@
 ;;derive the length of the policy...
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
   (if-let [ctor (get @templates name (get @templates (keyword name)))]
-    (let [stats {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
-          stats (if overlap (assoc stats :overlap overlap) stats)]
-      (-> (ctor :deltas deltas :stats stats)
-          (core/set-deployable startdeployable stopdeployable)))
+    (let [stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
+          stats      (if overlap (assoc stats :overlap overlap) stats)
+          base       (ctor :deltas deltas :stats stats)
+          baselength (core/compute-cycle-length base)
+          _          (println [name (min baselength +inf+)])]
+      (-> base
+          (core/set-deployable startdeployable stopdeployable)
+          (assoc  :cyclelength (min baselength +inf+))))
     (throw (Exception. (str "Unknown template: " name)))))
 
 ;;Possible vestigial design cruft....we may be able to unify this and

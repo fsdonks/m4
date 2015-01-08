@@ -321,7 +321,7 @@
 
 ;;Computes the intervals between units distributed along a lifecylce.
 ;;Used to uniformly disperse units in a deterministic fashion.
-(defn compute-interval [clength unitcount]
+(defn compute-interval [clength unitcount]  
   (if (or (zero? clength) (zero? unitcount)) 
     (throw (Error.  "Cannot have zero length cycle or 0 units"))
     (if (< unitcount clength) 
@@ -333,7 +333,7 @@
 ;;cycles are uniformly distributed (using integer division).
 (defn distribute-cycle-times [units policy]
   (let [clength (generic/cycle-length policy)
-        clength (if (> clength +max-cycle-length+) +default-cycle-length+)
+        clength (if (> clength +max-cycle-length+) +default-cycle-length+ clength)
         uniform-interval (atom (compute-interval clength (count units)))
         last-interval (atom (- @uniform-interval))
         remaining     (atom (count units))
