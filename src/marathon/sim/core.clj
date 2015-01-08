@@ -457,6 +457,9 @@
         (assoc-in m path (dissoc parent (last ks))))
       updated)))
 
+;;Predicate for determining if a map has a key equal to a val.
+(defn key= [k v] (fn [m] (= (get m k) v)))
+
 ;;#TODO evaluate memoize here and see if we're paying a useless
 ;penalty.
 (defn key-tag-maker

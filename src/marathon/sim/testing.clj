@@ -127,7 +127,18 @@
 ;;I had to put this dude in, for some reason the structural equality
 ;;checks are not working inside the test clauses.  This does...
 (defn same? [& colls]
-  (every? identity (map = colls)))
+  (loop [cs colls
+         acc true]
+    (if (every? seq cs)
+      (let [x (ffirst cs)]
+        (if (every? #(= (first %) x)  cs)
+          (recur (filter identity (map rest cs))
+                 acc)
+          false))
+      (if (some seq cs)
+        false
+        acc))))
+;  (every? identity (map = colls)))
 
 (deftest scheduled-demands-correctly 
   (is (= times
@@ -136,9 +147,11 @@
       "Scheduled times from sampledata should be consistent, in sorted order.")
   (is (= known-events expected-events)           
       "The only events scheduled should be time changes.")
-  (is (same? activations481 
-             ["1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-92_SRC1[481...554]"])
-      "Should have actives on 481...")       
+  (is (same? (take 2 activations481)
+             ["1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]"])
+      "Should have actives on 481...")
+  (is (re-find #"1_Vig-ANON-.*[481...554]" (nth activations481 2))
+      "The third active on 481 should be an anonymously named vignette with a  number in the name.")
   (is (some (fn [d] (= d (:name first-demand))) (demand/get-activations m-dstore tstart))
       "Demand should register as an activation on startday.")
   (is (zero? (sim/get-time multiple-demands)) "Simulation time should still be at zero.")
@@ -259,8 +272,9 @@
 
 (deftest unit-queries 
   (is (same? deploynames 
-             '("25_SRC3_AC" "28_SRC3_AC" "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC"))
+             '("11_SRC3_NG" "17_SRC3_NG" "25_SRC3_AC" "28_SRC3_AC" "12_SRC3_NG" 
+               "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC" "10_SRC3_NG"))
       "Should have 5 units deployable"))
 
-(defn key= [k v]
-  (fn [m] (= (get m k) v)))
+(defn key= [k v] (fn [m] (= (get m k) v)))
+
