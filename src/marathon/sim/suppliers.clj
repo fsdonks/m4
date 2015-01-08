@@ -335,10 +335,13 @@
                                          (conj xs [source cost])) [] sources)))
                            {} rules)
         rule->src (memoize (fn [rule] (let [[nd src] (fill/derive-supply-rule nil)]
-                                       src)))]
+                                       src)))
+        rule->buckets (memoize (fn [rule store]
+                                 (supply/get-buckets store)]
   (reify fill/ISupplier 
     (query [s rule store] 
-      (let [buckets get-in 
+      (let [buckets  (supply/get-buckets store)
+            
       
 
         

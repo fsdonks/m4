@@ -238,7 +238,7 @@
 ;;function for performance (and ostensibly simpler).  We'll see if we
 ;;need to expand beyond this and go with a protocol or a multimethod.  
 ;;Doubtful.
-
+;;TODO# determine if fillstore is necessary here.  It may just be a stub.
 (defn derive-supply-rule [demand fillstore & {:keys [category] :or {category (get demand :src)}}]
   (case (supply-cat demand fillstore category)
   ;for simple categories, ala "SRC_1" or :SRC_1, we just use the existing 
