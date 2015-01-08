@@ -497,7 +497,8 @@
 ;;enforce these invariants.  You'll see it get used a bit when we make changes
 ;;to a demand, either filling, activating, etc.  It applies the appropriate 
 ;;processing to keep a demand's fill status consistent.
-
+;;TODO# Simplify this guy?  Maybe break up the detection phase by
+;;activated/deactivated....
 (defn update-fill
   "Derives a demand's fill status based on its current data.  Satisfied demands 
    are removed from the unfilled queue, unsatisfied demands are kept or added to

@@ -5,13 +5,15 @@
             [marathon.sim [core :as core]
                           [supply :as supply]
                           [demand :as demand]
+                          [unit :as unit]
                           [policy :as policy]
                           [policyio :as policyio]
                           [sampledata :as sd]
                           [entityfactory :as ent]
                           [setup :as setup]
                           [engine :as engine]]                        
-            [marathon.data [simstate :as simstate]]
+            [marathon.data [simstate :as simstate]
+                           [protocol :as generic]]
             [spork.sim     [simcontext :as sim]]
             [spork.util.reducers]
             [spork.sketch :as sketch]
@@ -222,7 +224,8 @@
                                         (sim/advance-time
                                          (stepf (sim/get-time ctx) ctx))))
                                     init)))
-
+;;A wrapper for an abstract simulation.  Can produce a sequence of
+;;simulation states; reducible.
 (defn ->simulator [stepf seed]
   (let [simred (->simreducer stepf seed)]
     (reify     
@@ -250,3 +253,11 @@
               '(["1_R25_SRC3[1...541]" 1] ["1_R3_SRC3[1...2521]" 1] ["2_R1_SRC3[1...91]" 2] ["2_R2_SRC3[1...2521]" 2]))
       "Should have the same order and set of demands unfilled on day 1."))
 
+
+(def deployables  (filter unit/in-deployable-window? (vals  (core/units defaultctx))))
+(def deploynames  (map :name deployables))
+
+(deftest unit-queries 
+  (is (same? deploynames 
+             '("25_SRC3_AC" "28_SRC3_AC" "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC"))
+      "Should have 5 units deployable"))
