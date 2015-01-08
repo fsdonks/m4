@@ -453,7 +453,8 @@
 ;;Deployment windows (Megan;;s parameter)
 ;;Strict vs. Non-Strict (single day available/lifecycle vs. else)
 ;;defines
-
+;;#TODO Policy cycle lengths default to +inf+, we really want to
+;;derive the length of the policy...
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
   (if-let [ctor (get @templates name (get @templates (keyword name)))]
     (let [stats {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}

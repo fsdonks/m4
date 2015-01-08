@@ -347,7 +347,7 @@
 
 ;;TODO# define a visualization protocol, extend it to core datatypes...
 (defn visualize-unit [u] (inspect/inspect-tree u))    
-
+(defn visualize-policy [p] (jung/view-graph (:positiongraph p) jung/fr))
        
 ;;#Shared Functions
 

@@ -260,6 +260,14 @@
 
 (defn drop-ends [xs] (drop 1 (butlast xs)))
 
+(defn compute-cycle-length [p]
+  (let [pg (get-position-graph p)]
+    (reduce + 
+            (let [[hd & tl] (first (graph/directed-cycles pg))
+                  full (into [(last tl) hd] tl)] 
+              (map (fn [[from to]]  
+                     (graph/arc-weight pg from to)) (partition 2 1 full))))))
+
 (defn mark-deployable-region 
   "Adds modifiers to each node in the position graph of a policy between :deployable and :non-deployable nodes, 
    indicating the position is an eligible deployable state."
