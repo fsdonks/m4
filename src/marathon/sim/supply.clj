@@ -298,10 +298,9 @@
 ;Consolidated this from update-deployability, formalized into a function.
 (defn add-deployable-supply 
   ([supply bucket src unit ctx]
-     (do (println [:adding (:name unit) :deployable :to (:deployable-buckets supply)])
-         (->> (sim/merge-updates 
-               {:supplystore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} ctx)
-              (update-availability unit supply))))
+     (->> (sim/merge-updates 
+           {:supplystore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} ctx)
+          (update-availability unit supply)))
   ([supply src unit ctx] 
      (add-deployable-supply supply :generic src unit ctx)))
 
@@ -313,14 +312,14 @@
 ;Consolidated this from update-deployability, formalized into a function.
 (defn remove-deployable-supply 
   ([supply bucket src unit ctx]
-     (if-let [newstock (-> (get-in supply [:deployable-buckets bucket src (get unit :name)])
+     (if-let [newstock (-> (get-in supply [:deployable-buckets bucket src])
                            (dissoc (get unit :name)))]
        (sim/merge-updates 
         {:supplystore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
        (->> (sim/merge-updates 
              {:supplystore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
             (out-of-stock! (get unit :src)))))
-  ([supply src unit ctx] (remove-deployable-supply supply :generic src unit ctx))) 
+  ([supply src unit ctx] (remove-deployable-supply supply :generic src unit ctx)))
 
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
@@ -331,12 +330,12 @@
            src      (get unit :src)]
        (if (or followon (u/can-deploy? unit spawning))                         ;1)
          (->> (if followon  ;notifiying of followon data...
-                (new-followon! unit ctx) 
+                (new-followon!   unit ctx) 
                 (new-deployable! unit ctx))
               (add-deployable-supply supply src unit)) ;add stuff to buckets...   
                                         ;unit is not deployable
-      (->> (not-deployable! unit ctx)
-           (remove-deployable-supply supply src unit)))))
+         (->> (not-deployable! unit ctx)
+              (remove-deployable-supply supply src unit)))))
   ([unit followon spawning ctx] 
      (update-deployability (core/get-supplystore ctx) unit followon spawning ctx)))
 
