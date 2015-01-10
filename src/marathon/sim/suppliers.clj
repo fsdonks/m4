@@ -321,13 +321,81 @@
 ;;------------------Pending---------------------------------------
 
 
+          
+            
+      
+;;Given these rules....we should be able to find supply for each.
+;; ([:fillrule "SRC3"] 
+;;  [:fillrule "SRC3"] 
+;;  [:fillrule "SRC2"] 
+;;  [:fillrule "SRC1"] 
+;;  [:fillrule "SRC3"] 
+;;  [:fillrule "SRC3"] 
+;;  [:fillrule "SRC1"]
+;;  [:fillrule "SRC3"] 
+;;  [:fillrule "SRC2"]) 
+            
+;;so a fill query is just a sophisticated entity query....
+;;we're looking at entities from the supply store.
+;;Another option here is to wrap each of the stores as an entity
+;;store....and define some operations that concatenate the entity
+;;store.
+;;This could greatly unify entity querying....
+;;Later on, when we go to "update" the entities and add components, 
+;;we can port the backend into an actual component store.
+
+;;given a rule, how do we look up supply that matches that rule? 
+;;under the old scheme, we have a set of "supply buckets"; basically 
+;;a map in the supplystore that maintains the deployable supply as
+;;units move around.
+
+;;This is an optimization....most of the simulation activity will be
+;;dominated by supply updates (i.e. entity movement).
+
+;;High level concern is to query a supply store given a fillrule and a
+;;fillstore.
+
 ;;The default fill function.  We'll look at one that can interpret
 ;;rules internally later.
 ;;The simplest fill function we can have is to take a fill rule 
 ;;and match it to all supply via the fill map.  From here, we 
 ;;have supply partitioned into buckets automatically.  We just 
 ;;search deployable buckets from there.
-(defn fill-function [fillgraph]
+;; (defn fill-function [fillgraph]
+;;   (let [rules   (fg/fill-map fillgraph)
+;;         src-map (reduce-kv (fn [acc [_ snk] sources]
+;;                              (assoc acc 
+;;                                (reduce (fn [xs [[_ source] cost]]
+;;                                          (conj xs [source cost])) [] sources)))
+;;                            {} rules)
+;;         rule->src (memoize (fn [rule] (let [[nd src] (fill/derive-supply-rule nil)]
+;;                                        src)))
+;;         rule->buckets (memoize (fn [rule store]
+;;                                  (supply/get-buckets store)]
+;;   (reify fill/ISupplier 
+;;     (query [s rule store] 
+;;       (let [buckets  (supply/get-buckets store)  
+
+
+;;The dumb way is to just map over all deployable units....
+;;Basically reduce over then entire set of units, and filter out 
+;;the ones that are deployable.  We normally cache these in the
+;;supplystore/buckets...note: buckets are keyed by src.
+;;Note: we have a separate set of buckets for followons...
+;;followonbuckets...
+
+;;It may be useful to just add a "generic" category of 
+;;buckets; ala the followon buckets, and unify them all together.
+;;For instance: 
+;;{:buckets {:generic #{src1 src2 src3....} 
+;;           :group1  #{src1 src3 .....}
+;;           :group2  #{src3 ...}}}
+;;if we opt to use tags, we already have things managed for us, 
+;;plus the benefit of a mutable interface...
+
+;;Unifying the buckets is probably a good idea...
+
+(defn dumb-fill-function [fillgraph]
   (let [rules   (fg/fill-map fillgraph)
         src-map (reduce-kv (fn [acc [_ snk] sources]
                              (assoc acc 
@@ -336,12 +404,11 @@
                            {} rules)
         rule->src (memoize (fn [rule] (let [[nd src] (fill/derive-supply-rule nil)]
                                        src)))
+        ;;compute the ordered set of resource buckets that we should
+        ;;look at.
         rule->buckets (memoize (fn [rule store]
-                                 (supply/get-buckets store)]
+                                 (supply/get-buckets store))
+                               
   (reify fill/ISupplier 
     (query [s rule store] 
       (let [buckets  (supply/get-buckets store)
-            
-      
-
-        

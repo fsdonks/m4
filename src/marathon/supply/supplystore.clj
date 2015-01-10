@@ -7,7 +7,6 @@
   [[name :SupplyStore]
    srcs-in-scope ;Set of unique SRCs in scope.
    deployable-buckets ;{category entity}, indicates entities that can fill demand.
-   followon-buckets ;{demandgroup {category entity}}, indicates follown eligibility.
    unitmap        ;{entity-name unitdata}, map of unique unit entities.
    unit-behaviors ;map of named unit behaviors.  may move this out...
    unit-updates ;set of eventful unit-days....might be able to handle this outside.

@@ -647,9 +647,10 @@
                          subscriptions [:state :policystore :subscriptions]
                          unitmap       [:state :supplystore :unitmap]
                          unittags      [:state :supplystore :tags]
+                         buckets       [:state :supplystore :deployable-buckets]
                          :as ctx2}         ctx]
         (let [newctx  (update-ctx2!
-                       (core/with-transient-cells [unittags subscriptions]
+                       (core/with-transient-cells [unittags subscriptions buckets]
                          (-> (reduce (fn [acc unit]
                                        (process-unit! unit nil parameters behaviors supplystore policystore acc))
                                      ctx2 

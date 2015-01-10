@@ -63,7 +63,7 @@
 
 ;Predicate to indicate unit U's ability to bog.
 (defn bog-remains? [u]
-  (pos? (gen/deep-get u [:currentcycle :bogbuget] 0)))
+  (pos? (gen/deep-get u [:currentcycle :bogbudget] 0)))
 
 (defn unit-state [u] (-> u :statedata :currentstate))
 
@@ -96,8 +96,6 @@
          (not (deployed? u)) 
          (or (can-followon? u) (in-deployable-window? u policy))))) 
 
-
-
 ;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated
 ;'with the unit state, i.e the empirical cycle time.  Since we've got a separation between the cycle
 ;'length experienced by the unit, and the nominal policy length that unit is operating under (i.e.
@@ -109,8 +107,14 @@
   ([u spawning?] (valid-deployer? u spawning? (:policy u)))
   ([u] (valid-deployer? u nil (:policy u))))
 
-
-
+;;Useful summary info for unitdata, helpful for debugging.
+(defn summary [u]
+  {:name           (:name u) 
+   :policy         (:name (:policy  u))
+   :positionpolicy (:positionpolicy u)
+   :positionstate  (pol/get-state (:policy u) (:positionpolicy u))
+   :deployable?    (can-deploy? u)
+   :cycletime      (:cycletime  u)})
 
 ;;#Needs Porting#
 

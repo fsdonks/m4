@@ -268,6 +268,7 @@
 
 
 (def deployables  (filter unit/in-deployable-window? (vals  (core/units defaultctx))))
+(defn deployable-units [ctx] (filter unit/can-deploy?(vals  (core/units defaultctx))))
 (def deploynames  (map :name deployables))
 
 (deftest unit-queries 
@@ -276,5 +277,10 @@
                "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC" "10_SRC3_NG"))
       "Should have 5 units deployable"))
 
-(defn key= [k v] (fn [m] (= (get m k) v)))
+;;fill queries...
+(def fillrules (map marathon.sim.fill/derive-supply-rule (vals (core/demands defaultctx)) (core/get-fillstore defaultctx)))
+
+;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
+
+
 

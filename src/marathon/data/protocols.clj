@@ -168,7 +168,8 @@
 
 ;;Might want to cache this stuff....
 ;;Include a facility for defining deployable states..
-(defn deployable-state? [s] (:deployable s))
+(defn deployable-state? [s] 
+  (when s (:deployable s)))
 
 ;;used to be isDeployable
 (defn deployable-by?      [p cycletime]

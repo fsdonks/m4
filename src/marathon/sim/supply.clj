@@ -130,7 +130,7 @@
   (-> (drop-unit supply unitname)
       (remove-src (:src (get-unit supply unitname))))) 
 
-(defn get-buckets [supply] (:buckets supply))
+(defn get-buckets [supply] (get (:deployable-buckets supply) :generic))
 (defn add-bucket [supply bucket-name]
   (let [buckets (:deployable-buckets supply)]
     (if (contains? buckets bucket-name) supply 
@@ -296,10 +296,14 @@
       (new-deployable! unit))))
 
 ;Consolidated this from update-deployability, formalized into a function.
-(defn add-deployable-supply [supply src unit ctx]
-  (->> (sim/merge-updates 
-         {:supplystore (assoc-in supply [:buckets src (:name unit)] unit)} ctx)
-       (update-availability unit supply)))
+(defn add-deployable-supply 
+  ([supply bucket src unit ctx]
+     (do (println [:adding (:name unit) :deployable :to (:deployable-buckets supply)])
+         (->> (sim/merge-updates 
+               {:supplystore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} ctx)
+              (update-availability unit supply))))
+  ([supply src unit ctx] 
+     (add-deployable-supply supply :generic src unit ctx)))
 
 ;;follow on supply was treated as special, but now it's not.  We expected 
 ;;a function called get-followon-supply before...
@@ -307,14 +311,16 @@
 ;;__TODO__ Determine if get-followon-supply is OBE, and that can ignore it.
 
 ;Consolidated this from update-deployability, formalized into a function.
-(defn remove-deployable-supply [supply src unit ctx]
-  (if-let [newstock (-> (get-in supply [:buckets src (get unit :name)])
-                        (dissoc (get unit :name)))]
-    (sim/merge-updates 
-      {:supplystore (assoc-in supply [:buckets src] newstock)} ctx)
-    (->> (sim/merge-updates 
-           {:supplystore (update-in supply [:buckets] dissoc src)} ctx)
-         (out-of-stock! (get unit :src)))))
+(defn remove-deployable-supply 
+  ([supply bucket src unit ctx]
+     (if-let [newstock (-> (get-in supply [:deployable-buckets bucket src (get unit :name)])
+                           (dissoc (get unit :name)))]
+       (sim/merge-updates 
+        {:supplystore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
+       (->> (sim/merge-updates 
+             {:supplystore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
+            (out-of-stock! (get unit :src)))))
+  ([supply src unit ctx] (remove-deployable-supply supply :generic src unit ctx))) 
 
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
@@ -378,9 +384,6 @@
       (->> (spawning-unit! unit ctx)
            (update-deployability supply unit nil nil)))))
 
-
-
-
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
 (defn new-unit [supplystore parameters policystore behaviors name src title 
@@ -417,6 +420,26 @@
 
 ;;#Tracking Follow-On Supply
 
+;;#Alteration 
+;;I'm changing the existing scheme of storing followon unit
+;;information, as well as non-followon, or generic unit information.
+;;One (still) tempting idea is to just shove everything into tags, 
+;;and use the tag annotation to execute queries.  We're heading
+;;towards components at that point (which IS the right direction).
+;;For now, a bridging strategy is to unify the buckets and followons, 
+;;basically making a standard bucket, :generic, and having everything
+;;else be inferred as "non-generic" (currently meaning followon, or 
+;;associated with some demand group).
+;;Note# 
+;;There is a general relation here...the fact is that the unit is
+;;related to some element of demand...either the demandgroup, or
+;;something else.  That makes tags an interesting prospect....
+;;Further, if we shift to using tags to denote relationship facts, 
+;;we get a consistent API, an option for batched mutable updates, and 
+;;other features.  We have more facts associated with a unit than
+;;merely its followon status....right now we're tracking lots of extra
+;;state when it's simpler to just use tags....
+
 ;The call for update-deploy-status is UGLY.  Might be nice to use keyword args..
 (defn add-followon
   "Registers the unit as eligible for follow on status."
@@ -433,7 +456,7 @@
         src      (get unit :src)]
     (-> store 
         (update-in [:followons] dissoc unitname)
-        (core/prune-in  [:followonbuckets fcode src] dissoc unitname)
+        (core/prune-in  [:deployable-buckets fcode src] dissoc unitname)
         (assoc-in  [:unit-map unitname] 
           (assoc unit :followoncode nil)))))
 
