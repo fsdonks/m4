@@ -271,16 +271,91 @@
 (defn deployable-units [ctx] (filter unit/can-deploy?(vals  (core/units defaultctx))))
 (def deploynames  (map :name deployables))
 
-(deftest unit-queries 
-  (is (same? deploynames 
-             '("11_SRC3_NG" "17_SRC3_NG" "25_SRC3_AC" "28_SRC3_AC" "12_SRC3_NG" 
-               "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC" "10_SRC3_NG"))
-      "Should have 5 units deployable"))
+
 
 ;;fill queries...
 (def fillrules (map marathon.sim.fill/derive-supply-rule (vals (core/demands defaultctx)) (core/get-fillstore defaultctx)))
 
 ;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
 
+;;These should become basic supply queries.  We can change the
+;;implementation strategy (likely to tags/components) after the
+;;fact...Also, they're primitive supply for our more general fill
+;;query language...
+(defn find-deployable-supply  [supply src] (keys (get (supply/get-buckets supply) src)))
+(def  src->fillrule (memoize (fn [src] 
+                               (marathon.sim.fill.fillgraph/sink-label src))))
 
+;;Provides an ordered vector of suitable supply buckets to look.
+(defn src->srcs [srcmap src] 
+  (->> (for [[rule cost] (get srcmap (src->fillrule src))]
+             [(marathon.sim.fill.fillgraph/source-root rule) cost]) 
+       (sort-by second)
+       (mapv first)))
+
+(def srcs->prefs (memoize (fn [srcs]   
+                              (into {} (map-indexed (fn [idx src] [src idx]) srcs)))))
+(defn src->prefs [src srcmap]  (srcs->prefs (src->srcs srcmap src)))
+
+(defmacro change-if [default test & body]
+  `(if ~test
+     ~@body
+     ~default))
+
+
+;;Reducer/seq that provides an abstraction layer for implementing 
+;;queries over deployable supply.  I really wish I had more time 
+;;to hack out a better macro for the reducers, but this works for now.
+(defn ->deployers [supply & {:keys [cat src unit] :or {cat  identity 
+                                                       src  identity 
+                                                       unit identity}}]
+  (let [catfilter cat
+        srcfilter src 
+        unitfilter unit]
+    (reify     
+      clojure.lang.Seqable 
+      (seq [this]  
+        (for [[cat srcs]    (:deployable-buckets supply)
+              [src units]   srcs
+              [nm u]        units
+              :when (and (catfilter cat) (srcfilter src) (unitfilter u))]
+          [[cat src] u]))
+      clojure.core.protocols/CollReduce
+      (coll-reduce [this f1]        
+        (reduce-kv (fn [acc cat srcs]
+                     (change-if acc (catfilter cat)
+                                (reduce-kv (fn [acc src units]
+                                             (change-if acc (srcfilter src)
+                                                        (reduce-kv (fn [acc nm unit]
+                                                                     (change-if units (unitfilter unit)
+                                                                                (f1 acc [[cat src] unit]))) acc units)))
+                                           acc srcs))) (f1) (:deployable-buckets supply)))
+      (coll-reduce [_ f1 init]      
+        (reduce-kv (fn [acc cat srcs]
+                     (change-if acc (catfilter cat)
+                                (reduce-kv (fn [acc src units]
+                                             (change-if acc (srcfilter src)
+                                                        (reduce-kv (fn [acc nm unit]
+                                                                     (change-if units (unitfilter unit)
+                                                                                (f1 acc [[cat src] unit]))) acc units)))
+                                           acc srcs))) init (:deployable-buckets supply))))))
+(defn is? 
+  ([x y] (or (identical? x y) (= x y)))
+  ([x] (fn [y] (is? x y))))
+
+(defn find-feasible-supply 
+  ([supply srcmap category src]
+     (if (is? category :any) 
+       (->deployers supply :src (is? src))
+       (let [prefs (src->prefs srcmap src)]
+         (->>  (->deployers supply :src #(contains? prefs %))
+               (into [])
+               (sort-by prefs)))))
+  ([supply srcmap src] (find-feasible-supply supply srcmap :generic src)))
+
+(deftest unit-queries 
+  (is (same? deploynames 
+             '("11_SRC3_NG" "17_SRC3_NG" "25_SRC3_AC" "28_SRC3_AC" "12_SRC3_NG" 
+               "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC" "10_SRC3_NG"))
+      "Should have 5 units deployable"))
 

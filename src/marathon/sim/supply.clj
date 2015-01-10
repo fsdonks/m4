@@ -130,7 +130,10 @@
   (-> (drop-unit supply unitname)
       (remove-src (:src (get-unit supply unitname))))) 
 
-(defn get-buckets [supply] (get (:deployable-buckets supply) :generic))
+(defn get-buckets 
+  ([supply bucket] (get (:deployable-buckets supply) bucket))
+  ([supply]        (get (:deployable-buckets supply) :default)))
+
 (defn add-bucket [supply bucket-name]
   (let [buckets (:deployable-buckets supply)]
     (if (contains? buckets bucket-name) supply 
@@ -287,7 +290,17 @@
   (sim/trigger-event :firstDeployment (:name supply) (:name supply) 
        (core/msg "Unit " (:name unit) " Deployed for the First Time") nil ctx))  
 
+
+
 ;;#Supply Availability
+
+
+;;#TODO revamp our data model to store sets of unit names, rather than
+;;map of name->unit.  This, again, fits in nicely with tags if we
+;;centralize our queries off a tag data model.  It's more legible for
+;;interactive debugging if we just see the names (note: I can write a
+;;view that will accomplish the same thing; in some cases it might be 
+;;preferable to retain the name->unit info....pending.
 
 (defn update-availability [unit supply ctx]
   (if (contains? (get-buckets supply) (get unit :src))
@@ -302,7 +315,7 @@
            {:supplystore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} ctx)
           (update-availability unit supply)))
   ([supply src unit ctx] 
-     (add-deployable-supply supply :generic src unit ctx)))
+     (add-deployable-supply supply :default src unit ctx)))
 
 ;;follow on supply was treated as special, but now it's not.  We expected 
 ;;a function called get-followon-supply before...
@@ -319,7 +332,7 @@
        (->> (sim/merge-updates 
              {:supplystore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
             (out-of-stock! (get unit :src)))))
-  ([supply src unit ctx] (remove-deployable-supply supply :generic src unit ctx)))
+  ([supply src unit ctx] (remove-deployable-supply supply :default src unit ctx)))
 
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
@@ -426,7 +439,7 @@
 ;;and use the tag annotation to execute queries.  We're heading
 ;;towards components at that point (which IS the right direction).
 ;;For now, a bridging strategy is to unify the buckets and followons, 
-;;basically making a standard bucket, :generic, and having everything
+;;basically making a standard bucket, :default, and having everything
 ;;else be inferred as "non-generic" (currently meaning followon, or 
 ;;associated with some demand group).
 ;;Note# 
