@@ -239,20 +239,22 @@
 ;;need to expand beyond this and go with a protocol or a multimethod.  
 ;;Doubtful.
 ;;TODO# determine if fillstore is necessary here.  It may just be a stub.
-(defn derive-supply-rule [demand fillstore & {:keys [category] :or {category (get demand :src)}}]
-  (case (supply-cat demand fillstore category)
-  ;for simple categories, ala "SRC_1" or :SRC_1, we just use the existing 
-  ;label for the demand, which maps to a node in the fill graph.  This label is 
-  ;typically a standard alphanumeric SRC, but it could be any identifier the user
-  ;chooses.
-  :simple         (sink-label category)
-  ;For categories that require a demand group, namely follow-on fills, we 
-  ;just inject the sink-label into the vector: 
-  ;     [src group] ->  [(sink-label src) group]
-  :src-and-group  [(sink-label (first category)) (second category)]
-  ;For complex categories that contain information in a map structure, we 
-  ;will have a way to parse the supply rule, which could be arbitrarily complex.
-  :rule-map       (rule->supply-rule category)))
+(defn derive-supply-rule
+  ([demand fillstore category]
+    (case (supply-cat demand fillstore category)
+                                        ;for simple categories, ala "SRC_1" or :SRC_1, we just use the existing 
+                                        ;label for the demand, which maps to a node in the fill graph.  This label is 
+                                        ;typically a standard alphanumeric SRC, but it could be any identifier the user
+                                        ;chooses.
+      :simple         (sink-label category)
+                                        ;For categories that require a demand group, namely follow-on fills, we 
+                                        ;just inject the sink-label into the vector: 
+                                        ;     [src group] ->  [(sink-label src) group]
+      :src-and-group  [(sink-label (first category)) (second category)]
+                                        ;For complex categories that contain information in a map structure, we 
+                                        ;will have a way to parse the supply rule, which could be arbitrarily complex.
+      :rule-map       (rule->supply-rule category)))
+  ([demand fillstore] (derive-supply-rule demand fillstore (get demand :src))))
 
 
 ;;testing

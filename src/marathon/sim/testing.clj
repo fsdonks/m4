@@ -349,14 +349,17 @@
 ;;of queries.
 (defn find-feasible-supply 
   ([supply srcmap category src]
-     (if (is? category :any) 
-       (->deployers supply :src (is? src))
-       (let [prefs (src->prefs  src srcmap)]
-         (->>  (->deployers supply :src #(contains? prefs %))
-               (into [])
-               (sort-by prefs)))))
+   (if (or  (is? category :any)
+            (is? category :generic)) 
+     (->deployers supply :src (is? src))
+     (let [prefs (src->prefs  src srcmap)]
+       (->>  (->deployers supply :src #(contains? prefs %) :cat (is? category))
+             (into [])
+             (sort-by prefs)))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :generic src))
   ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) src)))
+
+;;Can we define more general supply orderings?...
 
 (deftest unit-queries 
   (is (same? deploynames 
