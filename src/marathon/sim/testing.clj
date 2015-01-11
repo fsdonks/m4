@@ -343,15 +343,20 @@
   ([x y] (or (identical? x y) (= x y)))
   ([x] (fn [y] (is? x y))))
 
+;;#TODO supplement this with supply queries, so we can change the
+;;sort-order, etc.  allow caller to provide custom sort
+;;function...this is pretty huge.  From that, we can build all kinds
+;;of queries.
 (defn find-feasible-supply 
   ([supply srcmap category src]
      (if (is? category :any) 
        (->deployers supply :src (is? src))
-       (let [prefs (src->prefs srcmap src)]
+       (let [prefs (src->prefs  src srcmap)]
          (->>  (->deployers supply :src #(contains? prefs %))
                (into [])
                (sort-by prefs)))))
-  ([supply srcmap src] (find-feasible-supply supply srcmap :generic src)))
+  ([supply srcmap src] (find-feasible-supply supply srcmap :generic src))
+  ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) src)))
 
 (deftest unit-queries 
   (is (same? deploynames 
