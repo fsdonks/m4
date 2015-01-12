@@ -295,7 +295,7 @@
 
 (def srcs->prefs (memoize (fn [srcs]   
                               (into {} (map-indexed (fn [idx src] [src idx]) srcs)))))
-(defn src->prefs [src srcmap]  (srcs->prefs (src->srcs srcmap src)))
+(defn src->prefs [srcmap src]  (srcs->prefs (src->srcs srcmap src)))
 
 (defmacro change-if [default test & body]
   `(if ~test
@@ -346,17 +346,18 @@
 ;;#TODO supplement this with supply queries, so we can change the
 ;;sort-order, etc.  allow caller to provide custom sort
 ;;function...this is pretty huge.  From that, we can build all kinds
-;;of queries.
+;;of queries.  I inlined the sorting so that the initial supply is
+;;ordered by preference.  We may want to do this lazily, since we
+;;may not need all the supply.  Possible performance optimization.
 (defn find-feasible-supply 
   ([supply srcmap category src]
-   (if (or  (is? category :any)
-            (is? category :generic)) 
+   (if (is? category :any)
      (->deployers supply :src (is? src))
-     (let [prefs (src->prefs  src srcmap)]
+     (let [prefs (src->prefs  srcmap src)]
        (->>  (->deployers supply :src #(contains? prefs %) :cat (is? category))
              (into [])
-             (sort-by prefs)))))
-  ([supply srcmap src] (find-feasible-supply supply srcmap :generic src))
+             (sort-by (fn [[ k v]] (-  (get prefs (second k)))))))))
+  ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
   ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) src)))
 
 ;;Can we define more general supply orderings?...

@@ -955,12 +955,12 @@ RCMission->Rotational	[\"FFGMission\", \"FFGRCRoto\"]")
 (def supply-records 
 "Type	Enabled	Quantity	SRC	Component	OITitle	Name	Behavior	CycleTime	Policy	Tags	SpawnTime	Location	Position	Original
 SupplyRecord	FALSE	1	Ghost	Ghost	Anything	Auto	Ghost365_45	0	Ghost365_45	Auto	0	Auto	Auto	FALSE
-SupplyRecord	TRUE	0	SRC1	NG	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
-SupplyRecord	TRUE	0	SRC1	AC	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
-SupplyRecord	TRUE	0	SRC2	NG	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
-SupplyRecord	TRUE	0	SRC2	AC	Generated_SRC1	Auto	Auto	0	Auto	Auto	0	Auto	Auto	FALSE
-SupplyRecord	TRUE	20	SRC3	NG	Generated_SRC1	Auto	Auto	0	RCOpSus	Auto	0	Auto	Auto	FALSE
-SupplyRecord	TRUE	10	SRC3	AC	Generated_SRC1	Auto	Auto	0	FFGACRoto	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	3	SRC1	NG	Generated_SRC1	Auto	Auto	0	RC14	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	3	SRC1	AC	Generated_SRC1	Auto	Auto	0	AC12	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	3	SRC2	NG	Generated_SRC2	Auto	Auto	0	RC15	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	3	SRC2	AC	Generated_SRC2	Auto	Auto	0	AC13	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	20	SRC3	NG	Generated_SRC3	Auto	Auto	0	RCOpSus	Auto	0	Auto	Auto	FALSE
+SupplyRecord	TRUE	10	SRC3	AC	Generated_SRC3	Auto	Auto	0	FFGACRoto	Auto	0	Auto	Auto	FALSE
 ")
 
 (def src-tag-records 

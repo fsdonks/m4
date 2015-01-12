@@ -112,6 +112,7 @@
   {:name           (:name u) 
    :policy         (:name (:policy  u))
    :positionpolicy (:positionpolicy u)
+   :src            (:src u)
    :positionstate  (pol/get-state (:policy u) (:positionpolicy u))
    :deployable?    (can-deploy? u)
    :cycletime      (:cycletime  u)})
