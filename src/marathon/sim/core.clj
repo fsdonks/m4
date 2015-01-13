@@ -345,9 +345,13 @@
     (jung/view-graph fg jung/fr)
     (throw (Exception. "No fillgraph to visualize!"))))
 
+(defn visualize-subscriptions [ctx] 
+  (inspect/inspect-tree (:subscriptions (get-policystore ctx))))
+
 ;;TODO# define a visualization protocol, extend it to core datatypes...
-(defn visualize-unit [u] (inspect/inspect-tree u))    
+(defn visualize-unit [u]   (inspect/inspect-tree u))    
 (defn visualize-policy [p] (jung/view-graph (:positiongraph p) jung/fr))
+
        
 ;;#Shared Functions
 

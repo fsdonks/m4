@@ -343,6 +343,34 @@
   ([x y] (or (identical? x y) (= x y)))
   ([x] (fn [y] (is? x y))))
 
+
+;;#TODO expose a sql-like query interface for the simstate/simcontext.
+;;There's a more primive query mechanism here...
+;;Tables exposed by the simstate are..
+;;demandstore [demands activations deactivations tags]
+;;supplystore [units   deployables categories    tags]
+;;policystore []
+;;fillstore   []
+;;events      ...
+;;We may think of a general way to organize our data - entitystore is
+;;really desireable, but currently not configured that way.
+       
+
+;;For now, we'll implement specific queries that directly examine 
+;;stuff, then abstract and migrate later.
+
+
+;;For instance, we might have an select-entity query, via
+;;spork.entitystore, that only works on units of supply.
+
+;;The domains of supplystore are:
+;;[unitdata deployable category cycle policy supplytags followon]
+
+;;The domains of demandstore are:
+;;[demanddata active unfilled activation deactivation changed demandtags]
+
+;;Note: similar domains exist for the fillstore and policystore.
+
 ;;#TODO supplement this with supply queries, so we can change the
 ;;sort-order, etc.  allow caller to provide custom sort
 ;;function...this is pretty huge.  From that, we can build all kinds
@@ -356,7 +384,7 @@
      (let [prefs (src->prefs  srcmap src)]
        (->>  (->deployers supply :src #(contains? prefs %) :cat (is? category))
              (into [])
-             (sort-by (fn [[ k v]] (-  (get prefs (second k)))))))))
+             (sort-by  (fn [[ k v]]   (get prefs (second k))))))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
   ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) src)))
 
