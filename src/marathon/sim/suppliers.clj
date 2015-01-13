@@ -129,7 +129,6 @@
 
 (defn order-cost [m] (get m :cost 0))
 
-
 (defn constrained-gen [order gen]
   (if (>= (capacity gen) (order-cost order))   
     [(create-new-unit (new-id))

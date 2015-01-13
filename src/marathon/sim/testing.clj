@@ -282,7 +282,7 @@
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
   (is (same? deploynames 
-             '("11_SRC3_NG" "17_SRC3_NG" "25_SRC3_AC" "28_SRC3_AC" "12_SRC3_NG" 
-               "22_SRC3_AC" "24_SRC3_AC" "23_SRC3_AC" "10_SRC3_NG"))
+             '("29_SRC3_NG" "36_SRC3_AC" "23_SRC3_NG" "11_SRC2_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG" "40_SRC3_AC"
+               "34_SRC3_AC" "37_SRC3_AC" "8_SRC2_NG" "35_SRC3_AC"))
       "Should have 5 units deployable"))
 

@@ -238,7 +238,11 @@
 ;;function for performance (and ostensibly simpler).  We'll see if we
 ;;need to expand beyond this and go with a protocol or a multimethod.  
 ;;Doubtful.
-;;TODO# determine if fillstore is necessary here.  It may just be a stub.
+;;TODO# determine if fillstore is necessary here.  It may just be a
+;;stub.  Also revisit different types of rules, currently only
+;;handling simply rules, where the rule is the demand's src.  Note: 
+;;we could opt to use complex rules in lie of the SRC for the demand, 
+;;or have the SRC map to a pattern....
 (defn derive-supply-rule
   ([demand fillstore category]
     (case (supply-cat demand fillstore category)
@@ -246,15 +250,16 @@
                                         ;label for the demand, which maps to a node in the fill graph.  This label is 
                                         ;typically a standard alphanumeric SRC, but it could be any identifier the user
                                         ;chooses.
-      :simple         (sink-label category)
+      :simple         category ;(sink-label category)
                                         ;For categories that require a demand group, namely follow-on fills, we 
                                         ;just inject the sink-label into the vector: 
                                         ;     [src group] ->  [(sink-label src) group]
-      :src-and-group  [(sink-label (first category)) (second category)]
+      :src-and-group  (rule->supply-rule category) ;[(sink-label (first category)) (second category)]
                                         ;For complex categories that contain information in a map structure, we 
                                         ;will have a way to parse the supply rule, which could be arbitrarily complex.
       :rule-map       (rule->supply-rule category)))
   ([demand fillstore] (derive-supply-rule demand fillstore (get demand :src))))
+;  ([demand ctx] (derive-supply-rule demand (marathon.sim.core/get-fillstore ctx) (get demand :src))))
 
 
 ;;testing

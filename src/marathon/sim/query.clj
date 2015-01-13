@@ -40,7 +40,6 @@
      ~@body
      ~default))
 
-
 ;;Reducer/seq that provides an abstraction layer for implementing 
 ;;queries over deployable supply.  I really wish I had more time 
 ;;to hack out a better macro for the reducers, but this works for now.
@@ -130,6 +129,37 @@
              (into [])
              (sort-by  (fn [[ k v]]   (get prefs (second k))))))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
-  ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) src)))
+  ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src)))
 
 
+;;Once we find a supply...we want to sort the supply.
+;;This is where a slew of suitability functions come into play.
+;;We used to have this in a dedicated unit comparison module, along
+;;with a specialized unit comparator object that "interpreted" simple 
+;;enum combinations to nest comparators into complicated rules, like 
+;;prefer ac, then rc, by order of maximum dwell.
+
+;;FMCA represents a complex set of rules for generating units...
+;;For a rule like:
+
+;(unitcomparer max-dwell [u] 
+
+;;(defcomparer initial-demand [[AC-First MaxDwell]
+;;                             [RC-AD MaxDwell]
+;;                             Generate-AC
+;;                             Generate-RCAD])
+
+;;(defcomparer rotational-demand [[[RC-First MaxDwell] 
+;;                                 [AC-First MaxDwell]]
+;;                                RCAD
+;;                                Generate-RC
+;;                                Generate-AC
+;;                                Generate-RCAD])
+
+;;Note -> Generate-X implies that the unit does not exist.
+;;So, the first couple of rules actually apply to a comparison function.
+;;The next n rules apply to some generating function for new entities. 
+;;We may wish to keep them separate.
+
+;;(defcomparer initial-demand [[AC-First MaxDwell]
+;;                             [RC-AD MaxDwell]])
