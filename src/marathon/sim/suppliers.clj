@@ -76,32 +76,6 @@
 
 
 
-
-
-
-;;FMCA represents a complex set of rules for generating units...
-;;For a rule like:
-
-;;(defcomparer initial-demand [[AC-First MaxDwell]
-;;                             [RC-AD MaxDwell]
-;;                             Generate-AC
-;;                             Generate-RCAD])
-
-;;(defcomparer rotational-demand [[[RC-First MaxDwell] 
-;;                                 [AC-First MaxDwell]]
-;;                                RCAD
-;;                                Generate-RC
-;;                                Generate-AC
-;;                                Generate-RCAD])
-
-;;Note -> Generate-X implies that the unit does not exist.
-;;So, the first couple of rules actually apply to a comparison function.
-;;The next n rules apply to some generating function for new entities. 
-;;We may wish to keep them separate.
-
-;;(defcomparer initial-demand [[AC-First MaxDwell]
-;;                             [RC-AD MaxDwell]])
-
 ;;(defgenerator initial-demand-gen 
 ;;                             [existing-supply ;;sorting matters
 ;;                              Generate-AC     ;;sorting may not matter ....

@@ -208,6 +208,12 @@
 ;End Property
 (defn get-dwell [u] (-> u :currentcycle :dwell))
 
+
+(defn get-cyclelength [u] (-> u :currentcycle :duration-expected))
+(defn normalized-dwell [u] 
+ (double  (/ (get u :cycletime)
+            (-> u :currentcycle :dwell-expected))))
+
 ;Public Property Get BDR() As Single
 ;BDR = CurrentCycle.BDR
 ;End Property

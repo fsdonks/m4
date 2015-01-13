@@ -142,7 +142,32 @@
 ;;FMCA represents a complex set of rules for generating units...
 ;;For a rule like:
 
-;(unitcomparer max-dwell [u] 
+(defn by-key [k]
+  (fn [l r] 
+    (compare (get l k) (get r k))))
+
+(defn by-keys 
+  ([ks]           
+     (fn [l r]                       
+       (reduce (fn [acc k]
+                 (let [res (compare (get l k) (get r k))]
+                   (if (not (zero? res))
+                     (reduced res)
+                     acc))) 0 ks)))
+  ([ks k->comp]
+     (fn [l r]                       
+       (reduce (fn [acc k]
+                 (let [res ((k->comp k) (get l k) (get r k)))]
+                   (if (not (zero? res))
+                     (reduced res)
+                     acc))) 0 ks)))
+
+[:component ["AC"]
+ :dwell     unit/normalized-dwell]
+ 
+(defn descend [f] 
+  (fn [l r] 
+    (f r l)))
 
 ;;(defcomparer initial-demand [[AC-First MaxDwell]
 ;;                             [RC-AD MaxDwell]
