@@ -34,7 +34,7 @@
 (defprotocol IEntitySelector 
   (select-entity [selector entity-order]))
 
-(defn select-all [supplystore]
+(defn select-all   [supplystore]
   (get supplystore [:unitmap]))
 
 ;;We need different ways of comparing units. 
