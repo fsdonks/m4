@@ -1062,6 +1062,19 @@ RelationRecord	sub	SRC2	SRC1	1	FALSE
 RelationRecord	sub	SRC2	SRC3	1	FALSE
 ")
 
+(def suitability-records 
+"Suitability	Definition
+fencedto	builtin
+maxdwell	builtin
+uniform	[fenced  followon maxdwell] 
+mindwell	(flip maxdwell)
+ac_first	[fenced followon (where-compo \"AC\") maxdwell]
+rc_first	[fenced followon (where-compo \"RC\") maxdwell]
+ng_first	[fenced followon (where-compo \"NG\") maxdwell]
+ar_first	[fenced followon (where-compo \"AR\") maxdwell]
+not_ac	(except-compo \"AC\")
+title32	[(where-compo \"NG\") mindwell]")
+
 (def parameters 
 "ParameterName	Value
 LastDay	0
@@ -1099,7 +1112,8 @@ DefaultDemotionPolicy	Auto
    :DemandRecords   demand-records
    :PeriodRecords   period-records 
    :RelationRecords relation-records
-   :Parameters      parameters})
+   :Parameters      parameters
+   :SuitabilityRecords suitability-records})
 
 (def non-tables #{:PolicyDefs})
 

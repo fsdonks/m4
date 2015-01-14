@@ -190,19 +190,47 @@
 (def MinDwell    (ordering unit/normalized-dwell))
 (def MaxDwell    (flip MinDwell))
 (def compo-pref #(key-pref :component %))
+(def where-compo  compo-pref)
+(def except-compo (comp flip compo-pref))
 
 (def components ["AC" "RC" "NG" "RCAD" "RCAD-BIG"])
 ;;Emit preferences for standard component values.
 (doseq [c components]
   (eval `(def ~(symbol c) (compo-pref ~c))))
 
-;;(defcomparer initial-demand [[AC-First MaxDwell]
-;;                             [RC-AD MaxDwell]
+;;(defcomparer initial-demand [[AC MaxDwell]
+;;                             [RCAD MaxDwell]
 ;;                             Generate-AC
 ;;                             Generate-RCAD])
 
-;;(defcomparer rotational-demand [[[RC-First MaxDwell] 
-;;                                 [AC-First MaxDwell]]
+
+;;Example rules:
+
+;;establishes a preference...
+;;given the rule "SRC3" 
+;;We search from an abstract deployable resource
+
+(comment 
+'{:select  :*
+  :from    :deployable
+  :where    {:category  [:default :jit]
+             :src       "SRC3"}
+  :order-by [[:AC :RCAD] 
+              :MaxDwell]}
+
+'{:select  :*
+  :from    :deployable 
+  :where    {:category  [:default :jit]
+             :src       "SRC3"
+             :has-tag  #{"Special"}}
+  :order-by [[:AC :RCAD] 
+              :MaxDwell]}
+)
+
+
+
+;;(defcomparer rotational-demand [[[RC MaxDwell] 
+;;                                 [AC MaxDwell]]
 ;;                                RCAD
 ;;                                Generate-RC
 ;;                                Generate-AC
