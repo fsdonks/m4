@@ -142,32 +142,59 @@
 ;;FMCA represents a complex set of rules for generating units...
 ;;For a rule like:
 
+(defn ordering? [x] (get (meta x) :ordering))
+(defmacro ord-fn [[l r] & body]
+  `(vary-meta (fn [~l ~r] ~@body) assoc :ordering true))
+
+(defn ordering 
+  ([f]  (if (ordering? f) f (ord-fn [l r] (compare (f l) (f r)))))
+  ([f & fs]
+    (let [fs (into [f] fs)]      
+      (ord-fn [l r]
+        (reduce (fn [acc f]
+                  (let [res (if (ordering? f) (f l r) 
+                                (compare (f l) (f r)))]
+                    (if (not (zero? res))
+                      (reduced res)
+                      acc))) 0 fs)))))
+
 (defn by-key [k]
-  (fn [l r] 
+  (ord-fn [l r] 
     (compare (get l k) (get r k))))
+ 
+(defn flip [f] (ord-fn [l r] (f r l)))
+(def descending flip)
 
 (defn by-keys 
-  ([ks]           
-     (fn [l r]                       
-       (reduce (fn [acc k]
-                 (let [res (compare (get l k) (get r k))]
-                   (if (not (zero? res))
-                     (reduced res)
-                     acc))) 0 ks)))
-  ([ks k->comp]
-     (fn [l r]                       
-       (reduce (fn [acc k]
-                 (let [res ((k->comp k) (get l k) (get r k)))]
-                   (if (not (zero? res))
-                     (reduced res)
-                     acc))) 0 ks)))
+  ([ks]         (apply ordering (map (fn [k] #(get % k)) ks)))
+  ([ks k->comp] (apply ordering (map (fn [k] #(k->comp k)) ks)) ))
 
-[:component ["AC"]
- :dwell     unit/normalized-dwell]
- 
-(defn descend [f] 
-  (fn [l r] 
-    (f r l)))
+
+;;Note the use of not= .  This seems counterintutive, but 
+;;the predicates, used as comparators, means that false 
+;;values are less than true.  So if you want a preference, 
+;;you need to invert the predicate.
+(defn key-pref [k c] 
+  (if (fn? c)
+    (ordering #(c (get % k)))
+    (ordering #(not= (get % k) c))))
+
+;;Basic Orderings
+;;===============
+
+;;We need to formalize these later; for now 
+;;they'll serve.
+;;#TODO allow users to define suitability queries via scripts 
+;;or a little language.
+
+(def MinDwell    (ordering unit/normalized-dwell))
+(def MaxDwell    (flip MinDwell))
+(def compo-pref #(key-pref :component %))
+
+(def components ["AC" "RC" "NG" "RCAD" "RCAD-BIG"])
+;;Emit preferences for standard component values.
+(doseq [c components]
+  (eval `(def ~(symbol c) (compo-pref ~c))))
 
 ;;(defcomparer initial-demand [[AC-First MaxDwell]
 ;;                             [RC-AD MaxDwell]
@@ -180,6 +207,10 @@
 ;;                                Generate-RC
 ;;                                Generate-AC
 ;;                                Generate-RCAD])
+
+;;The default from Marathon is...
+;;Fenced 
+;;
 
 ;;Note -> Generate-X implies that the unit does not exist.
 ;;So, the first couple of rules actually apply to a comparison function.
