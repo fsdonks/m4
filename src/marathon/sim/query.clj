@@ -219,8 +219,8 @@
    for both ascending and descending values."
   [type nm [l r] & body]
   (let [[hi lo] (case type 
-                  :value ["lowest"   "highest"]
-                  :predicate     ["when-not" "when"])
+                  :value     ["min"   "max"]
+                  :predicate ["not" "when"])
         hi  (symbol (str hi "-" nm))
         lo  (symbol (str lo "-" nm))]                  
     `(do (def ~hi (ord-fn [~l ~r] 
@@ -273,19 +273,12 @@
                 dwell  unit/get-dwell
                 bog     unit/get-bog 
                 proportional-dwell unit/normalized-dwell
-               relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength))))            
-            )
+                relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength u)))))
+
+;;predicates...
 
 ;;whereCompo
 ;;whereNotCompo
-
-
-;;highestBOG
-;;lowestBOG
-
-;;highestProportionalDwell
-;;lowestProportionalDwell
-
 
 
 ;;Environmental queries
@@ -298,19 +291,16 @@
        (pred-compare (same-val? get l *env*))))
 
 ;;FencedTo
-;;notFencedTo
+;;NotFencedTo
 
-;;whereTag
-;;whereNotTag
+;;tag 
+;;not-tag
 
-;;whereAndTags
-;;whereNotAndTags
+;;ANDTags
+;;NANDTags
 
-;;whereOrTags
-;;whereNotOrTags
-
-
-
+;;ORTags
+;;NORTags
 
 ;;(defcomparer initial-demand [[AC MaxDwell]
 ;;                             [RCAD MaxDwell]
