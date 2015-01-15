@@ -204,6 +204,22 @@
 ;;                             Generate-RCAD])
 
 
+;;Stock Rules From Old Marathon
+;;=============================
+
+;;#TODO implement these guys, or optionally read them from the default project.
+;; (def fencedto	builtin
+;;      maxdwell	builtin
+;; uniform	[fenced  followon maxdwell] 
+;; mindwell	(flip maxdwell)
+;; ac_first	[fenced followon (where-compo "AC") maxdwell]
+;; rc_first	[fenced followon (where-compo "RC") maxdwell]
+;; ng_first	[fenced followon (where-compo "NG") maxdwell]
+;; ar_first	[fenced followon (where-compo "AR") maxdwell]
+;; not_ac	(except-compo "AC")
+;; title32	[(where-compo "NG") mindwell]
+
+
 ;;Example rules:
 
 ;;establishes a preference...
