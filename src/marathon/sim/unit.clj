@@ -202,7 +202,7 @@
 ;End Property
 (defn get-bog [u] (-> u :currentcycle :bog))
 
-(defn unit-bog-budget [u] (-> u :currentcycle :bogbudget))
+(defn get-bog-budget [u] (-> u :currentcycle :bogbudget))
 ;Public Property Get dwell() As Single
 ;dwell = CurrentCycle.dwell
 ;End Property
@@ -210,6 +210,8 @@
 
 
 (defn get-cyclelength [u] (-> u :currentcycle :duration-expected))
+
+;;TODO# Verify this statistic is accurate....
 (defn normalized-dwell [u] 
  (double  (/ (get u :cycletime)
             (-> u :currentcycle :dwell-expected))))
@@ -222,6 +224,23 @@
 (defn- cycle-bdr [c] 0.0)
 (defn get-BDR [u] (cycle-bdr (:currentcycle u)))
 
+
+;;TODO remove this or switch over to them.  MAybe more clean.  Unknown
+;; at this point.
+
+;; (defn defaccessors [paths]
+;;   (doseq [p paths]
+;;     (let [nm (subs (str p) 1)]
+;;       (eval `(defn ~(symbol nm) [obj#] 
+;;                (-> obj# ~@path))))))
+
+;; (defaccessors [:currentcycle :bogbudget]
+;;               [:currentcycle :bog]
+;;               [:currentcycle :dwell])
+  
+;; (defn bog-budget [u] (-> u :currentcycle :bogbudget))
+;; (defn bog        [u] (-> u :currentcycle :bog))
+;; (defn dwell      [u] (-> u :currentcycle :dwell))
 
 ;Public Sub changePolicy(newpolicy As IRotationPolicy)
 ;If Not (policy Is Nothing) Then policyStack.add newpolicy

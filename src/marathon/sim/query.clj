@@ -236,14 +236,17 @@
   ([pred] 
      `(if ~pred 1 -1)))
 
-(defmacro compare-by [k l r]
-  `(compare (get ~l ~k)
-            (get ~r ~k)))
+(defn key-compare [k l r]
+  (if (keyword? k)
+    (compare (get l k)
+             (get r k))
+    (compare (k l) (k r))))
 
-(comment 
+;; (defmacro compare* [l r & else]
+;;   `(let [res# (compare ~l ~r)]
+;;      (if (zero? res#) ~@else
+;;          res#)))
 
-(defmacro predicate [nm [l r] & body] 
-  `(defcomparison :predicate ~nm [~l ~r] ~@body))
 
 (defmacro valuation [nm [l r] & body] 
   `(defcomparison :value ~nm [~l ~r] ~@body))
@@ -252,40 +255,48 @@
   `(valuation ~nm [l# r#]
        (key-compare ~k l# r#)))
 
-(defmacro key-valuations [& ks]
-  `(doseq [k# ~ks]
-     (key-valuation k#)))
+(defmacro key-valuations [& kvps]
+  `(do ~@(for [[nm f] (partition 2 kvps)]
+          `(key-valuation ~nm ~f))))
 
-(defmacro predicates [& ks]
-  `(doseq [k# ~ks]
-     (predicate k#)))
+;; (defmacro predicates [& kvps]
+;;   `(doseq [[k# nm#] ~kvps]
+;;      (predicate k#)))
+
+;; (defmacro predicate [nm k] 
+;;   `(defcomparison :predicate ~nm [~l ~r] ~@body))                   
   
-(predicate followon  [l r] 
-  (if (same-val? :followon l r) 0
-      (pred-compare (same-val? :followon l *env*))))
-)
-;; (key-valuations :followon :cycletime)
-;; (func-valuations 
-                
- 
+;;Basic value-based orderings.  These provide numbers we can easily
+;;compare on.
+(key-valuations cycletime  :cycletime
+                bog-budget unit/bog-budget
+                dwell  unit/get-dwell
+                bog     unit/get-bog 
+                proportional-dwell unit/normalized-dwell
+               relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength))))            
+            )
 
-
-
-
-
-;;followon
-;;cycletime
-;;relativeCycletime
-;;highestBOGBudget
-;;lowestBOGBudget
-;;highestDwell
-;;lowestDwell
 ;;whereCompo
 ;;whereNotCompo
+
+
 ;;highestBOG
 ;;lowestBOG
+
 ;;highestProportionalDwell
 ;;lowestProportionalDwell
+
+
+
+;;Environmental queries
+;;=====================
+
+;;followon 
+
+(predicate followon  [l r] 
+   (if (same-val? get l r) 0
+       (pred-compare (same-val? get l *env*))))
+
 ;;FencedTo
 ;;notFencedTo
 
