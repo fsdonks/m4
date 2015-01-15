@@ -110,6 +110,9 @@
    :Parameters 
     [:ParameterName 
      :Value]
+   :SuitabilityRecords
+    [:Suitability 
+     :Definition]
    :demand-table-schema ;;added for legacy purposes.
    [:Type
     :Enabled

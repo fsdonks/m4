@@ -198,6 +198,109 @@
 (doseq [c components]
   (eval `(def ~(symbol c) (compo-pref ~c))))
 
+;;We have a set of unit comparison criteria that together form a
+;;little language for comparing units.
+
+(defn same-val? 
+  ([k r1 r2] (= (get r1 k) (get r2 k)))
+  ([k r1 r2 & rs]
+     (let [l (get r1 k)
+           r (get r2 k)]
+       (when (= l r)             
+         (reduce (fn [acc r]
+                   (if (= (get r k) acc) acc
+                       (reduced nil)))
+                 l
+                 rs)))))
+            
+;;For convenience, we define functions that alias the comparer...
+(defmacro defcomparison 
+  "Defines a comparison in ascending order.  Derives default ordering functions 
+   for both ascending and descending values."
+  [type nm [l r] & body]
+  (let [[hi lo] (case type 
+                  :value ["lowest"   "highest"]
+                  :predicate     ["when-not" "when"])
+        hi  (symbol (str hi "-" nm))
+        lo  (symbol (str lo "-" nm))]                  
+    `(do (def ~hi (ord-fn [~l ~r] 
+                 ~@body))
+         (def ~lo (ord-fn [~r ~l]
+                 ~@body)))))
+
+(def ^:dynamic *env* {})
+      
+(defmacro pred-compare
+  ([pred expr]
+     `(if (~pred ~expr) 1 -1))
+  ([pred] 
+     `(if ~pred 1 -1)))
+
+(defmacro compare-by [k l r]
+  `(compare (get ~l ~k)
+            (get ~r ~k)))
+
+(comment 
+
+(defmacro predicate [nm [l r] & body] 
+  `(defcomparison :predicate ~nm [~l ~r] ~@body))
+
+(defmacro valuation [nm [l r] & body] 
+  `(defcomparison :value ~nm [~l ~r] ~@body))
+
+(defmacro key-valuation [nm k] 
+  `(valuation ~nm [l# r#]
+       (key-compare ~k l# r#)))
+
+(defmacro key-valuations [& ks]
+  `(doseq [k# ~ks]
+     (key-valuation k#)))
+
+(defmacro predicates [& ks]
+  `(doseq [k# ~ks]
+     (predicate k#)))
+  
+(predicate followon  [l r] 
+  (if (same-val? :followon l r) 0
+      (pred-compare (same-val? :followon l *env*))))
+)
+;; (key-valuations :followon :cycletime)
+;; (func-valuations 
+                
+ 
+
+
+
+
+
+;;followon
+;;cycletime
+;;relativeCycletime
+;;highestBOGBudget
+;;lowestBOGBudget
+;;highestDwell
+;;lowestDwell
+;;whereCompo
+;;whereNotCompo
+;;highestBOG
+;;lowestBOG
+;;highestProportionalDwell
+;;lowestProportionalDwell
+;;FencedTo
+;;notFencedTo
+
+;;whereTag
+;;whereNotTag
+
+;;whereAndTags
+;;whereNotAndTags
+
+;;whereOrTags
+;;whereNotOrTags
+
+
+
+
 ;;(defcomparer initial-demand [[AC MaxDwell]
 ;;                             [RCAD MaxDwell]
 ;;                             Generate-AC
