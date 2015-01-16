@@ -21,6 +21,15 @@
             [spork.util [tags :as tag]]
             [clojure.core [reducers :as r]]))
 
+
+;; (defmacro napply [f k & xs]
+;;   `(fn [m#] (~f (get m# ~k) ~@xs)))
+
+;; (defn klift 
+;;   ([k f]       (napply f k))
+;;   ([k f v]     (napply f k (v m)))
+;;   ([k f v1 v2] (napply f k v1 v2)))  
+
 (defmacro mapfunctor
   [[k v] expr]
   `(fn [m#]
@@ -37,21 +46,23 @@
         `(defn ~nm [~k ~v]
            (mapfunctor [~k curr#] (~expr curr# ~v)))))))                                    
 
-(doseq [op '[= < > <= >=]]
+(defn one? [x] (== x 1))
+
+(doseq [op '[= < > <= >= not=]]
   (eval `(mapop ~(symbol (str "?" op)) [k# v#]  ~op)))
 
-;; (defn ?between [k lower upper] 
-;;   (fn [m]
-;;     (and (?<= k upper) 
-;;          (?>= k lower))))
+(doseq [op '[even? odd? zero? one? pos?]]
+  (eval `(mapop ~(symbol (str "?" op)) [k#]  ~op)))
 
-;; (defn ?not [f] 
-;;   (fn [m] 
-;;     (not (f m))))
 
-;; (defn ?outside [k lower upper]
-;;   (let [f (?between k lower upper)] 
-;;     (fn [m]  (not (f m)))))
+(defn ?between [k lower upper] 
+  (mapfunctor [k curr]
+              (and (<= curr upper)
+                   (>= curr lower))))
+
+(defn ?outside [k lower upper]
+   (let [f (?between k lower upper)] 
+     (fn [m]  (not (f m)))))
 
 (defn find-deployable-supply  [supply src] (keys (get (supply/get-buckets supply) src)))
 (def  src->fillrule (memoize (fn [src] 
@@ -447,8 +458,8 @@
               acc)) nil fs)) 
   
 (defn filt-sort [f ord xs]
-     (let [filtered      (if filter (filter f xs) xs)]
-       (if sort (sort ord filtered) filtered)))
+     (let [filtered      (if f (filter f xs) xs)]
+       (if ord (sort ord filtered) filtered)))
 
 (defn eval-filter [xs]
   (cond (fn? xs) xs        
@@ -462,9 +473,9 @@
         (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))))
   
 (defn selection [& {:keys [from where order-by]}]
-   (let [filt (if (fn? where) where (and-filter where))
+   (let [filt (if (fn? where) where (eval-filter where))
          order (if (ordering? order-by) order-by
-                   (apply ordering order-by))]
+                   (eval-order order-by))]
      (fn [xs]
        (filt-sort filt order xs))))
 
