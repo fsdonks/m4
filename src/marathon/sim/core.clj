@@ -84,7 +84,14 @@
    policystore   [:policystore]
    fillstore     [:fillstore]
    fill-function [:fillstore :fillfunction]
-   behaviors     [:behaviormanager]})
+   behaviors     [:behaviormanager]
+   supply-tags   [:supplystore :tags]
+   demand-tags   [:demandstore :tags]})
+
+(defn demands [ctx] (:demandmap (get-demandstore ctx)))
+(defn units   [ctx] (:unitmap   (get-supplystore ctx)))
+(defn periods [ctx] (:periods   (get-policystore ctx)))
+
 
 (defmacro with-simstate 
   "Given a destructuring of [[path1 path2...] the-simstate], paired
@@ -228,9 +235,6 @@
 
 ;;#State-wide queries...
 ;;tbd
-(defn demands [ctx] (:demandmap (get-demandstore ctx)))
-(defn units   [ctx] (:unitmap   (get-supplystore ctx)))
-(defn periods [ctx] (:periods   (get-policystore ctx)))
 (defn features [ctx & {:keys [where] :or {where identity}}]
   [:simstate
    (for [[nm obj] (seq (:state ctx))

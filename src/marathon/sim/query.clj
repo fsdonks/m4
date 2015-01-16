@@ -21,6 +21,38 @@
             [spork.util [tags :as tag]]
             [clojure.core [reducers :as r]]))
 
+(defmacro mapfunctor
+  [[k v] expr]
+  `(fn [m#]
+     (let [~v (get m# ~k)]
+       ~expr)))
+
+(defmacro mapop 
+  [nm args expr]  
+  (let [[k & vs] args]
+    (if (zero? (count vs))
+      `(defn ~nm [~k] 
+         (mapfunctor [~k curr#] (~expr curr#)))
+      (let [v (first vs)]
+        `(defn ~nm [~k ~v]
+           (mapfunctor [~k curr#] (~expr curr# ~v)))))))                                    
+
+(doseq [op '[= < > <= >=]]
+  (eval `(mapop ~(symbol (str "?" op)) [k# v#]  ~op)))
+
+;; (defn ?between [k lower upper] 
+;;   (fn [m]
+;;     (and (?<= k upper) 
+;;          (?>= k lower))))
+
+;; (defn ?not [f] 
+;;   (fn [m] 
+;;     (not (f m))))
+
+;; (defn ?outside [k lower upper]
+;;   (let [f (?between k lower upper)] 
+;;     (fn [m]  (not (f m)))))
+
 (defn find-deployable-supply  [supply src] (keys (get (supply/get-buckets supply) src)))
 (def  src->fillrule (memoize (fn [src] 
                                (marathon.sim.fill.fillgraph/sink-label src))))
@@ -415,13 +447,26 @@
               acc)) nil fs)) 
   
 (defn filt-sort [f ord xs]
-  (->> xs
-       (filter f)
-       (sort ord)))
-  
+     (let [filtered      (if filter (filter f xs) xs)]
+       (if sort (sort ord filtered) filtered)))
 
-;; (defn select [& {:keys [from where order-by]}]
-;;   (
+(defn eval-filter [xs]
+  (cond (fn? xs) xs        
+        (vector? xs) 
+        (let [fs (reduce (fn [acc f] (conj acc (eval-filter f))) [] xs)]
+          #(and-filter % fs))))
+
+(defn eval-order [xs]
+  (cond (ordering? xs) xs        
+        (vector? xs)  
+        (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))))
+  
+(defn selection [& {:keys [from where order-by]}]
+   (let [filt (if (fn? where) where (and-filter where))
+         order (if (ordering? order-by) order-by
+                   (apply ordering order-by))]
+     (fn [xs]
+       (filt-sort filt order xs))))
 
 
 ;;(defcomparer initial-demand [[AC MaxDwell]
