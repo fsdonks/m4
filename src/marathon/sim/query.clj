@@ -111,7 +111,7 @@
 
 
 ;;These should become basic supply queries.  We can change the
-;;implementation strategy (likely to tags/components) after the
+;;implementation strategy (likely to tag/components) after the
 ;;fact...Also, they're primitive supply for our more general fill
 ;;query language...
 
@@ -254,8 +254,8 @@
 ;;   `(doseq [[k# nm#] ~kvps]
 ;;      (predicate k#)))
 
-;; (defmacro predicate [nm k] 
-;;   `(defcomparison :predicate ~nm [~l ~r] ~@body))                   
+(defmacro predicate [nm [l r] & body] 
+  `(defcomparison :predicate ~nm [~l ~r] ~@body))                   
 
 
 ;;TODO# relook what needs to be in the general query namespace.
@@ -265,7 +265,7 @@
 ;;Basic value-based orderings.  These provide numbers we can easily
 ;;compare on.
 (key-valuations cycletime  :cycletime
-                bog-budget unit/bog-budget
+                bog-budget unit/get-bog-budget
                 dwell      unit/get-dwell
                 bog        unit/get-bog 
                 proportional-dwell unit/normalized-dwell
@@ -332,33 +332,97 @@
      (fenced-compare demandname followoncode tags l r)))
           
 (predicate fenced  [l r] 
-   (fenced-compare (get *env* :demandname) (get *env* :followoncode) (get *env* :tags) l r))
+    (fenced-compare (get *env* :demandname) (get *env* :followoncode) (get *env* :tags) l r))
 
 ;;tag
 ;;not-tag
+(defn tag 
+  ([tags tag]
+     (ord-fn [l r]
+             (key-compare #(tag/has-tag? tags tag % ) (get l :name) (get r :name))))
+  ([tag]  
+     (ord-fn [l r]
+             (key-compare #(tag/has-tag? (get *env* :tags) tag % ) (get l :name) (get r :name)))))
 
-(defn tag [tags tag]
-  (ord-fn [l r]
-     (key-compare #(tags/has-tag? tags %) (get l :name) (get r :name))))
 
-(defn all-tags [tags subject xs]
-  (every? (tags/get-tags tags subject) xs))
+;;Utility functions for working with tags [move to spork.util.tags]
+;;=================================================================
+
 
 ;;ANDTags
-(defn and-tags [tags xs]
-  (let [tagged (memoize (fn [name] (all-tags tags name)))] ;hopefully this doesn't kill us.
-    (ord-fn [l r]            
-     (let [lefts  (tagged (:name l)) 
-           rights (tagged (:name r))]
-       (cond (= lefts rights) 0
-             lefts -1
-             rights 1)))))
-(defn nand-tags [tags xs] (flip (and-tags tags xs)))
+(defn and-tags 
+  ([tags xs]
+     (let [tagged (memoize (fn [name] (tag/has-tags? tags name xs)))] ;hopefully this doesn't kill us.
+       (ord-fn [l r]            
+               (let [lefts  (tagged (:name l)) 
+                     rights (tagged (:name r))]
+                 (cond (= lefts rights) 0
+                       lefts -1
+                       rights 1)))))
+  ([xs] (let [tagged (fn [name] (tag/has-tags? (get *env* :tags) name xs))] ;hopefully this doesn't kill us.
+          (ord-fn [l r]            
+                  (let [lefts  (tagged (:name l)) 
+                        rights (tagged (:name r))]
+                    (cond (= lefts rights) 0
+                          lefts -1
+                          rights 1))))))
+
+(defn nand-tags 
+  ([tags xs] (flip (and-tags tags xs)))
+  ([xs]      (flip (and-tags xs))))
                   
 ;;NANDTags
 
 ;;ORTags
+(defn or-tags 
+  ([tags xs]
+     (let [tagged (memoize (fn [name] (tag/some-tags? tags name xs)))] ;hopefully this doesn't kill us.
+       (ord-fn [l r]            
+               (let [lefts  (tagged (:name l)) 
+                     rights (tagged (:name r))]
+                 (cond (= lefts rights) 0
+                       lefts -1
+                       rights 1)))))
+  ([xs] (let [tagged (fn [name] (tag/some-tags? (get *env* :tags) name xs))] ;hopefully this doesn't kill us.
+          (ord-fn [l r]            
+                  (let [lefts  (tagged (:name l)) 
+                        rights (tagged (:name r))]
+                    (cond (= lefts rights) 0
+                          lefts -1
+                          rights 1))))))
+
 ;;NORTags
+(defn nor-tags  
+  ([tags xs] (flip (nand-tags tags xs)))
+  ([xs]      (flip (nand-tags xs))))
+
+(defmacro with-query-env [env & expr]
+  `(binding [~'marathon.sim.query/*env* ~env]
+     ~@expr))
+
+
+;;TODO# move these generic functions into a more general namespace.
+(defn and-filter [x fs]
+  (reduce (fn [acc f]
+            (if (f acc) 
+              acc
+              (reduced nil))) x fs))
+
+(defn or-filter [x fs]
+  (reduce (fn [acc f]
+            (if (f x) 
+              (reduced x)
+              acc)) nil fs)) 
+  
+(defn filt-sort [f ord xs]
+  (->> xs
+       (filter f)
+       (sort ord)))
+  
+
+;; (defn select [& {:keys [from where order-by]}]
+;;   (
+
 
 ;;(defcomparer initial-demand [[AC MaxDwell]
 ;;                             [RCAD MaxDwell]

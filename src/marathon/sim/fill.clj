@@ -59,27 +59,7 @@
         (ghost-deployed! unit ctx))))
 
 
-;;Temporarily located here, amenable to refactoring.
-;;================================================== 
 
-;;Tag-related queries for filling:  
-
-;;Determines if the unit is tagged with compatible information for either the 
-;;demand name, of the general class of followoncode.  This is a more general 
-;;concept that we need to abstract out, but for now it's ported as-is.
-(defn inside-fence? [uic demandname followoncode tags]
-  (let [unitname (:name uic)]
-    (or (tag/has-tag? tags unitname followoncode)
-        (tag/has-tag? tags unitname demandname))))
- 
-;;Determines if the unit is outside of any fencing.  We use a general tagging 
-;;mechanism to partition this possible, and serve as a quick first check.
-;;Units not explicitly tagged as :fenced are possible matches to the demandname
-;;or followoncode criteria.  So feasible fenced units must be both fenced and 
-;;fenced to a particular demand.
-(defn outside-fence? [uic demandname followoncode tags]
-  (when (tag/has-tag? tags :fenced (:name uic))
-    (inside-fence? uic demandname followoncode tags)))
 
 ;##Decomposing the Fill Process....
 ;Sourcing a demand is really the composition of three simpler tasks: 
