@@ -18,6 +18,7 @@
             [spork.sim     [simcontext :as sim]]
             [spork.entitysystem [store :as estore]]
             [spork.util.reducers]
+            [spork.util [tags :as tag]]
             [clojure.core [reducers :as r]]))
 
 (defn find-deployable-supply  [supply src] (keys (get (supply/get-buckets supply) src)))
@@ -169,7 +170,6 @@
   ([ks]         (apply ordering (map (fn [k] #(get % k)) ks)))
   ([ks k->comp] (apply ordering (map (fn [k] #(k->comp k)) ks)) ))
 
-
 ;;Note the use of not= .  This seems counterintutive, but 
 ;;the predicates, used as comparators, means that false 
 ;;values are less than true.  So if you want a preference, 
@@ -187,16 +187,7 @@
 ;;#TODO allow users to define suitability queries via scripts 
 ;;or a little language.
 
-(def MinDwell    (ordering unit/normalized-dwell))
-(def MaxDwell    (flip MinDwell))
-(def compo-pref #(key-pref :component %))
-(def where-compo  compo-pref)
-(def except-compo (comp flip compo-pref))
 
-(def components ["AC" "RC" "NG" "RCAD" "RCAD-BIG"])
-;;Emit preferences for standard component values.
-(doseq [c components]
-  (eval `(def ~(symbol c) (compo-pref ~c))))
 
 ;;We have a set of unit comparison criteria that together form a
 ;;little language for comparing units.
@@ -265,38 +256,105 @@
 
 ;; (defmacro predicate [nm k] 
 ;;   `(defcomparison :predicate ~nm [~l ~r] ~@body))                   
-  
+
+
+;;TODO# relook what needs to be in the general query namespace.
+;;Maybe we should move these to sim.unit, or another namespace that
+;;pertains to unit comparison?  
+
 ;;Basic value-based orderings.  These provide numbers we can easily
 ;;compare on.
 (key-valuations cycletime  :cycletime
                 bog-budget unit/bog-budget
-                dwell  unit/get-dwell
-                bog     unit/get-bog 
+                dwell      unit/get-dwell
+                bog        unit/get-bog 
                 proportional-dwell unit/normalized-dwell
                 relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength u)))))
 
 ;;predicates...
 
+;;Already defined...
 ;;whereCompo
 ;;whereNotCompo
+;; (def MinDwell    (ordering unit/normalized-dwell))
+;; (def MaxDwell    (flip MinDwell))
 
+(def compo-pref #(key-pref :component %))
+(def where-compo  compo-pref)
+(def except-compo (comp flip compo-pref))
+
+(def components ["AC" "RC" "NG" "RCAD" "RCAD-BIG"])
+;;Emit preferences for standard component values.
+(doseq [c components]
+  (eval `(def ~(symbol c) (compo-pref ~c))))
 
 ;;Environmental queries
 ;;=====================
 
-;;followon 
-
 (predicate followon  [l r] 
-   (if (same-val? get l r) 0
-       (pred-compare (same-val? get l *env*))))
+   (if (same-val? :followon l r) 0
+       (cond 
+        (same-val? :followon l *env*) 1
+        (same-val? :followon r *env*) -1)))
 
-;;FencedTo
-;;NotFencedTo
+;;Temporarily located here, amenable to refactoring.
+;;================================================== 
 
-;;tag 
+;;Tag-related queries for filling:  
+
+;;Determines if the unit is tagged with compatible information for either the 
+;;demand name, of the general class of followoncode.  This is a more general 
+;;concept that we need to abstract out, but for now it's ported as-is.
+(defn inside-fence? [uic demandname followoncode tags]
+  (let [unitname (:name uic)]
+    (or (tag/has-tag? tags unitname followoncode)
+        (tag/has-tag? tags unitname demandname))))
+ 
+;;Determines if the unit is outside of any fencing.  We use a general tagging 
+;;mechanism to partition this possible, and serve as a quick first check.
+;;Units not explicitly tagged as :fenced are possible matches to the demandname
+;;or followoncode criteria.  So feasible fenced units must be both fenced and 
+;;fenced to a particular demand.
+(defn outside-fence? [uic demandname followoncode tags]
+  (when (tag/has-tag? tags :fenced (:name uic))
+    (inside-fence? uic demandname followoncode tags)))
+
+(defn fenced-compare [demandname followoncode tags l r]
+  (let [x (inside-fence? l demandname followoncode tags)
+        y (inside-fence? r demandname followoncode tags)]
+    (cond (and l r) 0
+          (and l (not r)) 1
+          (and (not l) r) -1)))
+
+;;maybe unnecessary
+(defn fenced-by [demandname followoncode tags]
+  (ord-fn [l r] 
+     (fenced-compare demandname followoncode tags l r)))
+          
+(predicate fenced  [l r] 
+   (fenced-compare (get *env* :demandname) (get *env* :followoncode) (get *env* :tags) l r))
+
+;;tag
 ;;not-tag
 
+(defn tag [tags tag]
+  (ord-fn [l r]
+     (key-compare #(tags/has-tag? tags %) (get l :name) (get r :name))))
+
+(defn all-tags [tags subject xs]
+  (every? (tags/get-tags tags subject) xs))
+
 ;;ANDTags
+(defn and-tags [tags xs]
+  (let [tagged (memoize (fn [name] (all-tags tags name)))] ;hopefully this doesn't kill us.
+    (ord-fn [l r]            
+     (let [lefts  (tagged (:name l)) 
+           rights (tagged (:name r))]
+       (cond (= lefts rights) 0
+             lefts -1
+             rights 1)))))
+(defn nand-tags [tags xs] (flip (and-tags tags xs)))
+                  
 ;;NANDTags
 
 ;;ORTags
