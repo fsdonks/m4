@@ -496,10 +496,33 @@
 (defn select [{:keys [where order-by]} xs]   
   ((selection :where where :order-by order-by) xs))
 
-;;TODO maybe make this a reducer....dunno yet.
+
+
 (defn collect [fs xs]  
   (let [f (if (coll? fs) (apply juxt fs) fs)]
-    (map f xs)))
+      (map f xs)))
+
+;;TODO maybe make this a reducer....dunno yet.
+(defn collectr [fs xs]  
+  (let [f (if (coll? fs) (apply juxt fs) fs)]
+    (reify     
+      clojure.core.protocols/CollReduce
+      (coll-reduce [this f1]   (reduce f1 (f1) (r/map f xs)))        
+      (coll-reduce [_ f1 init] (reduce f1 init (r/map f xs)))
+      clojure.lang.Seqable 
+      (seq [this]  (seq (map f xs))))))
+
+
+;;#TODO move this to sim.query or another ns
+;;Find all deployable units that match the category "SRC=SRC3"
+(defn find-supply [{:keys [src cat order-by where collect-by] :or 
+                    {src :any cat :default}} ctx] 
+    (let [order-by (eval-order order-by)
+          where    (eval-filter where)] 
+      (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
+           (select {:where    (when where   (fn wherf [kv]    (where (second kv))))
+                    :order-by (when order-by (ord-fn [l r] (order-by (second l) (second r))))})
+           ((fn [xs] (if collect-by (collect collect-by (map second xs)) xs))))))
 
 ;;(defcomparer initial-demand [[AC MaxDwell]
 ;;                             [RCAD MaxDwell]

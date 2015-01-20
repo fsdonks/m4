@@ -304,12 +304,7 @@
         ["32_SRC3_AC" 0] ["9_SRC2_AC" 0] ["0_SRC1_NG" 0] ["3_SRC1_AC" 0] ["12_SRC3_NG" 0] ["6_SRC2_NG" 0] ["30_SRC3_NG" 0]
         ["39_SRC3_AC" 0] ["25_SRC3_NG" 0])))
 
-
 ;;How can we fill a demand with the category '[:fillrule "SRC3"] ? 
 
-;;Find all deployable units that match the category "SRC=SRC3"
-(defn find-supply [{:keys [src cat order-by where] :or 
-                        {src :any cat :default}} ctx] 
-  (->> (query/find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
-       (query/select {:where    (when where (fn [kv]    (where (second kv))))
-                      :order-by (when order-by (fn [kv] (order-by (second kv))))})))
+
+
