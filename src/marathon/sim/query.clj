@@ -479,16 +479,19 @@
         (vector? xs)  (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))
         :else (throw (Exception. (str "Unknown ordering expression: " xs)))))
 
+(defn selection? [f]  (get (meta f) :selection))
 ;;#TODO flesh out the from key.  Maybe it makes sense to define a
 ;;protocol so we can have tabular queries.  
 (defn selection [& {:keys [from where order-by]}]
-   (let [filt (if (fn? where) where (eval-filter where))
+   (let [filt  (if (fn? where) where (eval-filter where))
          order (if (ordering? order-by) order-by
                    (eval-order order-by))]
-     (fn [xs]
-       (filt-sort filt order xs))))
+     (with-meta (fn [xs] (filt-sort filt order xs))
+       {:where filt 
+        :order-by order})))
 
-(defn select [{:keys [where order-by]} xs]
+;;#TODO think about composing selections....
+(defn select [{:keys [where order-by]} xs]   
   ((selection :where where :order-by order-by) xs))
 
 ;;TODO maybe make this a reducer....dunno yet.
