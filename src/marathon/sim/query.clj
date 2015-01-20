@@ -439,23 +439,30 @@
   ([tags xs] (flip (nand-tags tags xs)))
   ([xs]      (flip (nand-tags xs))))
 
+
+;;TODO -> make this a bit higher level, provide an API for defining 
+;;environmental queries and specifying which vars in an expression are 
+;;drawn from the environment (i.e. the state monad....)
 (defmacro with-query-env [env & expr]
   `(binding [~'marathon.sim.query/*env* ~env]
      ~@expr))
 
 
 ;;TODO# move these generic functions into a more general namespace.
-(defn and-filter [x fs]
+(defn ands [x fs]
   (reduce (fn [acc f]
             (if (f acc) 
               acc
               (reduced nil))) x fs))
 
-(defn or-filter [x fs]
+(defn ors [x fs]
   (reduce (fn [acc f]
             (if (f x) 
               (reduced x)
               acc)) nil fs)) 
+
+(defn nands [x fs] (not (ands x fs)))
+(defn nors  [x fs] (not (ors x fs)))
   
 (defn filt-sort [f ord xs]
      (let [filtered      (if f (filter f xs) xs)]
@@ -465,13 +472,15 @@
   (cond (fn? xs) xs        
         (vector? xs) 
         (let [fs (reduce (fn [acc f] (conj acc (eval-filter f))) [] xs)]
-          #(and-filter % fs))))
+          #(ands % fs))))
 
 (defn eval-order [xs]
-  (cond (ordering? xs) xs        
-        (vector? xs)  
-        (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))))
-  
+  (cond (or (fn? xs) (keyword? xs))      (ordering  xs)
+        (vector? xs)  (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))
+        :else (throw (Exception. (str "Unknown ordering expression: " xs)))))
+
+;;#TODO flesh out the from key.  Maybe it makes sense to define a
+;;protocol so we can have tabular queries.  
 (defn selection [& {:keys [from where order-by]}]
    (let [filt (if (fn? where) where (eval-filter where))
          order (if (ordering? order-by) order-by
@@ -479,11 +488,17 @@
      (fn [xs]
        (filt-sort filt order xs))))
 
+(defn select [{:keys [where order-by]} xs]
+  ((selection :where where :order-by order-by) xs))
+
+;;TODO maybe make this a reducer....dunno yet.
+(defn collect [fs xs]  (map (apply juxt fs) xs))
 
 ;;(defcomparer initial-demand [[AC MaxDwell]
 ;;                             [RCAD MaxDwell]
 ;;                             Generate-AC
 ;;                             Generate-RCAD])
+
 
 
 ;;Stock Rules From Old Marathon
