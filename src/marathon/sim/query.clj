@@ -520,6 +520,14 @@
 ;; not_ac	(except-compo "AC")
 ;; title32	[(where-compo "NG") mindwell]
 
+(def uniform [when-fenced when-followon max-dwell])
+(def ac-first [when-fenced when-followon AC max-dwell])
+(def rc-first [when-fenced when-followon RC max-dwell])
+(def ng-first [when-fenced when-followon NG max-dwell])
+;(def ar-first [when-fenced when-followon AR max-dwell])
+(def not-ac   #(not= (:component %) "AC"))
+(def title32 [#(= (:component %) "NG") min-dwell])
+
 
 ;;Example rules:
 
