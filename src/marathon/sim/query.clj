@@ -495,13 +495,14 @@
   ((selection :where where :order-by order-by) xs))
 
 ;;TODO maybe make this a reducer....dunno yet.
-(defn collect [fs xs]  (map (apply juxt fs) xs))
+(defn collect [fs xs]  
+  (let [f (if (coll? fs) (apply juxt fs) fs)]
+    (map f xs)))
 
 ;;(defcomparer initial-demand [[AC MaxDwell]
 ;;                             [RCAD MaxDwell]
 ;;                             Generate-AC
 ;;                             Generate-RCAD])
-
 
 
 ;;Stock Rules From Old Marathon
