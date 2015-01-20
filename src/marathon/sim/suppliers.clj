@@ -7,7 +7,9 @@
 ;;supply.
 
 (ns marathon.sim.suppliers
-  (:require [marathon.sim [fill :as fill]]))
+  (:require [marathon.sim [fill  :as fill]
+                          [query :as query]
+                          [core  :as core]]))
 
 ;;Supply functions are passed a pair of arguments:   
 ;;a rule and a supplystore.   
@@ -30,21 +32,12 @@
 
 ;;Selecting Units
 ;;===============
-;;SelectionRequest->Unit
-(defprotocol IEntitySelector 
-  (select-entity [selector entity-order]))
 
-(defn select-all   [supplystore]
-  (get supplystore [:unitmap]))
+;;We already have a pretty comprehensive and flexible way to define 
+;;entity selectors (really unit selectors) in sim.query
 
-;;We need different ways of comparing units. 
-;;That's pretty fundamental to unit selection and ordering.
-
-(defn compare-unit [x y]) 
-  
 
 ;;EntityRequest->SpawnUnit
-
 ;;Generating Unit Entities
 ;;========================
 (defprotocol IEntityGenerator
@@ -74,6 +67,35 @@
   (let [[new-unit ctx] (generate-unit! rule store ctx)]    
     [new-unit ctx]))
 
+;;We can approach jit units a couple of ways....
+;;We could actually have a category for jit. 
+;;In this sense, we can have sentinel values inside of a jit 
+;;bucket.  That unifies the category.  So, we may say there is a 
+;;gross category of :jit, which means we can generate units
+;;just-in-time, which maintains categories of SRC...
+;;That seems like a consistent approach to our existing demand
+;;category approach.
+
+;;So we have a fill-rule.  If we fail to find supply, we can 
+;;always see if we can jit the supply as a last resort.  We used 
+;;to indicate this via ghostable...
+
+;;There's a problem with this approach.  Since FMCA, we have 
+;;different generators for each component, which can vary
+;;significantly, and they share different resources....
+
+;;Currently, the values stored in our supply map are unit entities, 
+;;but we could just as easily store supply generators...
+;;The generators act as proxies for deployable units, rather than 
+;;the units themselves....
+;;This allows definition of piecemeal jit entities that can "be
+;;deployed" to fill demands.
+
+;;We can envision unit entities in the supply as singleton 
+;;supply generators, who have a simpler set of requirements 
+;;to deploy.  
+
+;;If we open up this abstraction, we could have promisory units.
 
 
 ;;(defgenerator initial-demand-gen 
@@ -385,3 +407,28 @@
   (reify fill/ISupplier 
     (query [s rule store] 
       (let [buckets  (supply/get-buckets store)
+
+
+
+
+
+
+
+;;Obsolete
+;;========
+
+;;EntitySelection
+;;===============
+
+;;SelectionRequest->Unit
+;; (defprotocol IEntitySelector 
+;;   (select-entity [selector entity-order]))
+
+;; (defn select-all   [supplystore]
+;;   (get supplystore [:unitmap]))
+
+;; ;;We need different ways of comparing units. 
+;; ;;That's pretty fundamental to unit selection and ordering.
+
+;; (defn compare-unit [x y]) 
+  

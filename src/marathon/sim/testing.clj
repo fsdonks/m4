@@ -278,11 +278,38 @@
 
 ;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
 
+;;using features from sim.query, we build some supply queries:
+(def odd-units (->> (vals (core/units defaultctx)) 
+                    (query/select {:where #(odd? (:cycletime %)) :order-by query/uniform}) 
+                    (query/collect [:name :cycletime])))
+
+(def even-units (->> (vals (core/units defaultctx)) 
+                           (query/select {:where #(even? (:cycletime %)) :order-by query/uniform}) 
+                           (query/collect [:name :cycletime])))
 
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
   (is (same? deploynames 
              '("29_SRC3_NG" "36_SRC3_AC" "23_SRC3_NG" "11_SRC2_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG" "40_SRC3_AC"
                "34_SRC3_AC" "37_SRC3_AC" "8_SRC2_NG" "35_SRC3_AC"))
-      "Should have 5 units deployable"))
+      "Should have 5 units deployable")
+  (is (same? odd-units)
+      '(["24_SRC3_NG" 1601] ["38_SRC3_AC" 923] ["8_SRC2_NG" 1825] ["23_SRC3_NG" 1399] ["29_SRC3_NG" 1385] ["22_SRC3_NG" 1217] 
+          ["28_SRC3_NG" 929] ["10_SRC2_AC" 365] ["40_SRC3_AC" 365] ["4_SRC1_AC" 365] ["17_SRC3_NG" 509] ["16_SRC3_NG" 395] 
+            ["14_SRC3_NG" 187] ["33_SRC3_AC" 109] ["13_SRC3_NG" 91]))
+  (is (same? even-units)
+      '(["5_SRC1_AC" 912] ["11_SRC2_AC" 912] ["2_SRC1_NG" 1520] ["41_SRC3_AC" 912] ["37_SRC3_AC" 704] ["21_SRC3_NG" 1052] 
+        ["31_SRC3_NG" 912] ["20_SRC3_NG" 900] ["36_SRC3_AC" 522] ["19_SRC3_NG" 760] ["18_SRC3_NG" 630] ["35_SRC3_AC" 366] 
+        ["7_SRC2_NG" 730] ["1_SRC1_NG" 608] ["27_SRC3_NG" 564] ["34_SRC3_AC" 230] ["15_SRC3_NG" 288] ["26_SRC3_NG" 260] 
+        ["32_SRC3_AC" 0] ["9_SRC2_AC" 0] ["0_SRC1_NG" 0] ["3_SRC1_AC" 0] ["12_SRC3_NG" 0] ["6_SRC2_NG" 0] ["30_SRC3_NG" 0]
+        ["39_SRC3_AC" 0] ["25_SRC3_NG" 0])))
 
+
+;;How can we fill a demand with the category '[:fillrule "SRC3"] ? 
+
+;;Find all deployable units that match the category "SRC=SRC3"
+(defn find-supply [{:keys [src cat order-by where] :or 
+                        {src :any cat :default}} ctx] 
+  (->> (query/find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
+       (query/select {:where    (when where (fn [kv]    (where (second kv))))
+                      :order-by (when order-by (fn [kv] (order-by (second kv))))})))

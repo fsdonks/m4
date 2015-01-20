@@ -471,12 +471,14 @@
 (defn eval-filter [xs]
   (cond (fn? xs) xs        
         (vector? xs) 
-        (let [fs (reduce (fn [acc f] (conj acc (eval-filter f))) [] xs)]
-          #(ands % fs))))
+           (let [fs (reduce (fn [acc f] (conj acc (eval-filter f))) [] xs)]
+             #(ands % fs))
+        (nil? xs) nil))
 
 (defn eval-order [xs]
   (cond (or (fn? xs) (keyword? xs))      (ordering  xs)
         (vector? xs)  (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))
+        (nil? xs)    nil
         :else (throw (Exception. (str "Unknown ordering expression: " xs)))))
 
 (defn selection? [f]  (get (meta f) :selection))
@@ -520,13 +522,13 @@
 ;; not_ac	(except-compo "AC")
 ;; title32	[(where-compo "NG") mindwell]
 
-(def uniform [when-fenced when-followon max-dwell])
-(def ac-first [when-fenced when-followon AC max-dwell])
-(def rc-first [when-fenced when-followon RC max-dwell])
-(def ng-first [when-fenced when-followon NG max-dwell])
-;(def ar-first [when-fenced when-followon AR max-dwell])
+(def uniform  [when-fenced when-followon max-proportional-dwell])
+(def ac-first [when-fenced when-followon AC max-proportional-dwell])
+(def rc-first [when-fenced when-followon RC max-proportional-dwell])
+(def ng-first [when-fenced when-followon NG max-proportional-dwell])
+;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
 (def not-ac   #(not= (:component %) "AC"))
-(def title32 [#(= (:component %) "NG") min-dwell])
+(def title32 [#(= (:component %) "NG") min-proportional-dwell])
 
 
 ;;Example rules:

@@ -84,6 +84,7 @@
    policystore   [:policystore]
    fillstore     [:fillstore]
    fill-function [:fillstore :fillfunction]
+   fillmap       [:fillstore :fillmap]
    behaviors     [:behaviormanager]
    supply-tags   [:supplystore :tags]
    demand-tags   [:demandstore :tags]})
