@@ -305,6 +305,9 @@
         ["39_SRC3_AC" 0] ["25_SRC3_NG" 0])))
 
 ;;How can we fill a demand with the category '[:fillrule "SRC3"] ? 
+;;Actually, for primitive fillrules, like "SRC3"....
 
+(defn match-supply [rule ctx]
+  (query/find-supply {:src rule} ctx))
 
 
