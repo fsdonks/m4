@@ -198,8 +198,14 @@
 ;;Dispatch function for reading demands as demand rules.
 (defn supply-cat 
   ([demand]                    (core/category-type (get demand :src)))
-  ([demand fillstore]          (core/category-type (get demand :src)))
-  ([demand fillstore category] (core/category-type category)))
+  ([demand category] (core/category-type category)))
+
+
+;;Old...no need for the fillstore as of yet.
+;; (defn supply-cat 
+;;   ([demand]                    (core/category-type (get demand :src)))
+;;   ([demand fillstore]          (core/category-type (get demand :src)))
+;;   ([demand fillstore category] (core/category-type category)))
 
 ;Not yet implemented, but the intent is to have a simple idiom for parsing 
 ;abstract categories into rules that can be used to query supply or demand 
