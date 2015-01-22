@@ -282,6 +282,20 @@
     (coll-reduce [_ f1 init]
       (reduce-kv (fn [acc k v] (f1 acc k)) init kvs))))
 
+(defn collect [fs xs]  
+  (let [f (if (coll? fs) (apply juxt fs) fs)]
+      (map f xs)))
+
+;;TODO maybe make this a reducer....dunno yet.
+(defn collectr [fs xs]  
+  (let [f (if (coll? fs) (apply juxt fs) fs)]
+    (reify     
+      clojure.core.protocols/CollReduce
+      (coll-reduce [this f1]   (reduce f1 (f1) (r/map f xs)))        
+      (coll-reduce [_ f1 init] (reduce f1 init (r/map f xs)))
+      clojure.lang.Seqable 
+      (seq [this]  (seq (map f xs))))))
+
 ;;This is a trivial proxy for the entity store.  We'll port this over
 ;;once the backend/state management is stable.
 (defn entities [ctx]  

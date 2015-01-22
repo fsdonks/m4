@@ -307,7 +307,45 @@
 ;;How can we fill a demand with the category '[:fillrule "SRC3"] ? 
 ;;Actually, for primitive fillrules, like "SRC3"....
 
+
+;;we have a couple of different rules we could match..
+
+;;"SRC3" -> match any supply that corresponds to src3.
+  ;;[(where-category :any) (where-src "SRC3")]
+
+;;["SomeCategory" "SRC3"] -> match any supply the correponds to src3,
+;;from a specific category of supply.
+  ;;[(where-category "SomeCategory") (where-src "SRC3")]
+
+;;{:tags #{"Special"} :category "SomeCategory" :src "SRC3"} -> 
+  ;;[(where-tag "Special") (where-category "SomeCategory") (where-src "SRC3")]
+
+;;another idea here is to allow where to be a function...
+;;(where symb               val) 
+;;(where symb)         === (where symb true) 
+;;(where-not symb)     === (not (where symb false))
+;;(where-not symb val) === (not (where symb val))
+
+;;rather than (where-category ....), a specific function, 
+;;we use where as a dispatch mechanism...
+;;(where category ...)  -> lookup the function associated with
+;;category, and use that.
+;;=== (where #'category ...) 
+
+;;same thing with order-by
+;;(order-by symb)...
+;;(max symb ...)
+;;(min symb ...)
+
 (defn match-supply [rule ctx]
   (query/find-supply {:src rule} ctx))
+
+;;What if demands have a category preference? That adds a second
+;;dimension of ordering we can use....
+(defn demand->rule    [d ctx] (marathon.sim.fill/derive-supply-rule d (core/get-fillstore ctx))) ;;.e.g {:src "SRC3" :category :any}
+(defn rule->criteria  [rule]   ) 
+(defn criteria->query [crit]   )
+
+;;(match-supply (demand->rule d) ctx) ;--desireable
 
 
