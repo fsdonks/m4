@@ -372,11 +372,20 @@
 
 ;;(match-supply (demand->rule d) ctx) ;--desireable
 
+
+;;Probably a good idea....
+;;Do we define protocols for rules? i.e.
+;;(defprotocol IRule
+;;  (as-rule [obj]))
+
+;;#TODO - we can incorporate quantity into the rules too...
+
+
 ;;match-supply could actually incorporate some sophisticated pattern
 ;;matching logic from core.match, fyi.  Maybe later....We can always extend...
 (defn match-supply 
  ([rule features ctx]  
-    (query/find-supply (-> rule (rule->criteria) (assoc :collect features)) ctx))
+    (query/find-supply (-> rule (rule->criteria) (assoc :collect-by features)) ctx))
  ([rule ctx] (query/find-supply (rule->criteria rule) ctx)))
 
 

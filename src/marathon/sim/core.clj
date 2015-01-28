@@ -286,6 +286,41 @@
   (let [f (if (coll? fs) (apply juxt fs) fs)]
       (map f xs)))
 
+;; (defn parse-collector [fs]
+;;   (cond (map? fs) (fn [x] 
+;;                     (reduce-kv (fn [m fld f] (assoc m fld (f x))) {} x))
+;;         (vector? fs) 
+;;             (reduce (fn [acc f]
+;;                       (if (and (vector? f) (= (count f) 2))
+;;                         (
+           
+;; (defn collect2 [fs xs]  
+;;   (let [f (if (coll? fs) 
+;;             (apply juxt fs) 
+;;             fs)]
+;;       (map f xs)))
+
+;;Acts like juxt, except it returns the results in a map.
+;;The map is implied by the args in kvps, where simple keys - numbers,
+;;strings, keywords, are assumed to be field names. A map is built 
+;;from the fields by getting the corresponding field in an input
+;;record.  Vector keys are assumed to imply [key function-to-apply]
+(defn juxtmap [& ks]
+  (let [fs  (reduce (fn [acc x]
+              (cond (or  (keyword? x)  (string? x) (number? x))   (assoc acc x #(get % x))
+                    (vector? x)  
+                      (let [fld (first x) 
+                            getter (second x)]
+                        (assoc acc fld 
+                          (cond (fn? getter) getter 
+                                (or  (keyword? getter)  (string? getter) (number? getter))   
+                                 #(get % getter)
+                                :else (throw (Exception. (str "unknown juxt-map getter " getter))))))
+                      :else (throw (Exception. (str "unknown juxt-map arg " x)))))
+                   {} ks)]
+    (fn [x] 
+      (reduce-kv (fn [m fld f] (assoc m fld (f x))) {} fs))))
+
 ;;TODO maybe make this a reducer....dunno yet.
 (defn collectr [fs xs]  
   (let [f (if (coll? fs) (apply juxt fs) fs)]
