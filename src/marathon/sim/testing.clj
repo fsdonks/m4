@@ -338,13 +338,11 @@
 (def unfilled (marathon.sim.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
 (def d (first (vals unfilled)))
 (def suitables (query/match-supply {:src (:src d) :order-by query/uniform} :name  demandctx))
-(def needed (dem/required d))
+(def needed    (dem/required d))
+(def selected  (take 2 suitables))
 
-(defn ascending? [xs] (reduce (fn [l r] (if (<= l r) r
-                                            (reduced nil))) xs))
-
-(defn descending? [xs] (reduce (fn [l r] (if (>= l r) r
-                                            (reduced nil))) xs))
+(defn ascending?  [xs] (reduce (fn [l r] (if (<= l r) r (reduced nil))) xs))
+(defn descending? [xs] (reduce (fn [l r] (if (>= l r) r (reduced nil))) xs))
 
 (deftest demandmatching 
   (is (ascending? (map :priority (vals unfilled)))
@@ -354,9 +352,63 @@
                "37_SRC3_AC" "36_SRC3_AC" "35_SRC3_AC" "40_SRC3_AC" "34_SRC3_AC"))
       "The feasible supply names that match the first demand should be consistent")
   (is (== needed 2)
-      "First demand should require 2 units"))
-
+      "First demand should require 2 units")
+  (is (same? selected  '("24_SRC3_NG" "2_SRC1_NG"))
+      "Suitability of units is dictated by the ordering.  Best first."))
 ;;how do we turn suitable supply into a set of fills? 
+;;Suitable supply is represented as a sequence of names of units...
+;;Hmmm...can these imply promises? 
+;;What if we don't have enough supply? 
+;;At some point, we have a name of units that actually exist.
+;;Maybe we partition off our jit supply into other areas...
+;;In the original marathon, we encoded the ghost as a special case.
+;;Whenever we ran out of units, we'd make it.  It was always last.
+
+;;In fmca, we have to be able to generate units, sometimes we prefer
+;;to generate units over using existing units actually. 
+
+;;Another way to do this is to create a proxy unit....
+;;the proxy is something like "JIT_SRCTYPE"
+;;Rather than simply a unit name, i.e. a single unit, we have a unit 
+;;generator that can provide multiple units of the same
+;;characteristic...
+
+;;So if we have 
+;;["A", "B", "C"], those are equivalent to 
+;;[["A" 1], ["B" 1], ["C" 1]], i.e. a single entity that exists in the
+;;supply.
+
+;;if we have ["A", ["JIT_B", 20], "C"], then we have the ability to
+;;generate/fill up to 21 units before we use C.
+
+;;Just like we did before, the ghost was a proxy unit.
+;;This time, we have proxies in th supply for our jittable stuff.
+
+;;That allows us to keep them present in the supply.
+
+;;The implication is that there are 2 different paths for filling
+;;using a regular unit and a JIT unit.
+
+;;No matter what, we go down the line, asking the supplier to 
+;;fill the quantity asked for.
+
+;;If we follow that abstraction, then single units will 
+;;merely return a promised fill and the amount.
+;;So singletons work...
+;;JIT units, or units representing populations, also work 
+;;to fill supply; they return a promised fill and the amount 
+;;remaining.
+
+;;We just keep going until all the fills are done, or we 
+;;have no supply left.
+
+;;This lets us arbitrarily order where the JITers come in 
+;;based on the attributes of the unit, i.e. tags, src, etc.
+
+;;So, we think of each unit as an individual supplier.
+
+
+
 
 
 
