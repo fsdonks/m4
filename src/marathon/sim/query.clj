@@ -2,8 +2,7 @@
 ;;useful hub for defining complicated queries.  May also eventually 
 ;;extend spork.entitystore protocols to marathon stores.
 (ns marathon.sim.query
-  (:require [marathon.sim.fill.demand   :as dfill]
-            [marathon.sim  [core :as core]
+  (:require [marathon.sim  [core :as core]
                            [supply :as supply]
                            [demand :as demand]
                            [unit :as unit]
@@ -518,8 +517,6 @@
 
 ;;More sophisticated querying API
 ;;===============================
-(defn demand->rule    [d ] (fill/derive-supply-rule d)) ;;.e.g {:src "SRC3" :category :any}
-
 (defn rule->criteria  [rule] 
   (cond (map? rule) rule
         (string? rule)  {:src rule}

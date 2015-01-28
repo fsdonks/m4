@@ -16,7 +16,8 @@
             [marathon.supply [unitdata :as udata]]
             [marathon.sim [core :as core] [demand :as dem] [supply :as supply]
                           [policy :as policy] [unit :as u] 
-                          [deployment :as deployment]]
+                          [deployment :as deployment]
+                          [query :as query]]
             [marathon.sim.fill [fillgraph :as fg]]
             [spork.sim  [simcontext :as sim] [updates :as updates]]
             [spork.util [tags :as tag]]
@@ -248,6 +249,14 @@
 ;  ([demand ctx] (derive-supply-rule demand (marathon.sim.core/get-fillstore ctx) (get demand :src))))
 
 
+;;TODO# flesh this out, for now it fits with our match-supply expressions.
+(defn demand->rule    [d ] 
+  {:src (get d :src)
+   :cat (get d :category :default)
+   :name (get d :name)
+   :order-by (get d :source-first :uniform)
+   :required (d/required d)})
+
 ;;testing
 (comment 
 
@@ -434,6 +443,12 @@
   [fillfunc supplystore rule]
   (query fillfunc rule supplystore))
 
+(extend-type nil 
+  ISupplier 
+  (query [s rule store] 
+    (query/match-supply rule store)))
+  
+
 ;We can coerce our list of fill promises into actual fills by applying 
 ;__realize-fill__ to them.  Assuming a fill promise consumes a context, we  
 ;apply the promise to a given context.  This should produce a pair of the 
@@ -527,11 +542,12 @@
    [:filled|:unfilled updated-context], where :filled indicates the demand is 
    satisifed, and updated-context is the resulting simulation context."
   [demand category ctx]
-  (let [fillstore   (core/get-fillstore ctx)
+  (let [fillstore   (core/get-fillstore     ctx)
         fillfunc    (core/get-fill-function ctx)
-        supplystore (core/get-supplystore ctx)
-        candidates  (find-supply fillfunc supplystore ;1)
-                      (derive-supply-rule demand fillstore category))
+        supplystore (core/get-supplystore   ctx)
+        rule        (demand->rule demand)
+        ;1)
+        candidates  (find-supply fillfunc supplystore rule)
         demand-name (:name demand)]
     (loop [d  demand           
            xs candidates 

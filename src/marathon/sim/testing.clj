@@ -407,8 +407,17 @@
 
 ;;So, we think of each unit as an individual supplier.
 
+;;On a really grand scale...
+;;We can think of each unit as a supplystore.
+;;In some cases, we may want that....so we can break apart units.
+;;The supplystore is responsible for tracking units....
+
+;;A generator is a facade around one or more class of units.
+;;The supplystore is effectively a generator that 
+;;produces units based on the existing supply.
 
 
-
+;;Note: going this route, we can also treat demands as generators..
+;;specifically, they "can" show up as suppliers.  This is good....
 
 
