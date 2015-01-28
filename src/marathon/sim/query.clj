@@ -172,7 +172,7 @@
        (if (is? category :any)
          (->deployers supply :src src-selector)
          (let [prefs (src->prefs  srcmap src)]
-           (->>  (->deployers supply :src  :cat (is? category))
+           (->>  (->deployers supply :src src-selector :cat (is? category))
                  (into [])
                  (sort-by  (fn [[ k v]]   (get prefs (second k)))))))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
