@@ -2,7 +2,7 @@
 ;;useful hub for defining complicated queries.  May also eventually 
 ;;extend spork.entitystore protocols to marathon stores.
 (ns marathon.sim.query
-  (:require [marathon.sim.fill.demand   :as fill]
+  (:require [marathon.sim.fill.demand   :as dfill]
             [marathon.sim  [core :as core]
                            [supply :as supply]
                            [demand :as demand]
@@ -12,7 +12,8 @@
                            [sampledata :as sd]
                            [entityfactory :as ent]
                            [setup :as setup]
-                           [engine :as engine]]                        
+                           [engine :as engine]
+                           [fill :as fill]]                        
             [marathon.data [simstate :as simstate]
                            [protocols :as generic]]
             [spork.sim     [simcontext :as sim]]
@@ -172,7 +173,7 @@
        (if (is? category :any)
          (->deployers supply :src src-selector)
          (let [prefs (src->prefs  srcmap src)]
-           (->>  (->deployers supply :src src-selector :cat (is? category))
+           (->>  (->deployers supply :src #(contains? prefs %) :cat (is? category))
                  (into [])
                  (sort-by  (fn [[ k v]]   (get prefs (second k)))))))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
@@ -514,10 +515,25 @@
              (if collect-by (core/collect collect-by (map second res)) 
                  res)))))
 
-;;(defcomparer initial-demand [[AC MaxDwell]
-;;                             [RCAD MaxDwell]
-;;                             Generate-AC
-;;                             Generate-RCAD])
+
+;;More sophisticated querying API
+;;===============================
+(defn demand->rule    [d ] (fill/derive-supply-rule d)) ;;.e.g {:src "SRC3" :category :any}
+
+(defn rule->criteria  [rule] 
+  (cond (map? rule) rule
+        (string? rule)  {:src rule}
+        :else (throw (Exception. "Not sophisticated enough to process " rule))))
+
+;;#TODO - we can incorporate quantity into the rules too...   
+;;match-supply could actually incorporate some sophisticated pattern
+;;matching logic from core.match, fyi.  Maybe later....We can always extend...
+(defn match-supply 
+ ([rule constraints features ctx]  
+    (find-supply (-> rule (rule->criteria) (assoc :collect-by features) (merge constraints)) ctx))  
+ ([rule features ctx]  
+    (find-supply (-> rule (rule->criteria) (assoc :collect-by features)) ctx))
+ ([rule ctx] (find-supply (rule->criteria rule) ctx)))
 
 
 ;;Stock Rules From Old Marathon

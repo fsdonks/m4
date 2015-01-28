@@ -15,6 +15,7 @@
                           [query :as query]]                        
             [marathon.data [simstate :as simstate]
                            [protocols :as generic]]
+            [marathon.demand [demanddata :as dem]]
             [spork.sim     [simcontext :as sim]]
             [spork.util.reducers]
             [spork.sketch :as sketch]
@@ -306,93 +307,56 @@
         ["32_SRC3_AC" 0] ["9_SRC2_AC" 0] ["0_SRC1_NG" 0] ["3_SRC1_AC" 0] ["12_SRC3_NG" 0] ["6_SRC2_NG" 0] ["30_SRC3_NG" 0]
         ["39_SRC3_AC" 0] ["25_SRC3_NG" 0])))
 
-;;How can we fill a demand with the category '[:fillrule "SRC3"] ? 
-;;Actually, for primitive fillrules, like "SRC3"....
+;;Try filling a demand.
+;;We can query a demand and try to find feasible supply for it.
+;;Given a generic demand, we want to see if:
+;1)It's a member of a category (there exists a category constraint)
+;2)It's got an SRC preference associated with it (should).
+;3)It has any tags that may be useful in finding suitable supply.
+
+;;Maybe it would be nice to see if there are any rules associated with
+;;the demand?  then we just look up the rule and query by it....
+
+;;So rules have that general information stored...
+;;{:src ... :cat ... :where .... :order-by ...} 
+
+;;Given the following holds....
+;;marathon.sim.testing> (query/match-supply (:src d) :name defaultctx)
+;;("40_SRC3_AC" "37_SRC3_AC" "36_SRC3_AC" "35_SRC3_AC" "34_SRC3_AC" "29_SRC3_NG" "24_SRC3_NG" "23_SRC3_NG" "22_SRC3_NG" "2_SRC1_NG")
+
+;;We should then be able to fill the supply.
+;;We need a function that takes these names and turns them into fill
+;;promises...
 
 
-;;we have a couple of different rules we could match..
+;;fill demand d => 
+;;n <- how many units are needed for d
+;;r <- d's rule for matching supply 
+;;xs <- units that match r in supply
+;;us <- take n xs
 
-;;"SRC3" -> match any supply that corresponds to src3.
-  ;;[(where-category :any) (where-src "SRC3")]
+(def unfilled (marathon.sim.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
+(def d (first (vals unfilled)))
+(def suitables (query/match-supply {:src (:src d) :order-by query/uniform} :name  demandctx))
+(def needed (dem/required d))
 
-;;["SomeCategory" "SRC3"] -> match any supply the correponds to src3,
-;;from a specific category of supply.
-  ;;[(where-category "SomeCategory") (where-src "SRC3")]
+(defn ascending? [xs] (reduce (fn [l r] (if (<= l r) r
+                                            (reduced nil))) xs))
 
-;;{:tags #{"Special"} :category "SomeCategory" :src "SRC3"} -> 
-  ;;[(where-tag "Special") (where-category "SomeCategory") (where-src "SRC3")]
+(defn descending? [xs] (reduce (fn [l r] (if (>= l r) r
+                                            (reduced nil))) xs))
 
-;;another idea here is to allow where to be a function...
-;;(where symb               val) 
-;;(where symb)         === (where symb true) 
-;;(where-not symb)     === (not (where symb false))
-;;(where-not symb val) === (not (where symb val))
+(deftest demandmatching 
+  (is (ascending? (map :priority (vals unfilled)))
+      "Priorities of unfilled demand should be sorted in ascending order, i.e. low to hi")
+  (is (same? suitables 
+             '("24_SRC3_NG" "2_SRC1_NG" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" 
+               "37_SRC3_AC" "36_SRC3_AC" "35_SRC3_AC" "40_SRC3_AC" "34_SRC3_AC"))
+      "The feasible supply names that match the first demand should be consistent")
+  (is (== needed 2)
+      "First demand should require 2 units"))
 
-;;rather than (where-category ....), a specific function, 
-;;we use where as a dispatch mechanism...
-;;(where category ...)  -> lookup the function associated with
-;;category, and use that.
-;;=== (where #'category ...) 
-
-;;same thing with order-by
-;;(order-by symb)...
-;;(max symb ...)
-;;(min symb ...)
-
-
-
-;;can we interpret a demand as a rule? 
-;;Currently, we go [category -> srcpref -> pref1 -> pref2 ...]
-;;Like,            [category -> src1 -> ac -> has-tag :blue]
-
-;;What if we want to alter the order?  
-;;[ac -> has-tag -> src1 -> category] ? 
-
-;;Note that "where" clauses, or filters, are pretty universal..
-;;We typically filter by category, not sort...although we should be
-;;able to do both.
-
-;;We can implement that alteration, but it happens after the fact, as
-
-;;What if demands have a category preference? That adds a second
-;;dimension of ordering we can use....
-
-(defmacro exception [& body-expr]
-  `(throw (Exception. (str ~@body-expr))))
-
-(defn demand->rule    [d ] (marathon.sim.fill/derive-supply-rule d)) ;;.e.g {:src "SRC3" :category :any}
-;;what am I doing here...
-(defn rule->criteria  [rule] 
-  (cond (string? rule)  {:src rule}
-        :else (exception "Not sophisticated enough to process ")))
-
-(defn criteria->query 
-  ([crit features]  (fn [ctx] (query/find-supply (assoc crit :collect features) ctx)))
-  ([crit] (criteria->query crit [:name])))
-
-;;(match-supply (demand->rule d) ctx) ;--desireable
-
-
-;;Probably a good idea....
-;;Do we define protocols for rules? i.e.
-;;(defprotocol IRule
-;;  (as-rule [obj]))
-
-;;#TODO - we can incorporate quantity into the rules too...
-
-
-
-;;This works pretty well; We can constrain
-    
-;;match-supply could actually incorporate some sophisticated pattern
-;;matching logic from core.match, fyi.  Maybe later....We can always extend...
-(defn match-supply 
- ([rule constraints features ctx]  
-    (query/find-supply (-> rule (rule->criteria) (assoc :collect-by features) (merge constraints)) ctx))  
- ([rule features ctx]  
-    (query/find-supply (-> rule (rule->criteria) (assoc :collect-by features)) ctx))
- ([rule ctx] (query/find-supply (rule->criteria rule) ctx)))
-
+;;how do we turn suitable supply into a set of fills? 
 
 
 
