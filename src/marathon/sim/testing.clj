@@ -381,9 +381,14 @@
 ;;#TODO - we can incorporate quantity into the rules too...
 
 
+
+;;This works pretty well; We can constrain
+    
 ;;match-supply could actually incorporate some sophisticated pattern
 ;;matching logic from core.match, fyi.  Maybe later....We can always extend...
 (defn match-supply 
+ ([rule constraints features ctx]  
+    (query/find-supply (-> rule (rule->criteria) (assoc :collect-by features) (merge constraints)) ctx))  
  ([rule features ctx]  
     (query/find-supply (-> rule (rule->criteria) (assoc :collect-by features)) ctx))
  ([rule ctx] (query/find-supply (rule->criteria rule) ctx)))

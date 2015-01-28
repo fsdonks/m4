@@ -321,6 +321,12 @@
     (fn [x] 
       (reduce-kv (fn [m fld f] (assoc m fld (f x))) {} fs))))
 
+(defmacro fields [xs]
+  (cond (map? xs)
+        `(marathon.sim.core/juxtmap ~@(:fields xs))
+        (vector? xs) 
+        `(juxt ~@xs)))
+
 ;;TODO maybe make this a reducer....dunno yet.
 (defn collectr [fs xs]  
   (let [f (if (coll? fs) (apply juxt fs) fs)]
