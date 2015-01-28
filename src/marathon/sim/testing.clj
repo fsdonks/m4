@@ -279,13 +279,15 @@
 ;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
 
 ;;using features from sim.query, we build some supply queries:
-(def odd-units (->> (vals (core/units defaultctx)) 
-                    (query/select {:where #(odd? (:cycletime %)) :order-by query/uniform}) 
-                    (query/collect [:name :cycletime])))
+(def odd-units (->> defaultctx
+                    (query/find-supply {:where #(odd? (:cycletime %)) 
+                                        :order-by query/uniform 
+                                        :collect-by [:name :cycletime]})))
 
-(def even-units (->> (vals (core/units defaultctx)) 
-                           (query/select {:where #(even? (:cycletime %)) :order-by query/uniform}) 
-                           (query/collect [:name :cycletime])))
+(def even-units (->> defaultctx 
+                     (query/find-supply {:where #(even? (:cycletime %)) 
+                                         :order-by query/uniform 
+                                         :collect-by [:name :cycletime]})))
 
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
@@ -337,15 +339,46 @@
 ;;(max symb ...)
 ;;(min symb ...)
 
-(defn match-supply [rule ctx]
-  (query/find-supply {:src rule} ctx))
+
+
+;;can we interpret a demand as a rule? 
+;;Currently, we go [category -> srcpref -> pref1 -> pref2 ...]
+;;Like,            [category -> src1 -> ac -> has-tag :blue]
+
+;;What if we want to alter the order?  
+;;[ac -> has-tag -> src1 -> category] ? 
+
+;;Note that "where" clauses, or filters, are pretty universal..
+;;We typically filter by category, not sort...although we should be
+;;able to do both.
+
+;;We can implement that alteration, but it happens after the fact, as
 
 ;;What if demands have a category preference? That adds a second
 ;;dimension of ordering we can use....
-(defn demand->rule    [d ctx] (marathon.sim.fill/derive-supply-rule d (core/get-fillstore ctx))) ;;.e.g {:src "SRC3" :category :any}
-(defn rule->criteria  [rule]   ) 
-(defn criteria->query [crit]   )
+
+(defmacro exception [& body-expr]
+  `(throw (Exception. (str ~@body-expr))))
+
+(defn demand->rule    [d ] (marathon.sim.fill/derive-supply-rule d)) ;;.e.g {:src "SRC3" :category :any}
+;;what am I doing here...
+(defn rule->criteria  [rule] 
+  (cond (string? rule)  {:src rule}
+        :else (exception "Not sophisticated enough to process ")))
+
+(defn criteria->query 
+  ([crit features]  (fn [ctx] (query/find-supply (assoc crit :collect features) ctx)))
+  ([crit] (criteria->query crit [:name])))
 
 ;;(match-supply (demand->rule d) ctx) ;--desireable
+
+;;match-supply could actually incorporate some sophisticated pattern
+;;matching logic from core.match, fyi.  Maybe later....We can always extend...
+(defn match-supply 
+ ([rule features ctx]  
+    (query/find-supply (-> rule (rule->criteria) (assoc :collect features)) ctx))
+ ([rule ctx] (query/find-supply (rule->criteria rule) ctx)))
+
+
 
 

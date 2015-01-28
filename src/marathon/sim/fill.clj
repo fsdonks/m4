@@ -230,8 +230,8 @@
 ;;we could opt to use complex rules in lie of the SRC for the demand, 
 ;;or have the SRC map to a pattern....
 (defn derive-supply-rule
-  ([demand fillstore category]
-    (case (supply-cat demand fillstore category)
+  ([demand category] 
+    (case (supply-cat demand category)
                                         ;for simple categories, ala "SRC_1" or :SRC_1, we just use the existing 
                                         ;label for the demand, which maps to a node in the fill graph.  This label is 
                                         ;typically a standard alphanumeric SRC, but it could be any identifier the user
@@ -244,7 +244,7 @@
                                         ;For complex categories that contain information in a map structure, we 
                                         ;will have a way to parse the supply rule, which could be arbitrarily complex.
       :rule-map       (rule->supply-rule category)))
-  ([demand fillstore] (derive-supply-rule demand fillstore (get demand :src))))
+  ([demand] (derive-supply-rule demand  (get demand :src))))
 ;  ([demand ctx] (derive-supply-rule demand (marathon.sim.core/get-fillstore ctx) (get demand :src))))
 
 

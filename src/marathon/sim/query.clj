@@ -166,12 +166,15 @@
 ;;may not need all the supply.  Possible performance optimization.
 (defn find-feasible-supply 
   ([supply srcmap category src]
-   (if (is? category :any)
-     (->deployers supply :src (is? src))
-     (let [prefs (src->prefs  srcmap src)]
-       (->>  (->deployers supply :src #(contains? prefs %) :cat (is? category))
-             (into [])
-             (sort-by  (fn [[ k v]]   (get prefs (second k))))))))
+     (let [src-selector (cond (or (identical? src :any) (identical? src  :*)) identity 
+                              (fn? src) src
+                              :else    (is? src))]
+       (if (is? category :any)
+         (->deployers supply :src src-selector)
+         (let [prefs (src->prefs  srcmap src)]
+           (->>  (->deployers supply :src  :cat (is? category))
+                 (into [])
+                 (sort-by  (fn [[ k v]]   (get prefs (second k)))))))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
   ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src)))
 
@@ -504,10 +507,12 @@
     (let [order-by (eval-order order-by)
           where    (eval-filter where)] 
       (with-query-env env
-        (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
-             (select {:where    (when where   (fn wherf [kv]    (where (second kv))))
-                      :order-by (when order-by (ord-fn [l r] (order-by (second l) (second r))))})
-             ((fn [xs] (if collect-by (core/collect collect-by (map second xs)) xs)))))))
+        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
+                   (select {:where    (when where   (fn wherf [kv]    (where (second kv))))
+                            :order-by (when order-by (ord-fn [l r] (order-by (second l) (second r))))}))
+              res               
+             (if collect-by (core/collect collect-by (map second res)) 
+                 res)))))
 
 ;;(defcomparer initial-demand [[AC MaxDwell]
 ;;                             [RCAD MaxDwell]
