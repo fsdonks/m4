@@ -3,20 +3,9 @@
 ;;extend spork.entitystore protocols to marathon stores.
 (ns marathon.sim.query
   (:require [marathon.sim  [core :as core]
-                           [supply :as supply]
-                           [demand :as demand]
                            [unit :as unit]
-                           [policy :as policy]
-                           [policyio :as policyio]
-                           [sampledata :as sd]
-                           [entityfactory :as ent]
-                           [setup :as setup]
-                           [engine :as engine]
-                           [fill :as fill]]                        
-            [marathon.data [simstate :as simstate]
-                           [protocols :as generic]]
-            [spork.sim     [simcontext :as sim]]
-            [spork.entitysystem [store :as estore]]
+                           [supply :as supply]]
+            [marathon.sim.fill.fillgraph]
             [spork.util.reducers]
             [spork.util [tags :as tag]]
             [clojure.core [reducers :as r]]))

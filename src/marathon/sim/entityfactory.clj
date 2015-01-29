@@ -20,7 +20,7 @@
             [marathon.supply [unitdata :as u]]
             [marathon.sim.supply :as supply]
             [marathon.sim.policy :as plcy]
-            [marathon.sim.engine :as engine]
+;;            [marathon.sim.engine :as engine]
             [spork.sim.simcontext :as sim]
             [marathon.sim.core :as core]
             [spork.util      [table :as tbl]]
