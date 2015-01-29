@@ -162,8 +162,9 @@
          (->deployers supply :src src-selector)
          (let [prefs (src->prefs  srcmap src)]
            (->>  (->deployers supply :src #(contains? prefs %) :cat (is? category))
+                 (r/map (fn [[k v]] [(conj k (get prefs (second k))) v]))
                  (into [])
-                 (sort-by  (fn [[ k v]]   (get prefs (second k)))))))))
+                 (sort-by  (fn [[k v]]  (nth k 2))))))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
   ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src)))
 

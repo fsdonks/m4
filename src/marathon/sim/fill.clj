@@ -12,6 +12,7 @@
 
 (ns marathon.sim.fill
   (:require [marathon.data   [protocols :as protocols]]
+            [marathon.fill   [filldata :as filldata]]
             [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
             [marathon.sim [core :as core] [demand :as dem] [supply :as supply]
@@ -433,6 +434,16 @@
 ;             ->supply->rule->[fill-promise]  
 ;where fill-promise::(simcontext->'a->[filldata,simcontext])  
 
+;;simple....
+;;TODO# replace with record or type.
+(defn unit->filldata [cat src length u]  
+  (filldata/->fill  cat src length nil u))
+
+;;all we expect from fills is that there is a quantity
+;;if there is a key for :actions, then we have some requirement.
+;;otherwise, it's a default fill, we just do what's necessary to
+;;deploy the unit.
+
 (defn find-supply
   "Returns an ordered sequence of actions that can result in supply.
    This effectively applies the suitability function related to fillfunc to the 
@@ -440,16 +451,21 @@
    potential fills....where potential fills are data structures that contain 
    the context of the fill (i.e. the unit, the actions required to realize the 
    fill, and other meta data), typically a filldata record."
-  ([fillfunc supplystore rule]
+  ([fillfunc supplystore rule]     
      (query fillfunc rule supplystore))
   ([supplystore rule]
-     (query nil rule supplystore)))
+     (map (fn [[[cat src length] u]] 
+            (unit->filldata cat src length u))
+          (query/match-supply rule supplystore))))
 
-(extend-type nil 
-  ISupplier 
-  (query [s rule store] 
-    (query/match-supply rule store)))
-  
+;;An element of supply has a quantity associated with it.
+;;It also has a set of actions associated with delivering said supply.
+
+;;A supplier provides units at the cost of updates...
+;;A supplier can provide 1 or more (possibly infinite) units.
+;;Suppliers may nest inside each other (i.e. a unit living inside
+;;another).
+
 
 ;We can coerce our list of fill promises into actual fills by applying 
 ;__realize-fill__ to them.  Assuming a fill promise consumes a context, we  
@@ -461,7 +477,13 @@
   "Applies the a function, fill-promise, that maps a context to a pair of 
    [filldata, updated-context].  The updated-context should represent the result
    of realizing the promised fill."
-  [fill-promise ctx] (fill-promise ctx))
+  [fill-promise ctx] 
+  [(get fill-promise :source)
+      (if-let [actions (get fill-promise :actions)]
+        (actions ctx) ;;perform any actions necessary 
+        ctx)])
+    
+
 
 ;#Second: Allocate a candidate fill against a demand.
 ;Assuming we have a candidate fill, and a demand that needs filling, we define
@@ -485,6 +507,8 @@
 ;that would otherwise be difficult, i.e. delayed fills (pre-allocating units 
 ;and scheduling them to deploy at a later date, while nominally "filling" the 
 ;demand).
+
+(def ^:dynamic *fill-* testing* true)
 
 (defn apply-fill
   "Deploys the unit identified in filldata to demand via the supply system."
@@ -519,12 +543,12 @@
    result of one promised fill to the demand, which may or may not satisfy the 
    demand."
   [demand ctx promised-fill]
-  (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
-         unit    (:source filldata)] 
+  (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill. 
+        unit (:unit fd)] 
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))
          (check-ghost unit)
-         (apply-fill filldata demand)))) 
+         (apply-fill fd demand)))) 
 
 ;;#Trying to Completely Satisfy a Demand
 
@@ -538,6 +562,9 @@
 ;   to re-evaluate the ordering of candidates while we're filling, i.e. the 
 ;   amount of fill may impact the order of candidates.  For now, we assume that 
 ;   the ordering of candidates is independent of the demand fill.
+
+
+;; think category is akin to rule here...
   
 (defn satisfy-demand  "Attempts to satisfy the demand by finding supply and applying promised 
    fills to the demand.  Returns a result pair of 
@@ -548,20 +575,21 @@
         fillfunc    (core/get-fill-function ctx)
         supplystore (core/get-supplystore   ctx)
         rule        (demand->rule demand)
+        demand-name (:name demand)
         ;1)
-        candidates  (find-supply fillfunc supplystore rule)
-        demand-name (:name demand)]
-    (loop [d  demand           
-           xs candidates 
+        candidates  (find-supply fillfunc supplystore rule)]
+    (loop [d           demand           
+           xs          candidates 
            fill-status :unfilled
+           remaining   (d/required d)
            current-ctx ctx]
-      (cond (zero? (:required d)) [:filled     current-ctx]
-            (empty? xs)           [fill-status current-ctx]
+      (cond (zero? remaining)      [:filled     current-ctx]
+            (empty? xs)            [fill-status current-ctx]
             :else  
               (let [nextctx (fill-demand d current-ctx (first xs))
                     nextd (-> (core/get-demandstore nextctx)
                               (dem/get-demand demand-name))]
-                (recur nextd (rest xs) :added-fill nextctx))))))
+                (recur nextd (rest xs) :added-fill remaining nextctx))))))
 
 ;;#Pending
 ;;Port fill store generation functions and IO functions/constructors from legacy 
