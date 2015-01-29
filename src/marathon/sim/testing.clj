@@ -1,7 +1,7 @@
 (ns marathon.sim.testing
   (:require [marathon.sim.missing] 
             [marathon.sim [engine :refer :all]]
-            [marathon.sim.fill.demand   :as fill]
+            [marathon.sim [fill  :as fill]]
             [marathon.sim [core :as core]
                           [supply :as supply]
                           [demand :as demand]
@@ -275,7 +275,7 @@
 
 
 ;;fill queries...
-(def fillrules (map marathon.sim.fill/derive-supply-rule (vals (core/demands defaultctx)) (core/get-fillstore defaultctx)))
+(def fillrules (map fill/derive-supply-rule (vals (core/demands defaultctx)) (core/get-fillstore defaultctx)))
 
 ;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
 

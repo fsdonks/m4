@@ -440,8 +440,10 @@
    potential fills....where potential fills are data structures that contain 
    the context of the fill (i.e. the unit, the actions required to realize the 
    fill, and other meta data), typically a filldata record."
-  [fillfunc supplystore rule]
-  (query fillfunc rule supplystore))
+  ([fillfunc supplystore rule]
+     (query fillfunc rule supplystore))
+  ([supplystore rule]
+     (query nil rule supplystore)))
 
 (extend-type nil 
   ISupplier 
