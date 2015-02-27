@@ -351,6 +351,9 @@
              '("24_SRC3_NG" "2_SRC1_NG" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" 
                "37_SRC3_AC" "36_SRC3_AC" "35_SRC3_AC" "40_SRC3_AC" "34_SRC3_AC"))
       "The feasible supply names that match the first demand should be consistent")
+  (is (same? (map (comp :name :source) (fill/find-supply demandctx {:src "SRC3" :order-by query/uniform}))
+             suitables)
+      "fill/find-supply should be synonymous with match-supply")
   (is (== needed 2)
       "First demand should require 2 units")
   (is (same? selected  '("24_SRC3_NG" "2_SRC1_NG"))

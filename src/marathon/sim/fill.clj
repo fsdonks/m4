@@ -249,13 +249,25 @@
   ([demand] (derive-supply-rule demand  (get demand :src))))
 ;  ([demand ctx] (derive-supply-rule demand (marathon.sim.core/get-fillstore ctx) (get demand :src))))
 
+;;#TODO elevate stock queries into user-defined rules.
+(def stock-queries
+  {"AC"        query/AC
+   "RC"        query/RC
+   "RCAD"      query/RCAD
+   "RCAD-BIG"  query/RCAD-BIG
+   "uniform"   query/uniform})
+
+(defn resolve-source-first [sf]
+  (if-let [r  ( get stock-queries sf)]
+    r
+    (throw (Exception. (str "unknown source-first rule: " sf)))))
 
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
-(defn demand->rule    [d ] 
-  {:src (get d :src)
-   :cat (get d :category :default)
+(defn demand->rule [d] 
+  {:src  (get d :src)
+   :cat  (get d :category :default)
    :name (get d :name)
-   :order-by (get d :source-first :uniform)
+   :order-by (resolve-source-first (get d :source-first "uniform"))
    :required (d/required d)})
 
 ;;testing
@@ -458,6 +470,12 @@
             (unit->filldata cat src length u))
           (query/match-supply rule supplystore))))
 
+;;TODO# fillPath in our supply query is currently pretty rudimentary.
+;;It may be nice, for feature parity, to have then entire fillpath
+;;relayed rather than the endpoint.
+
+
+
 ;;An element of supply has a quantity associated with it.
 ;;It also has a set of actions associated with delivering said supply.
 
@@ -465,7 +483,6 @@
 ;;A supplier can provide 1 or more (possibly infinite) units.
 ;;Suppliers may nest inside each other (i.e. a unit living inside
 ;;another).
-
 
 ;We can coerce our list of fill promises into actual fills by applying 
 ;__realize-fill__ to them.  Assuming a fill promise consumes a context, we  
@@ -508,16 +525,16 @@
 ;and scheduling them to deploy at a later date, while nominally "filling" the 
 ;demand).
 
-(def ^:dynamic *fill-* testing* true)
+(def ^:dynamic *fill-testing* true)
 
 (defn apply-fill
   "Deploys the unit identified in filldata to demand via the supply system."
   [filldata demand ctx]
   (let [unit        (:unit filldata)
-        fillstore   (core/get-fillstore ctx)
+        fillstore   (core/get-fillstore   ctx)
         supplystore (core/get-supplystore ctx)
         policystore (core/get-policystore ctx)
-        params      (core/get-parameters ctx)
+        params      (core/get-parameters  ctx)
         t           (sim/get-time ctx)]
     (deployment/deploy-unit ctx unit t demand filldata 
                             (core/interval->date t ctx) (core/followon? unit))))
