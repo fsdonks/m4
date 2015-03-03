@@ -496,9 +496,9 @@
    of realizing the promised fill."
   [fill-promise ctx] 
   [(get fill-promise :source)
-      (if-let [actions (get fill-promise :actions)]
-        (actions ctx) ;;perform any actions necessary 
-        ctx)])
+   (if-let [actions (get fill-promise :actions)]
+     (actions ctx) ;;perform any actions necessary 
+     ctx)])
     
 
 
@@ -530,15 +530,15 @@
 (defn apply-fill
   "Deploys the unit identified in filldata to demand via the supply system."
   [filldata demand ctx]
-  (let [unit        (:unit filldata)
-        fillstore   (core/get-fillstore   ctx)
-        supplystore (core/get-supplystore ctx)
-        policystore (core/get-policystore ctx)
-        params      (core/get-parameters  ctx)
-        t           (sim/get-time ctx)]
-    (deployment/deploy-unit ctx unit t demand filldata 
-                            (core/interval->date t ctx) (core/followon? unit))))
+  (core/with-simstate [[fillstore supplystore policystore parameters] ctx]
+    (let [unit        (:unit filldata)
+          t           (sim/get-time ctx)]
+      (deployment/deploy-unit ctx unit t demand filldata 
+                              (core/interval->date t ctx) (core/followon? unit)))))
 
+(comment
+  (deployment/deploy-unit t/demandctx (:source t/fzero) (sim/get-time t/demandctx) t/d 10 t/fzero (core/interval->date (sim/get-time t/demandctx) (core/followon? (:source t/fzero))))
+  )
 ;;#Incremental Demand Filling
 
 ;;The atomic fill process rests inside a high-level function, __fill-demand__ .

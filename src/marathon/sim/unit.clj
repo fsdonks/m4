@@ -388,11 +388,11 @@
   (core/with-simstate [[supplystore] ctx]
     (if (= newlocation (:locationname unit))
       ctx
-      (let [nextu   (push-location unit newlocation)
+      (let [nextu    (-> (if (:moved unit)  (assoc unit :moved true) unit)
+                         (push-location newlocation))
             ctx     (core/set-supplystore ctx (add-unit supplystore nextu))]
-        (if (:moved unit)              
-          (unit-moved-event! nextu newlocation ctx)                                          
-          (unit-first-moved-event! (assoc nextu :moved true) newlocation ctx))))))
+        (unit-moved-event! unit newlocation ctx)                                          
+        (unit-first-moved-event! unit newlocation ctx)))))
 
 
 ;Predicate to indicate unit U's ability to bog.
@@ -423,12 +423,14 @@
 (defn deployable-window [u] (pol/deployable-window (:policy u)))
 
 ;Determines if u is capable of deploying, as a function of u's associated policy.
-(defn valid-deployer? [u spawning? policy]
-  (if spawning? 
-    (pol/deployable-at? policy (:positionpolicy u))
-    (and (bog-remains? u) 
-         (not (deployed? u)) 
-         (or (can-followon? u) (in-deployable-window? u policy))))) 
+(defn valid-deployer?
+  ([u spawning? policy]
+   (if spawning? 
+      (pol/deployable-at? policy (:positionpolicy u))
+      (and (bog-remains? u) 
+           (not (deployed? u)) 
+           (or (can-followon? u) (in-deployable-window? u policy)))))
+  ([u] (valid-deployer? u nil (:policy u)))) 
 
 ;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated
 ;'with the unit state, i.e the empirical cycle time.  Since we've got a separation between the cycle
@@ -505,6 +507,20 @@
 ;
 ;End Sub
 
+;;TODO# Fully implemente re-deploy-unit
+;;This updates the unit statistics, and alters the followon code.
+;;We need to implement keepbogging untildepleted and friends
+(defn  re-deploy-unit [unit t deployment-idx ctx]
+  (let [c    (:current-cycle u)
+        deps (:deployments c)
+               ])
+  (do (println "re-deploy-unit is not implemented, warning!"
+               )
+      
+      ctx) )
+
+(defn increment-deployments [u] )
+(defn increment-followons   [u] )
 
 ;'Probably pull unit's changelocation into here as well.
 ;Public Sub changeLocation(unit As TimeStep_UnitData, newlocation As String, Optional context As TimeStep_SimContext)

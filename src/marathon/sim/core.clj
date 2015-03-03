@@ -444,10 +444,16 @@
 (defn followon? [u] (:followoncode u))
 (defn ghost-followon? [u] (and (ghost? u) (followon? u)))
 
-(defn interval->date  [t ctx]
-  (let [[start-date time-scale] ((juxt [:start-date :time-scale])  
-                                  (get-parameters ctx))] 
-    (+ start-date (* time-scale t))))
+;;#TODO get this working like it used to, right now it's not important.
+;; (defn interval->date  [t ctx]
+;;   (let [ps (get-parameters ctx)
+;;         start-date (get ps :StartDate)
+;;         time-scale (get ps :time-scale 1)] 
+;;     (+ start-date (* time-scale t))))
+
+;;interval->date is a simple stub, maybe unnecessary (although I like
+;;having it around for records in the output)
+(defn interval->date  [t ctx]  t)
 
 (defn in-scope? [params src]
   (and (not (get-in params [:SRCs-Out-of-Scope src]))

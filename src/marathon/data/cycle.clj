@@ -12,19 +12,19 @@
    policyname ;Policy the unit entity follows
    tstart     ;The start time of the unit's current cycle.
    tfinal     ;The expected end time of the unit's current cycle.
-   duration   ;The time the entity has spent in cycle.   
-   available-time  ;Time the entity spent in available pool
-   deployableTime ;Time the entity spent in a deployable state.
+   [duration 0]   ;The time the entity has spent in cycle.   
+   [available-time 0]  ;Time the entity spent in available pool
+   [deployableTime 0] ;Time the entity spent in a deployable state.
    duration-expected  ;The expected cycle length.
-   bog         ;The cumulative BOG experienced by the entity. (units of time, days)
-   bogbudget   ;The remaining BOG a unit can expend in the current cycle.
+   [bog 0]         ;The cumulative BOG experienced by the entity. (units of time, days)
+   [bogbudget 0]   ;The remaining BOG a unit can expend in the current cycle.
    bog-expected ;The expected BOG days for the unit in the current cycle. 
-   dwell       ;The cumulative Dwell days for the current cycle.
+   [dwell 0]       ;The cumulative Dwell days for the current cycle.
    dwell-expected ;The expected Dwell for the current cycle.
    mob-expected  ;mobilization time expected, if any, for the current cycle.
-   mob          ;Accumulated mobilization days.
-   deployments  ;count of deployments in the current cycle.
-   followons    ;count of follow-on deployments for the current cycle.
+   [mob 0]          ;Accumulated mobilization days.
+   [deployments 0]  ;count of deployments in the current cycle.
+   [followons   0]  ;count of follow-on deployments for the current cycle.
    bog-to-dwell-expected  ;expected BOG/Dwell ratio for the current cycle.
    traversals]) ;record of state traversal, for the current cycle.
 
