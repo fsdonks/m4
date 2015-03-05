@@ -348,6 +348,7 @@
 (defn add-unit [supplystore unit]
   (gen/assoc2 supplystore :unitmap (:name unit) unit))
 
+(defn get-policy [u] (:policy u))
 (defn short-policy [u]  (assoc u :policy (:name (:policy u))))
 
 ;;CHANGE hiding unit policy 
@@ -458,33 +459,7 @@
 ;;#Needs Porting#
 
 ;Option Explicit
-;'Wrapper for low level calls to the unit.
-;'Assumes a unit is in a followon status.  Imediately puts the unit in a bogging state, with no
-;'change in time.  Instantaneous.
-;'Bogs the unit for its remaining bog budget.  The unit will ask for an update
-;Public Sub keepBoggingUntilDepleted(unit As TimeStep_UnitData, Optional context As TimeStep_SimContext)
-;unit.ChangeState "Bogging", 0, unit.CurrentCycle.bogbudget - unit.policy.overlap, context
-;End Sub
 
-;'Assumes a unit has not yet bogged, at least not as a follow on
-;'Bogs the unit for its remaining bog budget.  Accounts for the passage of time before computing
-;'the unit's next update.
-;Public Sub wakeAndBogUntilDepleted(unit As TimeStep_UnitData, t As Single, Optional context As TimeStep_SimContext)
-;With unit
-;    .ChangeState "Bogging", t - SimLib.lastupdate(.name, context), .policy.maxbog - .policy.overlap
-;End With
-;End Sub
-
-
-;'Increment the unit's deployment count for the current cycle.
-;Public Sub incrementDeployments(unit As TimeStep_UnitData, Optional context As TimeStep_SimContext)
-;unit.CurrentCycle.deployments = unit.CurrentCycle.deployments + 1
-;End Sub
-
-;'Increment the unit's deployment count for the current cycle.
-;Public Sub incrementFollowOns(unit As TimeStep_UnitData, Optional context As TimeStep_SimContext)
-;unit.CurrentCycle.followons = unit.CurrentCycle.followons + 1
-;End Sub
 
 ;Public Sub requestUnitUpdate(t As Single, unit As TimeStep_UnitData, ctx As TimeStep_SimContext)
 ;SimLib.requestUpdate t, unit.name, UpdateType.supply
@@ -498,6 +473,53 @@
 ;
 ;End Sub
 
+
+;;Note: these are just delegating, we could probably extend the
+;;protocol to cover the unit, in sim.supply.unitdata
+(defn overlap [u] (pol/overlap (get u :policy)))
+(defn max-bog [u] (pol/max-bog (get u :policy)))
+
+(defn boggable-time     [u]  (- (get-bog-budget u) (overlap u)))
+(defn max-boggable-time [u]  (- (max-bog u) (overlap u)))
+
+;'Wrapper for low level calls to the unit.
+;'Assumes a unit is in a followon status.  Imediately puts the unit in a bogging state, with no
+;'change in time.  Instantaneous.
+;'Bogs the unit for its remaining bog budget.  The unit will ask for an update
+;Public Sub keepBoggingUntilDepleted(unit As TimeStep_UnitData, Optional context As TimeStep_SimContext)
+;unit.ChangeState "Bogging", 0, unit.CurrentCycle.bogbudget - unit.policy.overlap, context
+;End Sub
+
+(defn keep-bogging-until-depleted [u ctx]
+  (change-state u :bogging 0 (boggable-time u) ctx))
+
+;'Assumes a unit has not yet bogged, at least not as a follow on
+;'Bogs the unit for its remaining bog budget.  Accounts for the passage of time before computing
+;'the unit's next update.
+;Public Sub wakeAndBogUntilDepleted(unit As TimeStep_UnitData, t As Single, Optional context As TimeStep_SimContext)
+;With unit
+;    .ChangeState "Bogging", t - SimLib.lastupdate(.name, context), .policy.maxbog - .policy.overlap
+;End With
+;End Sub
+(defn wake-and-bog-until-depleted [u t ctx]
+  (change-state u :bogging
+      (- t (sim/last-update (get u :name) ctx))
+      (max-boggable-time u) ctx))
+
+;'Increment the unit's deployment count for the current cycle.
+;Public Sub incrementDeployments(unit As TimeStep_UnitData, Optional context As TimeStep_SimContext)
+;unit.CurrentCycle.deployments = unit.CurrentCycle.deployments + 1
+;End Sub
+(defn increment-deployments [u]
+  (core/deep-update u [:currentcycle :deployments] inc))
+
+;'Increment the unit's deployment count for the current cycle.
+;Public Sub incrementFollowOns(unit As TimeStep_UnitData, Optional context As TimeStep_SimContext)
+;unit.CurrentCycle.followons = unit.CurrentCycle.followons + 1
+;End Sub
+(defn increment-followons   [u]
+  (core/deep-update u [:currentcycle :followons] inc))
+
 ;Public Sub reDeployUnit(unit As TimeStep_UnitData, t As Single, Optional deploymentindex As Long, Optional context As TimeStep_SimContext)
 ;
 ;incrementFollowOns unit, context
@@ -506,21 +528,17 @@
 ;incrementDeployments unit, context
 ;
 ;End Sub
-
 ;;TODO# Fully implemente re-deploy-unit
-;;This updates the unit statistics, and alters the followon code.
-;;We need to implement keepbogging untildepleted and friends
+;;This updates the unit statistics, and alters (drops) the followon
+;;code.  re-deployment indicates followon?
 (defn  re-deploy-unit [unit t deployment-idx ctx]
-  (let [c    (:current-cycle u)
-        deps (:deployments c)
-               ])
-  (do (println "re-deploy-unit is not implemented, warning!"
-               )
-      
-      ctx) )
-
-(defn increment-deployments [u] )
-(defn increment-followons   [u] )
+  (let [c    (:current-cycle unit)
+        deps (:deployments c)]
+    (-> unit
+        (increment-followons)
+        (increment-deployments)
+        (assoc :followoncode nil)
+        (keep-bogging-until-depleted ctx))))
 
 ;'Probably pull unit's changelocation into here as well.
 ;Public Sub changeLocation(unit As TimeStep_UnitData, newlocation As String, Optional context As TimeStep_SimContext)

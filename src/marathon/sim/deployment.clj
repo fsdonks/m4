@@ -14,7 +14,6 @@
             [spork.util      [tags :as tag]]))
 
 ;;#Functions for Deploying Supply
-
 (defn get-max-bog [unit policystore]
   (let [bog-remaining (udata/unit-bog-budget unit)
         p             (policy/get-policy    (-> unit :policy :name) policystore)]

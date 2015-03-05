@@ -1,9 +1,13 @@
 (ns marathon.supply.unitdata
   (:require [marathon.sim [core :as core]]
-            [marathon.data [cycle :as cyc]]
+            [marathon.data [cycle :as cyc]
+             ;[protocols :as p]
+             ]
             [marathon.policy [policydata :as pol]])
   (:use [spork.util.record :only [defrecord+ inc-field dec-field get-vals]]))
 
+
+;;TODO# should we extend IRotationaPolicy to these guys? Convenience function...
 ;record for unitdata state.
 (defrecord+ unitdata 
   [name ;unit entity's unique name. corresponds to a UIC 
@@ -23,7 +27,10 @@
    oi-title ;the description of the unit.
    locationhistory ;list of all the locations visited.
    dwell-time-when-deployed ;dwell time 
-   ])
+   ]
+  ;marathon.data.protocols.IRotationPolicy
+  
+  )
 
 (def empty-unit
   (-> (make-unitdata)
