@@ -367,13 +367,16 @@
         msg (str nm " Started moving from " loc " to " newlocation " on day " (sim/get-time ctx))]
    (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
+;;TODO# implement change-state, so that it actually modifies the
+;;entity.  In this case, it's tbased off of unit behavior.
 ;;Typically resides in unit/change-state, but we probably 
 ;;want to make it universal for any entity with an FSM.
 ;;Temporary Stub
 (defn change-state [entity newstate deltat duration ctx]
-  (do (println "marathon.sim.unit/change-state is a stub")
+  (do (println "*Warning*: marathon.sim.unit/change-state is a stub")
       (sim/trigger-event :Change-State-Stub :EntityFactory 
-                         (:name entity) "State Change" [newstate deltat duration] ctx)))
+        (:name entity) (core/msg  "State Change" (:name entity) "to " newstate)
+        [newstate deltat duration] ctx)))
 
 (defn push-location [unit newlocation]
   (-> unit 
