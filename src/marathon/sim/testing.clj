@@ -12,7 +12,8 @@
                           [entityfactory :as ent]
                           [setup :as setup]
                           [engine :as engine]
-                          [query :as query]]                        
+                          [query :as query]
+                          [deployment :as deployment]]                        
             [marathon.data [simstate :as simstate]
                            [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
@@ -344,7 +345,28 @@
 (defn ascending?  [xs] (reduce (fn [l r] (if (<= l r) r (reduced nil))) xs))
 (defn descending? [xs] (reduce (fn [l r] (if (>= l r) r (reduced nil))) xs))
 
+
+;;find supply according to the strictest criteria, in this case,
+;;supply that has the same category as demand; note: there should be
+;;none, since the referenced demand actually has a category:
+(def strict-fills (fill/find-supply demandctx (fill/demand->rule d)))
+;;we should find plentiful supply if we make the demand rule more
+;;relaxed by removing the category.  This way, we look at all
+;;categories of supply.  Also, fill/find-supply takes into account the
+;;source-first data associated with the demand, and uses that to
+;;order the fills.  Since the referenced demand has an "AC" sourcing
+;;priority, AC entities should end up toward the front of the list.
+;;We're using an inclusive rather than exclusive default order, so we
+;;use the compo preference to improve order, rather than completely
+;;excluding things of said compo.  We'll look into making the query
+;;system more sophisticated (probably at read-time when we load
+;;demands).  For instance, we may want the :source-first val for a
+;;demand to be a user-defined function.
+(def relaxed-fills (fill/find-supply demandctx (dissoc (fill/demand->rule d) :cat)))
+
 (deftest demandmatching 
+  (is (= (set (map (comp :name :source) relaxed-fills)) (set suitables))
+      "The relaxed fills and the original suitable units should be equal.")
   (is (ascending? (map :priority (vals unfilled)))
       "Priorities of unfilled demand should be sorted in ascending order, i.e. low to hi")
   (is (same? suitables 
@@ -425,3 +447,14 @@
 
 ;;Right now....let's just get names of units, and then figure out
 ;;how to fill using the unit....
+(comment
+  (deployment/deploy-unit t/demandctx (:source t/fzero) (sim/get-time t/demandctx) t/d 10 t/fzero (core/interval->date (sim/get-time t/demandctx) (core/followon? (:source t/fzero))))
+  )
+
+(def fzero  (first relaxed-fills))
+(def u0 (:source fzero))
+(def depres
+  (deployment/deploy-unit
+   demandctx  u0 (sim/get-time demandctx)
+   d 10 fzero (core/interval->date (sim/get-time demandctx)
+   (core/followon? u0))))

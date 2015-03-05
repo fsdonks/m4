@@ -7,9 +7,8 @@
 ;;motivates a kind of motion in the supply simulation.
 
 ;;Note: This is one of the more involved pieces of documentation, and could 
-;;benefit from refinement.  However, filling has proven to be a sensitive 
-;;so the extra layer of commentary is still useful.
-
+;;benefit from refinement.  However, filling has proven to be
+;;a sensitive subject, so the extra layer of commentary is still useful.
 (ns marathon.sim.fill
   (:require [marathon.data   [protocols :as protocols]]
             [marathon.fill   [filldata :as filldata]]
@@ -251,8 +250,10 @@
 
 ;;#TODO elevate stock queries into user-defined rules.
 (def stock-queries
-  {"AC"        query/AC
-   "RC"        query/RC
+  {"ac-first"  query/ac-first
+   "AC"        query/ac-first
+   "rc-first"  query/rc-first
+   "RC"        query/rc-first
    "RCAD"      query/RCAD
    "RCAD-BIG"  query/RCAD-BIG
    "uniform"   query/uniform})
@@ -536,9 +537,7 @@
       (deployment/deploy-unit ctx unit t demand filldata 
                               (core/interval->date t ctx) (core/followon? unit)))))
 
-(comment
-  (deployment/deploy-unit t/demandctx (:source t/fzero) (sim/get-time t/demandctx) t/d 10 t/fzero (core/interval->date (sim/get-time t/demandctx) (core/followon? (:source t/fzero))))
-  )
+
 ;;#Incremental Demand Filling
 
 ;;The atomic fill process rests inside a high-level function, __fill-demand__ .

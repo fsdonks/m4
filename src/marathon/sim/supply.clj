@@ -33,10 +33,10 @@
   (gen/assoc2 supply :unitmap (get unit :name) unit))
 
 (defn drop-unit  [supply unitname] 
-  (update-in supply [:unit-map] dissoc unitname))
+  (update-in supply [:unitmap] dissoc unitname))
 
 
-(defn get-unit [supplystore name] (get-in supplystore [:unit-map  name]))
+(defn get-unit [supplystore name] (get-in supplystore [:unitmap  name]))
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
 
@@ -469,7 +469,7 @@
     (-> store 
         (update-in [:followons] dissoc unitname)
         (core/prune-in  [:deployable-buckets fcode src] dissoc unitname)
-        (assoc-in  [:unit-map unitname] 
+        (assoc-in  [:unitmap unitname] 
           (assoc unit :followoncode nil)))))
 
 (defn followon-unit?

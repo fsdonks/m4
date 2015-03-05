@@ -21,7 +21,7 @@
 
 (defn check-followon-deployer! [followon? unitname demand t ctx]
   (let [supply (core/get-supplystore ctx)
-        unit   (supply/get-unit ctx unitname)]
+        unit   (supply/get-unit supply unitname)]
         (if followon? 
           (supply/record-followon supply unit demand ctx)
           (u/re-deploy-unit unit t (:deployment-index unit) ctx))))
@@ -60,10 +60,10 @@
                               (assoc :dwell-time-when-deployed (udata/get-dwell unit)))
             demand        (d/assign demand unit) ;need to update this in ctx..          
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
-                                                                       (:name unit)))] 
+                                                                       (:name unit)))
+            ]  
         (->> (sim/merge-updates {:demandstore (dem/add-demand demandstore demand)
                                  :supplystore supplystore} ctx)
-                                        ;( (fn [x] (do  (println :blah) x)) )
              (u/change-location unit (:name demand)) ;unit -> str ->ctx
                                         ;-> ctx....
              (check-followon-deployer! followon?  unitname demand t)

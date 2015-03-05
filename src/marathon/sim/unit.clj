@@ -340,7 +340,7 @@
 ;;===================
 
 ;TEMPORARILY ADDED for marathon.sim.demand, marathon.sim.policy
-(declare change-state update change-location! 
+(declare  update change-location! 
          re-deploy-unit deploy-unit change-policy) 
 
 ;;Copied from supply to avoid circular dependencies....
@@ -366,7 +366,6 @@
         loc (:locationname unit)
         msg (str nm " Started moving from " loc " to " newlocation " on day " (sim/get-time ctx))]
    (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
-
 
 ;;Typically resides in unit/change-state, but we probably 
 ;;want to make it universal for any entity with an FSM.
@@ -528,7 +527,7 @@
 ;incrementDeployments unit, context
 ;
 ;End Sub
-;;TODO# Fully implemente re-deploy-unit
+
 ;;This updates the unit statistics, and alters (drops) the followon
 ;;code.  re-deployment indicates followon?
 (defn  re-deploy-unit [unit t deployment-idx ctx]
