@@ -20,54 +20,76 @@
 (def behaviors nil)
 (defprotocol IBehaviorTree
   (behave [b ctx]))
-(defrecord bnode [name type status data f]
+(defrecord bnode [type status f data]
   IBehaviorTree
   (behave [b ctx] (f ctx)))
 
-(defn eval-b [b ctx]
+(defn beval [b ctx]
   (cond (satisfies? IBehaviorTree b) (behave b ctx)
         (fn? b) (b ctx)
         ))
+
 ;;note, behaviors are perfect candidates for zippers...
-(defn ->leaf [name f]
-  (->bnode name :leaf nil nil nil (fn [ctx]  (f ctx))))
-
-(defn ->pred [name pred]
-  (->bnode name :pred nil nil nil  (fn [ctx] (if (pred ctx) [:success ctx] [:fail ctx]))))
-
-(defn ->and [name xs]
-  (->bnode name :and nil nil xs  
-    (fn [ctx]
+(defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
+(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) [:success ctx] [:fail ctx])) nil))
+(defn ->and  [xs]
+  (->bnode  :and nil
+     (fn [ctx]
       (reduce (fn [acc child]
-                (let [[res ctx] (eval-b child acc)]
+                (let [[res ctx] (beval child (second acc))]
                   (case res
                     :run       (reduced [:run ctx])
                     :success   [:success ctx]
-                    :fail      (reduced [:fail ctx])))) ctx xs))))
+                    :fail      (reduced [:fail ctx])))) [:success ctx] xs))
+     xs))
 
-(defn ->or [name xs]
-  (->bnode name :or nil nil xs
+(defn ->or  [xs]
+  (->bnode  :or nil 
      (fn [b ctx]
        (reduce (fn [acc child]
-                 (let [[res ctx] (eval-b child acc)]
+                 (let [[res ctx] (beval child acc)]
                    (case res
                      :run       (reduced [:run ctx])
                      :success   (reduced [:success ctx])
-                     :fail      [:fail ctx]))) ctx xs))))
+                     :fail      [:fail ctx]))) ctx xs))
+     xs))
 
-(defn ->not [name b]
-  (->bnode name :not nil nil nil
-      (fn [b ctx] (let [[res ctx] (eval-b b ctx)]
+(defn ->not [b]
+  (->bnode  :not nil
+      (fn [b ctx] (let [[res ctx] (beval b ctx)]
                    (case res
                      :run [:run ctx]
                      :success [:fail ctx]
-                     :fail [:success ctx])))))
+                     :fail [:success ctx])))
+      nil))
+
+;;if a behavior fails, we return fail to the parent.
+;;we can represent a running behavior as a zipper....
+;;alternatively, we can just reval the behavior every time (not bad).
+(defn ->alter [f] (->bnode :alter nil (fn [ctx] [:success (f ctx)]) nil))
+(defn ->elapse [interval]                            
+    (->alter #(update-in % [:time] + interval)))
 
 ;;a behavior that waits until the time is less than 10.
-(defn ->wait-until [name pred]
-  (->bnode name :wait-until
-          nil nil 
-          (fn [ctx] (if (pred ctx) [ :success ctx] [:run ctx]))))
+(defn ->wait-until [pred]
+  (->bnode  :wait-until nil 
+          (fn [ctx] (if (pred ctx) [ :success ctx] [:run ctx]))     nil))
+           
+(def bt (->and [(->wait-until #(= (:time %) 12))
+                (->alter #(assoc % :count 1))]))
+
+(def testctx {:time 10})
+
+;;a simple behavior tree...
+(->and [(->wait-until #(= (:time %) 10))
+        (->alter #(assoc % :count 1))])
+       
+ 
+ 
+ 
+ 
+
+ 
 
 ;;can we describe a simple behavior?
 ;;an alarm...
