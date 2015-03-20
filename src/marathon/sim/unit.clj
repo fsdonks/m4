@@ -455,8 +455,8 @@
    :positionstate  (pol/get-state (:policy u) (:positionpolicy u))
    :deployable?    (can-deploy? u)
    :cycletime      (:cycletime  u)
-   :dwell          (get-dwell u)
-   :bog            (get-bog   u)})
+   :dwell          (get-dwell   u)
+   :bog            (get-bog     u)})
 
 ;;#Needs Porting#
 

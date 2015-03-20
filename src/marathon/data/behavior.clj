@@ -1,14 +1,82 @@
 ;this is currently in a holding pattern...
 
 (ns marathon.data.behavior
-  (:require [marathon.data.protcols :as protocols]))
+  (:require [marathon.data.protocols :as protocols]))
+
+
+;;what is the minimal amount of information necessary for a
+;;behavior tree?
+
+;;our btree will likely be a dag...
+;;we can use our graph lib to derive behaviors..good for structural
+;;property testing.
+
+;;Also, break up behaviors into small, reusable components.
+;;Taking a functional approach, a behavior has some "state",
+;;determining whether it's active.
+
+;;behaviors are either running, succeeded, failed.
+
+(def behaviors nil)
+(defprotocol IBehaviorTree
+  (behave [b ctx]))
+(defrecord bnode [name type status data f]
+  IBehaviorTree
+  (behave [b ctx] (f ctx)))
+
+(defn eval-b [b ctx]
+  (cond (satisfies? IBehaviorTree b) (behave b ctx)
+        (fn? b) (b ctx)
+        ))
+;;note, behaviors are perfect candidates for zippers...
+(defn ->leaf [name f]
+  (->bnode name :leaf nil nil nil (fn [ctx]  (f ctx))))
+
+(defn ->pred [name pred]
+  (->bnode name :pred nil nil nil  (fn [ctx] (if (pred ctx) [:success ctx] [:fail ctx]))))
+
+(defn ->and [name xs]
+  (->bnode name :and nil nil xs  
+    (fn [ctx]
+      (reduce (fn [acc child]
+                (let [[res ctx] (eval-b child acc)]
+                  (case res
+                    :run       (reduced [:run ctx])
+                    :success   [:success ctx]
+                    :fail      (reduced [:fail ctx])))) ctx xs))))
+
+(defn ->or [name xs]
+  (->bnode name :or nil nil xs
+     (fn [b ctx]
+       (reduce (fn [acc child]
+                 (let [[res ctx] (eval-b child acc)]
+                   (case res
+                     :run       (reduced [:run ctx])
+                     :success   (reduced [:success ctx])
+                     :fail      [:fail ctx]))) ctx xs))))
+
+(defn ->not [name b]
+  (->bnode name :not nil nil nil
+      (fn [b ctx] (let [[res ctx] (eval-b b ctx)]
+                   (case res
+                     :run [:run ctx]
+                     :success [:fail ctx]
+                     :fail [:success ctx])))))
+
+;;a behavior that waits until the time is less than 10.
+(defn ->wait-until [name pred]
+  (->bnode name :wait-until
+          nil nil 
+          (fn [ctx] (if (pred ctx) [ :success ctx] [:run ctx]))))
+
+;;can we describe a simple behavior?
+;;an alarm...
+;;the behavior context is the current time, and a duration.
+
 
 (defrecord behaviorstore [name behaviors])
 
 ;;#Pending  - Import Behavior Implementations From marathon.sim.legacy
-
-(ns marathon.port.data.unitbehavior)
-
 
 ;;_Begin Porting Legacy Behavior_
 ;;THe strategy here is to pull in what we originally had, translate it
