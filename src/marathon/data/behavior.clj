@@ -26,8 +26,7 @@
 
 (defn beval [b ctx]
   (cond (satisfies? IBehaviorTree b) (behave b ctx)
-        (fn? b) (b ctx)
-        ))
+        (fn? b) (b ctx)))
 
 ;;note, behaviors are perfect candidates for zippers...
 (defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
@@ -71,9 +70,9 @@
     (->alter #(update-in % [:time] + interval)))
 
 (defn succeed [b]
-  (fn [ctx] [:success (second (eval-b b ctx))]))
+  (fn [ctx] [:success (second (beval b ctx))]))
 (defn fail [b]
-  (fn [ctx] [:fail (second (eval-b b ctx))]))
+  (fn [ctx] [:fail (second (beval b ctx))]))
 
 ;;a behavior that waits until the time is less than 10.
 (defn ->wait-until [pred]
@@ -101,8 +100,8 @@
 (def testctx {:time 10})
 
 ;;a simple behavior tree...
-(->and [(->wait-until #(= (:time %) 10))
-        (->alter #(assoc % :count 1))])
+;; (->and [(->wait-until #(= (:time %) 10))
+;;         (->alter #(assoc % :count 1))])
 
 ;;let's say the entity has some notion of state then.
 ;;how long it's been there, etc.
@@ -114,8 +113,7 @@
                      :states {:a :default :b :default :c :default}})
 
 (defn no-messages? [ctx] (not (contains?  ctx :messages)))
-
-(def await-messages
+(def  await-messages
   (->while no-messages?
            (->and [(->do #(println "waiting for messages at " (:time %)))
                    (->elapse 1)])))
@@ -150,11 +148,6 @@
           last-update (get-in ctx [:ages id]) 
           delta       (- t last-update)]
       (if (zero? delta)  ;;we're up-to-date...
-        
-        
-
-                 
-         
 
 ;;Say we have an entity with a clock behavior..
 ;;It just elapses time until forever...
@@ -476,6 +469,9 @@
 ;; Private Function specialstate(instate As String) As Boolean
 ;; specialstate = instate = "Spawning" Or instate = "AbruptWithdraw"
 ;; End Function
+
+
+
 ;; Private Function FinishCycle(unit As TimeStep_UnitData, frompos As String, topos As String) As TimeStep_UnitData
 ;; Set FinishCycle = unit
 
@@ -486,13 +482,22 @@
 ;; End If
 
 ;; End Function
+
+
+
+
 ;; Private Function getState(unit As TimeStep_UnitData, position As String) As String
 ;; getState = unit.policy.getState(position)
 ;; End Function
+
+
 ;; 'Tom Change 24 May 2011
 ;; Private Function getNextPosition(unit As TimeStep_UnitData) As String
 ;; getNextPosition = unit.policy.nextposition(unit.PositionPolicy)
 ;; End Function
+
+
+
 ;; Private Function getWaitTime(unit As TimeStep_UnitData, position As String, Optional deltat As Single) As Single
 ;; Dim nextposition As String
 
@@ -503,6 +508,8 @@
 ;; End With
 
 ;; End Function
+
+
 ;; 'TODO -> reduce this down to one logical condition man....
 ;; 'TOM Change 6 June -> pointed disengagement toward demand name, via unit.LocationName
 ;; Private Sub checkOverlap(unit As TimeStep_UnitData, frompos As String, nextpos As String)
@@ -518,6 +525,9 @@
 ;; End If
 
 ;; End Sub
+
+
+
 ;; Private Sub checkDeployable(unit As TimeStep_UnitData, frompos As String, nextpos As String)
 ;; With unit
 ;;     If .policy.Deployable(frompos) <> .policy.Deployable(nextpos) Then 'came home from deployment, "may" back in Reset
@@ -526,18 +536,30 @@
 ;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
 ;;     End If
 ;; End With
-
 ;; End Sub
+
+
+
+
 ;; 'TODO -> these should be functions of policy, not parameters.
 ;; Private Function exceedsCycle(NewCycle As Long, unit As TimeStep_UnitData) As Boolean
 ;; Dim upperbound As Long
 ;; exceedsCycle = NewCycle > unit.policy.cyclelength
 ;; End Function
+
+
+
+
+
 ;; Private Function Deployable(position As String, policy As TimeStep_Policy) As Boolean
-
 ;; Deployable = policy.isDeployable(policy.GetCycleTime(position))
-
 ;; End Function
+
+
+
+
+
+
 ;; 'TODO -> Get this back to working as a function of policy.
 ;; 'TOM Change 3 Jan 2011 -> when conditions are met, units will start new cycles, update their cycles collection
 ;; 'This is a boolean filter, based on POLICY, that determines if the unit's state change merits a new cycle
@@ -545,17 +567,29 @@
 ;; NewCycle = (topos = unit.policy.startstate)
 ;; End Function
 
+
+
+
 ;; 'This is a very general and powerful mechanism to capture state changes in the unit.
 ;; Private Function StateExpired(unit As TimeStep_UnitData, deltat As Single) As Boolean
-
 ;; If unit.StateData.remaining <= deltat Then StateExpired = True
-
 ;; End Function
+
+
+
+
+
+
 ;; Private Function JustSpawned(unit As TimeStep_UnitData) As Boolean
 ;; 'Decoupled*
 ;; 'JustSpawned = (unit.spawnTime = parent.getTime)
 ;; JustSpawned = (unit.spawnTime = SimLib.getTime(simstate.context))
 ;; End Function
+
+
+
+
+
 ;; 'State handler for generic updates that occur regardless of the state.
 ;; 'These are specific to the unit data structure, not any particular state.
 ;; Private Function Global_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
@@ -574,6 +608,9 @@
 
 ;; Set Global_State = unit
 ;; End Function
+
+
+
 ;; 'Tom Change 1 July 2011
 ;; Private Function ageUnit(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 ;; With unit
@@ -587,6 +624,9 @@
 ;; End With
 ;; Set ageUnit = unit
 ;; End Function
+
+
+
 ;; 'State to control how a unit acts when it spawns.
 ;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
 ;; Dim newduration As Single
@@ -659,6 +699,9 @@
 
 ;; End Function
 
+
+
+
 ;; Private Function Bogging_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 
 ;; If deltat > 0 Then
@@ -670,6 +713,13 @@
 
 ;; Set Bogging_State = unit
 ;; End Function
+
+
+
+
+
+
+
 ;; 'Function to handle the occurence of an early withdraw from a deployment.
 ;; 'when a demand deactivates, what happens to the unit?
 ;; 'The behavior will be guided by (the unit's) policy.
@@ -714,6 +764,10 @@
 ;; End If
 
 ;; End Function
+
+
+
+
 ;; 'way to get the unit back to reset.
 ;; Private Function Reset_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 ;; unit.followoncode = vbNullString
@@ -728,6 +782,15 @@
 ;; Set FollowOn_State = ageUnit(unit, deltat)
 
 ;; End Function
+
+
+
+
+
+
+
+
+
 ;; 'A state to handle reentry into the available pool....
 ;; Private Function ReEntry_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 
@@ -816,8 +879,13 @@
 ;;         Err.Raise 101, , "Cannot handle during deployment or overlap"
 ;;     End If
 ;; End With
-
 ;; End Function
+
+
+
+
+
+
 
 ;; '''TOM Change 1 June 2011 -> Renamed moving state to Repositioning_State.  Location changes (moves) cannot happen without a
 ;; '''change of position.  This is convention.  Change of position implies a state transition.
@@ -851,6 +919,10 @@
 ;; ''
 ;; ''
 ;; ''End Function
+
+
+
+
 
 ;; 'TOM Change 1 June 2011 -> Added a subordinate routine to deal with changes in the spatial
 ;; 'location of a unit, i.e. "moves".
@@ -914,6 +986,9 @@
 ;; End With
 
 ;; End Function
+
+
+
 
 ;; 'TOM Change 13 Jul 2011
 ;; 'Needed to implement the transition from one policy to another.  I chose to add a state to handle just this.
@@ -1144,13 +1219,20 @@
 ;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Policy Change Attempt Caused Supply Update for unit " & .name, , simstate.context
 ;;     End If
 ;; End With
-
 ;; End Function
+
+
+
+
 ;; 'Units dwelling will accumulate dwell over time.
 ;; Private Function Dwelling_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 ;; If deltat > 0 Then unit.AddDwell deltat
 ;; Set Dwelling_State = unit
 ;; End Function
+
+
+
+
 
 ;; 'TOM Change 23 April 2012 -> Check to see if we should even try to recover....
 ;; 'Criteria: if cycletime + recoverytime > cycleduration then 'skip recovery....
@@ -1172,6 +1254,11 @@
 ;; End If
 
 ;; End Function
+
+
+
+
+
 
 ;; 'TOM Change 23 April 2012
 ;; 'Auxillary function to help us determine whether a unit should try to recover....
@@ -1209,6 +1296,11 @@
 ;; End With
 
 ;; End Function
+
+
+
+
+
 ;; 'A state in which the unit will attempt to re-enter the available pool, if it has enough BOG time remaining.
 ;; Public Function Recovered_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 ;; Set Recovered_State = unit
@@ -1229,6 +1321,13 @@
 ;; End With
        
 ;; End Function
+
+
+
+
+
+
+
 ;; 'Units starting cycles will go through a series of procedures.
 ;; Private Function StartCycle_State(unit As TimeStep_UnitData, deltat As Single, Optional tnow As Single) As TimeStep_UnitData
 ;; 'Possibly log this as an event?
@@ -1247,6 +1346,12 @@
 
 ;; Set StartCycle_State = unit
 ;; End Function
+
+
+
+
+
+
 ;; 'Units ending cycles will record their last cycle locally.
 ;; Private Function EndCycle_State(unit As TimeStep_UnitData, deltat As Single, Optional tnow As Single) As TimeStep_UnitData
 ;; If IsMissing(tnow) Then tnow = SimLib.getTime(simstate.context)
@@ -1265,6 +1370,14 @@
 ;; Set EndCycle_State = unit
 ;; End Function
 
+
+
+
+
+
+
+
+
 ;; 'Units in overlap accumulate dwell. They also may do other things.
 ;; Private Function Overlapping_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 
@@ -1272,6 +1385,11 @@
 
 ;; Set Overlapping_State = unit
 ;; End Function
+
+
+
+
+
 ;; 'Units in overlap accumulate dwell. They also may do other things.
 ;; Private Function DeMobilizing_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 
@@ -1279,6 +1397,10 @@
 ;; Set DeMobilizing_State = unit
 
 ;; End Function
+
+
+
+
 
 ;; Private Sub Class_Terminate()
 ;; 'Set parent = Nothing
