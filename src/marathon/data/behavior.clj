@@ -83,7 +83,10 @@
 ;;composeable)....is there anything that we can't compose with states
 ;;though?  
 (ns marathon.data.behavior
-  (:require [marathon.data.protocols :as protocols]))
+  (:require [marathon.data.protocols :as protocols]
+            [marathon.sim [core :as core]
+                          [unit :as u]]            
+            [spork.sim.simcontext :as sim]))
 
 (defrecord behaviorstore [name behaviors])
 
@@ -390,14 +393,14 @@
 ;;marathon.sim.demand (for abrupt withdraws), and marathon.sim.supply
 ;;(for deployments).
 
-
-(declare change-state-beh) 
-
+(declare change-state-beh update-state-beh) 
 
 ;;Similarly, we'll have update take the context last.
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
-(defn update  [unit deltat ctx])
+(defn update  [unit deltat ctx]
+  ;;really defers to roll-forward, which in-turn calls update-state
+  (roll-forward unit deltat ctx))
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
@@ -406,6 +409,38 @@
  (beval (->and [#(update unit deltat %)
                   change-state-beh])
         (assoc ctx :entity unit :deltat deltat)))
+
+;;todo# move to generic statedata library.
+;;this should be lifted out
+;;This just keeps track of where we are, how long we're waiting, and 
+;;where we expect to be after.
+(defn change-statedata [sdata tostate duration followingstate]
+  (-> statedata 
+      (assoc :tostate  tostate)
+      (assoc :duration duration)
+      (assoc :followingstate followingstate)))
+
+(defn update-after [entity duration ctx]
+  (sim/request-update (+ (sim/current-time ctx) duration) 
+                      (:name unit)
+                      :supply-update
+                      ctx))
+
+;;our idioms for defining behaviors will be to unpack 
+;;vars we're expecting from the context.  typically we'll 
+;;just be passing around the simulation context, perhaps 
+;;with some supplementary keys.
+(def change-state-beh 
+  (fn [{:keys [entity deltat statedata newstate duration followingstate] :as ctx}
+        :or {deltat 0 duration 0 followingstate newstate}]
+    (let [newdata (change-statedata statedata tostate duration followingstate)]                                                           
+      (if (pos? duration)  ;do stuff
+            [:success (update-after  unit duration ctx)]
+            (throw (Exception. "Error, cannot have negative duration!"))))))
+
+;;implement update-state-beh
+
+(def change-and-update (->and [change-state-beh update-state-beh]))
 
 ;;What happens when we change a state?
 ;;Some states are just blips (0 duration) .
