@@ -433,6 +433,7 @@
 ;;So, we are likely to include, either directly or in a
 ;;contextual binding, the current simulation context, when
 ;;we go to update one or more units.
+
 ;;Transitiong To Behavior Trees
 ;;=============================
 ;;Changing from the current policy-driven FSM, we need to start at the
@@ -457,11 +458,64 @@
 ;;entity, and the behavior tree - upon re-evaluation - should be
 ;;able to suss out what it should be doing.
 
-;;To Be Continued....
+
+;;One strategy could be to isolate the state-independent parts of the 
+;;existing logic and identify them as behaviors; in other words, 
+;;remove all state-changes.  We then have the idiom of defining 
+;;small, self-contained behaviors, and where we previously "wanted"
+;;a state change, we realize a sequence of the simple behavior, 
+;;and the state change.
+
+;;This doesn't refactor anything, but it does allow us to translate
+;;fairly directly to a behavior tree representation.
+
+;;For instance, the control flow of the Moving state would establish
+;;the context of a move based on policy, and then evaluate an
+;;instantaneous call to ChangeState afterwards.  We can view that 
+;;as a behavior like the following: 
+;;               Moving         
+;;[SetNextMove SetWaitTime LogMove WaitInNextState]
+
+;;So one strategy is to just break out all of the implicit unit entity
+;;state changes we're performing and them build our behaviors out 
+;;of them.  As we go along, we can re-use previous actions, or 
+;;where apprioriate, entire behaviors.
+
+;;We may give some thoughts to extensions for our naive behavior tree
+;;as well: 
+;;  Behavior zippers (so we can remember the path we followed to our
+;;                    current child)
+;;  Specific types that denote success, running, failure
 
 
 ;;Implementation
 ;;==============
+
+;;For now, we'll let the behavior tree assume it has everything it
+;;needs in its context. 
+;;The context is a simple map; we may move to a record type as an
+;;optimization later, particularly if there are well-known fields 
+;;that we'll be accessing frequently.  The context acts as a
+;;"blackboard" for the nodes in the behavior tree to work with.
+
+;;Note-> there are opportunities for using STM and exploiting
+;;parallelism here; if we implement a parallel node, we may 
+;;enjoy the benefits of "fast" entity updates.  On the other hand, 
+;;since supply updating takes the preponderance of our time, 
+;;we can still get a lot of bang-for-the-buck by updating individual
+;;units in parallel batches.  Parallelizing the behavior tree may 
+;;not be all that necessary.
+
+;;Note: if we do implement a parallel node (even if executed
+;;serially), we can have competing concerns executed in parallel 
+;;(i.e. listen for messages, and also update over time slices).
+
+;;Basic API
+;;=========
+;;The rest of the simulation still relies on our pre-existing API, 
+;;namely that we have "change-state", and "update"
+
+
 
 
 
