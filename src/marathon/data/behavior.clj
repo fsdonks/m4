@@ -315,18 +315,27 @@
   (cond (satisfies? IBehaviorTree b) (behave b ctx)
         (fn? b) (b ctx)))
 
+;;convenience? macros...at least it standardizes success and failure,
+;;provides an API for communicating results.
+(defmacro success [expr]
+  `(vector :success ~expr))
+(defmacro fail [expr]
+  `(vector :fail ~expr))
+(defmacro run [expr]
+  `(vector :run ~expr))
+
 ;;note, behaviors are perfect candidates for zippers...
 (defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
-(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) [:success ctx] [:fail ctx])) nil))
+(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) (success ctx) (fail ctx)) nil)))
 (defn ->and  [xs]
   (->bnode  :and nil
      (fn [ctx]
       (reduce (fn [acc child]
                 (let [[res ctx] (beval child (second acc))]
                   (case res
-                    :run       (reduced [:run ctx])
-                    :success   [:success ctx]
-                    :fail      (reduced [:fail ctx])))) [:success ctx] xs))
+                    :run       (reduced (run ctx))
+                    :success   (success ctx)
+                    :fail      (reduced [:fail ctx])))) (success ctx) xs))
      xs))
 
 (defn ->or  [xs]
@@ -335,43 +344,45 @@
        (reduce (fn [acc child]
                  (let [[res ctx] (beval child acc)]
                    (case res
-                     :run       (reduced [:run ctx])
-                     :success   (reduced [:success ctx])
-                     :fail      [:fail ctx]))) ctx xs))
+                     :run       (reduced (run ctx))
+                     :success   (reduced (success ctx))
+                     :fail      (fail ctx)))) ctx xs))
      xs))
 
 (defn ->not [b]
   (->bnode  :not nil
       (fn [b ctx] (let [[res ctx] (beval b ctx)]
                    (case res
-                     :run [:run ctx]
-                     :success [:fail ctx]
-                     :fail [:success ctx])))
+                     :run     (run ctx)
+                     :success (fail ctx)
+                     :fail    (success ctx))))
       b))
 
 ;;if a behavior fails, we return fail to the parent.
 ;;we can represent a running behavior as a zipper....
 ;;alternatively, we can just reval the behavior every time (not bad).
-(defn ->alter  [f] (->bnode :alter nil (fn [ctx] [:success (f ctx)]) nil))
+(defn ->alter  [f] (->bnode :alter nil (fn [ctx] (success (f ctx))) nil))
 (defn ->elapse [interval]                            
     (->alter #(update-in % [:time] + interval)))
 
 (defn succeed [b]
-  (fn [ctx] [:success (second (beval b ctx))]))
+  (fn [ctx] (success (second (beval b ctx)))))
 (defn fail [b]
-  (fn [ctx] [:fail (second (beval b ctx))]))
+  (fn [ctx] (fail (second (beval b ctx)))))
+
+
 
 ;;a behavior that waits until the time is less than 10.
 (defn ->wait-until [pred]
   (->bnode  :wait-until nil 
-          (fn [ctx] (if (pred ctx) [:success ctx] [:run ctx]))    nil))
+          (fn [ctx] (if (pred ctx) (success ctx) (run ctx)))    nil))
 
 ;;do we allow internal failure to signal external failure?
 (defn ->while [pred b]
   (->bnode :while nil 
            (fn [ctx] (if (pred ctx) 
                          (beval b ctx)
-                         [:fail ctx])) 
+                         (fail ctx))) 
            b))
           
 (defn ->elapse-until [t interval]
@@ -379,7 +390,7 @@
             (->elapse interval)))
 
 (defn ->do [f] 
-  (fn [ctx] [:success (do (f ctx) ctx)]))
+  (fn [ctx] (success (do (f ctx) ctx))))
 
 ;;Basic API
 ;;=========
@@ -400,7 +411,8 @@
 ;;change-state is a higher-level api for changing things.
 (defn update  [unit deltat ctx]
   ;;really defers to roll-forward, which in-turn calls update-state
-  (roll-forward unit deltat ctx))
+  (roll-forward unit deltat 
+     (assoc ctx :tupdate (sim/current-time ctx))))
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
@@ -418,29 +430,205 @@
   (-> statedata 
       (assoc :tostate  tostate)
       (assoc :duration duration)
+      (assoc :time-in-state 0)
       (assoc :followingstate followingstate)))
 
+;;aux function
+(defn remaining [statedata]
+  (- (get statedata :duration) 
+     (get statedata :time-in-state)))
+
+;;updates an entity after a specified duration, relative to the 
+;;current simulation time + duration.
 (defn update-after [entity duration ctx]
   (sim/request-update (+ (sim/current-time ctx) duration) 
                       (:name unit)
                       :supply-update
                       ctx))
-
 ;;our idioms for defining behaviors will be to unpack 
 ;;vars we're expecting from the context.  typically we'll 
 ;;just be passing around the simulation context, perhaps 
 ;;with some supplementary keys.
 (def change-state-beh 
   (fn [{:keys [entity deltat statedata newstate duration followingstate] :as ctx}
-        :or {deltat 0 duration 0 followingstate newstate}]
+        :or   {deltat 0 duration 0 followingstate newstate}]
     (let [newdata (change-statedata statedata tostate duration followingstate)]                                                           
       (if (pos? duration)  ;do stuff
-            [:success (update-after  unit duration ctx)]
-            (throw (Exception. "Error, cannot have negative duration!"))))))
+            (success (update-after  unit duration ctx))
+            (throw   (Exception. "Error, cannot have negative duration!"))))))
 
 ;;implement update-state-beh
-
 (def change-and-update (->and [change-state-beh update-state-beh]))
+
+;;we want to update the unit to its current point in time.  Basically, 
+;;we are folding over the behavior tree, updating along the way by 
+;;modifying the context.  One of the bits of context we're modifying 
+;;is the current deltat; assumably, some behaviors are predicated on 
+;;having a positive deltat, others are instantaneous and thus expect 
+;;deltat = 0 in the context.  Note, this is predicated on the
+;;assumption that we can eventually pass time in some behavior....
+
+;;Note -> we could represent roll-forward-beh as something more
+;;btree-ish, specifically as a combination of a repeat node and 
+;;some conditions (namely the condition that deltat <= remaining)
+;;Might have a smaller behavior that advances the next-smallest 
+;;time slice.  TODO# refactor using behaviortree nodes.
+(def roll-forward-beh 
+  (fn [{:keys [deltat] :as ctx}  
+       :or {deltat 0}]
+    (loop [dt deltat
+           ctx ctx]
+      (let [timeleft (remaining (get ctx :statedata))]
+        (if (<= dt timeleft)           
+          (beval update-state-beh ctx)
+          (recur  (- dt timeleft) ;advance time be decreasing delta
+                  (beval update-state-beh ctx))
+          ctx)))))
+
+;;What then, is the update-state-beh definition? 
+;;This "was" our central dispatch for states, i.e., based on 
+;;the current state, we would lookup the appropriate handler and 
+;;call it as the update function.
+
+;;It seems to me, there will be no "central dispatch" necessarily, 
+;;but these branches (the states) become leaves (or subtrees) to be 
+;;re-used with other behaviors.
+
+;;either that, or the update-state-beh is the hierarchical 
+;;composition of the entire tree, specifically it encodes everything 
+;;explicitly (including state transitions).
+
+;;The later definition seems more consistent with the behavior tree
+;;approach.  We want the whole enchilada to be updated every time
+;;step.
+
+
+;;We assume the the entity-behavior is stored in the context....
+;;so, update-state-beh is just using the behavior associated with the
+;;entity...
+
+(declare default-behavior)
+
+;;Heh, that's pretty weak, but it's technically correct
+;;All we do is provide a reference to the time the update 
+(defn update-state-beh [{:keys [root-behavior] :as ctx
+                         :or   {root-behavior default-behavior}}]
+  (beval root-behavior ctx))
+
+;;Only Movement....
+;;===================
+
+;;How would the behavior tree look rooted at update-state-beh, so that 
+;;we get an equivalent behavior tree to a unit that ONLY knows how to 
+;;move (i.e. follow a script).
+
+;;we need to implement movement-beh 
+;;so, the movement behavior depends on several subgoals...
+;;To get an entity to move, 
+;;We need to know where it's moving to, and make that part of the context
+;;We (may) need to know where it currently is....
+;;We (may) need to know what it's supposed to after it gets there
+;;(default is to wait)
+;;We (may) need to know how long it's supposed to wait (if it's
+;;waiting).
+
+;;So, at the high level, we have a simple behavior that checks to see
+;;if it can move, finds where to move to, starts the process of
+;;moving (maybe instantaneous), and waits...
+;;Maybe our implied behavior is really [move wait]
+;;move == 
+;; [should-move? get-next-location move-next-location]
+;;move(transport-time)== 
+;;  [should-move? get-next-location (move-next-location transport-time)]
+
+
+;;We should consider move if our time in state has expired, or 
+;;if we have a next-location planned.
+(def should-move?
+  (->pred #(or (get % :next-position)
+               (zero? (remaining (get % :statedata))))))
+
+(def record-move (->alter #(assoc % :moved true)))
+
+;;auxillary function that helps us wrap updates to the unit.
+(defn traverse-unit [u t from to]   
+  (-> u (assoc :positionpolicy to)
+      (u/add-traversal t from to)))
+
+;;after updating the unit bound to :entity in our context, 
+;;we commit it into the supplystore.  This is probably 
+;;slow....we may want to define a mutable version, 
+;;or detect if mutation is allowed for a faster update
+;;path.  For instance, on first encountering the unit,
+;;we establish a mutable cell to its location and use that 
+;;during the update process.
+(def commit-unit
+  (->alter 
+   (fn [ctx] 
+     (sim/merge-updates 
+      {:supply (supply/add-unit (get ctx :entity) 
+                                (core/get-supplystore ctx))}
+      ctx))))
+
+;;I like looking at unit updates like transactional semantics.
+;;We probably want to pull out the unit and establish a mutable
+;;context if we find out we have to change it.  For instance, 
+;;we can just bind the mutable cell to the :entity in the context,
+;;and then detect if mutation (or even simple change) has occurred.
+;;Another way to do this is to just check identity (since we're using 
+;;immmutable objects) and 
+;;Commmit our changes iff we recorded a change to the unit (we 
+;;may not during the course of the update)
+(def commit-if-changed 
+  (->and [(->pred :changed)
+           commit-unit]))
+
+;;Given that we have the context for a move in place, 
+;;we want to move as directed by the context.  If there 
+;;is a wait time associated with the place we're moving 
+;;to, we will add the wait-time to the context.  That way,
+;;downstream behaviors can pick up on the wait-time, and 
+;;apply it.
+(def apply-move 
+  (fn [ctx] 
+    (let [u       (get ctx :entity)
+          frompos (get u   :positionpolicy)
+          nextpos (get ctx :next-position)
+          t       (get ctx :tupdate)]
+      (success
+       (if (= frompos nextpos)  
+         ctx ;do nothing, no move has taken place.          
+         (let [newstate (get-state u nextpos)]
+           (merge ctx 
+                  {:entity      (traverse-unit u t frompos nextpos)
+                   :old-position frompos ;record information 
+                   :new-position newpos
+                   :new-state    newstate})))))))
+;;if we need to wait, as a function 
+          
+
+(def moving-beh 
+  (->and [should-move? 
+          find-move
+          apply-move]))
+
+          
+          
+   
+   
+  
+
+
+
+
+
+
+
+
+
+
+
+
 
 ;;What happens when we change a state?
 ;;Some states are just blips (0 duration) .
