@@ -373,7 +373,8 @@
 ;;want to make it universal for any entity with an FSM.
 ;;Temporary Stub
 (defn change-state [entity newstate deltat duration ctx]
-  (do (println "*Warning*: marathon.sim.unit/change-state is a stub")
+  (do (println (str "*Warning*: marathon.sim.unit/change-state is a stub\n"
+                    "we need to have it wrap an update via the unit's behavior\n"))
       (sim/trigger-event :Change-State-Stub :EntityFactory 
         (:name entity) (core/msg  "State Change" (:name entity) "to " newstate)
         [newstate deltat duration] ctx)))

@@ -1,229 +1,7 @@
-;this is currently in a holding pattern...
-
-(ns marathon.data.behavior
-  (:require [marathon.data.protocols :as protocols]))
-
-
-;;what is the minimal amount of information necessary for a
-;;behavior tree?
-
-;;our btree will likely be a dag...
-;;we can use our graph lib to derive behaviors..good for structural
-;;property testing.
-
-;;Also, break up behaviors into small, reusable components.
-;;Taking a functional approach, a behavior has some "state",
-;;determining whether it's active.
-
-;;behaviors are either running, succeeded, failed.
-
-(def behaviors nil)
-(defprotocol IBehaviorTree
-  (behave [b ctx]))
-(defrecord bnode [type status f data]
-  IBehaviorTree
-  (behave [b ctx] (f ctx)))
-
-(defn beval [b ctx]
-  (cond (satisfies? IBehaviorTree b) (behave b ctx)
-        (fn? b) (b ctx)))
-
-;;note, behaviors are perfect candidates for zippers...
-(defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
-(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) [:success ctx] [:fail ctx])) nil))
-(defn ->and  [xs]
-  (->bnode  :and nil
-     (fn [ctx]
-      (reduce (fn [acc child]
-                (let [[res ctx] (beval child (second acc))]
-                  (case res
-                    :run       (reduced [:run ctx])
-                    :success   [:success ctx]
-                    :fail      (reduced [:fail ctx])))) [:success ctx] xs))
-     xs))
-
-(defn ->or  [xs]
-  (->bnode  :or nil 
-     (fn [b ctx]
-       (reduce (fn [acc child]
-                 (let [[res ctx] (beval child acc)]
-                   (case res
-                     :run       (reduced [:run ctx])
-                     :success   (reduced [:success ctx])
-                     :fail      [:fail ctx]))) ctx xs))
-     xs))
-
-(defn ->not [b]
-  (->bnode  :not nil
-      (fn [b ctx] (let [[res ctx] (beval b ctx)]
-                   (case res
-                     :run [:run ctx]
-                     :success [:fail ctx]
-                     :fail [:success ctx])))
-      b))
-
-;;if a behavior fails, we return fail to the parent.
-;;we can represent a running behavior as a zipper....
-;;alternatively, we can just reval the behavior every time (not bad).
-(defn ->alter  [f] (->bnode :alter nil (fn [ctx] [:success (f ctx)]) nil))
-(defn ->elapse [interval]                            
-    (->alter #(update-in % [:time] + interval)))
-
-(defn succeed [b]
-  (fn [ctx] [:success (second (beval b ctx))]))
-(defn fail [b]
-  (fn [ctx] [:fail (second (beval b ctx))]))
-
-;;a behavior that waits until the time is less than 10.
-(defn ->wait-until [pred]
-  (->bnode  :wait-until nil 
-          (fn [ctx] (if (pred ctx) [:success ctx] [:run ctx]))    nil))
-
-;;do we allow internal failure to signal external failure?
-(defn ->while [pred b]
-  (->bnode :while nil 
-           (fn [ctx] (if (pred ctx) 
-                         (beval b ctx)
-                         [:fail ctx])) 
-           b))
-          
-(defn ->elapse-until [t interval]
-  (->while #(< (:time %) t)
-            (->elapse interval)))
-
-(defn ->do [f] 
-  (fn [ctx] [:success (do (f ctx) ctx)]))
-
-(def bt (->and [(->wait-until #(= (:time %) 12))
-                (->alter #(assoc % :count 1))]))
-
-(def testctx {:time 10})
-
-;;a simple behavior tree...
-;; (->and [(->wait-until #(= (:time %) 10))
-;;         (->alter #(assoc % :count 1))])
-
-;;let's say the entity has some notion of state then.
-;;how long it's been there, etc.
-;;The next behavior change happens in 20. 
-;;We can determine how we'll modify the time the entity spent in a
-;;behavior...
-
-(def bigctx {:time 0 :ages   {:a 0 :b 0 :c 0}
-                     :states {:a :default :b :default :c :default}})
-
-(defn no-messages? [ctx] (not (contains?  ctx :messages)))
-(def  await-messages
-  (->while no-messages?
-           (->and [(->do #(println "waiting for messages at " (:time %)))
-                   (->elapse 1)])))
-
-(defn update-entity [id msg ctx]
-  (let [b (get-in ctx [:behavior id])]
-    (beval (assoc ctx :id id :msg msg) 
-           b)))
-
-(defn dispatch-messages [ctx]
-  (if-let [messages (get ctx :messages)]  
-    (let [t (:time ctx)
-          dispatches (atom [])
-          remaining
-                  (reduce-kv (fn [acc tm  msg]
-                               (if (<= tm t)
-                                 (do (swap! dispatches conj msg)
-                                     (dissoc acc tm))
-                                 acc))
-                             messages messages)]
-      (reduce (fn [ctx [ent msg]]
-                (update-entity ent msg ctx))              
-              (if (empty? remaining) 
-                (dissoc ctx :messages)
-                (assoc ctx :messages remaining)))))
-  ctx)
-
-;;entities age themselves...
-(defn update-entity [id]
-  (fn [ctx] 
-    (let [t (get ctx :time)
-          last-update (get-in ctx [:ages id]) 
-          delta       (- t last-update)]
-      (if (zero? delta)  ;;we're up-to-date...
-
-;;Say we have an entity with a clock behavior..
-;;It just elapses time until forever...
-;;While it's elapsing, it also updates other entities in the context.
-;;These updates take the form of applying a behavior to the entities, 
-;;providing, as part of the context, how much time has elapsed for 
-;;the entity.
-;;this is crucial if we have a situation where the entity's notion 
-;;of time is happening eventfully; we have concurrent entity "lives"
-;;in play.
-       
- 
- 
- 
- 
-
- 
-
-;;can we describe a simple behavior?
-;;an alarm...
-;;the behavior context is the current time, and a duration.
-
-
-(defrecord behaviorstore [name behaviors])
-
-;;#Pending  - Import Behavior Implementations From marathon.sim.legacy
-
-;;_Begin Porting Legacy Behavior_
-;;THe strategy here is to pull in what we originally had, translate it
-;;to clojure, and then see if any patterns jump out.  We know we're
-;;working with a finite state machine at the moment.  We may find it
-;;easier to go with behavior trees or something more compositional
-;;later;
-
-;;For the time being, we have our good ole' case statement that
-;;switches between states.  So our behavior is really a limited
-;;interpreter.
-
-;;THe task at hand is to port the functions used by said interpreter,
-;;because they will probably be used by anything we use (even if we go
-;;the non-fsm route).
-
-;;some stubs for necessary functions....at the moment they aren't clear.
-(declare update-behavior init-unit-behavior change-state)
-
-;;the current design maintains a reference to the mutable simstate.
-;;we can copy that for now by allowing a dynamic var...
-;;going to cheat for now...allow behaviors to have access to core data.
-(def ^:dynamic *simstate* nil)
-
-
-;;Interface defining unit behaviors.
-;;AC behavior, RC behavior, etc. all implement these things.
-
-;;well, behaviors have names....
-;;They also have a simstate reference...
-
-;;let's assume we can minimally represent a behavior as a
-;;name and a set of states.  Given that, we can use the
-;;behavior to determine what happens to a unit on updating,
-;;using the context of a simstate. and any other pertinent
-;;information.  Note, the IUnitBehavior protocol may be gratiutous
-;;at this point. We'll see.
-(defrecord behavior [name states]
-  protocols/IUnitBehavior
-  (behavior-name [b] name)
-  (init-behavior [b state] (init-unit-behavior b state *simstate*))
-  (update [b deltat unit]  (update-behavior b deltat unit *simstate*))
-  (change-state [b unit to-state deltat duration following-state]
-    (change-state b unit to-state deltat duration following-state *simstate*)))
-
-;;TODO# define an empty-behavior
-(declare roll-forward)
-(defn update-behavior [b telapsed unit simstate]
-  (roll-forward b unit telapsed simstate))
-
+;;A library for defining entity behaviors.  Legacy implementation 
+;;only covered unit entities, and used a Finite State Machine (FSM).
+;;New implementation should be more general, and follows the Behavior 
+;;Tree design as presented by A.J. Champagnard.
 ;;Revised notes:
 ;;Under the functional paradigm, behaviors are first-class state
 ;;transition functions.  They compose other first-class state
@@ -304,50 +82,62 @@
 ;;BTs are pretty damn convenient from an FP perspective (nice and
 ;;composeable)....is there anything that we can't compose with states
 ;;though?  
+(ns marathon.data.behavior
+  (:require [marathon.data.protocols :as protocols]))
 
-(defprotocol IBehavior
-  (update [b e ctx] "updates entity e according to ctx, returns ")
-  (continue? [b])
-  (next-b    [b])
-  (first-b   [b]))
- 
+(defrecord behaviorstore [name behaviors])
 
-(defrecord result [status e ctx])
-(defn update-with [b u dt ctx]
-  (if-let [])
-  )
+;;#Pending  - Import Behavior Implementations From marathon.sim.legacy
 
+;;_Begin Porting Legacy Behavior_
+;;THe strategy here is to pull in what we originally had, translate it
+;;to clojure, and then see if any patterns jump out.  We know we're
+;;working with a finite state machine at the moment.  We may find it
+;;easier to go with behavior trees or something more compositional
+;;later;
 
-;;based on the excellent gamasutra article, we can
-;;implement really simple behaviors.
-;;they only return :running | :success | :failure...
-                                        ;
-;;So, starting with an atomic behavior, we can "wait".
-(defn ->wait [ent location dt ctx] )
+;;For the time being, we have our good ole' case statement that
+;;switches between states.  So our behavior is really a limited
+;;interpreter.
 
-;;following a supply policy may be seen as waiting at multiple
-;;location in turn, based on a cycle.
+;;THe task at hand is to port the functions used by said interpreter,
+;;because they will probably be used by anything we use (even if we go
+;;the non-fsm route).
 
-(defn ->walk-policies [policy]
-  )
-(defn ->follow-supply-policy [ent policy ctx]
-  [:begin-cycle (walk-policy policy) :end-cycle])
+;;some stubs for necessary functions....at the moment they aren't clear.
+(declare update-behavior init-unit-behavior change-state)
 
-(defn time-remains? [ent ctx]
-  (when-let [t (get ctx :time-in-state)]
-    (pos? t)))
-(defn decrement-time [ent ctx]
-  )
+;;the current design maintains a reference to the mutable simstate.
+;;we can copy that for now by allowing a dynamic var...
+;;going to cheat for now...allow behaviors to have access to core data.
+(def ^:dynamic *simstate* nil)
 
 
+;;Interface defining unit behaviors.
+;;AC behavior, RC behavior, etc. all implement these things.
 
-(defn simple [e dt ctx]
-  (if (zero? dt)
-    (result. :same e ctx)
-    ()))
-(def btree [(fn [e dt ctx]
-              (if ()
-                           ))])
+;;well, behaviors have names....
+;;They also have a simstate reference...
+
+;;let's assume we can minimally represent a behavior as a
+;;name and a set of states.  Given that, we can use the
+;;behavior to determine what happens to a unit on updating,
+;;using the context of a simstate. and any other pertinent
+;;information.  Note, the IUnitBehavior protocol may be gratiutous
+;;at this point. We'll see.
+(defrecord behavior [name states]
+  protocols/IUnitBehavior
+  (behavior-name [b] name)
+  (init-behavior [b state] (init-unit-behavior b state *simstate*))
+  (update [b deltat unit]  (update-behavior b deltat unit *simstate*))
+  (change-state [b unit to-state deltat duration following-state]
+    (change-state b unit to-state deltat duration following-state *simstate*)))
+
+;;TODO# define an empty-behavior
+(declare roll-forward)
+(defn update-behavior [b telapsed unit simstate]
+  (roll-forward b unit telapsed simstate))
+
 
 ;;Legacy Implementation
 ;;======================
@@ -362,8 +152,8 @@
 ;;changeState :: unitdata -> tostate -> deltat -> *duration ->
 ;;              *followingstate -> unitdata
 
-;;Both functions incorporate the notion of possible timedelta;  Both
-;;functions also return the updated unit.
+;;Both functions incorporate the notion of possible time delta;  
+;;Both functions also return the updated unit.
 
 ;;update is the more standard usage, as it's purely a function of
 ;;time.  The 90% use-case is that the simulation is ticking, prompting
@@ -510,14 +300,112 @@
 ;;serially), we can have competing concerns executed in parallel 
 ;;(i.e. listen for messages, and also update over time slices).
 
+;;Behavior Tree Core, temporarily copied from marathon.data.behaviorbase
+(def behaviors nil)
+(defprotocol IBehaviorTree
+  (behave [b ctx]))
+(defrecord bnode [type status f data]
+  IBehaviorTree
+  (behave [b ctx] (f ctx)))
+
+(defn beval [b ctx]
+  (cond (satisfies? IBehaviorTree b) (behave b ctx)
+        (fn? b) (b ctx)))
+
+;;note, behaviors are perfect candidates for zippers...
+(defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
+(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) [:success ctx] [:fail ctx])) nil))
+(defn ->and  [xs]
+  (->bnode  :and nil
+     (fn [ctx]
+      (reduce (fn [acc child]
+                (let [[res ctx] (beval child (second acc))]
+                  (case res
+                    :run       (reduced [:run ctx])
+                    :success   [:success ctx]
+                    :fail      (reduced [:fail ctx])))) [:success ctx] xs))
+     xs))
+
+(defn ->or  [xs]
+  (->bnode  :or nil 
+     (fn [b ctx]
+       (reduce (fn [acc child]
+                 (let [[res ctx] (beval child acc)]
+                   (case res
+                     :run       (reduced [:run ctx])
+                     :success   (reduced [:success ctx])
+                     :fail      [:fail ctx]))) ctx xs))
+     xs))
+
+(defn ->not [b]
+  (->bnode  :not nil
+      (fn [b ctx] (let [[res ctx] (beval b ctx)]
+                   (case res
+                     :run [:run ctx]
+                     :success [:fail ctx]
+                     :fail [:success ctx])))
+      b))
+
+;;if a behavior fails, we return fail to the parent.
+;;we can represent a running behavior as a zipper....
+;;alternatively, we can just reval the behavior every time (not bad).
+(defn ->alter  [f] (->bnode :alter nil (fn [ctx] [:success (f ctx)]) nil))
+(defn ->elapse [interval]                            
+    (->alter #(update-in % [:time] + interval)))
+
+(defn succeed [b]
+  (fn [ctx] [:success (second (beval b ctx))]))
+(defn fail [b]
+  (fn [ctx] [:fail (second (beval b ctx))]))
+
+;;a behavior that waits until the time is less than 10.
+(defn ->wait-until [pred]
+  (->bnode  :wait-until nil 
+          (fn [ctx] (if (pred ctx) [:success ctx] [:run ctx]))    nil))
+
+;;do we allow internal failure to signal external failure?
+(defn ->while [pred b]
+  (->bnode :while nil 
+           (fn [ctx] (if (pred ctx) 
+                         (beval b ctx)
+                         [:fail ctx])) 
+           b))
+          
+(defn ->elapse-until [t interval]
+  (->while #(< (:time %) t)
+            (->elapse interval)))
+
+(defn ->do [f] 
+  (fn [ctx] [:success (do (f ctx) ctx)]))
+
 ;;Basic API
 ;;=========
 ;;The rest of the simulation still relies on our pre-existing API, 
 ;;namely that we have "change-state", and "update"
 
 
+;;note that change-state already exists in marathon.sim.unit/change-state, 
+;;we're merely providing an interface to the unit's behavior for it.
+;;Also note that change-state is only called (currently) from
+;;marathon.sim.demand (for abrupt withdraws), and marathon.sim.supply
+;;(for deployments).
 
 
+(declare change-state-beh) 
+
+
+;;Similarly, we'll have update take the context last.
+;;update will depend on change-state-beh, but not change-state.
+;;change-state is a higher-level api for changing things.
+(defn update  [unit deltat ctx])
+
+;;This implementation takes the context last.
+(defn change-state [unit to-state deltat ctx]
+  ;;ideally, we'd just evaluate the change-state behavior, prepended by 
+  ;;an update.
+ (beval (->and [#(update unit deltat %)
+                  change-state-beh])
+        (assoc ctx :entity unit :deltat deltat)))
 
 ;;What happens when we change a state?
 ;;Some states are just blips (0 duration) .
