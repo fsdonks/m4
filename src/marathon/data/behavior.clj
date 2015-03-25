@@ -422,6 +422,17 @@
                   change-state-beh])
         (assoc ctx :entity unit :deltat deltat)))
 
+;;Accessors for our behavior context.
+;;We don't "have" to do this, but I wanted to lift up
+;;from raw lookups and formalize the interface.  we seem to be using
+;;these alot, enough to warrant a new idiom possibly.
+(defn entity        [m] (get m :entity))
+(defn next-position [m] (get m :next-position))
+(defn tupdate       [m] (get m :tupdate))
+(defn wait-time     [m] (get m :wait-time))
+(defn statedata     [m] (get m :statedata))
+
+
 ;;todo# move to generic statedata library.
 ;;this should be lifted out
 ;;This just keeps track of where we are, how long we're waiting, and 
@@ -440,11 +451,14 @@
 
 ;;updates an entity after a specified duration, relative to the 
 ;;current simulation time + duration.
-(defn update-after [entity duration ctx]
-  (sim/request-update (+ (sim/current-time ctx) duration) 
-                      (:name unit)
-                      :supply-update
-                      ctx))
+(defn update-after 
+  ([entity duration ctx]
+     (sim/request-update (+ (sim/current-time ctx) duration) 
+                         (:name entity)
+                         :supply-update
+                         ctx))
+  ([duration ctx] (update-after (entity unit) duration ctx)))
+
 ;;our idioms for defining behaviors will be to unpack 
 ;;vars we're expecting from the context.  typically we'll 
 ;;just be passing around the simulation context, perhaps 
@@ -478,7 +492,7 @@
        :or {deltat 0}]
     (loop [dt deltat
            ctx ctx]
-      (let [timeleft (remaining (get ctx :statedata))]
+      (let [timeleft (remaining (statedata ctx))]
         (if (<= dt timeleft)           
           (beval update-state-beh ctx)
           (recur  (- dt timeleft) ;advance time be decreasing delta
@@ -506,6 +520,7 @@
 ;;We assume the the entity-behavior is stored in the context....
 ;;so, update-state-beh is just using the behavior associated with the
 ;;entity...
+
 
 (declare default-behavior)
 
@@ -553,7 +568,7 @@
 ;;auxillary function that helps us wrap updates to the unit.
 (defn traverse-unit [u t from to]   
   (-> u (assoc :positionpolicy to)
-      (u/add-traversal t from to)))
+        (u/add-traversal t from to)))
 
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
@@ -589,28 +604,39 @@
 ;;to, we will add the wait-time to the context.  That way,
 ;;downstream behaviors can pick up on the wait-time, and 
 ;;apply it.
-(def apply-move 
-  (fn [ctx] 
-    (let [u       (get ctx :entity)
-          frompos (get u   :positionpolicy)
-          nextpos (get ctx :next-position)
-          t       (get ctx :tupdate)]
-      (success
-       (if (= frompos nextpos)  
-         ctx ;do nothing, no move has taken place.          
-         (let [newstate (get-state u nextpos)]
-           (merge ctx 
-                  {:entity      (traverse-unit u t frompos nextpos)
-                   :old-position frompos ;record information 
-                   :new-position newpos
-                   :new-state    newstate})))))))
-;;if we need to wait, as a function 
-          
+(defn apply-move [ctx] 
+    (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
+      (let [t        (tupdate ctx)
+            u        (entity  ctx)
+            frompos  (get u   :positionpolicy)]
+        (success
+         (if (= frompos nextpos)  
+           ctx ;do nothing, no move has taken place.          
+           (let [newstate (get-state u nextpos)]
+             (merge ctx 
+                {:entity      (traverse-unit u t frompos nextpos)
+                 :old-position frompos ;record information 
+                 :new-state    newstate})))))
+      (fail ctx)))
+
+(def set-next-position  
+  (->alter #(assoc % :next-position (get-next-position (entity %)))))
+
+(def find-move 
+  (->and [should-move? 
+          set-next-position]))
+
+;;We know how to wait 
+(defn wait [ctx]
+  (if-let [wt (wait-time ctx)] ;;if we have an established wait time...
+    (success (update-after  ctx))
+    
+
 
 (def moving-beh 
-  (->and [should-move? 
-          find-move
-          apply-move]))
+  (->and [find-move
+          apply-move
+          wait]))
 
           
           
