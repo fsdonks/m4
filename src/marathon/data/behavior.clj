@@ -245,7 +245,7 @@
 ;;entity.  Typically, the AI folks will dictate that this is analagous
 ;;to the hierarchy of needs;  higher-priority needs occur earlier in
 ;;the tree;  With our naive tree, we always check from the root and
-;;traverse until a stopping criterion is meant;  this means we can
+;;traverse until a stopping criterion is met;  this means we can
 ;;accomplish the same reactive "philosophy" of the existing FSM;
 ;;we should be able to make simple changes to the state of our
 ;;entity, and the behavior tree - upon re-evaluation - should be
@@ -489,7 +489,7 @@
 ;;time slice.  TODO# refactor using behaviortree nodes.
 (def roll-forward-beh 
   (fn [{:keys [deltat] :as ctx}  
-       :or {deltat 0}]
+       :or   {deltat 0}]
     (loop [dt deltat
            ctx ctx]
       (let [timeleft (remaining (statedata ctx))]
