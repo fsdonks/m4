@@ -85,7 +85,8 @@
 (ns marathon.data.behavior
   (:require [marathon.data.protocols :as protocols]
             [marathon.sim [core :as core]
-                          [unit :as u]]            
+                          [unit :as u]
+                          [demand :as d]]            
             [spork.sim.simcontext :as sim]))
 
 (defrecord behaviorstore [name behaviors])
@@ -109,38 +110,6 @@
 
 ;;some stubs for necessary functions....at the moment they aren't clear.
 (declare update-behavior init-unit-behavior change-state)
-
-;;the current design maintains a reference to the mutable simstate.
-;;we can copy that for now by allowing a dynamic var...
-;;going to cheat for now...allow behaviors to have access to core data.
-(def ^:dynamic *simstate* nil)
-
-
-;;Interface defining unit behaviors.
-;;AC behavior, RC behavior, etc. all implement these things.
-
-;;well, behaviors have names....
-;;They also have a simstate reference...
-
-;;let's assume we can minimally represent a behavior as a
-;;name and a set of states.  Given that, we can use the
-;;behavior to determine what happens to a unit on updating,
-;;using the context of a simstate. and any other pertinent
-;;information.  Note, the IUnitBehavior protocol may be gratiutous
-;;at this point. We'll see.
-(defrecord behavior [name states]
-  protocols/IUnitBehavior
-  (behavior-name [b] name)
-  (init-behavior [b state] (init-unit-behavior b state *simstate*))
-  (update [b deltat unit]  (update-behavior b deltat unit *simstate*))
-  (change-state [b unit to-state deltat duration following-state]
-    (change-state b unit to-state deltat duration following-state *simstate*)))
-
-;;TODO# define an empty-behavior
-(declare roll-forward)
-(defn update-behavior [b telapsed unit simstate]
-  (roll-forward b unit telapsed simstate))
-
 
 ;;Legacy Implementation
 ;;======================
@@ -365,9 +334,11 @@
 (defn ->elapse [interval]                            
     (->alter #(update-in % [:time] + interval)))
 
-(defn succeed [b]
+;;always force success
+(defn always-succeed [b]
   (fn [ctx] (success (second (beval b ctx)))))
-(defn fail [b]
+;;always force failure
+(defn always-fail [b]
   (fn [ctx] (fail (second (beval b ctx)))))
 
 
@@ -406,29 +377,54 @@
 
 (declare change-state-beh update-state-beh) 
 
+;;API
+;;===
+
+;;These are the entry points that will be called from the outside.
+;;Under the legacy implementation, they delegated to a hard coded
+;;finite state machine that interpreted rotational policy to infer
+;;state transitions.  The general mechanism is to augment the
+;;simulation context.  We may want to define a single function
+;;load-context and unload-context the clears up any augmented
+;;contextual items we put in.  That, or manage the simulation
+;;context separate from the behavior context.  For now, managing
+;;the simcontext along with the behavior context (treating it
+;;as a huge blackboard) seems like the simplest thing to do.
+
 ;;Similarly, we'll have update take the context last.
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
 (defn update  [unit deltat ctx]
-  ;;really defers to roll-forward, which in-turn calls update-state
-  (roll-forward unit deltat 
-     (assoc ctx :tupdate (sim/current-time ctx))))
+  (roll-forward-beh (merge ctx {:tupdate (sim/current-time ctx)
+                                :entity  unit
+                                :deltat  deltat})))
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
-  ;;ideally, we'd just evaluate the change-state behavior, prepended by 
-  ;;an update.
- (beval (->and [#(update unit deltat %)
-                  change-state-beh])
-        (assoc ctx :entity unit :deltat deltat)))
+ (beval (->and [#(update unit deltat %) ;ensure the unit is up-to-date
+                  change-state-beh])    ;execute the change
+        (merge ctx {:tupdate (sim/current-time ctx)
+                    :entity   unit
+                    :deltat   deltat})))
+
+;;we can probably define a macro for contextual behaviors that
+;;define preconditions for executing, i.e. ensuring that we have
+;;an entity, we have a deltat, etc. in the context, and bind to them
+;;if we do.  If we don't have them, then we throw an error because our
+;;expectations failed...(todo)
+
+;;Accessors
+;;=========
 
 ;;Accessors for our behavior context.
 ;;We don't "have" to do this, but I wanted to lift up
 ;;from raw lookups and formalize the interface.  we seem to be using
 ;;these alot, enough to warrant a new idiom possibly.
 (defn entity        [m] (get m :entity))
+(defn from-position [m] (get m :from-position))
 (defn next-position [m] (get m :next-position))
 (defn tupdate       [m] (get m :tupdate))
+(defn deltat        [m] (get m :deltat))
 (defn wait-time     [m] (get m :wait-time))
 (defn statedata     [m] (get m :statedata))
 
@@ -449,6 +445,10 @@
   (- (get statedata :duration) 
      (get statedata :time-in-state)))
 
+;;note - another way to handle this is to record dirty entities
+;;and update them appropriately.
+
+;;note-we have a wait time in the context, under :wait-time
 ;;updates an entity after a specified duration, relative to the 
 ;;current simulation time + duration.
 (defn update-after 
@@ -457,8 +457,25 @@
                          (:name entity)
                          :supply-update
                          ctx))
-  ([duration ctx] (update-after (entity unit) duration ctx)))
+  ([duration ctx] (update-after (entity ctx) duration ctx)))
 
+;;auxillary function that helps us wrap updates to the unit.
+(defn traverse-unit [u t from to]   
+  (-> u (assoc :positionpolicy to)
+         (u/add-traversal t from to)))
+;;this is kinda weak, we used to use it to determine when not to
+;;perform updates via the global state, but it's probably less
+;;important now...
+(defn special-state? [s] (or (identical? s :spawning)
+                             (identical? s :abrupt-withdraw)))
+
+(defn just-spawned?  [ctx] (==  (:spawntime (entity ctx))    (core/get-time ctx)))
+(defn state-expired? [ctx] (<=  (remaining (statedata  ctx)) (deltat ctx)))
+
+(defn to-position?   [to   ctx] (identical? (next-position ctx) to))
+(defn from-position? [from ctx] (identical? (from-position ctx) from ))
+;;Behaviors
+;;=========
 ;;our idioms for defining behaviors will be to unpack 
 ;;vars we're expecting from the context.  typically we'll 
 ;;just be passing around the simulation context, perhaps 
@@ -466,10 +483,14 @@
 (def change-state-beh 
   (fn [{:keys [entity deltat statedata newstate duration followingstate] :as ctx}
         :or   {deltat 0 duration 0 followingstate newstate}]
-    (let [newdata (change-statedata statedata tostate duration followingstate)]                                                           
-      (if (pos? duration)  ;do stuff
-            (success (update-after  unit duration ctx))
-            (throw   (Exception. "Error, cannot have negative duration!"))))))
+    (let [newdata (change-statedata statedata tostate duration followingstate)
+          ctx     (assoc ctx :statedata newdata)]
+      (cond
+        ;state change inducing a wait until update.
+        (pos? duration)  (success (update-after  unit duration ctx))
+        ;immediate change, force an update.
+        (zero? duration) (success (update-state-beh ctx)) 
+        :else (throw   (Exception. "Error, cannot have negative duration!"))))))
 
 ;;implement update-state-beh
 (def change-and-update (->and [change-state-beh update-state-beh]))
@@ -490,14 +511,14 @@
 (def roll-forward-beh 
   (fn [{:keys [deltat] :as ctx}  
        :or   {deltat 0}]
-    (loop [dt deltat
+    (loop [dt  deltat
            ctx ctx]
       (let [timeleft (remaining (statedata ctx))]
         (if (<= dt timeleft)           
           (beval update-state-beh ctx)
           (recur  (- dt timeleft) ;advance time be decreasing delta
-                  (beval update-state-beh ctx))
-          ctx)))))
+                  (beval update-state-beh (assoc ctx :deltat dt))
+          ctx))))))
 
 ;;What then, is the update-state-beh definition? 
 ;;This "was" our central dispatch for states, i.e., based on 
@@ -520,12 +541,13 @@
 ;;We assume the the entity-behavior is stored in the context....
 ;;so, update-state-beh is just using the behavior associated with the
 ;;entity...
-
-
-(declare default-behavior)
+(declare default-behavior) ;;we need to make a default root behavior..
 
 ;;Heh, that's pretty weak, but it's technically correct
-;;All we do is provide a reference to the time the update 
+;;All we do is provide a reference to the time the update, note we can
+;;easily override the default behavior by providing a root-behavior in
+;;the context.  This is pretty cool for things like overriding
+;;behaviors if we have temporary effects.
 (defn update-state-beh [{:keys [root-behavior] :as ctx
                          :or   {root-behavior default-behavior}}]
   (beval root-behavior ctx))
@@ -565,11 +587,6 @@
 
 (def record-move (->alter #(assoc % :moved true)))
 
-;;auxillary function that helps us wrap updates to the unit.
-(defn traverse-unit [u t from to]   
-  (-> u (assoc :positionpolicy to)
-        (u/add-traversal t from to)))
-
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
 ;;slow....we may want to define a mutable version, 
@@ -608,13 +625,14 @@
     (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
       (let [t        (tupdate ctx)
             u        (entity  ctx)
-            frompos  (get u   :positionpolicy)]
+            frompos  (get     u   :positionpolicy)]
         (success
          (if (= frompos nextpos)  
            ctx ;do nothing, no move has taken place.          
            (let [newstate (get-state u nextpos)]
-             (merge ctx 
-                {:entity      (traverse-unit u t frompos nextpos)
+             (merge ctx ;update the context with information derived
+                        ;from moving
+                {:entity       (traverse-unit u t frompos nextpos)
                  :old-position frompos ;record information 
                  :new-state    newstate})))))
       (fail ctx)))
@@ -626,95 +644,17 @@
   (->and [should-move? 
           set-next-position]))
 
-;;We know how to wait 
+;;We know how to wait.  If there is an established wait-time, we
+;;request an update after the time has elapsed using update-after.
 (defn wait [ctx]
   (if-let [wt (wait-time ctx)] ;;if we have an established wait time...
-    (success (update-after  ctx))
+    (success  (update-after  wt ctx))
+    (fail      ctx)))
     
-
-
 (def moving-beh 
   (->and [find-move
           apply-move
           wait]))
-
-          
-          
-   
-   
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-;;What happens when we change a state?
-;;Some states are just blips (0 duration) .
-;;Some states are absorbing states (infinite duration) .
-;;Unless otherwise specified (by a duration),e duration is assumed infinite.
-;; Public Function ChangeState(unit As TimeStep_UnitData, tostate As String, deltat As Single, Optional duration As Single, _
-;;                                         Optional followingstate As String) As TimeStep_UnitData
-
-;; 'TOM change 1 July 2011
-
-;; If deltat > 0 Then Set unit = update(deltat, unit)
-
-;; With unit
-;;     .StateData.ChangeState tostate, duration, followingstate, True 'allows instant state changes.
-;;     If duration > 0 Then
-;;         'If duration <> .StateData.inf Then
-;;             'Decoupled*
-;;             MarathonOpUnit.requestUnitUpdate SimLib.getTime(simstate.context) + duration, unit, simstate.context
-;;         'End If
-;;     End If
-;;     Set ChangeState = UpdateState(unit, 0) 'State Changes are instantaneous.  If the current state is instantaneous, then
-;; End With
-
-;; End Function
-(defn change-state
-  ([unit tostate deltat duration followingstate simstate]
-    (let [[unit simstate]  (if  (pos? deltat)
-                              (roll-forward :blah unit deltat simstate)
-                              [unit simstate])]
-      ()
-      )))
-
-;; 'Tom change 25 july 2011
-;; 'Ability to revert back to previous state, timeinstate, duration, etc.
-;; Private Function RevertState(unit As TimeStep_UnitData) As TimeStep_UnitData
-
-;; unit.StateData.RevertState
-;; Set RevertState = unit
-
-;; End Function
-
-;; 'This function allows us to roll through multiple updates, if delta T is too large.
-;; 'We could set deltaT to 1095 and get an entire cycle in theory.
-;; Private Function RollForward(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-
-;; Dim remaining As Single
-;; Dim deltaNext As Single
-
-;; If deltat <= unit.StateData.remaining Then 'will the change cause us to be in the same state?
-;;     Set RollForward = UpdateState(unit, deltat)
-;; Else
-;;     While unit.StateData.remaining < deltat 'if the change means we're exceeding our time remaining...
-;;         deltaNext = unit.StateData.remaining 'this entire logic branch prevents us from overreaching time in state.
-;;         deltat = deltat - deltaNext
-;;         Set RollForward = UpdateState(unit, deltaNext)
-;;     Wend
-;; End If
-
-;; End Function
-
 
 ;;State-dependent functions, the building blocks of our state machine.
 
@@ -762,17 +702,6 @@
 
 ;; End Function
 
-
-
-
-
-
-;; Private Function specialstate(instate As String) As Boolean
-;; specialstate = instate = "Spawning" Or instate = "AbruptWithdraw"
-;; End Function
-
-
-
 ;; Private Function FinishCycle(unit As TimeStep_UnitData, frompos As String, topos As String) As TimeStep_UnitData
 ;; Set FinishCycle = unit
 
@@ -784,20 +713,18 @@
 
 ;; End Function
 
-
-
-
 ;; Private Function getState(unit As TimeStep_UnitData, position As String) As String
 ;; getState = unit.policy.getState(position)
 ;; End Function
 
+(defn get-state [unit position] (protocols/get-state (:policy unit) position))
 
 ;; 'Tom Change 24 May 2011
 ;; Private Function getNextPosition(unit As TimeStep_UnitData) As String
 ;; getNextPosition = unit.policy.nextposition(unit.PositionPolicy)
 ;; End Function
 
-
+(defn get-next-position [unit position] (protocols/next-position (:policy unit) position))
 
 ;; Private Function getWaitTime(unit As TimeStep_UnitData, position As String, Optional deltat As Single) As Single
 ;; Dim nextposition As String
@@ -810,6 +737,13 @@
 
 ;; End Function
 
+(defn get-wait-time
+  ([unit position ctx]
+   (let [np (get-next-position unit position)
+         wt (protocols/transfer-time position np)
+         deltat (or  (deltat ctx) 0)]
+     (- wt (remaining (statedata ctx)))))
+  ([position ctx] (get-wait-time (entity ctx) position ctx)))
 
 ;; 'TODO -> reduce this down to one logical condition man....
 ;; 'TOM Change 6 June -> pointed disengagement toward demand name, via unit.LocationName
@@ -827,7 +761,15 @@
 
 ;; End Sub
 
-
+;;this is really a behavior, modified from the old state.  called from overlapping_state.
+;;used to be called check-overlap
+(defn disengage [ctx]
+  (let [unit (entity ctx)]
+    (cond (to-position? :overlapping ctx)
+            (success (d/disengage (core/get-demandstore ctx) unit (:locationname unit) ctx true))
+          (from-position? :overlapping ctx)
+            (success (d/disengage (core/get-demandstore ctx) unit (:locationname unit) ctx false))
+            :else (fail ctx))))
 
 ;; Private Sub checkDeployable(unit As TimeStep_UnitData, frompos As String, nextpos As String)
 ;; With unit
@@ -839,6 +781,7 @@
 ;; End With
 ;; End Sub
 
+(defn check-deployable [])
 
 
 
@@ -1732,6 +1675,120 @@
 ;; End Function
 
 
+;;OBE
+;;=================
+
+;;I don't think we ever used this.
+
+;; 'Tom change 25 july 2011
+;; 'Ability to revert back to previous state, timeinstate, duration, etc.
+;; Private Function RevertState(unit As TimeStep_UnitData) As TimeStep_UnitData
+
+;; unit.StateData.RevertState
+;; Set RevertState = unit
+
+;; End Function
+
+
+(comment 
+;;the current design maintains a reference to the mutable simstate.
+;;we can copy that for now by allowing a dynamic var...
+;;going to cheat for now...allow behaviors to have access to core data.
+(def ^:dynamic *simstate* nil)
+
+
+;;Interface defining unit behaviors.
+;;AC behavior, RC behavior, etc. all implement these things.
+
+;;well, behaviors have names....
+;;They also have a simstate reference...
+
+;;let's assume we can minimally represent a behavior as a
+;;name and a set of states.  Given that, we can use the
+;;behavior to determine what happens to a unit on updating,
+;;using the context of a simstate. and any other pertinent
+;;information.  Note, the IUnitBehavior protocol may be gratiutous
+;;at this point. We'll see.
+(defrecord behavior [name states]
+  protocols/IUnitBehavior
+  (behavior-name [b] name)
+  (init-behavior [b state] (init-unit-behavior b state *simstate*))
+  (update [b deltat unit]  (update-behavior b deltat unit *simstate*))
+  (change-state [b unit to-state deltat duration following-state]
+    (change-state b unit to-state deltat duration following-state *simstate*)))
+
+;;TODO# define an empty-behavior
+(declare roll-forward)
+
+(defn old-update-behavior [b deltat unit simstate]
+  (roll-forward-beh b (merge simstate {:entity unit :deltat deltat})))
+)
 
 
 
+;;What happens when we change a state?
+;;Some states are just blips (0 duration) .
+;;Some states are absorbing states (infinite duration) .
+;;Unless otherwise specified (by a duration),e duration is assumed infinite.
+;; Public Function ChangeState(unit As TimeStep_UnitData, tostate As String, deltat As Single, Optional duration As Single, _
+;;                                         Optional followingstate As String) As TimeStep_UnitData
+
+;; 'TOM change 1 July 2011
+
+;; If deltat > 0 Then Set unit = update(deltat, unit)
+
+;; With unit
+;;     .StateData.ChangeState tostate, duration, followingstate, True 'allows instant state changes.
+;;     If duration > 0 Then
+;;         'If duration <> .StateData.inf Then
+;;             'Decoupled*
+;;             MarathonOpUnit.requestUnitUpdate SimLib.getTime(simstate.context) + duration, unit, simstate.context
+;;         'End If
+;;     End If
+;;     Set ChangeState = UpdateState(unit, 0) 'State Changes are instantaneous.  If the current state is instantaneous, then
+;; End With
+
+;; End Function
+
+
+;;hrm...change-state is less important than before; it used to be the
+;;foundation of the state machine, and states used it to establish
+;;transitions.  change-state had 2 primary roles: establish the
+;;context of the transition, and record the transition.  Recording the
+;;transition is as simple as updating the entity's statedata
+;;(duration, current state, time-in-state, time-remaining).
+;;Establishing the context of the transition (previous state, current
+;;state).  Change-state also acted on the default that if no time was
+;;specified, we'd have an infinite state.  In the context of
+;;behaviors, this may be obsolete....or it decomposed into a smaller
+;;behavior.  change-state is part of the high-level API as well...it's
+;;fundamental to modifying units.
+
+;;change-state already ported as change-state-beh.
+;;we may want to refine that name to just be "change" or "change behavior"
+
+
+;; 'This function allows us to roll through multiple updates, if delta T is too large.
+;; 'We could set deltaT to 1095 and get an entire cycle in theory.
+;; Private Function RollForward(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+
+;; Dim remaining As Single
+;; Dim deltaNext As Single
+
+;; If deltat <= unit.StateData.remaining Then 'will the change cause us to be in the same state?
+;;     Set RollForward = UpdateState(unit, deltat)
+;; Else
+;;     While unit.StateData.remaining < deltat 'if the change means we're exceeding our time remaining...
+;;         deltaNext = unit.StateData.remaining 'this entire logic branch prevents us from overreaching time in state.
+;;         deltat = deltat - deltaNext
+;;         Set RollForward = UpdateState(unit, deltaNext)
+;;     Wend
+;; End If
+
+;; End Function
+
+
+
+;; Private Function specialstate(instate As String) As Boolean
+;; specialstate = instate = "Spawning" Or instate = "AbruptWithdraw"
+;; End Function
