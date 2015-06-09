@@ -336,8 +336,8 @@
 ;;xs <- units that match r in supply
 ;;us <- take n xs
 
-(def unfilled (marathon.sim.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
-(def d (first (vals unfilled)))
+(def unfilled  (marathon.sim.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
+(def d         (first (vals unfilled)))
 (def suitables (query/match-supply {:src (:src d) :order-by query/uniform} :name  demandctx))
 (def needed    (dem/required d))
 (def selected  (take 2 suitables))

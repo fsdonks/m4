@@ -447,6 +447,16 @@
   ([u spawning?] (valid-deployer? u spawning? (:policy u)))
   ([u] (valid-deployer? u nil (:policy u))))
 
+
+;;Added for unit behavior utility
+(defn add-traversal [u t from to]
+  (assoc u :current-cycle 
+         (cyc/cycle-add-traversal 
+          (:current-cycle u) 
+          t 
+          from 
+          to)))
+
 ;;Useful summary info for unitdata, helpful for debugging.
 (defn summary [u]
   {:name           (:name u) 

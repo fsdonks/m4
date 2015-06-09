@@ -84,9 +84,12 @@
 ;;though?  
 (ns marathon.data.behavior
   (:require [marathon.data.protocols :as protocols]
+            [marathon.data.fsm :as fsm]
             [marathon.sim [core :as core]
                           [unit :as u]
-                          [demand :as d]]            
+                          [demand :as d]
+                          [supply :as supply]
+                          ]            
             [spork.sim.simcontext :as sim]))
 
 (defrecord behaviorstore [name behaviors])
@@ -276,9 +279,13 @@
 (def behaviors nil)
 (defprotocol IBehaviorTree
   (behave [b ctx]))
+
 (defrecord bnode [type status f data]
   IBehaviorTree
-  (behave [b ctx] (f ctx)))
+  (behave [b ctx] (f ctx))
+  ;; clojure.lang.IFn 
+  ;; (invoke [obj arg] (f arg))
+  )
 
 (defn beval [b ctx]
   (cond (satisfies? IBehaviorTree b) (behave b ctx)
@@ -295,7 +302,7 @@
 
 ;;note, behaviors are perfect candidates for zippers...
 (defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
-(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) (success ctx) (fail ctx)) nil)))
+(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) (success ctx) (fail ctx))) nil))
 (defn ->and  [xs]
   (->bnode  :and nil
      (fn [ctx]
@@ -375,7 +382,7 @@
 ;;marathon.sim.demand (for abrupt withdraws), and marathon.sim.supply
 ;;(for deployments).
 
-(declare change-state-beh update-state-beh) 
+(declare change-state-beh update-state-beh update-state) 
 
 ;;API
 ;;===
@@ -428,6 +435,37 @@
 (defn wait-time     [m] (get m :wait-time))
 (defn statedata     [m] (get m :statedata))
 
+;; Private Function getState(unit As TimeStep_UnitData, position As String) As String
+;; getState = unit.policy.getState(position)
+;; End Function
+
+(defn get-state [unit position] (protocols/get-state (:policy unit) position))
+
+;; 'Tom Change 24 May 2011
+;; Private Function getNextPosition(unit As TimeStep_UnitData) As String
+;; getNextPosition = unit.policy.nextposition(unit.PositionPolicy)
+;; End Function
+
+(defn get-next-position [unit position] (protocols/next-position (:policy unit) position))
+
+;; Private Function getWaitTime(unit As TimeStep_UnitData, position As String, Optional deltat As Single) As Single
+;; Dim nextposition As String
+
+;; With unit
+;;     nextposition = .policy.nextposition(position)
+;;     getWaitTime = .policy.TransferTime(position, nextposition)
+;;     getWaitTime = getWaitTime - (deltat - .StateData.remaining) '<- this gets the "next" transfer.
+;; End With
+
+;; End Function
+
+(defn get-wait-time
+  ([unit position ctx]
+   (let [np (get-next-position unit position)
+         wt (protocols/transfer-time (:policy unit) position np)
+         deltat (or  (deltat ctx) 0)]
+     (- wt (remaining (statedata ctx)))))
+  ([position ctx] (get-wait-time (entity ctx) position ctx)))
 
 ;;todo# move to generic statedata library.
 ;;this should be lifted out
@@ -437,13 +475,18 @@
   (-> statedata 
       (assoc :tostate  tostate)
       (assoc :duration duration)
-      (assoc :time-in-state 0)
+      (assoc :timeinstate 0)
       (assoc :followingstate followingstate)))
+
+(defn eget [m k]
+  (if-let [res (get m k)]
+    res
+    (throw (Exception. (str "Expected to find key " k " in " m)))))
 
 ;;aux function
 (defn remaining [statedata]
-  (- (get statedata :duration) 
-     (get statedata :time-in-state)))
+  (- (eget statedata :duration) 
+     (eget statedata :timeinstate)))
 
 ;;note - another way to handle this is to record dirty entities
 ;;and update them appropriately.
@@ -463,6 +506,7 @@
 (defn traverse-unit [u t from to]   
   (-> u (assoc :positionpolicy to)
          (u/add-traversal t from to)))
+
 ;;this is kinda weak, we used to use it to determine when not to
 ;;perform updates via the global state, but it's probably less
 ;;important now...
@@ -473,7 +517,7 @@
 (defn state-expired? [ctx] (<=  (remaining (statedata  ctx)) (deltat ctx)))
 
 (defn to-position?   [to   ctx] (identical? (next-position ctx) to))
-(defn from-position? [from ctx] (identical? (from-position ctx) from ))
+(defn from-position? [from ctx] (identical? (from-position ctx) from))
 ;;Behaviors
 ;;=========
 ;;our idioms for defining behaviors will be to unpack 
@@ -481,13 +525,14 @@
 ;;just be passing around the simulation context, perhaps 
 ;;with some supplementary keys.
 (def change-state-beh 
-  (fn [{:keys [entity deltat statedata newstate duration followingstate] :as ctx}
-        :or   {deltat 0 duration 0 followingstate newstate}]
-    (let [newdata (change-statedata statedata tostate duration followingstate)
+  (fn [{:keys [entity deltat statedata newstate duration followingstate] 
+        :or   {deltat 0 duration 0 } :as ctx}]
+    (let [followingstate (or followingstate newstate)
+          newdata (change-statedata statedata newstate duration followingstate)
           ctx     (assoc ctx :statedata newdata)]
       (cond
         ;state change inducing a wait until update.
-        (pos? duration)  (success (update-after  unit duration ctx))
+        (pos? duration)  (success (update-after  entity duration ctx))
         ;immediate change, force an update.
         (zero? duration) (success (update-state-beh ctx)) 
         :else (throw   (Exception. "Error, cannot have negative duration!"))))))
@@ -509,16 +554,14 @@
 ;;Might have a smaller behavior that advances the next-smallest 
 ;;time slice.  TODO# refactor using behaviortree nodes.
 (def roll-forward-beh 
-  (fn [{:keys [deltat] :as ctx}  
-       :or   {deltat 0}]
+  (fn [{:keys [deltat] :as ctx :or   {deltat 0}}]
     (loop [dt  deltat
            ctx ctx]
       (let [timeleft (remaining (statedata ctx))]
         (if (<= dt timeleft)           
           (beval update-state-beh ctx)
           (recur  (- dt timeleft) ;advance time be decreasing delta
-                  (beval update-state-beh (assoc ctx :deltat dt))
-          ctx))))))
+                  (beval update-state-beh (assoc ctx :deltat dt))))))))
 
 ;;What then, is the update-state-beh definition? 
 ;;This "was" our central dispatch for states, i.e., based on 
@@ -577,14 +620,20 @@
 ;; [should-move? get-next-location move-next-location]
 ;;move(transport-time)== 
 ;;  [should-move? get-next-location (move-next-location transport-time)]
-
-
+  
 ;;We should consider move if our time in state has expired, or 
 ;;if we have a next-location planned.
 (def should-move?
   (->pred #(or (get % :next-position)
-               (zero? (remaining (get % :statedata))))))
+               (zero? 
+                (remaining (get % :statedata {}))))))
 
+;;simple predicates, semi-monadic interface....
+;; (?  should-move? [*env* *statedata*]
+;;         (or (:next-position *env*)
+;;             (zero? (remaining *statedata*))))
+;; (!  record-move  (put! :moved true))       
+                  
 (def record-move (->alter #(assoc % :moved true)))
 
 ;;after updating the unit bound to :entity in our context, 
@@ -638,7 +687,9 @@
       (fail ctx)))
 
 (def set-next-position  
-  (->alter #(assoc % :next-position (get-next-position (entity %)))))
+  (->alter #(assoc %  :next-position
+              (let [e (entity %)]
+                (get-next-position e (:positionpolicy e))))))
 
 (def find-move 
   (->and [should-move? 
@@ -713,37 +764,7 @@
 
 ;; End Function
 
-;; Private Function getState(unit As TimeStep_UnitData, position As String) As String
-;; getState = unit.policy.getState(position)
-;; End Function
 
-(defn get-state [unit position] (protocols/get-state (:policy unit) position))
-
-;; 'Tom Change 24 May 2011
-;; Private Function getNextPosition(unit As TimeStep_UnitData) As String
-;; getNextPosition = unit.policy.nextposition(unit.PositionPolicy)
-;; End Function
-
-(defn get-next-position [unit position] (protocols/next-position (:policy unit) position))
-
-;; Private Function getWaitTime(unit As TimeStep_UnitData, position As String, Optional deltat As Single) As Single
-;; Dim nextposition As String
-
-;; With unit
-;;     nextposition = .policy.nextposition(position)
-;;     getWaitTime = .policy.TransferTime(position, nextposition)
-;;     getWaitTime = getWaitTime - (deltat - .StateData.remaining) '<- this gets the "next" transfer.
-;; End With
-
-;; End Function
-
-(defn get-wait-time
-  ([unit position ctx]
-   (let [np (get-next-position unit position)
-         wt (protocols/transfer-time position np)
-         deltat (or  (deltat ctx) 0)]
-     (- wt (remaining (statedata ctx)))))
-  ([position ctx] (get-wait-time (entity ctx) position ctx)))
 
 ;; 'TODO -> reduce this down to one logical condition man....
 ;; 'TOM Change 6 June -> pointed disengagement toward demand name, via unit.LocationName
@@ -784,6 +805,23 @@
 (defn check-deployable [])
 
 
+
+;;Testing...
+
+(comment 
+
+(require '[marathon.sim.testing :as test])
+(def u (val (first (core/units test/demandctx))))
+(def testctx 
+  (-> test/demandctx
+      (assoc :entity u 
+             :statedata fsm/blank-data)))
+ 
+  
+  
+
+
+)
 
 ;; 'TODO -> these should be functions of policy, not parameters.
 ;; Private Function exceedsCycle(NewCycle As Long, unit As TimeStep_UnitData) As Boolean
@@ -1718,7 +1756,7 @@
     (change-state b unit to-state deltat duration following-state *simstate*)))
 
 ;;TODO# define an empty-behavior
-(declare roll-forward)
+(declare roll-forward-beh)
 
 (defn old-update-behavior [b deltat unit simstate]
   (roll-forward-beh b (merge simstate {:entity unit :deltat deltat})))

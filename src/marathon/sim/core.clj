@@ -147,7 +147,8 @@
   reset-cell!
   ->cell]
  [spork.sim.simcontext 
-  merge-updates])
+  merge-updates
+  get-time])
 
 ;; (def  assoc-any  cells/assoc-any)
 ;; (def  conj-any   cells/conj-any)
