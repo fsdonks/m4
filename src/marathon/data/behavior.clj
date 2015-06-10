@@ -824,6 +824,7 @@
              :statedata s1)))
 
 (defn b! [b ctx]  (first (beval b ctx)))
+(defn b!! [b ctx]  (second (beval b ctx)))
   
   
 
