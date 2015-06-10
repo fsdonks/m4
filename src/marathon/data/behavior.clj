@@ -471,12 +471,18 @@
 ;; End Function
 
 (defn get-wait-time
+  ([unit frompos topos ctx]
+     (let [wt (protocols/transfer-time (:policy unit) frompos topos)
+           deltat (or  (deltat ctx) 0) ;allow the ctx to override us...
+           ]
+       (- wt (remaining (statedata ctx)))))
   ([unit position ctx]
    (let [np (get-next-position unit position)
          wt (protocols/transfer-time (:policy unit) position np)
          deltat (or  (deltat ctx) 0)]
      (- wt (remaining (statedata ctx)))))
-  ([position ctx] (get-wait-time (entity ctx) position ctx)))
+  ([position ctx] (get-wait-time (entity ctx) position ctx))
+  ([ctx] (wait-time ctx)))
 
 ;;todo# move to generic statedata library.
 ;;this should be lifted out
@@ -667,6 +673,11 @@
   (->and [(->pred :changed)
            commit-unit]))
 
+(defmacro get-else [m k v]
+  `(if-let [res# (get ~m ~k)]
+     res#
+     ~v))
+
 ;;Given that we have the context for a move in place, 
 ;;we want to move as directed by the context.  If there 
 ;;is a wait time associated with the place we're moving 
@@ -677,7 +688,8 @@
     (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
       (let [t        (tupdate ctx)
             u        (entity  ctx)
-            frompos  (get     u   :positionpolicy)]
+            frompos  (get     u   :positionpolicy)
+            wt       (get-wait-time  u nextpos ctx)  ]
         (success
          (if (= frompos nextpos)  
            ctx ;do nothing, no move has taken place.          
@@ -690,9 +702,11 @@
       (fail ctx)))
 
 (def set-next-position  
-  (->alter #(assoc %  :next-position
-              (let [e (entity %)]
-                (get-next-position e (:positionpolicy e))))))
+  (->alter #(let [e (entity %)
+                  p (get-next-position e (:positionpolicy e))]
+              (merge %  {:next-position  p
+                         :wait-time     (get-wait-time e (:positionpolicy e) p %)}))))
+
 
 (def find-move 
   (->and [should-move? 

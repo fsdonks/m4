@@ -219,21 +219,30 @@
   `(binding [~'marathon.sim.core/*event-filter* ~f]
      ~@expr))
 
+(defn debug-listener  [ctx edata name] 
+  (do  (when (*event-filter* edata)
+         (println (if *verbose* 
+                    (sim/debug-msg  ":debugger saw " 
+                                    {:type (spork.sim.data/event-type  edata) 
+                                     :from (spork.sim.data/event-from edata)
+                                     :to   (spork.sim.data/event-to edata)
+                                     :msg  (sim/packet-message edata)
+                                     :data (spork.sim.data/event-data  edata)})
+                    (sim/debug-msg (sim/packet-message edata)))))
+       ctx))
+
 (def debugsim   
   (->> (-> (sim/make-debug-context 
             :debug-handler  
-            (fn [ctx edata name] 
-              (do  (when (*event-filter* edata)
-                     (println (if *verbose* (sim/debug-msg  ":debugger saw " 
-                                                            {:type (spork.sim.data/event-type  edata) 
-                                                             :from (spork.sim.data/event-from edata)
-                                                             :to   (spork.sim.data/event-to edata)
-                                                             :msg  (sim/packet-message edata)
-                                                             :data (spork.sim.data/event-data  edata)})
-                                  (sim/debug-msg (sim/packet-message edata)))))
-                   ctx))) 
+            debug-listener)
            (assoc :state emptystate))
        (sim/add-time 0)))
+
+(defn debug! [ctx] 
+  (if (contains?  (spork.sim.pure.network/get-event-clients ctx :all)
+                  :debugger)
+    ctx
+    (sim/add-listener :debugger debug-listener [:all] ctx)))
 
 ;;#State-wide queries...
 ;;tbd
@@ -585,6 +594,18 @@
 ;;look into replacing this with a universal constant, or upperbound
 ;;for longs
 (def ^:constant +inf+ 9999999)
+
+;;#Wrapper around spork.simcontext 
+;;As it stands, update requests aren't events...
+;;They're disconnected...since the updater is handling the event
+;;separately...
+;;Maybe we can clear that up at some point....
+(defn request-update [tupdate requested-by request-type ctx]
+  (->> ctx
+       (sim/request-update tupdate requested-by request-type )
+       (sim/trigger-event request-type requested-by :update-manager 
+                          (msg requested-by " requested an " request-type " at " tupdate) nil)))
+
 
 
 ;;##Developer Notes
