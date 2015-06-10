@@ -382,8 +382,8 @@
 ;;marathon.sim.demand (for abrupt withdraws), and marathon.sim.supply
 ;;(for deployments).
 
-(declare change-state-beh update-state-beh update-state) 
-
+(declare change-state-beh update-state-beh update-state 
+         roll-forward-beh)
 ;;API
 ;;===
 
@@ -435,6 +435,17 @@
 (defn wait-time     [m] (get m :wait-time))
 (defn statedata     [m] (get m :statedata))
 
+
+(defn eget [m k]
+  (if-let [res (get m k)]
+    res
+    (throw (Exception. (str "Expected to find key " k " in " m)))))
+
+;;aux function
+(defn remaining [statedata]
+  (- (eget statedata :duration) 
+     (eget statedata :timeinstate)))
+
 ;; Private Function getState(unit As TimeStep_UnitData, position As String) As String
 ;; getState = unit.policy.getState(position)
 ;; End Function
@@ -478,15 +489,7 @@
       (assoc :timeinstate 0)
       (assoc :followingstate followingstate)))
 
-(defn eget [m k]
-  (if-let [res (get m k)]
-    res
-    (throw (Exception. (str "Expected to find key " k " in " m)))))
 
-;;aux function
-(defn remaining [statedata]
-  (- (eget statedata :duration) 
-     (eget statedata :timeinstate)))
 
 ;;note - another way to handle this is to record dirty entities
 ;;and update them appropriately.
@@ -811,12 +814,16 @@
 (comment 
 
 (require '[marathon.sim.testing :as test])
-(def u (val (first (core/units test/demandctx))))
+(def u   (val (first (core/units test/demandctx))))
+(def s1  (assoc fsm/blank-data :duration 0)) ;motivate a change.
+
+;;note u and statedata are decoupled....
 (def testctx 
   (-> test/demandctx
-      (assoc :entity u 
-             :statedata fsm/blank-data)))
- 
+      (assoc :entity    u 
+             :statedata s1)))
+
+(defn b! [b ctx]  (first (beval b ctx)))
   
   
 

@@ -450,9 +450,9 @@
 
 ;;Added for unit behavior utility
 (defn add-traversal [u t from to]
-  (assoc u :current-cycle 
+  (assoc u :currentcycle 
          (cyc/cycle-add-traversal 
-          (:current-cycle u) 
+          (:currentcycle u) 
           t 
           from 
           to)))
