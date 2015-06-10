@@ -77,7 +77,7 @@
 ;;dissect our nested map of state a bit easier.  Each symbol in the defpath 
 ;;binding returns a function that, given a simulation context, points to the 
 ;;named resource using standard clojure map operations via clojure.core/get-in.
-(util/defpaths [:state] 
+(util/defpaths   [:state] 
   {parameters    [:parameters]
    supplystore   [:supplystore]
    demandstore   [:demandstore]
@@ -87,7 +87,8 @@
    fillmap       [:fillstore :fillmap]
    behaviors     [:behaviormanager]
    supply-tags   [:supplystore :tags]
-   demand-tags   [:demandstore :tags]})
+   demand-tags   [:demandstore :tags]
+   blackboard    [:blackboard]})
 
 (defn demands [ctx] (:demandmap (get-demandstore ctx)))
 (defn units   [ctx] (:unitmap   (get-supplystore ctx)))
@@ -116,8 +117,6 @@
                             `(~res ~state)                                   
                             (throw (Exception. (str "Unknown path " p))))]))]
        ~@expr)))
-
-
 
 ;;#Protocols 
 ;;Alias for entity protocol.  Helps us unify name access.
@@ -602,11 +601,9 @@
 ;;Maybe we can clear that up at some point....
 (defn request-update [tupdate requested-by request-type ctx]
   (->> ctx
-       (sim/request-update tupdate requested-by request-type )
+       (sim/request-update tupdate requested-by request-type)
        (sim/trigger-event request-type requested-by :update-manager 
                           (msg requested-by " requested an " request-type " at " tupdate) nil)))
-
-
 
 ;;##Developer Notes
 

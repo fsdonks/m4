@@ -279,6 +279,7 @@
 (def behaviors nil)
 (defprotocol IBehaviorTree
   (behave [b ctx]))
+  
 
 (defrecord bnode [type status f data]
   IBehaviorTree
@@ -370,55 +371,7 @@
 (defn ->do [f] 
   (fn [ctx] (success (do (f ctx) ctx))))
 
-;;Basic API
-;;=========
-;;The rest of the simulation still relies on our pre-existing API, 
-;;namely that we have "change-state", and "update"
 
-
-;;note that change-state already exists in marathon.sim.unit/change-state, 
-;;we're merely providing an interface to the unit's behavior for it.
-;;Also note that change-state is only called (currently) from
-;;marathon.sim.demand (for abrupt withdraws), and marathon.sim.supply
-;;(for deployments).
-
-(declare change-state-beh update-state-beh update-state 
-         roll-forward-beh)
-;;API
-;;===
-
-;;These are the entry points that will be called from the outside.
-;;Under the legacy implementation, they delegated to a hard coded
-;;finite state machine that interpreted rotational policy to infer
-;;state transitions.  The general mechanism is to augment the
-;;simulation context.  We may want to define a single function
-;;load-context and unload-context the clears up any augmented
-;;contextual items we put in.  That, or manage the simulation
-;;context separate from the behavior context.  For now, managing
-;;the simcontext along with the behavior context (treating it
-;;as a huge blackboard) seems like the simplest thing to do.
-
-;;Similarly, we'll have update take the context last.
-;;update will depend on change-state-beh, but not change-state.
-;;change-state is a higher-level api for changing things.
-(defn update  [unit deltat ctx]
-  (roll-forward-beh (merge ctx {:tupdate (sim/current-time ctx)
-                                :entity  unit
-                                :deltat  deltat})))
-
-;;This implementation takes the context last.
-(defn change-state [unit to-state deltat ctx]
- (beval (->and [#(update unit deltat %) ;ensure the unit is up-to-date
-                  change-state-beh])    ;execute the change
-        (merge ctx {:tupdate (sim/current-time ctx)
-                    :entity   unit
-                    :deltat   deltat})))
-
-;;we can probably define a macro for contextual behaviors that
-;;define preconditions for executing, i.e. ensuring that we have
-;;an entity, we have a deltat, etc. in the context, and bind to them
-;;if we do.  If we don't have them, then we throw an error because our
-;;expectations failed...(todo)
 
 ;;Accessors
 ;;=========
@@ -427,17 +380,27 @@
 ;;We don't "have" to do this, but I wanted to lift up
 ;;from raw lookups and formalize the interface.  we seem to be using
 ;;these alot, enough to warrant a new idiom possibly.
-(defn entity        [m] (get m :entity))
-(defn from-position [m] (get m :from-position))
-(defn next-position [m] (get m :next-position))
-(defn tupdate       [m] (get m :tupdate))
-(defn deltat        [m] (get m :deltat))
-(defn wait-time     [m] (get m :wait-time))
-(defn statedata     [m] (get m :statedata))
 
+;;Get an item from the blackboard, which is stored in the simstate of 
+;;the context, under :state 
+(defn get-bb   
+  ([ctx k]      (get (core/get-blackboard ctx) k))
+  ([ctx k else] (get (core/get-blackboard ctx) k)))
+(defn set-bb   [ctx k v]  (core/set-blackboard ctx (assoc (core/get-blackboard ctx) k v)))
+(defn merge-bb [ctx m]    (core/set-blackboard ctx (merge (core/get-blackboard ctx) m)))
+
+;;we could use a macro here....maybe later..
+
+(defn entity        [m] (get-bb m :entity))
+(defn from-position [m] (get-bb m :from-position))
+(defn next-position [m] (get-bb m :next-position))
+(defn tupdate       [m] (get-bb m :tupdate))
+(defn deltat        [m] (get-bb m :deltat))
+(defn wait-time     [m] (get-bb m :wait-time))
+(defn statedata     [m] (get-bb m :statedata))
 
 (defn eget [m k]
-  (if-let [res (get m k)]
+  (if-let  [res (get m k)]
     res
     (throw (Exception. (str "Expected to find key " k " in " m)))))
 
@@ -495,6 +458,56 @@
       (assoc :timeinstate 0)
       (assoc :followingstate followingstate)))
 
+;;Basic API
+;;=========
+;;The rest of the simulation still relies on our pre-existing API, 
+;;namely that we have "change-state", and "update"
+
+
+;;note that change-state already exists in marathon.sim.unit/change-state, 
+;;we're merely providing an interface to the unit's behavior for it.
+;;Also note that change-state is only called (currently) from
+;;marathon.sim.demand (for abrupt withdraws), and marathon.sim.supply
+;;(for deployments).
+
+(declare change-state-beh update-state-beh update-state 
+         roll-forward-beh)
+;;API
+;;===
+
+;;These are the entry points that will be called from the outside.
+;;Under the legacy implementation, they delegated to a hard coded
+;;finite state machine that interpreted rotational policy to infer
+;;state transitions.  The general mechanism is to augment the
+;;simulation context.  We may want to define a single function
+;;load-context and unload-context the clears up any augmented
+;;contextual items we put in.  That, or manage the simulation
+;;context separate from the behavior context.  For now, managing
+;;the simcontext along with the behavior context (treating it
+;;as a huge blackboard) seems like the simplest thing to do.
+
+;;Similarly, we'll have update take the context last.
+;;update will depend on change-state-beh, but not change-state.
+;;change-state is a higher-level api for changing things.
+(defn update  [unit deltat ctx]
+  (roll-forward-beh (merge-bb ctx {:tupdate (sim/current-time ctx)
+                                   :entity  unit
+                                   :deltat  deltat})))
+
+;;This implementation takes the context last.
+(defn change-state [unit to-state deltat ctx]
+ (beval (->and [#(update unit deltat %) ;ensure the unit is up-to-date
+                  change-state-beh])    ;execute the change
+        (merge-bb ctx {:tupdate (sim/current-time ctx)
+                       :entity   unit
+                       :deltat   deltat})))
+
+;;we can probably define a macro for contextual behaviors that
+;;define preconditions for executing, i.e. ensuring that we have
+;;an entity, we have a deltat, etc. in the context, and bind to them
+;;if we do.  If we don't have them, then we throw an error because our
+;;expectations failed...(todo)
+
 
 
 ;;note - another way to handle this is to record dirty entities
@@ -505,16 +518,17 @@
 ;;current simulation time + duration.
 (defn update-after 
   ([entity duration ctx]
-     (sim/request-update (+ (sim/current-time ctx) duration) 
+     (core/request-update (+ (sim/current-time ctx) duration) 
                          (:name entity)
-                         :supply-update
+                         :supplyupdate
                          ctx))
   ([duration ctx] (update-after (entity ctx) duration ctx)))
 
 ;;auxillary function that helps us wrap updates to the unit.
 (defn traverse-unit [u t from to]   
-  (-> u (assoc :positionpolicy to)
-         (u/add-traversal t from to)))
+  (-> u 
+      (assoc :positionpolicy to)
+      (u/add-traversal t from to)))
 
 ;;this is kinda weak, we used to use it to determine when not to
 ;;perform updates via the global state, but it's probably less
@@ -538,7 +552,7 @@
         :or   {deltat 0 duration 0 } :as ctx}]
     (let [followingstate (or followingstate newstate)
           newdata (change-statedata statedata newstate duration followingstate)
-          ctx     (assoc ctx :statedata newdata)]
+          ctx     (set-bb ctx :statedata newdata)]
       (cond
         ;state change inducing a wait until update.
         (pos? duration)  (success (update-after  entity duration ctx))
@@ -570,7 +584,7 @@
         (if (<= dt timeleft)           
           (beval update-state-beh ctx)
           (recur  (- dt timeleft) ;advance time be decreasing delta
-                  (beval update-state-beh (assoc ctx :deltat dt))))))))
+                  (beval update-state-beh (set-bb ctx :deltat dt))))))))
 
 ;;What then, is the update-state-beh definition? 
 ;;This "was" our central dispatch for states, i.e., based on 
@@ -635,7 +649,7 @@
 (def should-move?
   (->pred #(or (get % :next-position)
                (zero? 
-                (remaining (get % :statedata {}))))))
+                (remaining (get-bb % :statedata {}))))))
 
 ;;simple predicates, semi-monadic interface....
 ;; (?  should-move? [*env* *statedata*]
@@ -643,7 +657,7 @@
 ;;             (zero? (remaining *statedata*))))
 ;; (!  record-move  (put! :moved true))       
                   
-(def record-move (->alter #(assoc % :moved true)))
+(def record-move (->alter #(set-bb % :moved true)))
 
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
@@ -656,7 +670,7 @@
   (->alter 
    (fn [ctx] 
      (sim/merge-updates 
-      {:supply (supply/add-unit (get ctx :entity) 
+      {:supply (supply/add-unit (entity ctx) 
                                 (core/get-supplystore ctx))}
       ctx))))
 
@@ -694,8 +708,8 @@
          (if (= frompos nextpos)  
            ctx ;do nothing, no move has taken place.          
            (let [newstate (get-state u nextpos)]
-             (merge ctx ;update the context with information derived
-                        ;from moving
+             (merge-bb ctx ;update the context with information derived
+                           ;from moving
                 {:entity       (traverse-unit u t frompos nextpos)
                  :old-position frompos ;record information 
                  :new-state    newstate})))))
@@ -704,13 +718,10 @@
 (def set-next-position  
   (->alter #(let [e (entity %)
                   p (get-next-position e (:positionpolicy e))]
-              (merge %  {:next-position  p
-                         :wait-time     (get-wait-time e (:positionpolicy e) p %)}))))
+              (merge-bb %  {:next-position  p
+                            :wait-time     (get-wait-time e (:positionpolicy e) p %)}))))
 
-
-(def find-move 
-  (->and [should-move? 
-          set-next-position]))
+(def find-move  (->and [should-move? set-next-position]))
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
@@ -834,14 +845,11 @@
 ;;note u and statedata are decoupled....
 (def testctx 
   (-> test/demandctx
-      (assoc :entity    u 
-             :statedata s1)))
+      (merge-bb {:entity    u 
+                 :statedata s1})))
 
 (defn b! [b ctx]  (first (beval b ctx)))
 (defn b!! [b ctx]  (second (beval b ctx)))
-  
-  
-
 
 )
 

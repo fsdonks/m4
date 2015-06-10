@@ -83,7 +83,10 @@
                      ;has ended.  If there are no pending demand activations
                      ;we assume that we can stop.  This assumption holds for 
                      ;requirements analysis only....    
-   found-truncation]) 
+   found-truncation
+   [blackboard      {}] ;;an empty channel for communicating entity
+                      ;;behavior info
+   ]) 
 
 ;For maximum flexibility, I am going to embed the simulation state inside of 
 ;an entity store, which is basically a fancy database with some special 
