@@ -413,7 +413,14 @@
 ;; getState = unit.policy.getState(position)
 ;; End Function
 
-(defn get-state [unit position] (protocols/get-state (:policy unit) position))
+;;#TODO   See if we can encode or derive a more meaningful semantics
+;;from the indices currently associated with the states...for
+;;instance, :deployable randomly came back with 7 as a state, we
+;;either don't want this or we want to have it mean something.
+(defn get-state [unit position] 
+  (let [s (protocols/get-state (:policy unit) position)]
+    (if (number? s)  :dwelling s)))
+    
 
 ;; 'Tom Change 24 May 2011
 ;; Private Function getNextPosition(unit As TimeStep_UnitData) As String
@@ -717,9 +724,9 @@
 
 (def set-next-position  
   (->alter #(let [e (entity %)
-                  p (get-next-position e (:positionpolicy e))]
+                  p (get-next-position e  (:positionpolicy e))]
               (merge-bb %  {:next-position  p
-                            :wait-time     (get-wait-time e (:positionpolicy e) p %)}))))
+                            :wait-time     (get-wait-time e p %)}))))
 
 (def find-move  (->and [should-move? set-next-position]))
 
@@ -734,6 +741,8 @@
   (->and [find-move
           apply-move
           wait]))
+
+(def default-behavior moving-beh) 
 
 ;;State-dependent functions, the building blocks of our state machine.
 
@@ -832,8 +841,6 @@
 
 (defn check-deployable [])
 
-
-
 ;;Testing...
 
 (comment 
@@ -848,7 +855,7 @@
       (merge-bb {:entity    u 
                  :statedata s1})))
 
-(defn b! [b ctx]  (first (beval b ctx)))
+(defn b!  [b ctx]  (first (beval b ctx)))
 (defn b!! [b ctx]  (second (beval b ctx)))
 
 )
@@ -859,18 +866,9 @@
 ;; exceedsCycle = NewCycle > unit.policy.cyclelength
 ;; End Function
 
-
-
-
-
 ;; Private Function Deployable(position As String, policy As TimeStep_Policy) As Boolean
 ;; Deployable = policy.isDeployable(policy.GetCycleTime(position))
 ;; End Function
-
-
-
-
-
 
 ;; 'TODO -> Get this back to working as a function of policy.
 ;; 'TOM Change 3 Jan 2011 -> when conditions are met, units will start new cycles, update their cycles collection
@@ -879,16 +877,10 @@
 ;; NewCycle = (topos = unit.policy.startstate)
 ;; End Function
 
-
-
-
 ;; 'This is a very general and powerful mechanism to capture state changes in the unit.
 ;; Private Function StateExpired(unit As TimeStep_UnitData, deltat As Single) As Boolean
 ;; If unit.StateData.remaining <= deltat Then StateExpired = True
 ;; End Function
-
-
-
 
 
 
