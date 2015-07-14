@@ -834,10 +834,63 @@
   [msg ctx]  
   (->> (success ctx)
        (core/debug-print [:passing msg])))
+
 (defn age [ctx] 
   (pass :age-stub ctx))
 
+
+;; 'Tom Change 1 July 2011
+;; Private Function ageUnit(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+;; With unit
+;;     If deltat > 0 Then
+;;         .cycletime = .cycletime + deltat 'units will always increase cycletime
+;;         .StateData.timeinstate = .StateData.timeinstate + deltat 'we increase state time here, but we haven't
+;;         'by changing the timeinstate, we've made the delta 0
+;;         deltat = 0 'mutate the deltat variable
+;;         'however, rollforward should be doing this for us by default.
+;;     End If
+;; End With
+;; Set ageUnit = unit
+;; End Function
+
+
+;; (defn age-unit [ctx]
+;;   (let [dt (get-bb ctx :deltat)
+;;         e  (entity ctx)
+;;         ct   ;;update the cycletime.
+;;         ]
+;;     (if (zero? dt) ctx ;nothing changed.
+;;         (merge-bb ctx {:deltat 0 ;consume the time
+                       
+    
+  
+
+;;State handler for generic updates that occur regardless of the state.
+;;These are specific to the unit data structure, not any particular state.
+;; Private Function Global_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+;; Dim nextposition As String
+;; Dim nextstate As String
+;; Dim change As Boolean
+
+;; change = False
+;; 'bring the unit up to current time
+;; Set unit = ageUnit(unit, deltat)
+
+;;this is should-move...it kicks us off to move
+
+;; If StateExpired(unit, deltat) Then 'time in current state has expired
+;;     nextposition = getNextPosition(unit) 'what is the next position according to policy?
+;;     Set Global_State = Moving_State(unit, 0, nextposition) 'TOM Note 29 Mar 2011 -> this now reflects an instant move.
+;; End If
+
+;; Set Global_State = unit
+;; End Function
+
+
+
+
 ;;State-dependent functions, the building blocks of our state machine.
+
 ;;states are identical to leaf behaviors, with 
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
@@ -980,8 +1033,6 @@
 ;; If unit.StateData.remaining <= deltat Then StateExpired = True
 ;; End Function
 
-
-
 ;; Private Function JustSpawned(unit As TimeStep_UnitData) As Boolean
 ;; 'Decoupled*
 ;; 'JustSpawned = (unit.spawnTime = parent.getTime)
@@ -989,43 +1040,6 @@
 ;; End Function
 
 
-
-
-
-;; 'State handler for generic updates that occur regardless of the state.
-;; 'These are specific to the unit data structure, not any particular state.
-;; Private Function Global_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-;; Dim nextposition As String
-;; Dim nextstate As String
-;; Dim change As Boolean
-
-;; change = False
-;; 'bring the unit up to current time
-;; Set unit = ageUnit(unit, deltat)
-
-;; If StateExpired(unit, deltat) Then 'time in current state has expired
-;;     nextposition = getNextPosition(unit) 'what is the next position according to policy?
-;;     Set Global_State = Moving_State(unit, 0, nextposition) 'TOM Note 29 Mar 2011 -> this now reflects an instant move.
-;; End If
-
-;; Set Global_State = unit
-;; End Function
-
-
-
-;; 'Tom Change 1 July 2011
-;; Private Function ageUnit(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-;; With unit
-;;     If deltat > 0 Then
-;;         .cycletime = .cycletime + deltat 'units will always increase cycletime
-;;         .StateData.timeinstate = .StateData.timeinstate + deltat 'we increase state time here, but we haven't
-;;         'by changing the timeinstate, we've made the delta 0
-;;         deltat = 0 'mutate the deltat variable
-;;         'however, rollforward should be doing this for us by default.
-;;     End If
-;; End With
-;; Set ageUnit = unit
-;; End Function
 
 
 
