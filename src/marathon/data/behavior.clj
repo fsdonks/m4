@@ -288,8 +288,10 @@
   ;; (invoke [obj arg] (f arg))
   )
 
+(defn behavior? [obj] (satisfies? IBehaviorTree obj))
+
 (defn beval [b ctx]
-  (cond (satisfies? IBehaviorTree b) (behave b ctx)
+  (cond (behavior? b) (behave b ctx)
         (fn? b) (b ctx)))
 
 ;;convenience? macros...at least it standardizes success and failure,
@@ -358,10 +360,10 @@
 
 ;;do we allow internal failure to signal external failure?
 (defn ->while [pred b]
-  (->bnode :while nil 
+  (->bnode :while nil   
            (fn [ctx] (if (pred ctx) 
-                         (beval b ctx)
-                         (fail ctx))) 
+                       (beval b ctx)
+                       (fail ctx))) 
            b))
           
 (defn ->elapse-until [t interval]
@@ -497,9 +499,9 @@
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
 (defn update  [unit deltat ctx]
-  (roll-forward-beh (merge-bb ctx {:tupdate (sim/current-time ctx)
-                                   :entity  unit
-                                   :deltat  deltat})))
+  (second  (roll-forward-beh (merge-bb ctx {:tupdate (sim/current-time ctx)
+                                            :entity  unit
+                                            :deltat  deltat}))))
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
@@ -782,23 +784,61 @@
                             :wait-time     (get-wait-time e p %)}))))
 
 (def find-move  (->and [should-move? 
-                        set-next-position]))
+                        set-next-position ;;the problem here is that
+                        ;;we don't see what's being changed....the
+                        ;;context is changing, but where? At least
+                        ;;it's not side-effecting, but can we keep
+                        ;;track of our changes better?
+                        ]))
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
 (defn wait [ctx]
   (if-let [wt (wait-time ctx)] ;;if we have an established wait time...    
-    (->>  (success  (update-after  wt ctx))
-          (core/debug-print (str "waiting for " wt)))
+    (->> (if (zero? wt) 
+           ctx ;skip the wait, instantaneous.  No need to request an update.
+           (update-after  wt ctx))
+         (success)
+         (core/debug-print (str "waiting for " wt)))
     (fail      ctx)))
     
+;;Movement is pretty straightforward: find a place to go, determine 
+;;any changes necessary to "get" there, apply the changes, wait 
+;;at the location until a specified time.
 (def moving-beh 
   (->and [find-move
           apply-changes
           wait]))
 
-(def default-behavior moving-beh) 
+;; ;;a better moving-beh would be...
+;; (def moving-beh2 
+;;   (->or  [(->while should-move?
+;;                     [find-move
+;;                      apply-changes])
+;;           wait]))
 
+;;similar to moving behavior, we have a stationary behavior...
+;;If we're stationary, we're not moving, but staying in the same 
+;;state, and updating statistics as a function of (usually time) 
+;;based on the state we're in.
+(comment ;in progress.
+  (def stationary-beh 
+    (->or [update-current-state ;perform any state-specific stat updates...
+           apply-changes        ;typical sweep of changes, typically
+                                        ;statistical updates
+           ]))         
+)
+
+;;This is actually pretty cool, and might be a nice catch-all
+;;behavior...
+;;We try to compute changes, apply the changes, then wait until 
+;;the next known change...
+;;Known changes occur when we're told about them...i.e. 
+;;when time elapses, when an external state change happens, 
+;;etc.  It's ALWAYS externally driven by the caller.
+
+
+(def default-behavior moving-beh) 
 ;;State-dependent functions, the building blocks of our state machine.
 
 ;; Private Function UpdateState(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
