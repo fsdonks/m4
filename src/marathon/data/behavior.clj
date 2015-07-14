@@ -467,6 +467,14 @@
       (assoc :timeinstate 0)
       (assoc :followingstate followingstate)))
 
+;;auxillary function to help us lock down things like unit updates,
+;;things that should never fail.  Note, we lose some of the context 
+;;if we're not tracing the behavior evaluation live; that still needs
+;;to be implemented.
+(defn error-on-fail [bres]
+  (if (identical? (first bres) :success) bres 
+      (throw (Exception. (str "behavior returned failure...")))))    
+
 ;;Basic API
 ;;=========
 ;;The rest of the simulation still relies on our pre-existing API, 
@@ -498,10 +506,15 @@
 ;;Similarly, we'll have update take the context last.
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
-(defn update  [unit deltat ctx]
-  (second  (roll-forward-beh (merge-bb ctx {:tupdate (sim/current-time ctx)
-                                            :entity  unit
-                                            :deltat  deltat}))))
+(defn update  [unit deltat ctx]  
+  (->> (merge-bb ctx {:tupdate (sim/current-time ctx)
+                                    :entity  unit
+                                    :deltat  deltat})
+       (roll-forward-beh) ;update the unit according to the change in time.
+       (error-on-fail)    ;unit updates should never fail.
+       (second  ;result is in terms of [:success|:fail ctx], pull out
+                                        ;the ctx
+        )))
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
@@ -817,17 +830,51 @@
 ;;                      apply-changes])
 ;;           wait]))
 
+(defn pass 
+  [msg ctx]  
+  (->> (success ctx)
+       (core/debug-print [:passing msg])))
+(defn age [ctx] 
+  (pass :age-stub ctx))
+
+;;State-dependent functions, the building blocks of our state machine.
+;;states are identical to leaf behaviors, with 
+;;the possibility for some states to invoke transitions.
+;;we'll continue to port them.
+(def default-states 
+  {:global          age
+   :reset           age
+   :bogging         age
+   :dwelling        age 
+   :moving          age
+   :start-cycle     age
+   :end-cycle       age
+   :overlapping     age
+   :demobilizing    age
+   :policy-change   age
+   :recovering      age
+   :recovered       age 
+   :nothing         age
+   :spawning        #(pass :spawning %2)
+   :abrupt-withdraw #(pass :abrupt-withdraw %2)})
+
+;;perform a simple update via the entity's FSM.
+(defn update-current-state [states ctx] 
+  (->> (if-let [f (get states (get (statedata ctx) :curstate))]
+         (f ctx)
+         ctx)
+       ((get states :global identity))))
+
 ;;similar to moving behavior, we have a stationary behavior...
 ;;If we're stationary, we're not moving, but staying in the same 
 ;;state, and updating statistics as a function of (usually time) 
 ;;based on the state we're in.
-(comment ;in progress.
-  (def stationary-beh 
-    (->or [update-current-state ;perform any state-specific stat updates...
-           apply-changes        ;typical sweep of changes, typically
-                                        ;statistical updates
-           ]))         
-)
+(def stationary-beh 
+  (->or [update-current-state ;perform any state-specific stat updates...
+         apply-changes        ;typical sweep of changes, typically
+                              ;statistical updates
+         ]))         
+
 
 ;;This is actually pretty cool, and might be a nice catch-all
 ;;behavior...
@@ -839,51 +886,7 @@
 
 
 (def default-behavior moving-beh) 
-;;State-dependent functions, the building blocks of our state machine.
 
-;; Private Function UpdateState(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-
-;; If Not specialstate(unit.StateData.CurrentState) Then
-;;     Select Case unit.StateData.CurrentState
-;;         Case Is = "Reset"
-;;             Set UpdateState = Reset_State(unit, deltat)
-;;         Case Is = "Bogging"
-;;             Set UpdateState = Bogging_State(unit, deltat)
-;;         Case Is = "Moving"
-;;             Set UpdateState = Moving_State(unit, deltat)
-;;         Case Is = "Dwelling"
-;;             Set UpdateState = Dwelling_State(unit, deltat)
-;;         Case Is = "StartCycle"
-;;             Set UpdateState = StartCycle_State(unit, deltat)
-;;         Case Is = "EndCycle"
-;;             Set UpdateState = EndCycle_State(unit, deltat)
-;;         Case Is = "Overlapping"
-;;             Set UpdateState = Overlapping_State(unit, deltat)
-;;         Case Is = "DeMobilizing"
-;;             Set UpdateState = DeMobilizing_State(unit, deltat)
-;;         Case Is = "PolicyChange"
-;;             Set UpdateState = PolicyChange_State(unit, deltat)
-;;         Case Is = "Recovering"
-;;             Set UpdateState = Recovering_State(unit, deltat)
-;;         Case Is = "Recovered"
-;;             Set UpdateState = Recovered_State(unit, deltat)
-;;         Case Is = "Nothing"
-;;             Set UpdateState = unit
-;;     Case Else
-;;         Err.Raise 101, , "No implementation for unit state" & unit.StateData.CurrentState
-;;     End Select
-;;     Set unit = Global_State(unit, deltat) 'run global tasks common to every state.
-;; Else
-;;     Select Case unit.StateData.CurrentState
-;;         Case Is = "Spawning"
-;;             Set UpdateState = Spawning_State(unit, deltat)
-;;         Case Is = "AbruptWithdraw"
-;;             Set UpdateState = AbruptWithdraw_State(unit, deltat)
-        
-;;     End Select
-;; End If
-
-;; End Function
 
 ;; Private Function FinishCycle(unit As TimeStep_UnitData, frompos As String, topos As String) As TimeStep_UnitData
 ;; Set FinishCycle = unit
