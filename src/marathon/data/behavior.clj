@@ -317,7 +317,7 @@
 
 (defn ->or  [xs]
   (->bnode  :or nil 
-     (fn [b ctx]
+     (fn [ctx]
        (reduce (fn [acc child]
                  (let [[res ctx] (beval child acc)]
                    (case res
@@ -328,10 +328,10 @@
 
 (defn ->not [b]
   (->bnode  :not nil
-      (fn [b ctx] (let [[res ctx] (beval b ctx)]
+      (fn [ctx] (let [[res ctx] (beval b ctx)]
                    (case res
-                     :run     (run ctx)
-                     :success (fail ctx)
+                     :run     (run     ctx)
+                     :success (fail    ctx)
                      :fail    (success ctx))))
       b))
 
@@ -526,9 +526,9 @@
 (defn update-after 
   ([entity duration ctx]
      (core/request-update (+ (sim/current-time ctx) duration) 
-                         (:name entity)
-                         :supplyupdate
-                         ctx))
+                          (:name entity)
+                          :supplyupdate
+                          ctx))
   ([duration ctx] (update-after (entity ctx) duration ctx)))
 
 ;;auxillary function that helps us wrap updates to the unit.
@@ -578,21 +578,34 @@
 ;;deltat = 0 in the context.  Note, this is predicated on the
 ;;assumption that we can eventually pass time in some behavior....
 
+(defmacro if-y [expr & else]
+  `(if (= (clojure.string/upper-case (read)) "Y")
+     ~expr 
+     ~@else))
 ;;Note -> we could represent roll-forward-beh as something more
 ;;btree-ish, specifically as a combination of a repeat node and 
 ;;some conditions (namely the condition that deltat <= remaining)
 ;;Might have a smaller behavior that advances the next-smallest 
 ;;time slice.  TODO# refactor using behaviortree nodes.
 (def roll-forward-beh 
-  (fn [{:keys [deltat] :as ctx :or   {deltat 0}}]
-    (loop [dt  deltat
-           ctx ctx]
-      (let [timeleft (remaining (statedata ctx))]
-        (if (<= dt timeleft)           
-          (beval update-state-beh ctx)
-          (recur  (- dt timeleft) ;advance time be decreasing delta
-                  (beval update-state-beh (set-bb ctx :deltat dt))))))))
-
+  (fn [ctx]
+    (let [deltat (get-bb ctx :deltat 0)]
+      (loop [dt  deltat
+             ctx ctx]
+        (let [sd (statedata ctx)              
+              _ (println [:sd sd])
+              timeleft (remaining sd)
+              _ (println [:rolling :dt dt :remaining timeleft ]) ]
+          (if-y 
+            (if (<= dt timeleft)           
+              (beval update-state-beh ctx)
+              (let [[stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))]
+                (if (= stat :success) 
+                  (recur  (- dt timeleft) ;advance time be decreasing delta
+                          nxt)
+                  [stat nxt])))
+            ctx))))))
+  
 ;;What then, is the update-state-beh definition? 
 ;;This "was" our central dispatch for states, i.e., based on 
 ;;the current state, we would lookup the appropriate handler and 
@@ -709,18 +722,58 @@
     (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
       (let [t        (tupdate ctx)
             u        (entity  ctx)
-            frompos  (get     u   :positionpolicy)
-            wt       (get-wait-time  u nextpos ctx)  ]
+            frompos  (get     u      :positionpolicy)
+            wt       (get-wait-time  u  nextpos ctx)]
         (success
          (if (= frompos nextpos)  
            ctx ;do nothing, no move has taken place.          
-           (let [newstate (get-state u nextpos)]
+           (let [newstate (get-state u nextpos)
+                 ;;#Todo change change-state into a fixed-arity
+                 ;;function, this will probably slow us down due to arrayseqs.
+                 new-sd   (fsm/change-state (statedata ctx) newstate wt)]
              (merge-bb ctx ;update the context with information derived
-                           ;from moving
+                                        ;from moving
                 {:entity       (traverse-unit u t frompos nextpos)
                  :old-position frompos ;record information 
-                 :new-state    newstate})))))
+                 :new-state    newstate
+                 :statedata    new-sd
+                 :new-duration wt})))))
       (fail ctx)))
+
+(defn apply-state [ctx] 
+  (if-let [new-state (get-bb ctx :new-state)]
+    (let [;;#Todo change change-state into a fixed-arity
+          ;;function, this will probably slow us down due to arrayseqs.
+          new-sd   (fsm/change-state (statedata ctx) new-state (get-bb :new-duration))]
+      (success 
+       (merge-bb ctx ;update the context with information derived
+                                        ;from moving
+                 {:statedata    new-sd}))
+      (fail ctx))))
+
+;;consume all the ambient changes in the blackboard, such as the
+;;statedata we've built up along the way, and pack it back into the 
+;;unit for storage until the next update.
+;; (defn update-entity [ctx]
+;;   (if-let [
+  
+
+(def apply-changes (->or [apply-move 
+                          apply-state                                                    
+                          ]))
+
+;; ;;apply-state? should update the entity's state, change the duration
+;; ;;to be the current wait-time, etc.
+;; (defn apply-state [ctx] 
+;;   (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
+;;     (let [new-state (get-bb :new-state)]
+;;         (success
+;;          (merge-bb ctx ;update the context with information derived
+;;                                         ;from moving
+;;                    {:entity       (traverse-unit u t frompos nextpos)
+;;                     :old-position frompos ;record information 
+;;                     :new-state    newstate})))
+;;     (fail ctx)))
 
 (def set-next-position  
   (->alter #(let [e (entity %)
@@ -728,18 +781,20 @@
               (merge-bb %  {:next-position  p
                             :wait-time     (get-wait-time e p %)}))))
 
-(def find-move  (->and [should-move? set-next-position]))
+(def find-move  (->and [should-move? 
+                        set-next-position]))
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
 (defn wait [ctx]
-  (if-let [wt (wait-time ctx)] ;;if we have an established wait time...
-    (success  (update-after  wt ctx))
+  (if-let [wt (wait-time ctx)] ;;if we have an established wait time...    
+    (->>  (success  (update-after  wt ctx))
+          (core/debug-print (str "waiting for " wt)))
     (fail      ctx)))
     
 (def moving-beh 
   (->and [find-move
-          apply-move
+          apply-changes
           wait]))
 
 (def default-behavior moving-beh) 

@@ -414,8 +414,10 @@
     (jung/view-graph fg jung/fr)
     (throw (Exception. "No fillgraph to visualize!"))))
 
+(defn tree-view [obj] (inspect/inspect-tree obj))
+
 (defn visualize-subscriptions [ctx] 
-  (inspect/inspect-tree (:subscriptions (get-policystore ctx))))
+  (tree-view (:subscriptions (get-policystore ctx))))
 
 ;;TODO# define a visualization protocol, extend it to core datatypes...
 (defn visualize-unit [u]   (inspect/inspect-tree u))    
