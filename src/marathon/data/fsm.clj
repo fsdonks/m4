@@ -33,8 +33,7 @@
               :statehistory (conj (:statehistory fsm) newstate)
               :duration newduration}))
 
-(defn remaining [fsm]
-  (- (:duration fsm) (:timeinstate fsm)))
+(defn remaining [fsm]  (- (:duration fsm) (:timeinstate fsm)))
 
 ;'Quick, instantaneous blips between state changes, usually with the intent to revert back soonafter
 ;Public Sub BlipState(newstate As String, Optional followingstate As String)
@@ -51,6 +50,8 @@
 ;    duration = 0
 ;End If
 ;End Sub
+
+
 ;'TODO -> wrap this into a list of states ....
 ;'newstate
 ;'Write now, it only goes back one, then cycles on infinitely between 2 states, only really good for
@@ -72,6 +73,7 @@
 ;duration = DurationPrior
 ;timeinstate = timeinstatePrior
 ;
+
 ;'PreviousState
 ;'DurationPrior
 ;'tmpstate
@@ -83,3 +85,7 @@
   (if (and (pos? duration) (not= duration inf))
     (double (/ timeinstate duration))
     0))
+
+
+(defn add-duration [{:keys [timeinstate] :as sd} amt]
+  (assoc sd :timeinstate (+ timeinstate amt)))

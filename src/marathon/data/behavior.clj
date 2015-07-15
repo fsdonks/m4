@@ -387,9 +387,19 @@
 ;;the context, under :state 
 (defn get-bb   
   ([ctx k]      (get (core/get-blackboard ctx) k))
-  ([ctx k else] (get (core/get-blackboard ctx) k)))
+  ([ctx k else] (if-let [res (get (core/get-blackboard ctx) k)]
+                  res 
+                  else)))
 (defn set-bb   [ctx k v]  (core/set-blackboard ctx (assoc (core/get-blackboard ctx) k v)))
 (defn merge-bb [ctx m]    (core/set-blackboard ctx (merge (core/get-blackboard ctx) m)))
+
+(defmacro with-bb [[opts ctx] & expr]
+  (let [lhs (cond (map? opts) (into {} (partition 2 opts))
+                  (vector? opts) {:as 'bb :keys opts} 
+                  :else (throw (Exception. (str "Options need to be a vector or a map... " opts))))]
+    `(let [~lhs (core/get-blackboard ~ctx)]
+       ~@expr)))
+  
 
 ;;we could use a macro here....maybe later..
 
@@ -397,8 +407,8 @@
 (defn from-position [m] (get-bb m :from-position))
 (defn next-position [m] (get-bb m :next-position))
 (defn tupdate       [m] (get-bb m :tupdate))
-(defn deltat        [m] (get-bb m :deltat))
-(defn wait-time     [m] (get-bb m :wait-time))
+(defn deltat        [m] (get-bb m :deltat 0))
+(defn wait-time     [m] (get-bb m :wait-time fsm/inf))
 (defn statedata     [m] (get-bb m :statedata))
 
 (defn eget [m k]
@@ -492,6 +502,11 @@
 ;;API
 ;;===
 
+(defn load-ctx [unit deltat ctx]
+  (merge-bb ctx {:tupdate (sim/current-time ctx)
+                 :entity  unit
+                 :deltat  deltat}))
+
 ;;These are the entry points that will be called from the outside.
 ;;Under the legacy implementation, they delegated to a hard coded
 ;;finite state machine that interpreted rotational policy to infer
@@ -507,11 +522,10 @@
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
 (defn update  [unit deltat ctx]  
-  (->> (merge-bb ctx {:tupdate (sim/current-time ctx)
-                                    :entity  unit
-                                    :deltat  deltat})
+  (->> ctx 
+       (load-ctx unit deltat)
        (roll-forward-beh) ;update the unit according to the change in time.
-       (error-on-fail)    ;unit updates should never fail.
+;       (error-on-fail)    ;unit updates should never fail.
        (second  ;result is in terms of [:success|:fail ctx], pull out
                                         ;the ctx
         )))
@@ -559,7 +573,12 @@
                              (identical? s :abrupt-withdraw)))
 
 (defn just-spawned?  [ctx] (==  (:spawntime (entity ctx))    (core/get-time ctx)))
-(defn state-expired? [ctx] (<=  (remaining (statedata  ctx)) (deltat ctx)))
+(defn state-expired? [ctx] 
+  (let [r (remaining (statedata  ctx)) 
+        dt (deltat ctx)
+        _ (println r dt)]
+    (<=  r dt)))
+       
 
 (defn to-position?   [to   ctx] (identical? (next-position ctx) to))
 (defn from-position? [from ctx] (identical? (from-position ctx) from))
@@ -610,7 +629,8 @@
         (let [sd (statedata ctx)              
               _ (println [:sd sd])
               timeleft (remaining sd)
-              _ (println [:rolling :dt dt :remaining timeleft ]) ]
+              _ (println [:rolling :dt dt :remaining timeleft ]) 
+              _ (core/tree-view ctx)]
           (if-y 
             (if (<= dt timeleft)           
               (beval update-state-beh ctx)
@@ -809,10 +829,11 @@
 (defn wait [ctx]
   (if-let [wt (wait-time ctx)] ;;if we have an established wait time...    
     (->> (if (zero? wt) 
-           ctx ;skip the wait, instantaneous.  No need to request an update.
-           (update-after  wt ctx))
-         (success)
-         (core/debug-print (str "waiting for " wt)))
+           ctx ;skip the wait, instantaneous.  No need to request an
+               ;update.
+           (core/debug-print (str "waiting for " wt)
+              (update-after  wt ctx)))           
+         (success))
     (fail      ctx)))
     
 ;;Movement is pretty straightforward: find a place to go, determine 
@@ -835,8 +856,7 @@
   (->> (success ctx)
        (core/debug-print [:passing msg])))
 
-(defn age [ctx] 
-  (pass :age-stub ctx))
+(defn age [ctx]  (pass :age-stub ctx))
 
 
 ;; 'Tom Change 1 July 2011
@@ -853,23 +873,16 @@
 ;; Set ageUnit = unit
 ;; End Function
 
-
 ;;Should we keep a timestamp with the unit? That way we can keep track
 ;;of how fresh it is.
 (defn age-unit [ctx]
-  (let [dt (get-bb ctx :deltat)
-        e  (entity ctx)
-        sd (statedata ctx)
-        ct   ;;update the cycletime.
-        ]
+  (let [dt (get-bb ctx :deltat 0)]
     (if (zero? dt) ctx ;nothing changed.
         ;otherwise we age the unit by an amount...
         ;Maybe aging the unit also means processing messages...dunno.
-        (merge-bb ctx {:deltat 0
-                       :statedata (
-                       
-    
-  
+        (merge-bb ctx {:deltat 0 ;is this the sole consumer of time? 
+                       :statedata (fsm/add-duration (statedata ctx) dt)
+                       :entity    (u/add-duration   (entity ctx) dt)}))))
 
 ;;State handler for generic updates that occur regardless of the state.
 ;;These are specific to the unit data structure, not any particular state.
@@ -892,8 +905,8 @@
 ;; Set Global_State = unit
 ;; End Function
 
-
-
+(defn global-beh [ctx] 
+  (success (age-unit ctx)))
 
 ;;State-dependent functions, the building blocks of our state machine.
 
@@ -901,42 +914,47 @@
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
 (def default-states 
-  {:global          age
-   :reset           age
-   :bogging         age
-   :dwelling        age 
-   :moving          age
-   :start-cycle     age
-   :end-cycle       age
-   :overlapping     age
-   :demobilizing    age
-   :policy-change   age
-   :recovering      age
-   :recovered       age 
-   :nothing         age
-   :spawning        #(pass :spawning %2)
-   :abrupt-withdraw #(pass :abrupt-withdraw %2)})
+  {:global           global-beh
+   :reset            #(pass :spawning %2)
+   :bogging          #(pass :bogging %2)
+   :dwelling         #(pass :dwelling %2) 
+   :moving           moving-beh
+   :start-cycle      #(pass :start-cycle %2)
+   :end-cycle        #(pass :end-cycle  %2)
+   :overlapping      #(pass :overlapping    %2)
+   :demobilizing     #(pass :demobilizing %2)
+   :policy-change    #(pass :policy-change %2)
+   :recovering       #(pass :recovering  %2)
+   :recovered        #(pass :recovered %2) 
+   :nothing          #(pass :nothing %2)
+   :spawning         #(pass :spawning %2)
+   :abrupt-withdraw  #(pass :abrupt-withdraw %2)})
 
 ;;we should be able to define a nice FSM interface, and then derive a
 ;;simple FSM behavior....
 ;;Or, we completely meld what were FSM states into leaf behaviors.
 
 ;;perform a simple update via the entity's FSM.
-(defn update-current-state [states ctx] 
-  (->> (if-let [f (get states (get (statedata ctx) :curstate))]
-         (f ctx)
-         ctx)
-       ((get states :global identity))))
+(defn update-current-state 
+  ([states ctx] 
+     (let [st (get (statedata ctx) :curstate)
+           _ (println st)]
+       (if-let [f (get states st)]
+         (do (println [:updating-in st])
+             (f ctx))
+         (fail ctx))))
+  ([ctx] (update-current-state default-states ctx)))
 
 ;;similar to moving behavior, we have a stationary behavior...
 ;;If we're stationary, we're not moving, but staying in the same 
 ;;state, and updating statistics as a function of (usually time) 
 ;;based on the state we're in.
-(def stationary-beh 
-  (->or [update-current-state ;perform any state-specific stat updates...
-         apply-changes        ;typical sweep of changes, typically
-                              ;statistical updates
-         ]))         
+
+;; (def stationary-beh 
+;;   (->or [update-current-state ;perform any state-specific stat updates...
+;;          apply-changes        ;typical sweep of changes, typically
+;;                               ;statistical updates
+;;          ]))         
 
 
 ;;This is actually pretty cool, and might be a nice catch-all
@@ -947,8 +965,87 @@
 ;;when time elapses, when an external state change happens, 
 ;;etc.  It's ALWAYS externally driven by the caller.
 
+(def default-behavior 
+  (->or [update-current-state
+        ; global-beh
+         moving-beh]))
 
-(def default-behavior moving-beh) 
+;;we can break the spawning behavior up into smaller tasks...
+;;Find out where we're supposed to be. Do we have initial conditions? 
+;;Initial conditions are currently derived from cycletime and policy. 
+;;For instance, we narrowly assume that every unit exists somewhere in 
+;;on a cycle at t=0, rather than setting them in arbitray deployments
+;;to begin with.  This is limiting, we should be able to define
+;;all kinds of initial conditions to perform upon spawn (like set
+;;location, cycletime, etc.)  For now, we just replicate the
+;;cycletime-derived automated initial conditions logic.
+
+;;Given a cycletime, where should we be according to policy?
+(defn spawning-beh [ctx]
+  (let [tnow (sim/current-time ctx)
+        ]
+    
+;; 'State to control how a unit acts when it spawns.
+;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
+;; Dim newduration As Single
+;; Dim offset As Single
+;; Dim timeinstate As Single
+;; Dim timeremaining As Single
+;; Dim nextstate As String
+;; 'added for overuse of .gettime
+;; Dim tnow As Single
+
+;; tnow = SimLib.getTime(simstate.context)
+
+;; With unit
+;;     If topos = vbNullString And .PositionPolicy = vbNullString Then 'no target position to spawn at, must derive
+;;         .PositionPolicy = .policy.getPosition(.cycletime) '.parent.parent.PolicyManager.DeriveLocationID(.cycletime, . component)
+;;         topos = .PositionPolicy '.parent.parent.policyManager.LocationIndex(.location)
+;;         'Decoupled*
+;;         '.location = .parent.parent.policyManager.locationID(topos)
+;;         .location = MarathonOpPolicy.locationID(topos, simstate.policystore)
+;;     Else 'target position, derive index
+;;         topos = .PositionPolicy
+;;         'Decoupled*
+;;         '.location = .parent.parent.policyManager.locationID(topos)
+;;         .location = MarathonOpPolicy.locationID(topos, simstate.policystore) 'TODO <----this is redundant, see if we can eliminate it.
+;;     End If
+;;     'Decoupled*
+;;     '.spawnTime = .parent.getTime
+;;     .spawnTime = tnow
+;;     'hack...
+;;         timeinstate = .cycletime - .policy.GetCycleTime(.PositionPolicy) 'derived time in state upon spawning.
+;;         unit.InitCycles tnow
+;;         unit.AddDwell .cycletime
+;;     timeremaining = .policy.TransferTime(.PositionPolicy, .policy.nextposition(.PositionPolicy)) 'time remaining in this state
+;;     newduration = timeremaining - timeinstate
+
+    
+;;     If .cycletime > 0 Then
+;;         .DateToReset = DateAdd("d", -.cycletime, simstate.parameters.startdate)
+;;         nextstate = "Dwelling"
+;;     ElseIf .cycletime = 0 Then
+;;         .DateToReset = simstate.parameters.startdate
+;;         nextstate = "Dwelling"
+;;     End If
+
+;;     'initialize cycle from policy
+;; End With
+
+;; Set Spawning_State = ChangeState(unit, nextstate, 0, newduration)
+
+;; 'TOM Change -> Changed from "Initialized" to "Spawning"
+;; With unit
+;;     'Decoupled*
+;;     '.parent.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration
+;;     MarathonOpSupply.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration, simstate.context
+;; End With
+
+;; End Function
+
+
+
+
 
 
 ;; Private Function FinishCycle(unit As TimeStep_UnitData, frompos As String, topos As String) As TimeStep_UnitData
@@ -1014,7 +1111,8 @@
 (def testctx 
   (-> test/demandctx
       (merge-bb {:entity    u 
-                 :statedata s1})))
+                 :statedata s1
+                })))
 
 (defn b!  [b ctx]  (first (beval b ctx)))
 (defn b!! [b ctx]  (second (beval b ctx)))
@@ -1048,83 +1146,6 @@
 ;; 'JustSpawned = (unit.spawnTime = parent.getTime)
 ;; JustSpawned = (unit.spawnTime = SimLib.getTime(simstate.context))
 ;; End Function
-
-
-
-
-
-;; 'State to control how a unit acts when it spawns.
-;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
-;; Dim newduration As Single
-;; Dim offset As Single
-;; Dim timeinstate As Single
-;; Dim timeremaining As Single
-;; Dim nextstate As String
-;; 'added for overuse of .gettime
-;; Dim tnow As Single
-
-;; tnow = SimLib.getTime(simstate.context)
-
-;; With unit
-;;     If topos = vbNullString And .PositionPolicy = vbNullString Then 'no target position to spawn at, must derive
-;;         .PositionPolicy = .policy.getPosition(.cycletime) '.parent.parent.PolicyManager.DeriveLocationID(.cycletime, . component)
-;;         topos = .PositionPolicy '.parent.parent.policyManager.LocationIndex(.location)
-;;         'Decoupled*
-;;         '.location = .parent.parent.policyManager.locationID(topos)
-;;         .location = MarathonOpPolicy.locationID(topos, simstate.policystore)
-;;     Else 'target position, derive index
-;;         topos = .PositionPolicy
-;;         'Decoupled*
-;;         '.location = .parent.parent.policyManager.locationID(topos)
-;;         .location = MarathonOpPolicy.locationID(topos, simstate.policystore) 'TODO <----this is redundant, see if we can eliminate it.
-;;     End If
-;;     'Decoupled*
-;;     '.spawnTime = .parent.getTime
-;;     .spawnTime = tnow
-;;     'hack...
-;;     If .cycletime >= 0 Then
-;;         timeinstate = .cycletime - .policy.GetCycleTime(.PositionPolicy) 'derived time in state upon spawning.
-;;         'Decoupled*
-;;         'unit.InitCycles parent.getTime
-;;         unit.InitCycles tnow
-;;         unit.AddDwell .cycletime
-;;     Else
-;;         unit.AddBOG timeinstate
-;;         Err.Raise 101, , "Negative cycle times are not handled..."
-;;     End If
-;;     timeremaining = .policy.TransferTime(.PositionPolicy, .policy.nextposition(.PositionPolicy)) 'time remaining in this state
-;;     newduration = timeremaining - timeinstate
-    
-;;     If .cycletime > 0 Then
-;;         'Decoupled*
-;; '       .DateToReset = DateAdd("d", -.cycletime, .parent.parent.parameters.startdate)
-;;         .DateToReset = DateAdd("d", -.cycletime, simstate.parameters.startdate)
-;;         nextstate = "Dwelling"
-;;     ElseIf .cycletime = 0 Then
-;;         'TOM note double check this.  make it point to current date.
-;;         'Decoupled*
-;;         '.DateToReset = .parent.parent.parameters.startdate
-;;         .DateToReset = simstate.parameters.startdate
-;;         nextstate = "Dwelling"
-;;     Else 'account for deployed/bogging
-;;         newduration = .cycletime
-;;         nextstate = "Bogging"
-;;     End If
-
-;;     'initialize cycle from policy
-;; End With
-
-;; Set Spawning_State = ChangeState(unit, nextstate, 0, newduration)
-
-;; 'TOM Change -> Changed from "Initialized" to "Spawning"
-;; With unit
-;;     'Decoupled*
-;;     '.parent.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration
-;;     MarathonOpSupply.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration, simstate.context
-;; End With
-
-;; End Function
-
 
 
 

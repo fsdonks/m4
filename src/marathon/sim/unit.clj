@@ -79,7 +79,8 @@
 
 (defn add-duration [u t] 
   (merge u {:currentcycle (-> (:currentcycle u) 
-                            (inc-field :duration t))}))                                             
+                              (inc-field :duration t))
+            :cycletime (+ (:cycletime u) t)}))
 
 ;Public Sub AddBOG(bogtime As Single)
 ;CurrentCycle.bog = CurrentCycle.bog + bogtime
