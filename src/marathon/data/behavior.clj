@@ -854,13 +854,19 @@
 ;; End Function
 
 
-;; (defn age-unit [ctx]
-;;   (let [dt (get-bb ctx :deltat)
-;;         e  (entity ctx)
-;;         ct   ;;update the cycletime.
-;;         ]
-;;     (if (zero? dt) ctx ;nothing changed.
-;;         (merge-bb ctx {:deltat 0 ;consume the time
+;;Should we keep a timestamp with the unit? That way we can keep track
+;;of how fresh it is.
+(defn age-unit [ctx]
+  (let [dt (get-bb ctx :deltat)
+        e  (entity ctx)
+        sd (statedata ctx)
+        ct   ;;update the cycletime.
+        ]
+    (if (zero? dt) ctx ;nothing changed.
+        ;otherwise we age the unit by an amount...
+        ;Maybe aging the unit also means processing messages...dunno.
+        (merge-bb ctx {:deltat 0
+                       :statedata (
                        
     
   
@@ -910,6 +916,10 @@
    :nothing         age
    :spawning        #(pass :spawning %2)
    :abrupt-withdraw #(pass :abrupt-withdraw %2)})
+
+;;we should be able to define a nice FSM interface, and then derive a
+;;simple FSM behavior....
+;;Or, we completely meld what were FSM states into leaf behaviors.
 
 ;;perform a simple update via the entity's FSM.
 (defn update-current-state [states ctx] 

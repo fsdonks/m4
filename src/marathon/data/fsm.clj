@@ -78,13 +78,8 @@
 ;'tmpdur
 ;StateHistory.add CurrentState 'shows the reversion
 ;End Sub
-;Public Function Progress() As Single
-;
-;If duration <> infinite And duration <> 0 Then
-;    Progress = timeinstate / duration
-;Else
-;    Progress = 0
-;End If
-;
-;End Function
 
+(defn progress [{:keys [duration timeinstate] :as sd}] 
+  (if (and (pos? duration) (not= duration inf))
+    (double (/ timeinstate duration))
+    0))
