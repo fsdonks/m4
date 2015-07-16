@@ -284,6 +284,8 @@
 (defrecord bnode [type status f data]
   IBehaviorTree
   (behave [b ctx] (f ctx))
+  clojure.lang.Named 
+  (getName [b] (name type))
   ;; clojure.lang.IFn 
   ;; (invoke [obj arg] (f arg))
   )
@@ -350,8 +352,6 @@
 ;;always force failure
 (defn always-fail [b]
   (fn [ctx] (fail (second (beval b ctx)))))
-
-
 
 ;;a behavior that waits until the time is less than 10.
 (defn ->wait-until [pred]
@@ -635,7 +635,8 @@
           (if-y 
             (if (<= dt timeleft)           
               (beval update-state-beh ctx)
-              (let [[stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))
+              (let [
+                    [stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))
                     _ (println stat dt)]
                 (if (= stat :success) 
                   (recur  (- dt timeleft) ;advance time be decreasing delta
@@ -968,9 +969,11 @@
 ;;etc.  It's ALWAYS externally driven by the caller.
 
 (def default-behavior 
-  (->and [;update-current-state
+  (->and [
           ; global-beh
-          moving-beh]))
+          moving-beh
+          update-current-state
+          ]))
 
 ;;we can break the spawning behavior up into smaller tasks...
 ;;Find out where we're supposed to be. Do we have initial conditions? 
