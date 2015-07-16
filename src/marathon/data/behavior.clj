@@ -639,17 +639,16 @@
              ctx ctx]
         (let [sd (statedata ctx)              
               _  (println [:sd sd])
-              _ (when (not sd) (core/tree-view ctx))
-              timeleft (remaining sd)
-              _  (println [:rolling :dt dt :remaining timeleft ])
-;              _ (core/tree-view ctx)
+              timeleft    (remaining sd)
+              _  (println [:rolling :dt dt :remaining timeleft])
+
               ]
           (if-y 
-            (if (<= dt timeleft)          
+            (if (<= dt timeleft)
               (do (println [:updating-for timeleft])
-                  (beval update-state-beh ctx))
-              (let [residual   (- dt timeleft)
-                    [stat nxt] (beval update-state-beh (set-bb ctx :deltat residual))
+                  (beval update-state-beh (set-bb ctx :deltat dt))) ;gives us [stat ctx]
+              (let [residual   (max (- dt timeleft) 0)
+                    [stat nxt :as result] (beval update-state-beh (set-bb ctx :deltat timeleft))
                     _          (println stat dt)]
                 (if (= stat :success) 
                   (recur  residual ;advance time be decreasing delta
@@ -892,7 +891,8 @@
 ;;Should we keep a timestamp with the unit? That way we can keep track
 ;;of how fresh it is.
 (defn age-unit [ctx]
-  (let [dt (get-bb ctx :deltat 0)]
+  (let [dt (get-bb ctx :deltat 0)
+        _ (println [:aging dt])]
     (if (zero? dt) (success ctx) ;nothing changed.
         ;otherwise we age the unit by an amount...
         ;Maybe aging the unit also means processing messages...dunno.
@@ -922,7 +922,8 @@
 ;; Set Global_State = unit
 ;; End Function
 
-(defn global-beh [ctx] (success (age-unit ctx)))
+;(defn global-beh [ctx] (success (age-unit ctx)))
+(def global-beh age-unit)
 
 ;;State-dependent functions, the building blocks of our state machine.
 
@@ -995,7 +996,8 @@
   (->any [; global-beh
           moving-beh 
           update-current-state
-          global-beh
+;          global-beh
+          age-unit
           ]))
 
 ;;we can break the spawning behavior up into smaller tasks...

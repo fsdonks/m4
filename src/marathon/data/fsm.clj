@@ -33,7 +33,10 @@
               :statehistory (conj (:statehistory fsm) newstate)
               :duration newduration}))
 
-(defn remaining [fsm]  (- (:duration fsm) (:timeinstate fsm)))
+(defn remaining [fsm]  
+   (- (:duration fsm) (:timeinstate fsm)))
+
+            
 
 ;'Quick, instantaneous blips between state changes, usually with the intent to revert back soonafter
 ;Public Sub BlipState(newstate As String, Optional followingstate As String)
