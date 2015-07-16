@@ -640,9 +640,7 @@
         (let [sd (statedata ctx)              
               _  (println [:sd sd])
               timeleft    (remaining sd)
-              _  (println [:rolling :dt dt :remaining timeleft])
-
-              ]
+              _  (println [:rolling :dt dt :remaining timeleft])]
           (if-y 
             (if (<= dt timeleft)
               (do (println [:updating-for timeleft])
