@@ -640,7 +640,7 @@
         (let [sd (statedata ctx)              
               _  (println [:sd sd])
               timeleft    (remaining sd)
-              _  (println [:rolling :dt dt :remaining timeleft])]
+              _  (println [:rolling :dt dt :remaining timeleft]) ]
           (if-y 
             (if (<= dt timeleft)
               (do (println [:updating-for timeleft])
@@ -896,7 +896,7 @@
         ;Maybe aging the unit also means processing messages...dunno.
         (success 
          (merge-bb ctx {:deltat 0 ;is this the sole consumer of time? 
-                        :statedata (fsm/add-duration (statedata ctx) dt)
+                        :statedata (fsm/add-duration (statedata ctx)  dt)
                         :entity    (u/add-duration   (entity ctx) dt)})))))
 
 ;;State handler for generic updates that occur regardless of the state.

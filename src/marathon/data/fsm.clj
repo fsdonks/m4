@@ -31,7 +31,8 @@
   (merge fsm {:curstate newstate 
               :nextstate followingstate
               :statehistory (conj (:statehistory fsm) newstate)
-              :duration newduration}))
+              :duration newduration
+              :timeinstate 0}))
 
 (defn remaining [fsm]  
    (- (:duration fsm) (:timeinstate fsm)))
