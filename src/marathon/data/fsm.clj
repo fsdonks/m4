@@ -28,7 +28,7 @@
   
 
 (defn change-state [fsm newstate & [newduration followingstate instant]]
-  (merge fsm {:currentstate newstate 
+  (merge fsm {:curstate newstate 
               :nextstate followingstate
               :statehistory (conj (:statehistory fsm) newstate)
               :duration newduration}))

@@ -319,6 +319,17 @@
                     :fail      (reduced [:fail ctx])))) (success ctx) xs))
      xs))
 
+(defn ->any  [xs]
+  (->bnode  :and nil
+     (fn [ctx]
+      (reduce (fn [acc child]
+                (let [[res ctx] (beval child (second acc))]
+                  (case res
+                    :run       (reduced (run ctx))
+                    :success   (success ctx)
+                    :fail      (fail ctx)))) (success ctx) xs))
+     xs))
+
 (defn ->or  [xs]
   (->bnode  :or nil 
      (fn [ctx]
@@ -627,18 +638,21 @@
       (loop [dt  deltat
              ctx ctx]
         (let [sd (statedata ctx)              
-              _ (println [:sd sd])
+              _  (println [:sd sd])
+              _ (when (not sd) (core/tree-view ctx))
               timeleft (remaining sd)
-              _ (println [:rolling :dt dt :remaining timeleft ]) 
+              _  (println [:rolling :dt dt :remaining timeleft ])
 ;              _ (core/tree-view ctx)
               ]
           (if-y 
-            (if (<= dt timeleft)           
-              (beval update-state-beh ctx)
-              (let [[stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))
+            (if (<= dt timeleft)          
+              (do (println [:updating-for timeleft])
+                  (beval update-state-beh ctx))
+              (let [residual   (- dt timeleft)
+                    [stat nxt] (beval update-state-beh (set-bb ctx :deltat residual))
                     _          (println stat dt)]
                 (if (= stat :success) 
-                  (recur  (- dt timeleft) ;advance time be decreasing delta
+                  (recur  residual ;advance time be decreasing delta
                           nxt)
                   [stat nxt])))
             ctx))))))
@@ -879,12 +893,13 @@
 ;;of how fresh it is.
 (defn age-unit [ctx]
   (let [dt (get-bb ctx :deltat 0)]
-    (if (zero? dt) ctx ;nothing changed.
+    (if (zero? dt) (success ctx) ;nothing changed.
         ;otherwise we age the unit by an amount...
         ;Maybe aging the unit also means processing messages...dunno.
-        (merge-bb ctx {:deltat 0 ;is this the sole consumer of time? 
-                       :statedata (fsm/add-duration (statedata ctx) dt)
-                       :entity    (u/add-duration   (entity ctx) dt)}))))
+        (success 
+         (merge-bb ctx {:deltat 0 ;is this the sole consumer of time? 
+                        :statedata (fsm/add-duration (statedata ctx) dt)
+                        :entity    (u/add-duration   (entity ctx) dt)})))))
 
 ;;State handler for generic updates that occur regardless of the state.
 ;;These are specific to the unit data structure, not any particular state.
@@ -920,20 +935,20 @@
 ;;we'll continue to port them.
 (def default-states 
   {:global           global-beh
-   :reset            #(pass :spawning        %2)
-   :bogging          #(pass :bogging         %2)
-   :dwelling         #(pass :dwelling        %2) 
+   :reset            #(pass :spawning        %)
+   :bogging          #(pass :bogging         %)
+   :dwelling         #(pass :dwelling        %) 
    :moving           moving-beh
-   :start-cycle      #(pass :start-cycle     %2)
-   :end-cycle        #(pass :end-cycle       %2)
-   :overlapping      #(pass :overlapping     %2)
-   :demobilizing     #(pass :demobilizing    %2)
-   :policy-change    #(pass :policy-change   %2)
-   :recovering       #(pass :recovering      %2)
-   :recovered        #(pass :recovered       %2) 
-   :nothing          #(pass :nothing         %2)
-   :spawning         #(pass :spawning        %2)
-   :abrupt-withdraw  #(pass :abrupt-withdraw %2)})
+   :start-cycle      #(pass :start-cycle     %)
+   :end-cycle        #(pass :end-cycle       %)
+   :overlapping      #(pass :overlapping     %)
+   :demobilizing     #(pass :demobilizing    %)
+   :policy-change    #(pass :policy-change   %)
+   :recovering       #(pass :recovering      %)
+   :recovered        #(pass :recovered       %) 
+   :nothing          #(pass :nothing         %)
+   :spawning         #(pass :spawning        %)
+   :abrupt-withdraw  #(pass :abrupt-withdraw %)})
 
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
@@ -977,10 +992,10 @@
 ;;etc.  It's ALWAYS externally driven by the caller.
 
 (def default-behavior 
-  (->and [
-          ; global-beh
-          moving-beh
-          (always-succeed update-current-state)
+  (->any [; global-beh
+          moving-beh 
+          update-current-state
+          global-beh
           ]))
 
 ;;we can break the spawning behavior up into smaller tasks...
