@@ -621,7 +621,7 @@
 ;;some conditions (namely the condition that deltat <= remaining)
 ;;Might have a smaller behavior that advances the next-smallest 
 ;;time slice.  TODO# refactor using behaviortree nodes.
-(def roll-forward-beh 
+(def roll-forward-beh
   (fn [ctx]
     (let [deltat (get-bb ctx :deltat 0)]
       (loop [dt  deltat
@@ -945,7 +945,8 @@
        (if-let [f (get states st)]
          (do (println [:updating-in st])
              (f ctx))
-         (fail ctx))))
+         (do (println [:unknown-state st])
+             (fail ctx)))))
   ([ctx] (update-current-state default-states ctx)))
 
 ;;similar to moving behavior, we have a stationary behavior...
@@ -972,7 +973,7 @@
   (->and [
           ; global-beh
           moving-beh
-          update-current-state
+          (always-succeed update-current-state)
           ]))
 
 ;;we can break the spawning behavior up into smaller tasks...
