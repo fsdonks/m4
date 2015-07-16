@@ -635,9 +635,8 @@
           (if-y 
             (if (<= dt timeleft)           
               (beval update-state-beh ctx)
-              (let [
-                    [stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))
-                    _ (println stat dt)]
+              (let [[stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))
+                    _          (println stat dt)]
                 (if (= stat :success) 
                   (recur  (- dt timeleft) ;advance time be decreasing delta
                           nxt)
@@ -908,30 +907,38 @@
 ;; Set Global_State = unit
 ;; End Function
 
-(defn global-beh [ctx] 
-  (success (age-unit ctx)))
+(defn global-beh [ctx] (success (age-unit ctx)))
 
 ;;State-dependent functions, the building blocks of our state machine.
+
+(def +nothing-state+ 
+  (fn [ctx] (success (do (println (str (:name (entity ctx)) " is doing nothing for " (deltat ctx) ))
+                         ctx))))
 
 ;;states are identical to leaf behaviors, with 
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
 (def default-states 
   {:global           global-beh
-   :reset            #(pass :spawning      %2)
-   :bogging          #(pass :bogging       %2)
-   :dwelling         #(pass :dwelling      %2) 
+   :reset            #(pass :spawning        %2)
+   :bogging          #(pass :bogging         %2)
+   :dwelling         #(pass :dwelling        %2) 
    :moving           moving-beh
-   :start-cycle      #(pass :start-cycle   %2)
-   :end-cycle        #(pass :end-cycle     %2)
-   :overlapping      #(pass :overlapping   %2)
-   :demobilizing     #(pass :demobilizing  %2)
-   :policy-change    #(pass :policy-change %2)
-   :recovering       #(pass :recovering    %2)
-   :recovered        #(pass :recovered     %2) 
-   :nothing          #(pass :nothing       %2)
-   :spawning         #(pass :spawning      %2)
+   :start-cycle      #(pass :start-cycle     %2)
+   :end-cycle        #(pass :end-cycle       %2)
+   :overlapping      #(pass :overlapping     %2)
+   :demobilizing     #(pass :demobilizing    %2)
+   :policy-change    #(pass :policy-change   %2)
+   :recovering       #(pass :recovering      %2)
+   :recovered        #(pass :recovered       %2) 
+   :nothing          #(pass :nothing         %2)
+   :spawning         #(pass :spawning        %2)
    :abrupt-withdraw  #(pass :abrupt-withdraw %2)})
+
+(defmacro try-get [m k & else]
+  `(if-let [res# (get ~m ~k)]
+     res# 
+     ~@else))
 
 ;;we should be able to define a nice FSM interface, and then derive a
 ;;simple FSM behavior....
@@ -942,7 +949,7 @@
   ([states ctx] 
      (let [st (get (statedata ctx) :curstate)
            _ (println st)]
-       (if-let [f (get states st)]
+       (if-let [f (try-get states st +nothing-state+)]
          (do (println [:updating-in st])
              (f ctx))
          (do (println [:unknown-state st])
