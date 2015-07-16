@@ -321,11 +321,11 @@
   (->bnode  :or nil 
      (fn [ctx]
        (reduce (fn [acc child]
-                 (let [[res ctx] (beval child acc)]
+                 (let [[res ctx] (beval child (second acc))]
                    (case res
                      :run       (reduced (run ctx))
                      :success   (reduced (success ctx))
-                     :fail      (fail ctx)))) ctx xs))
+                     :fail      (fail ctx)))) (success ctx) xs))
      xs))
 
 (defn ->not [b]
@@ -630,11 +630,13 @@
               _ (println [:sd sd])
               timeleft (remaining sd)
               _ (println [:rolling :dt dt :remaining timeleft ]) 
-              _ (core/tree-view ctx)]
+;              _ (core/tree-view ctx)
+              ]
           (if-y 
             (if (<= dt timeleft)           
               (beval update-state-beh ctx)
-              (let [[stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))]
+              (let [[stat nxt] (beval update-state-beh (set-bb ctx :deltat dt))
+                    _ (println stat dt)]
                 (if (= stat :success) 
                   (recur  (- dt timeleft) ;advance time be decreasing delta
                           nxt)
@@ -779,12 +781,12 @@
   (if-let [new-state (get-bb ctx :new-state)]
     (let [;;#Todo change change-state into a fixed-arity
           ;;function, this will probably slow us down due to arrayseqs.
-          new-sd   (fsm/change-state (statedata ctx) new-state (get-bb :new-duration))]
+          new-sd   (fsm/change-state (statedata ctx) new-state (get-bb ctx :new-duration))]
       (success 
        (merge-bb ctx ;update the context with information derived
                                         ;from moving
-                 {:statedata    new-sd}))
-      (fail ctx))))
+                 {:statedata    new-sd})))
+      (fail ctx)))
 
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
@@ -793,9 +795,9 @@
 ;;   (if-let [
   
 
-(def apply-changes (->or [apply-move 
-                          apply-state                                                    
-                          ]))
+(def apply-changes (->and [apply-move 
+                           apply-state                                                    
+                           ]))
 
 ;; ;;apply-state? should update the entity's state, change the duration
 ;; ;;to be the current wait-time, etc.
@@ -915,19 +917,19 @@
 ;;we'll continue to port them.
 (def default-states 
   {:global           global-beh
-   :reset            #(pass :spawning %2)
-   :bogging          #(pass :bogging %2)
-   :dwelling         #(pass :dwelling %2) 
+   :reset            #(pass :spawning      %2)
+   :bogging          #(pass :bogging       %2)
+   :dwelling         #(pass :dwelling      %2) 
    :moving           moving-beh
-   :start-cycle      #(pass :start-cycle %2)
-   :end-cycle        #(pass :end-cycle  %2)
-   :overlapping      #(pass :overlapping    %2)
-   :demobilizing     #(pass :demobilizing %2)
+   :start-cycle      #(pass :start-cycle   %2)
+   :end-cycle        #(pass :end-cycle     %2)
+   :overlapping      #(pass :overlapping   %2)
+   :demobilizing     #(pass :demobilizing  %2)
    :policy-change    #(pass :policy-change %2)
-   :recovering       #(pass :recovering  %2)
-   :recovered        #(pass :recovered %2) 
-   :nothing          #(pass :nothing %2)
-   :spawning         #(pass :spawning %2)
+   :recovering       #(pass :recovering    %2)
+   :recovered        #(pass :recovered     %2) 
+   :nothing          #(pass :nothing       %2)
+   :spawning         #(pass :spawning      %2)
    :abrupt-withdraw  #(pass :abrupt-withdraw %2)})
 
 ;;we should be able to define a nice FSM interface, and then derive a
@@ -966,9 +968,9 @@
 ;;etc.  It's ALWAYS externally driven by the caller.
 
 (def default-behavior 
-  (->or [update-current-state
-        ; global-beh
-         moving-beh]))
+  (->and [;update-current-state
+          ; global-beh
+          moving-beh]))
 
 ;;we can break the spawning behavior up into smaller tasks...
 ;;Find out where we're supposed to be. Do we have initial conditions? 
@@ -981,9 +983,9 @@
 ;;cycletime-derived automated initial conditions logic.
 
 ;;Given a cycletime, where should we be according to policy?
-(defn spawning-beh [ctx]
-  (let [tnow (sim/current-time ctx)
-        ]
+;; (defn spawning-beh [ctx]
+;;   (let [tnow (sim/current-time ctx)
+;;         ]
     
 ;; 'State to control how a unit acts when it spawns.
 ;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
