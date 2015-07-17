@@ -1,6 +1,27 @@
 (ns marathon.visuals.core
   (:require [spork.sketch :as sketch]))
 
+
+;;can we map an entity (location, state, name) to a projection in
+;;space? 
+;;If an entity is a small circle, what does it look like? 
+
+;;(Name) ....
+;;What is its color? 
+;;   Use the same color scheme we have for AC / RC / NG? 
+;;How do we derive a location? 
+;; 
+;;       Location1 Location2 
+;;State1
+;;State2             (E1)
+
+;;Another option is to color by state...
+;;Or change shape by state....
+;;State colors sound good...
+
+
+
+
 ;;This is a quick turn deal...
 ;; (defn make-cycle [name]
 ;;   [{:name :A 

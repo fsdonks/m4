@@ -515,8 +515,25 @@
 
 (defn load-ctx [unit deltat ctx]
   (merge-bb ctx {:tupdate (sim/current-time ctx)
-                 :entity  unit
-                 :deltat  deltat}))
+                 :entity   unit
+                 :original unit 
+                 :deltat   deltat}))
+
+(defn changed? [orig e sd]    
+  (or (not (identical? e orig))
+      (not (identical? (get orig :statedata) sd))))
+ 
+(defn merge-updates [ctx]
+  (with-bb [[entity statedata original] ctx]
+    (do (println [statedata (:statedata original)])
+        (if (changed? original entity statedata)
+          (let [n (assoc entity :statedata statedata) 
+                _ (println [:entity-changed (:name entity) :sd statedata :new ])]
+            (core/set-supplystore  ctx
+             (supply/add-unit (core/get-supplystore ctx) n)))
+          ctx))))
+
+(defn clear-bb [ctx]   (core/set-blackboard ctx {}))
 
 ;;These are the entry points that will be called from the outside.
 ;;Under the legacy implementation, they delegated to a hard coded
@@ -535,11 +552,15 @@
 (defn update  [unit deltat ctx]  
   (->> ctx 
        (load-ctx unit deltat)
-       (roll-forward-beh) ;update the unit according to the change in time.
-;       (error-on-fail)    ;unit updates should never fail.
+       (roll-forward-beh) ;update the unit according to the change in
+                          ;time.
+;       (error-on-fail)    ;unit updates should never fail.       
        (second  ;result is in terms of [:success|:fail ctx], pull out
                                         ;the ctx
-        )))
+        )
+       (merge-updates)
+;       (clear-bb)
+       ))
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
@@ -554,8 +575,6 @@
 ;;an entity, we have a deltat, etc. in the context, and bind to them
 ;;if we do.  If we don't have them, then we throw an error because our
 ;;expectations failed...(todo)
-
-
 
 ;;note - another way to handle this is to record dirty entities
 ;;and update them appropriately.
@@ -734,13 +753,7 @@
 ;;path.  For instance, on first encountering the unit,
 ;;we establish a mutable cell to its location and use that 
 ;;during the update process.
-(def commit-unit
-  (->alter 
-   (fn [ctx] 
-     (sim/merge-updates 
-      {:supply (supply/add-unit (entity ctx) 
-                                (core/get-supplystore ctx))}
-      ctx))))
+;(def commit-entity (->alter merge-updates))
 
 ;;I like looking at unit updates like transactional semantics.
 ;;We probably want to pull out the unit and establish a mutable
@@ -929,6 +942,15 @@
   (fn [ctx] (success (do (println (str (:name (entity ctx)) " is doing nothing for " (deltat ctx) ))
                          ctx))))
 
+;; 'Units dwelling will accumulate dwell over time.
+;; Private Function Dwelling_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+;; If deltat > 0 Then unit.AddDwell deltat
+;; Set Dwelling_State = unit
+;; End Function
+
+(defn dwelling-beh [ctx] )
+  
+
 ;;states are identical to leaf behaviors, with 
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
@@ -948,7 +970,8 @@
    :nothing          #(pass :nothing         %)
    :spawning         #(pass :spawning        %)
    :abrupt-withdraw  #(pass :abrupt-withdraw %)
-   #{:deployable :dwelling} #(pass :deployable-dwelling)})
+;   #{:deployable :dwelling} #(pass :deployable-dwelling)
+   })
 
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
@@ -1700,15 +1723,6 @@
 
 
 
-;; 'Units dwelling will accumulate dwell over time.
-;; Private Function Dwelling_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-;; If deltat > 0 Then unit.AddDwell deltat
-;; Set Dwelling_State = unit
-;; End Function
-
-
-
-
 
 ;; 'TOM Change 23 April 2012 -> Check to see if we should even try to recover....
 ;; 'Criteria: if cycletime + recoverytime > cycleduration then 'skip recovery....
@@ -1952,11 +1966,6 @@
 ;;TODO# define an empty-behavior
 (declare roll-forward-beh)
 
-(defn old-update-behavior [b deltat unit simstate]
-  (roll-forward-beh b (merge simstate {:entity unit :deltat deltat})))
-)
-
-
 
 ;;What happens when we change a state?
 ;;Some states are just blips (0 duration) .
@@ -1981,6 +1990,7 @@
 ;; End With
 
 ;; End Function
+
 
 
 ;;hrm...change-state is less important than before; it used to be the
@@ -2024,3 +2034,4 @@
 ;; Private Function specialstate(instate As String) As Boolean
 ;; specialstate = instate = "Spawning" Or instate = "AbruptWithdraw"
 ;; End Function
+)

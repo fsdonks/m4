@@ -136,7 +136,6 @@
             :currentcycle (apply newcycle t 
                            (get-vals (:policy u) [:MaxBOG :MaxDwell 
                                                   :cyclelength :MaxMOB]))}))
-
 ;'TOM change 2 Sep 2011
 ;'mutate the current cycle object to reflect changes in expectations
 ;Public Function modify(bogtime As Long, dwelltime As Long, policyduration As Long, Optional MOBtime As Single) As TimeStep_CycleRecord
@@ -183,11 +182,8 @@
 ;Call behavior.ChangeState(Me, newstate, deltat, duration)
 ;End Sub
 
-(defn changestate [u newstate dt duration]
-  ((:behavior u) u newstate dt duration)) 
-
-(defn update [u dt]
-  (unit-update u {:dt dt}))
+(defn changestate [u newstate dt duration] ((:behavior u) u newstate dt duration))
+(defn update      [u dt]                   (unit-update u {:dt dt}))
 
 ;Public Function CanDeploy() As Boolean
 
@@ -207,15 +203,12 @@
 ;Public Property Get bog() As Single
 ;bog = CurrentCycle.bog
 ;End Property
-(defn get-bog [u] (-> u :currentcycle :bog))
-
-(defn get-bog-budget [u] (-> u :currentcycle :bogbudget))
+(defn get-bog         [u] (-> u :currentcycle :bog))
+(defn get-bog-budget  [u] (-> u :currentcycle :bogbudget))
 ;Public Property Get dwell() As Single
 ;dwell = CurrentCycle.dwell
 ;End Property
-(defn get-dwell [u] (-> u :currentcycle :dwell))
-
-
+(defn get-dwell       [u] (-> u :currentcycle :dwell))
 (defn get-cyclelength [u] (-> u :currentcycle :duration-expected))
 
 ;;TODO# Verify this statistic is accurate....
@@ -228,9 +221,8 @@
 ;End Property
 
 ;NOTE -> need to define cycle-bdr
-(defn- cycle-bdr [c] 0.0)
-(defn get-BDR [u] (cycle-bdr (:currentcycle u)))
-
+(defn- cycle-bdr [c]  0.0)
+(defn get-BDR    [u] (cycle-bdr (:currentcycle u)))
 
 ;;TODO remove this or switch over to them.  MAybe more clean.  Unknown
 ;; at this point.
@@ -299,7 +291,7 @@
         t (get-time u)
         loc (:locationname u)
         msg (str nm " moved from " loc " to " newlocation " on day " t)]
-      (entity-trigger u (make-packet :UnitMoved nm newlocation msg u))))
+    (entity-trigger u (make-packet :UnitMoved nm newlocation msg u))))
 )                      
 
           
