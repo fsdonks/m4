@@ -93,6 +93,8 @@
                 (inc-field :bogtime t) 
                 (dec-field :bogbudget t))]   
     (add-duration (merge u {:currentcycle cyclerecord}) t)))
+
+(def add-bog ADDBog)
   
 ;Public Sub AddDwell(dwelltime As Single, Optional available As Boolean)
 ;If available Then CurrentCycle.availableTime = CurrentCycle.availableTime + dwelltime
@@ -110,6 +112,8 @@
       (merge u {:currentcycle 
                 (if available (addavailable cyclerecord) cyclerecord)}))) t)
 
+(def add-dwell AddDwell)
+
 ;Public Sub addMOB(MOBtime As Single)
 ;CurrentCycle.mob = CurrentCycle.mob + MOBtime
 ;addduration MOBtime
@@ -118,6 +122,8 @@
 (defn addMOB [u t]
   (add-duration 
     (merge u {:currentcycle (inc-field :mob (:currentcycle u) t)})) t)
+
+(def add-MOB addMOB)
 
 ;'Note, this will retain a good deal of data...we're keeping track of the unit's arforgen histories..
 ;Public Sub RecordCycle(day As Single)

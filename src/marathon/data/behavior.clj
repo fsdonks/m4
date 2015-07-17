@@ -947,7 +947,8 @@
    :recovered        #(pass :recovered       %) 
    :nothing          #(pass :nothing         %)
    :spawning         #(pass :spawning        %)
-   :abrupt-withdraw  #(pass :abrupt-withdraw %)})
+   :abrupt-withdraw  #(pass :abrupt-withdraw %)
+   #{:deployable :dwelling} #(pass :deployable-dwelling)})
 
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
