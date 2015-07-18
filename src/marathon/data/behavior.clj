@@ -512,7 +512,6 @@
          roll-forward-beh)
 ;;API
 ;;===
-
 (defn load-ctx [unit deltat ctx]
   (merge-bb ctx {:tupdate (sim/current-time ctx)
                  :entity   unit
@@ -525,13 +524,12 @@
  
 (defn merge-updates [ctx]
   (with-bb [[entity statedata original] ctx]
-    (do (println [statedata (:statedata original)])
-        (if (changed? original entity statedata)
-          (let [n (assoc entity :statedata statedata) 
-                _ (println [:entity-changed (:name entity) :sd statedata :new ])]
-            (core/set-supplystore  ctx
-             (supply/add-unit (core/get-supplystore ctx) n)))
-          ctx))))
+    (if (changed? original entity statedata)
+      (let [n (assoc entity :statedata statedata)]
+        (sim/merge-updates 
+         {:supplystore  (supply/add-unit (core/get-supplystore ctx) n)}
+         ctx))
+      ctx)))
 
 (defn clear-bb [ctx]   (core/set-blackboard ctx {}))
 
