@@ -92,7 +92,7 @@
   (let [cyclerecord (-> (:currentcycle u) 
                 (inc-field :bogtime t) 
                 (dec-field :bogbudget t))]   
-    (add-duration (merge u {:currentcycle cyclerecord}) t)))
+    (merge u {:currentcycle cyclerecord}) t))
 
 (def add-bog AddBOG)
   
@@ -108,9 +108,8 @@
 (defn AddDwell [u t & [available]]
   (let [cyclerecord (-> (:currentcycle u) 
                         (inc-field :dwell t))]                                                                    
-    (add-duration 
       (merge u {:currentcycle 
-                (if available (addavailable cyclerecord) cyclerecord)}) t)))
+                (if available (addavailable cyclerecord) cyclerecord)})))
 
 (def add-dwell AddDwell)
 
@@ -120,8 +119,7 @@
 ;End Sub
 
 (defn addMOB [u t]
-  (add-duration 
-    (merge u {:currentcycle (inc-field :mob (:currentcycle u) t)}) t))
+  (merge u {:currentcycle (inc-field :mob (:currentcycle u) t)}) t)
 
 (def add-MOB addMOB)
 

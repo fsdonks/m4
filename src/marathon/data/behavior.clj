@@ -990,6 +990,12 @@
    :reset            #(pass :spawning        %)
    :bogging          bogging-beh
    :dwelling         dwelling-beh
+   ;Currently, we encode multiple states in the policy graph.  We may
+   ;want to re-evaluate that...right now, we have multiple
+   ;combinations of states to handle...that all correspond to dwelling.
+   #{:dwelling}      dwelling-beh
+   #{:deployable}    dwelling-beh
+   #{:deployable :dwelling}  dwelling-beh
    :moving           moving-beh
    :start-cycle      #(pass :start-cycle     %)
    :end-cycle        #(pass :end-cycle       %)
