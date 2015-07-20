@@ -762,9 +762,9 @@
 ;;immmutable objects) and 
 ;;Commmit our changes iff we recorded a change to the unit (we 
 ;;may not during the course of the update)
-(def commit-if-changed 
-  (->and [(->pred :changed)
-           commit-unit]))
+;; (def commit-if-changed 
+;;   (->and [(->pred :changed)
+;;            commit-unit]))
 
 (defmacro get-else [m k v]
   `(if-let [res# (get ~m ~k)]
@@ -946,8 +946,41 @@
 ;; Set Dwelling_State = unit
 ;; End Function
 
-(defn dwelling-beh [ctx] )
+;;maybe have an altering macro...
+;;(altering [[entity statedata] bb]
+;;  expr)....
+;;
   
+;;Another way to look at these as producing "diffs" 
+;;We can compose diffs like monoids...an empty diff is 
+;;just identity
+;;An alteration applies the function to the element to be altered 
+;;in the context
+;;A commit stores the element in the context...
+;; (altering-bb [ctx {entity    (add-dwell entity)
+;;                    statedata (do-stuff  statedata)}])
+
+;;working on making a nicer dsl for defining updates to the 
+;;blackboard.  Some boiler plate is cropping up, not terrible, 
+;;but it'd be nice to abstract out the cruft for doing things 
+;;like updating stats, running functions against and entity, 
+;;altering state data, etc.
+
+;; (defmacro map-bb [key-exprs ctx]
+;;   (let [ks (keys key-exprs)
+;;         keyworded (reduce-kv (fn [acc k v] 
+;;                                (assoc acc (keyword k) v)) {} key-exprs)]
+;;     `(with-bb [[~@ks] ~ctx]
+;;        (merge-bb ~ctx ~keyworded))))
+;(update-bb {:entity (u/add-dwell bb-entity bb-deltat)} ctx)
+
+;;We're going to copy this a bunch of times...
+(defn dwelling-beh [ctx]   
+  (success (with-bb [[entity deltat] ctx] 
+             (set-bb ctx :entity (u/add-dwell  entity deltat)))))
+(defn bogging-beh [ctx]
+  (success (with-bb [[entity deltat] ctx] 
+             (set-bb ctx :entity (u/add-bog  entity deltat)))))
 
 ;;states are identical to leaf behaviors, with 
 ;;the possibility for some states to invoke transitions.
@@ -955,8 +988,8 @@
 (def default-states 
   {:global           global-beh
    :reset            #(pass :spawning        %)
-   :bogging          #(pass :bogging         %)
-   :dwelling         #(pass :dwelling        %) 
+   :bogging          bogging-beh
+   :dwelling         dwelling-beh
    :moving           moving-beh
    :start-cycle      #(pass :start-cycle     %)
    :end-cycle        #(pass :end-cycle       %)

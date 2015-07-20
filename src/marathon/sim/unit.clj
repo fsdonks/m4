@@ -94,7 +94,7 @@
                 (dec-field :bogbudget t))]   
     (add-duration (merge u {:currentcycle cyclerecord}) t)))
 
-(def add-bog ADDBog)
+(def add-bog AddBOG)
   
 ;Public Sub AddDwell(dwelltime As Single, Optional available As Boolean)
 ;If available Then CurrentCycle.availableTime = CurrentCycle.availableTime + dwelltime
@@ -110,7 +110,7 @@
                         (inc-field :dwell t))]                                                                    
     (add-duration 
       (merge u {:currentcycle 
-                (if available (addavailable cyclerecord) cyclerecord)}))) t)
+                (if available (addavailable cyclerecord) cyclerecord)}) t)))
 
 (def add-dwell AddDwell)
 
@@ -121,7 +121,7 @@
 
 (defn addMOB [u t]
   (add-duration 
-    (merge u {:currentcycle (inc-field :mob (:currentcycle u) t)})) t)
+    (merge u {:currentcycle (inc-field :mob (:currentcycle u) t)}) t))
 
 (def add-MOB addMOB)
 
