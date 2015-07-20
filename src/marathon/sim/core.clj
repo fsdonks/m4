@@ -392,6 +392,23 @@
                                                                     color-keyf (juxt :vignette)}}]
   (visualize-events (vals (demands ctx)) track-keyf color-keyf))
 
+;;This is going to be a little brittle; should access to updates
+;;behind a protocol...
+(defn updates [ctx] 
+  (for [[ks xs] (-> ctx :updater :updates)
+        [ts  us]  xs
+        [nm pckt] us]
+    pckt))
+
+(defn update-events [ctx] 
+  (map (fn [{:keys [update-time request-time] :as r}]
+         (assoc r :start request-time :duration (- update-time request-time)))
+       (updates ctx)))
+
+(defn visualize-updates [ctx  & {:keys [track-keyf color-keyf] :or {track-keyf (juxt :requested-by)
+                                                                    color-keyf (juxt :update-type)}}]
+  (visualize-events (update-events ctx) track-keyf color-keyf))
+
 (defn visualize-supply [ctx]
   (->> (units ctx)
        (vals)
