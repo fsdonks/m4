@@ -402,7 +402,7 @@
 
 (defn update-events [ctx] 
   (map (fn [{:keys [update-time request-time] :as r}]
-         (assoc r :start request-time :duration (- update-time request-time)))
+         (assoc r :startday request-time :duration (- update-time request-time)))
        (updates ctx)))
 
 (defn visualize-updates [ctx  & {:keys [track-keyf color-keyf] :or {track-keyf (juxt :requested-by)
