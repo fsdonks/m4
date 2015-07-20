@@ -512,6 +512,13 @@
          roll-forward-beh)
 ;;API
 ;;===
+;;We need to determine if we're going to compute deltas, or provide
+;;them.
+;;The original scheme had us providing absolute time, not deltas.
+;;We computed the deltas internally....Note, we can go either way, 
+;;so long as we have a reference to the previous point in time.  
+;;We always have [lastupdate, current-time, deltat], one can be 
+;;computed from the others...
 (defn load-ctx [unit deltat ctx]
   (merge-bb ctx {:tupdate (sim/current-time ctx)
                  :entity   unit
@@ -547,18 +554,34 @@
 ;;Similarly, we'll have update take the context last.
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
-(defn update  [unit deltat ctx]  
-  (->> ctx 
-       (load-ctx unit deltat)
-       (roll-forward-beh) ;update the unit according to the change in
-                          ;time.
-;       (error-on-fail)    ;unit updates should never fail.       
-       (second  ;result is in terms of [:success|:fail ctx], pull out
+(defn update-unit [unit deltat ctx]
+  (->>  ctx  
+        (load-ctx unit deltat)
+        (roll-forward-beh) ;update the unit according to the change in
+                                        ;time.
+        (error-on-fail)    ;unit updates should never fail.       
+        (second  ;result is in terms of [:success|:fail ctx], pull out
                                         ;the ctx
-        )
-       (merge-updates)
-;       (clear-bb)
-       ))
+         )
+        (merge-updates)
+                                        ;  (clear-bb)
+        ))
+
+;;Re-evaluate the need for this....can we synchronize from outside?
+(defn synch [unit ctx]
+  (let [tprev (or (sim/last-update (:name unit) ctx) 0)
+        tnow  (sim/current-time ctx)]
+    (if (= tprev tnow) 
+      ctx
+      (update-unit unit (- tnow tprev) ctx))))
+
+;;Synchronizes the unit to the current time, then applies a time 
+;;delta, then processes/records the unit's time of update.
+(defn update [unit deltat ctx]
+  (let [nm (get unit :name)]
+    (->> (synch unit ctx)
+         (update-unit unit deltat)
+         (u/unit-update! nm (core/msg "Updated " nm)))))
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
@@ -567,7 +590,6 @@
         (merge-bb ctx {:tupdate (sim/current-time ctx)
                        :entity   unit
                        :deltat   deltat})))
-
 ;;we can probably define a macro for contextual behaviors that
 ;;define preconditions for executing, i.e. ensuring that we have
 ;;an entity, we have a deltat, etc. in the context, and bind to them
@@ -649,12 +671,16 @@
 ;;some conditions (namely the condition that deltat <= remaining)
 ;;Might have a smaller behavior that advances the next-smallest 
 ;;time slice.  TODO# refactor using behaviortree nodes.
+;;One issue is how we measure time.  Currently, deltat is our
+;;main metric for measuring time to advance.  Most of the legacy 
+;;FSM implementation went off of absolute time, and measured 
+;;deltas internally.
 (def roll-forward-beh
   (fn [ctx]
     (let [deltat (get-bb ctx :deltat 0)]
       (loop [dt  deltat
              ctx ctx]
-        (let [sd (statedata ctx)              
+        (let [sd (statedata ctx)            
               _  (println [:sd sd])
               timeleft    (remaining sd)
               _  (println [:rolling :dt dt :remaining timeleft]) ]
@@ -670,6 +696,10 @@
                           nxt)
                   [stat nxt])))
             ctx))))))
+;;I think deltat is okay....
+;;We're saying "take enough steps until this much time has elapsed." 
+;;One way we can do that is to add the disparity between tlastupdate 
+;;and tnow to deltat.
   
 ;;What then, is the update-state-beh definition? 
 ;;This "was" our central dispatch for states, i.e., based on 
@@ -779,7 +809,7 @@
 ;;apply it.
 (defn apply-move [ctx] 
     (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
-      (let [t        (tupdate ctx)
+      (let [t        (get-bb :t ctx) ;(tupdate ctx)
             u        (entity  ctx)
             frompos  (get     u      :positionpolicy)
             wt       (get-wait-time  u  nextpos ctx)]

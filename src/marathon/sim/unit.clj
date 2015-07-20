@@ -483,6 +483,10 @@
 ;
 ;End Sub
 
+(defn unit-update! "Notifies the context of a supply update."
+  [nm msg ctx]
+  (sim/trigger-event :supplyUpdate  nm nm msg nil ctx))
+
 
 ;;Note: these are just delegating, we could probably extend the
 ;;protocol to cover the unit, in sim.supply.unitdata

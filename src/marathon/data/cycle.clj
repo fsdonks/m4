@@ -62,10 +62,9 @@
       :bogbudget = bogbudget)))
 
 (defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]
-  (let [trav  [t startlocation endlocation]
-        ts (get :traversals cyclerec [])] 
-    (with-record cyclerec 
-      :traversals (conj ts trav))))
+  (let [trav  [t startlocation endlocation]       
+        ts    (get cyclerec  :traversals [])] 
+    (assoc cyclerec :traversals (conj ts trav))))
 
 (defn bog-to-dwell
   "Computes the BOG:Dwell ratio for a cycle."
