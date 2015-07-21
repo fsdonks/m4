@@ -13,7 +13,8 @@
 (ns marathon.sim.entityfactory
   (:require [marathon        [schemas :as s]]            
             [marathon.data.protocols :as generic] ;rename
-            [marathon.data   [cycle :as cyc]]
+            [marathon.data   [cycle :as cyc] 
+                             [fsm :as fsm]]
             [marathon.demand [demanddata :as d]]
             [marathon.sim.demand :as demand]
             [marathon.sim.unit :as unitsim]
@@ -365,7 +366,7 @@
    policy  ;the policy the entity is currently following.
    [] ;a stack of any pending policy changes.
    behavior ;the behavior the unit uses to interpret policy and messages.
-   nil ;generic state data for the unit's finite state machine.
+   fsm/blank-data ;generic state data for the unit's finite state machine.
    cycletime ;the unit's current coordinate in lifecycle space.
    nil       ;description of the categories this unit serve as a followon to.
    :spawning ;the current physical location of the unit.
