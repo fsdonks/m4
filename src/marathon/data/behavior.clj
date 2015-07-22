@@ -92,6 +92,12 @@
                           ]            
             [spork.sim.simcontext :as sim]))
 
+
+(defn log! [msg ctx]
+  (if core/*debug* 
+    (do (sim/trigger-event :log :unit-behavior :all msg nil ctx) ctx)
+    ctx))
+
 (defrecord behaviorstore [name behaviors])
 
 ;;#Pending  - Import Behavior Implementations From marathon.sim.legacy
@@ -626,7 +632,8 @@
 (defn state-expired? [ctx] 
   (let [r (remaining (statedata  ctx)) 
         dt (deltat ctx)
-        _ (println r dt)]
+;        _ (println r dt)
+        ]
     (<=  r dt)))
        
 
@@ -681,21 +688,22 @@
       (loop [dt  deltat
              ctx ctx]
         (let [sd (statedata ctx)            
-              _  (println [:sd sd])
+              _  (log! [:sd sd] ctx)
               timeleft    (remaining sd)
-              _  (println [:rolling :dt dt :remaining timeleft]) ]
-          (if-y 
+              _  (log! [:rolling :dt dt :remaining timeleft] ctx)]
+          ;(if ;if-y 
             (if (<= dt timeleft)
-              (do (println [:updating-for timeleft])
+              (do (log! [:updating-for timeleft] ctx)
                   (beval update-state-beh (set-bb ctx :deltat dt))) ;gives us [stat ctx]
               (let [residual   (max (- dt timeleft) 0)
                     [stat nxt :as result] (beval update-state-beh (set-bb ctx :deltat timeleft))
-                    _          (println stat dt)]
+                    _          (log! [stat dt] ctx)]
                 (if (= stat :success) 
                   (recur  residual ;advance time be decreasing delta
                           nxt)
                   [stat nxt])))
-            ctx))))))
+           ; ctx)
+            )))))
 ;;I think deltat is okay....
 ;;We're saying "take enough steps until this much time has elapsed." 
 ;;One way we can do that is to add the disparity between tlastupdate 
@@ -885,8 +893,7 @@
     (->> (if (zero? wt) 
            ctx ;skip the wait, instantaneous.  No need to request an
                ;update.
-           (core/debug-print (str "waiting for " wt)
-              (update-after  wt ctx)))           
+           (log! (str "waiting for " wt) (update-after  wt ctx)))           
          (success))
     (fail      ctx)))
     
@@ -931,7 +938,7 @@
 ;;of how fresh it is.
 (defn age-unit [ctx]
   (let [dt (get-bb ctx :deltat 0)
-        _ (println [:aging dt])]
+        _ (log! [:aging dt] ctx)]
     (if (zero? dt) (success ctx) ;nothing changed.
         ;otherwise we age the unit by an amount...
         ;Maybe aging the unit also means processing messages...dunno.
@@ -967,7 +974,7 @@
 ;;State-dependent functions, the building blocks of our state machine.
 
 (def +nothing-state+ 
-  (fn [ctx] (success (do (println (str (:name (entity ctx)) " is doing nothing for " (deltat ctx) ))
+  (fn [ctx] (success (do (log! (str (:name (entity ctx)) " is doing nothing for " (deltat ctx) ) ctx)
                          ctx))))
 
 ;; 'Units dwelling will accumulate dwell over time.
@@ -1053,11 +1060,11 @@
 (defn update-current-state 
   ([states ctx] 
      (let [st (get (statedata ctx) :curstate)
-           _ (println st)]
+           _ (log! st ctx)]
        (if-let [f (try-get states st +nothing-state+)]
-         (do (println [:updating-in st])
+         (do (log! [:updating-in st] ctx)
              (f ctx))
-         (do (println [:unknown-state st])
+         (do (log! [:unknown-state st] ctx)
              (fail ctx)))))
   ([ctx] (update-current-state default-states ctx)))
 
