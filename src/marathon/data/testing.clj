@@ -41,11 +41,13 @@
   (let [[l r] summaries]
     (is (not= test-run testctx)
         "Should have a change in unit data, and change in hash.")
-    (is (not= u u2) 
+    (is (not= l r) 
         "Unit should have been updated quite a bit.")
     (is (= (- (:cycletime r) (:cycletime l)) test-delta)
         "Updated unit should have spent expected time in cycle.")
     (is (= (- (:dwell r) (:dwell l)) test-delta)
         "Updated unit should have spent expected time in cycle.")))
+
+
 
 

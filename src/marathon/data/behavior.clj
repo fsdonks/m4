@@ -525,11 +525,17 @@
 ;;so long as we have a reference to the previous point in time.  
 ;;We always have [lastupdate, current-time, deltat], one can be 
 ;;computed from the others...
-(defn load-ctx [unit deltat ctx]
-  (merge-bb ctx {:tupdate (sim/current-time ctx)
-                 :entity   unit
-                 :original unit 
-                 :deltat   deltat}))
+(defn load-ctx 
+  "Prepare the blackboard relative to the entity's sensory context. 
+   tupdate is inferred to be a time at which the update is occuring, 
+   and is inferred to be the current simulation time if none is provided.
+   deltat indicates the elapsed time to update forward from tupdate."
+  ([unit deltat tupdate ctx]
+     (merge-bb ctx {:tupdate tupdate
+                    :entity   unit
+                    :original unit 
+                    :deltat   deltat}))
+  ([unit deltat ctx] (load-ctx unit deltat (sim/current-time ctx) ctx)))
 
 (defn changed? [orig e sd]    
   (or (not (identical? e orig))
@@ -560,30 +566,47 @@
 ;;Similarly, we'll have update take the context last.
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
-(defn update-unit [unit deltat ctx]
-  (->>  ctx  
-        (load-ctx unit deltat)
-        (roll-forward-beh) ;update the unit according to the change in
+(defn update-unit 
+  "Computes a new simulation context given a specific unit to update, 
+   an elapsed time, and an optional time of update.  tupdate is inferred
+   to be the current simulation time if none is supplied."
+  ([unit deltat ctx]        
+     (update-unit unit deltat (sim/current-time ctx) ctx))
+  ([unit deltat tupdate ctx]
+     (->>  ctx  
+           (load-ctx unit deltat tupdate)
+           (roll-forward-beh) ;update the unit according to the change in
                                         ;time.
-        (error-on-fail)    ;unit updates should never fail.       
-        (second  ;result is in terms of [:success|:fail ctx], pull out
+           (error-on-fail)    ;unit updates should never fail.       
+           (second  ;result is in terms of [:success|:fail ctx], pull out
                                         ;the ctx
-         )
-        (merge-updates)
-                                        ;  (clear-bb)
-        ))
+            )
+           (merge-updates)
+;           (clear-bb)
+           )))
 
 ;;Re-evaluate the need for this....can we synchronize from outside?
-(defn synch [unit ctx]
+(defn synch 
+  "Utility function.  Synchronize the unit to the current simulation time.  
+   If the last update occured before the current time, we roll the unit forward 
+   by the delta between the last update and the current time."
+  [unit ctx]
   (let [tprev (or (sim/last-update (:name unit) ctx) 0)
         tnow  (sim/current-time ctx)]
-    (if (= tprev tnow) 
-      ctx
-      (update-unit unit (- tnow tprev) ctx))))
+    (if (= tprev tnow)
+      (log! (str "unit " (:name unit) "is up to date") ctx)
+      (log! (str "Synchronizing unit " (:name unit) " from " tprev " to " tnow)
+            (update-unit unit (- tnow tprev) tprev ctx)))))
 
 ;;Synchronizes the unit to the current time, then applies a time 
 ;;delta, then processes/records the unit's time of update.
-(defn update [unit deltat ctx]
+(defn update 
+  "Entry point for computing behavior-based unit updates.  Fundamental 
+   API function for processing unit entities.  Synchronizes the unit to 
+   the current simulation time, then computes the new simulation context 
+   resulting from the entity behavior over an elapsed deltat (from current
+   simulation time)."
+  [unit deltat ctx]
   (let [nm (get unit :name)]
     (->> (synch unit ctx)
          (update-unit unit deltat)
@@ -619,7 +642,7 @@
 ;;auxillary function that helps us wrap updates to the unit.
 (defn traverse-unit [u t from to]   
   (-> u 
-      (assoc :positionpolicy to)
+      (assoc :positionpolicy  to)
       (u/add-traversal t from to)))
 
 ;;this is kinda weak, we used to use it to determine when not to
@@ -817,7 +840,7 @@
 ;;apply it.
 (defn apply-move [ctx] 
     (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
-      (let [t        (get-bb :t ctx) ;(tupdate ctx)
+      (let [t        (get-bb ctx :tupdate) ;(tupdate ctx)
             u        (entity  ctx)
             frompos  (get     u      :positionpolicy)
             wt       (get-wait-time  u  nextpos ctx)]
@@ -827,14 +850,17 @@
            (let [newstate (get-state u nextpos)
                  ;;#Todo change change-state into a fixed-arity
                  ;;function, this will probably slow us down due to arrayseqs.
-                 new-sd   (fsm/change-state (statedata ctx) newstate wt)]
-             (merge-bb ctx ;update the context with information derived
+                 new-sd   (fsm/change-state (statedata ctx) newstate wt)
+                 new-u   (traverse-unit u t frompos nextpos)]
+             (->> (merge-bb ctx ;update the context with information derived
                                         ;from moving
-                {:entity       (traverse-unit u t frompos nextpos)
-                 :old-position frompos ;record information 
-                 :new-state    newstate
-                 :statedata    new-sd
-                 :new-duration wt})))))
+                            {:entity       new-u
+                             :old-position frompos ;record information 
+                             :new-state    newstate
+                             :statedata    new-sd
+                             :new-duration wt})
+                  (u/unit-moved-event! new-u nextpos)
+                  )))))
       (fail ctx)))
 
 (defn apply-state [ctx] 
@@ -917,22 +943,6 @@
   (->> (success ctx)
        (core/debug-print [:passing msg])))
 
-(defn age [ctx]  (pass :age-stub ctx))
-
-
-;; 'Tom Change 1 July 2011
-;; Private Function ageUnit(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-;; With unit
-;;     If deltat > 0 Then
-;;         .cycletime = .cycletime + deltat 'units will always increase cycletime
-;;         .StateData.timeinstate = .StateData.timeinstate + deltat 'we increase state time here, but we haven't
-;;         'by changing the timeinstate, we've made the delta 0
-;;         deltat = 0 'mutate the deltat variable
-;;         'however, rollforward should be doing this for us by default.
-;;     End If
-;; End With
-;; Set ageUnit = unit
-;; End Function
 
 ;;Should we keep a timestamp with the unit? That way we can keep track
 ;;of how fresh it is.
@@ -972,7 +982,6 @@
 (def global-beh age-unit)
 
 ;;State-dependent functions, the building blocks of our state machine.
-
 (def +nothing-state+ 
   (fn [ctx] (success (do (log! (str (:name (entity ctx)) " is doing nothing for " (deltat ctx) ) ctx)
                          ctx))))
@@ -1024,7 +1033,7 @@
 ;;we'll continue to port them.
 (def default-states 
   {:global           global-beh
-   :reset            #(pass :spawning        %)
+   :reset            #(pass :spawning %)
    :bogging          bogging-beh
    :dwelling         dwelling-beh
    ;Currently, we encode multiple states in the policy graph.  We may
@@ -1108,8 +1117,9 @@
 
 ;;Given a cycletime, where should we be according to policy?
 ;; (defn spawning-beh [ctx]
-;;   (let [tnow (sim/current-time ctx)
-;;         ]
+;;   (with-bb [[topos cycletime t] ctx]
+;;     (let [tnow (sim/current-time ctx)       
+;;           ]
     
 ;; 'State to control how a unit acts when it spawns.
 ;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData

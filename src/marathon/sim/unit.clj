@@ -353,7 +353,7 @@
 (defn unit-moved-event!  [unit newlocation ctx]
   (let [nm  (:name unit) 
         loc (:locationname unit)
-        msg (str nm " moved from " loc " to " newlocation " on day " (sim/get-time ctx))]
+        msg (core/msg nm " moved from " loc " to " newlocation " on day " (sim/get-time ctx))]
    (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
 ;;CHANGE hiding unit policy 
