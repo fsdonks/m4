@@ -428,6 +428,8 @@
 (defn wait-time     [m] (get-bb m :wait-time fsm/inf))
 (defn statedata     [m] (get-bb m :statedata))
 
+(defn spawning?     [m] (nil? (:curstate (statedata m))))
+
 (defn eget [m k]
   (if-let  [res (get m k)]
     res
@@ -794,8 +796,8 @@
 ;;if we have a next-location planned.
 (def should-move?
   (->pred #(or (get % :next-position)
-               (zero? 
-                (remaining (get-bb % :statedata {}))))))
+               (zero? (remaining (get-bb % :statedata {})))
+               (spawning? %))))
 
 ;;simple predicates, semi-monadic interface....
 ;; (?  should-move? [*env* *statedata*]
@@ -1088,20 +1090,6 @@
 ;;          ]))         
 
 
-;;This is actually pretty cool, and might be a nice catch-all
-;;behavior...
-;;We try to compute changes, apply the changes, then wait until 
-;;the next known change...
-;;Known changes occur when we're told about them...i.e. 
-;;when time elapses, when an external state change happens, 
-;;etc.  It's ALWAYS externally driven by the caller.
-
-(def default-behavior 
-  (->any [moving-beh 
-          update-current-state
-          age-unit
-          ]))
-
 ;;we can break the spawning behavior up into smaller tasks...
 ;;Find out where we're supposed to be. Do we have initial conditions? 
 ;;Initial conditions are currently derived from cycletime and policy. 
@@ -1114,24 +1102,53 @@
 
 ;;Given a cycletime, where should we be according to policy?
 ;;Behavior to control how a unit acts when it spawns.
-;; (defn spawning-beh [ctx]
-;;   (with-bb [[topos cycletime tupdate statedata entity] ctx]
-;;     (let [{:keys [positionpolicy]} entity
-;;           {:keys [curstate prevstate nextstate timeinstate 
-;;                   timeinstateprior duration durationprior 
-;;                   statestart statehistory]} statedata
-;;           p         (:policy entity)
-;;           position  (:positionpolicy entity)
-;;           cycletime (or cycletime (:cycletime entity))
-;;           topos     (if (not (or topos positionpolicy))
-;;                         (protocols/get-position (u/get-policy entity) cycletime)
-;;                         (:positionpolicy entity))
-;;           timeinstate   (- cycletime (protocols/get-cycle-time p (:positionpolicy entity)))
-;;           timeremaining (protocols/transer-time p position (protocols/next-position p position))
-;;           newduration   (- timeremaining timeinstate)
-;;           nextstate     (protocols/get-state p position)
-;;           spawned-unit  (-> entity (u/initCycles tupdate) (add-dwell cycletime))]
-      
+;;We're trying to account for the unit's initial state...
+;;We move from spawning to the initial location.
+;;We account for having been at the initial location for 
+;;timeinstate days (currently tied to cycletime - timetoposition).
+;;So, what we really want to do is update the unit initially, possibly 
+;;with a negative time, and advance it forward to time 0 via the
+;;deltat being the timeinstate.
+(defn spawning-beh [ctx]
+  (if (spawning? ctx)     
+    (success 
+     (with-bb [[topos cycletime tupdate statedata entity] ctx]
+       (let [
+             {:keys [positionpolicy policy]} entity
+             {:keys [curstate prevstate nextstate timeinstate 
+                     timeinstateprior duration durationprior 
+                     statestart statehistory]} statedata
+                     cycletime (or cycletime (:cycletime entity))
+                     topos     (if (not (or topos positionpolicy))
+                                 (protocols/get-position (u/get-policy entity) cycletime)
+                                 (:positionpolicy entity))
+                     timeinstate   (- cycletime 
+                                      (protocols/get-cycle-time policy
+                                           (:positionpolicy entity)))
+                     timeremaining (protocols/transfer-time policy
+                                      positionpolicy 
+                                      (protocols/next-position policy positionpolicy))
+                     newduration   (- timeremaining timeinstate)
+                     nextstate     (protocols/get-state policy positionpolicy)
+                     spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime)) ]
+         ctx)))
+    (fail ctx)))
+
+;;This is actually pretty cool, and might be a nice catch-all
+;;behavior...
+;;We try to compute changes, apply the changes, then wait until 
+;;the next known change...
+;;Known changes occur when we're told about them...i.e. 
+;;when time elapses, when an external state change happens, 
+;;etc.  It's ALWAYS externally driven by the caller.
+(def default-behavior 
+  (->any [spawning-beh ;make sure we're alive 
+          moving-beh   ;if were' alive move
+          update-current-state ;update once we're done moving
+          age-unit ;if we're not moving, age in place.
+          ]))
+
+
       
 ;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
 
