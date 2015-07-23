@@ -3,7 +3,8 @@
 ;accumulated state during the cycle (bog, mob, dwell, etc.), start and end 
 ;of the cycle, transitions in the cycle, and more...
 (ns marathon.data.cycle
-  (:use [spork.util.record :only [defrecord+ with-record]]))
+  (:use [spork.util.record :only [defrecord+ with-record]]
+        [spork.util.general :as gen]))
 
 (defrecord+ cyclerecord 
   [uic-name    ;Associated uic
@@ -63,7 +64,7 @@
 
 (defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]
   (let [trav  [t startlocation endlocation]       
-        ts    (get cyclerec  :traversals [])] 
+        ts    (gen/get-else  cyclerec  :traversals [])] 
     (assoc cyclerec :traversals (conj ts trav))))
 
 (defn bog-to-dwell

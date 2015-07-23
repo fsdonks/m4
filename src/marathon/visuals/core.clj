@@ -6,6 +6,20 @@
 ;;space? 
 ;;If an entity is a small circle, what does it look like? 
 
+;;It might be useful to have the notion of a telemetry database.
+;;We have position, direction (velocity), and acceleration.
+;;For most things (like watching unit entities), acceleration 
+;;is constant.  So we have instantaneous changes in direction.
+
+;;I'd like to view entites as particles flowing in a system.
+;;The particle flow is dictated by where the entities are 
+;;(location).
+
+;;Maybe we set up the coordinates based on the policy 
+;;lifecycle and the positions reachable from there. 
+
+
+
 ;;(Name) ....
 ;;What is its color? 
 ;;   Use the same color scheme we have for AC / RC / NG? 

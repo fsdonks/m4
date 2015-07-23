@@ -411,7 +411,7 @@
 (defn merge-bb [ctx m]    (core/set-blackboard ctx (merge (core/get-blackboard ctx) m)))
 
 (defmacro with-bb [[opts ctx] & expr]
-  (let [lhs (cond (map? opts) (into {} (partition 2 opts))
+  (let [lhs (cond (map? opts) (if (contains? opts :as) opts (assoc opts :as 'bb))
                   (vector? opts) {:as 'bb :keys opts} 
                   :else (throw (Exception. (str "Options need to be a vector or a map... " opts))))]
     `(let [~lhs (core/get-blackboard ~ctx)]
@@ -851,7 +851,7 @@
                  ;;#Todo change change-state into a fixed-arity
                  ;;function, this will probably slow us down due to arrayseqs.
                  new-sd   (fsm/change-state (statedata ctx) newstate wt)
-                 new-u   (traverse-unit u t frompos nextpos)]
+                 new-u    (traverse-unit u t frompos nextpos)]
              (->> (merge-bb ctx ;update the context with information derived
                                         ;from moving
                             {:entity       new-u
@@ -880,7 +880,6 @@
 ;; (defn update-entity [ctx]
 ;;   (if-let [
   
-
 (def apply-changes (->and [apply-move 
                            apply-state                                                    
                            ]))
@@ -1098,10 +1097,8 @@
 ;;etc.  It's ALWAYS externally driven by the caller.
 
 (def default-behavior 
-  (->any [; global-beh
-          moving-beh 
+  (->any [moving-beh 
           update-current-state
-;          global-beh
           age-unit
           ]))
 
@@ -1116,38 +1113,29 @@
 ;;cycletime-derived automated initial conditions logic.
 
 ;;Given a cycletime, where should we be according to policy?
+;;Behavior to control how a unit acts when it spawns.
 ;; (defn spawning-beh [ctx]
-;;   (with-bb [[topos cycletime t] ctx]
-;;     (let [tnow (sim/current-time ctx)       
-;;           ]
-    
-;; 'State to control how a unit acts when it spawns.
+;;   (with-bb [[topos cycletime tupdate statedata entity] ctx]
+;;     (let [{:keys [positionpolicy]} entity
+;;           {:keys [curstate prevstate nextstate timeinstate 
+;;                   timeinstateprior duration durationprior 
+;;                   statestart statehistory]} statedata
+;;           p         (:policy entity)
+;;           position  (:positionpolicy entity)
+;;           cycletime (or cycletime (:cycletime entity))
+;;           topos     (if (not (or topos positionpolicy))
+;;                         (protocols/get-position (u/get-policy entity) cycletime)
+;;                         (:positionpolicy entity))
+;;           timeinstate   (- cycletime (protocols/get-cycle-time p (:positionpolicy entity)))
+;;           timeremaining (protocols/transer-time p position (protocols/next-position p position))
+;;           newduration   (- timeremaining timeinstate)
+;;           nextstate     (protocols/get-state p position)
+;;           spawned-unit  (-> entity (u/initCycles tupdate) (add-dwell cycletime))]
+      
+      
 ;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
-;; Dim newduration As Single
-;; Dim offset As Single
-;; Dim timeinstate As Single
-;; Dim timeremaining As Single
-;; Dim nextstate As String
-;; 'added for overuse of .gettime
-;; Dim tnow As Single
-
-;; tnow = SimLib.getTime(simstate.context)
 
 ;; With unit
-;;     If topos = vbNullString And .PositionPolicy = vbNullString Then 'no target position to spawn at, must derive
-;;         .PositionPolicy = .policy.getPosition(.cycletime) '.parent.parent.PolicyManager.DeriveLocationID(.cycletime, . component)
-;;         topos = .PositionPolicy '.parent.parent.policyManager.LocationIndex(.location)
-;;         'Decoupled*
-;;         '.location = .parent.parent.policyManager.locationID(topos)
-;;         .location = MarathonOpPolicy.locationID(topos, simstate.policystore)
-;;     Else 'target position, derive index
-;;         topos = .PositionPolicy
-;;         'Decoupled*
-;;         '.location = .parent.parent.policyManager.locationID(topos)
-;;         .location = MarathonOpPolicy.locationID(topos, simstate.policystore) 'TODO <----this is redundant, see if we can eliminate it.
-;;     End If
-;;     'Decoupled*
-;;     '.spawnTime = .parent.getTime
 ;;     .spawnTime = tnow
 ;;     'hack...
 ;;         timeinstate = .cycletime - .policy.GetCycleTime(.PositionPolicy) 'derived time in state upon spawning.
@@ -1155,18 +1143,8 @@
 ;;         unit.AddDwell .cycletime
 ;;     timeremaining = .policy.TransferTime(.PositionPolicy, .policy.nextposition(.PositionPolicy)) 'time remaining in this state
 ;;     newduration = timeremaining - timeinstate
-
-    
-;;     If .cycletime > 0 Then
-;;         .DateToReset = DateAdd("d", -.cycletime, simstate.parameters.startdate)
-;;         nextstate = "Dwelling"
-;;     ElseIf .cycletime = 0 Then
-;;         .DateToReset = simstate.parameters.startdate
-;;         nextstate = "Dwelling"
-;;     End If
-
+  
 ;;     'initialize cycle from policy
-;; End With
 
 ;; Set Spawning_State = ChangeState(unit, nextstate, 0, newduration)
 
