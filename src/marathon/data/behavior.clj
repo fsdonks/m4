@@ -1113,8 +1113,7 @@
   (if (spawning? ctx)     
     (success 
      (with-bb [[topos cycletime tupdate statedata entity] ctx]
-       (let [
-             {:keys [positionpolicy policy]} entity
+       (let [{:keys [positionpolicy policy]} entity
              {:keys [curstate prevstate nextstate timeinstate 
                      timeinstateprior duration durationprior 
                      statestart statehistory]} statedata
@@ -1130,8 +1129,9 @@
                                       (protocols/next-position policy positionpolicy))
                      newduration   (- timeremaining timeinstate)
                      nextstate     (protocols/get-state policy positionpolicy)
-                     spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime)) ]
-         ctx)))
+                     spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime))]
+         (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime]))
+               ctx))))
     (fail ctx)))
 
 ;;This is actually pretty cool, and might be a nice catch-all

@@ -41,7 +41,11 @@
 ;;__TODO__ Rename this to something cleaner.
 (defn newcycle [t policy]
   (let [{:keys [maxbog maxdwell cyclelength maxMOB]} policy]    
-    (cyc/make-cyclerecord t maxbog maxdwell cyclelength maxMOB)))
+    (cyc/make-cyclerecord :tstart t 
+                          :bogbudget maxbog 
+                          :dwell-expected maxdwell 
+                          :duration-expected cyclelength 
+                          :mob-expected maxMOB)))
 
 (defn initCycles [u t]
   (let [policy (:policy u)
