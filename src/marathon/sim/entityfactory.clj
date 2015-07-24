@@ -299,7 +299,8 @@
                         :tfinal            (+ t (generic/cycle-length p))
                         :duration          cycletime
                         :dwell             cycletime))
-       
+
+;;Moving this to spawning behavior...       
 (defn initialize-cycle 
   "Given a unit's policy, subscribes the unit with said policy, 
    updates the unit's state to initial conditions, broadcasts 
@@ -601,7 +602,8 @@
            (supply/register-unit supplystore behaviors prepped nil extra-tags)
            ;CHECK added this guy, lifted out from initialize-cycle,
            ;since it operates on a context, not a unit directly.
-           (unitsim/change-location prepped (:positionpolicy prepped))))))
+;           (unitsim/change-location prepped (:positionpolicy prepped))
+           ))))
 
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters behaviors] ctx]
@@ -719,9 +721,11 @@
 
   ;;#Entity Initialization
 
+;;Start state is another one that we can possibly alter.   
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
-    (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :Spawning 0 nil ctx))
+    (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :spawning 0 nil ctx) ;;all this does is an instant update in spawning
+                 )
                (core/set-parameter ctx :TotalUnits (count (:unitmap supply)))
                (:unitmap supply))))
 

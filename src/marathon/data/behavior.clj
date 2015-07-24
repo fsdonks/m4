@@ -85,8 +85,8 @@
 (ns marathon.data.behavior
   (:require [marathon.data.protocols :as protocols]
             [marathon.data.fsm :as fsm]
-            [marathon.sim [core :as core]
-                          [unit :as u]
+            [marathon.sim [core   :as core]
+                          [unit   :as u]
                           [demand :as d]
                           [supply :as supply]
                           ]            
@@ -311,9 +311,15 @@
 (defmacro run [expr]
   `(vector :run ~expr))
 
+(defn success? [res] (identical :success (first res)))
+
 ;;note, behaviors are perfect candidates for zippers...
 (defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
-(defn ->pred [pred] (->bnode  :pred nil  (fn [ctx] (if (pred ctx) (success ctx) (fail ctx))) nil))
+(defn ->pred [pred] 
+  (if (behavior? pred) 
+    pred ;behaviors can act as predicates, since they return success/failure.
+    (->bnode :pred nil  
+             (fn [ctx] (if (pred ctx) (success ctx) (fail ctx))) nil)))
 (defn ->and  [xs]
   (->bnode  :and nil
      (fn [ctx]
@@ -325,8 +331,8 @@
                     :fail      (reduced [:fail ctx])))) (success ctx) xs))
      xs))
 
-(defn ->any  [xs]
-  (->bnode  :and nil
+(defn ->seq  [xs]
+  (->bnode  :seq nil
      (fn [ctx]
       (reduce (fn [acc child]
                 (let [[res ctx] (beval child (second acc))]
@@ -390,7 +396,14 @@
 (defn ->do [f] 
   (fn [ctx] (success (do (f ctx) ctx))))
 
-
+(defn ->if 
+  ([pred btrue]
+      (->and [(->pred pred)
+              btrue]))
+  ([pred btrue bfalse]
+     (->or (->and [(->pred pred)
+                   btrue])
+           bfalse)))         
 
 ;;Accessors
 ;;=========
@@ -1052,7 +1065,7 @@
    :recovering       #(pass :recovering      %)
    :recovered        #(pass :recovered       %) 
    :nothing          #(pass :nothing         %)
-   :spawning         #(pass :spawning        %)
+   :spawning         spawning-beh
    :abrupt-withdraw  #(pass :abrupt-withdraw %)
 ;   #{:deployable :dwelling} #(pass :deployable-dwelling)
    })
@@ -1089,6 +1102,10 @@
 ;;                               ;statistical updates
 ;;          ]))         
 
+;;Our default spawning behavior is to use cycle to indicate.
+;;There will be times we alter the methods in which a unit 
+;;spawns (initializes itself in the simulation).  It'd be nice
+;;to break this out at some point, for now, we just let it go.
 
 ;;we can break the spawning behavior up into smaller tasks...
 ;;Find out where we're supposed to be. Do we have initial conditions? 
@@ -1130,8 +1147,11 @@
                      newduration   (- timeremaining timeinstate)
                      nextstate     (protocols/get-state policy positionpolicy)
                      spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime))]
-         (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime]))
-               ctx))))
+         (->> ;; (merge-bb  {:entity spawned-unit 
+              ;;             :next ctx
+              ctx
+              (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
+              ))))
     (fail ctx)))
 
 ;;This is actually pretty cool, and might be a nice catch-all
@@ -1142,7 +1162,7 @@
 ;;when time elapses, when an external state change happens, 
 ;;etc.  It's ALWAYS externally driven by the caller.
 (def default-behavior 
-  (->any [spawning-beh ;make sure we're alive 
+  (->seq [spawning-beh ;make sure we're alive 
           moving-beh   ;if were' alive move
           update-current-state ;update once we're done moving
           age-unit ;if we're not moving, age in place.
@@ -1167,8 +1187,6 @@
 
 ;; 'TOM Change -> Changed from "Initialized" to "Spawning"
 ;; With unit
-;;     'Decoupled*
-;;     '.parent.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration
 ;;     MarathonOpSupply.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration, simstate.context
 ;; End With
 
