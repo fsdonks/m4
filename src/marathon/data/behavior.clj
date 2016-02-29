@@ -90,7 +90,31 @@
                           [demand :as d]
                           [supply :as supply]
                           ]            
-            [spork.sim.simcontext :as sim]))
+            [spork.sim.simcontext :as sim]
+            [spork.ai.behavior :refer [beval
+                                       behave
+                                       success?
+                                       success
+                                       run
+                                       fail
+                                       ->seq
+                                       ->elapse
+                                       ->not
+                                       ->do
+                                       ->alter
+                                       ->elapse-until
+                                       ->leaf
+                                       ->wait-until
+                                       ->if
+                                       ->and
+                                       ->pred
+                                       ->or
+                                       ->bnode
+                                       ->while
+                                       always-succeed
+                                       always-fail]]
+            [spork.ai.machine :as fsm]
+             ))
 
 
 (defn log! [msg ctx]
@@ -205,7 +229,7 @@
 ;;contextual binding, the current simulation context, when
 ;;we go to update one or more units.
 
-;;Transitiong To Behavior Trees
+;;Transitioning To Behavior Trees
 ;;=============================
 ;;Changing from the current policy-driven FSM, we need to start at the
 ;;choke-points so-to-speak, and then grow from there.  The nice thing
@@ -258,155 +282,11 @@
 ;;                    current child)
 ;;  Specific types that denote success, running, failure
 
-
-;;Implementation
-;;==============
-
-;;For now, we'll let the behavior tree assume it has everything it
-;;needs in its context. 
-;;The context is a simple map; we may move to a record type as an
-;;optimization later, particularly if there are well-known fields 
-;;that we'll be accessing frequently.  The context acts as a
-;;"blackboard" for the nodes in the behavior tree to work with.
-
-;;Note-> there are opportunities for using STM and exploiting
-;;parallelism here; if we implement a parallel node, we may 
-;;enjoy the benefits of "fast" entity updates.  On the other hand, 
-;;since supply updating takes the preponderance of our time, 
-;;we can still get a lot of bang-for-the-buck by updating individual
-;;units in parallel batches.  Parallelizing the behavior tree may 
-;;not be all that necessary.
-
-;;Note: if we do implement a parallel node (even if executed
-;;serially), we can have competing concerns executed in parallel 
-;;(i.e. listen for messages, and also update over time slices).
-
-;;Behavior Tree Core, temporarily copied from marathon.data.behaviorbase
 (def behaviors nil)
-(defprotocol IBehaviorTree
-  (behave [b ctx]))
-  
 
-(defrecord bnode [type status f data]
-  IBehaviorTree
-  (behave [b ctx] (f ctx))
-  clojure.lang.Named 
-  (getName [b] (name type))
-  ;; clojure.lang.IFn 
-  ;; (invoke [obj arg] (f arg))
-  )
 
-(defn behavior? [obj] (satisfies? IBehaviorTree obj))
-
-(defn beval [b ctx]
-  (cond (behavior? b) (behave b ctx)
-        (fn? b) (b ctx)))
-
-;;convenience? macros...at least it standardizes success and failure,
-;;provides an API for communicating results.
-(defmacro success [expr]
-  `(vector :success ~expr))
-(defmacro fail [expr]
-  `(vector :fail ~expr))
-(defmacro run [expr]
-  `(vector :run ~expr))
-
-(defn success? [res] (identical :success (first res)))
-
-;;note, behaviors are perfect candidates for zippers...
-(defn ->leaf [f]    (->bnode  :leaf nil  (fn [ctx]  (f ctx)) nil))
-(defn ->pred [pred] 
-  (if (behavior? pred) 
-    pred ;behaviors can act as predicates, since they return success/failure.
-    (->bnode :pred nil  
-             (fn [ctx] (if (pred ctx) (success ctx) (fail ctx))) nil)))
-(defn ->and  [xs]
-  (->bnode  :and nil
-     (fn [ctx]
-      (reduce (fn [acc child]
-                (let [[res ctx] (beval child (second acc))]
-                  (case res
-                    :run       (reduced (run ctx))
-                    :success   (success ctx)
-                    :fail      (reduced [:fail ctx])))) (success ctx) xs))
-     xs))
-
-(defn ->seq  [xs]
-  (->bnode  :seq nil
-     (fn [ctx]
-      (reduce (fn [acc child]
-                (let [[res ctx] (beval child (second acc))]
-                  (case res
-                    :run       (reduced (run ctx))
-                    :success   (success ctx)
-                    :fail      (fail ctx)))) (success ctx) xs))
-     xs))
-
-(defn ->or  [xs]
-  (->bnode  :or nil 
-     (fn [ctx]
-       (reduce (fn [acc child]
-                 (let [[res ctx] (beval child (second acc))]
-                   (case res
-                     :run       (reduced (run ctx))
-                     :success   (reduced (success ctx))
-                     :fail      (fail ctx)))) (success ctx) xs))
-     xs))
-
-(defn ->not [b]
-  (->bnode  :not nil
-      (fn [ctx] (let [[res ctx] (beval b ctx)]
-                   (case res
-                     :run     (run     ctx)
-                     :success (fail    ctx)
-                     :fail    (success ctx))))
-      b))
-
-;;if a behavior fails, we return fail to the parent.
-;;we can represent a running behavior as a zipper....
-;;alternatively, we can just reval the behavior every time (not bad).
-(defn ->alter  [f] (->bnode :alter nil (fn [ctx] (success (f ctx))) nil))
-(defn ->elapse [interval]                            
-    (->alter #(update-in % [:time] + interval)))
-
-;;always force success
-(defn always-succeed [b]
-  (fn [ctx] (success (second (beval b ctx)))))
-;;always force failure
-(defn always-fail [b]
-  (fn [ctx] (fail (second (beval b ctx)))))
-
-;;a behavior that waits until the time is less than 10.
-(defn ->wait-until [pred]
-  (->bnode  :wait-until nil 
-          (fn [ctx] (if (pred ctx) (success ctx) (run ctx)))    nil))
-
-;;do we allow internal failure to signal external failure?
-(defn ->while [pred b]
-  (->bnode :while nil   
-           (fn [ctx] (if (pred ctx) 
-                       (beval b ctx)
-                       (fail ctx))) 
-           b))
-          
-(defn ->elapse-until [t interval]
-  (->while #(< (:time %) t)
-            (->elapse interval)))
-
-(defn ->do [f] 
-  (fn [ctx] (success (do (f ctx) ctx))))
-
-(defn ->if 
-  ([pred btrue]
-      (->and [(->pred pred)
-              btrue]))
-  ([pred btrue bfalse]
-     (->or (->and [(->pred pred)
-                   btrue])
-           bfalse)))         
-
-;;Accessors
-;;=========
+;;BlackBoard and Accessors
+;;=======================
 
 ;;Accessors for our behavior context.
 ;;We don't "have" to do this, but I wanted to lift up
@@ -565,7 +445,7 @@
          ctx))
       ctx)))
 
-(defn clear-bb [ctx]   (core/set-blackboard ctx {}))
+(defn clear-bb [ctx] (core/set-blackboard ctx {}))
 
 ;;These are the entry points that will be called from the outside.
 ;;Under the legacy implementation, they delegated to a hard coded
@@ -957,12 +837,11 @@
   (->> (success ctx)
        (core/debug-print [:passing msg])))
 
-
 ;;Should we keep a timestamp with the unit? That way we can keep track
 ;;of how fresh it is.
 (defn age-unit [ctx]
   (let [dt (get-bb ctx :deltat 0)
-        _ (log! [:aging dt] ctx)]
+        _  (log!   [:aging dt] ctx)]
     (if (zero? dt) (success ctx) ;nothing changed.
         ;otherwise we age the unit by an amount...
         ;Maybe aging the unit also means processing messages...dunno.

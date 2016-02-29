@@ -7,4 +7,3 @@
   :jvm-opts ^:replace ["-Xmx500m" "-XX:NewSize=200m"]
   ;:main marathon.core
   )
-
