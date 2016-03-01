@@ -19,12 +19,14 @@
         p             (policy/get-policy    (-> unit :policy :name) policystore)]
     (- bog-remaining  (protocols/overlap p))))
 
-(defn check-followon-deployer! [followon? unitname demand t ctx]
+(defn deploy! [followon? unit demand t ctx]
   (let [supply (core/get-supplystore ctx)
-        unit   (supply/get-unit supply unitname)]
-        (if followon? 
-          (supply/record-followon supply unit demand ctx)
-          (u/re-deploy-unit unit t (:deployment-index unit) ctx))))
+        ]
+          (->> ctx
+               (supply/record-followon supply unit demand)
+               (u/re-deploy-unit unit t (:deployment-index unit)))                         
+          (u/deploy-unit unit t (:deployment-index unit) ctx))))
+
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
@@ -42,7 +44,7 @@
    expected length of stay, bog, will determine when the next update is 
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
-  ([ctx unit t demand bog filldata deploydate  followon?]
+  ([ctx unit t demand   followon?]
     (assert  (u/valid-deployer? unit) 
              "Unit is not a valid deployer! Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment")
@@ -63,14 +65,17 @@
                                                                        (:name unit)))
             ]  
         (->> (sim/merge-updates {:demandstore (dem/add-demand demandstore demand)
-                                 :supplystore supplystore} ctx)
-             (u/change-location unit (:name demand)) ;unit -> str ->ctx
-                                        ;-> ctx....
-             (check-followon-deployer! followon?  unitname demand t)
-             ))))
-  ([ctx unit t demand bog filldata deploydate]
-    (deploy-unit  ctx unit t demand bog filldata deploydate (core/followon? unit))))
+                                 :supplystore (supply/add-unit supplystore unit)} ctx)
+             (u/change-location unit (:name demand)) 
+             (deploy! followon?  unit demand t)  ;;apply state changes.             
+             ))))  
+  ([ctx unit t demand ]
+    (deploy-unit  ctx unit t demand  (core/followon? unit))))
 
+(defn deploy-units [ctx us d]
+  (let [t (core/get-time ctx)]
+    (reduce (fn [acc u]
+              (deploy-unit acc u t d)) ctx us)))
 (comment   
            
            

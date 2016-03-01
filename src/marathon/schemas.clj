@@ -94,7 +94,8 @@
      :DemandGroup
      :Vignette
      :Operation
-     :Category]
+     :Category
+     [:Priority :int]]
    :PeriodRecords
     [:Type 
      :Name 

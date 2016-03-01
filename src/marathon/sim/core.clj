@@ -185,7 +185,13 @@
 
 (defn set-parameter    [s p v] (update-parameters s #(assoc % p v)))
 (defn merge-parameters [s ps]  (update-parameters s #(merge % ps)))
-  
+;;Operations for recording new units in the context.
+(defn set-unit
+  ([u ctx]   (set-unit u    (get-supplystore ctx) ctx))
+  ([u s ctx] (merge-updates 
+              {:supplystore (assoc-in s [:unit-map (:name u)] u)}
+              ctx)))
+
 ;;#Empty Simulation Contexts
 (def emptystate (simstate/make-simstate))
 (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
@@ -193,7 +199,6 @@
 (def ^:dynamic *debug* nil)
 (def ^:dynamic *verbose* nil)
 (def ^:dynamic *ignored* #{})
-
 
 (defmacro debugging [& expr]
   `(binding [~'marathon.sim.core/*debug* true]
@@ -361,9 +366,12 @@
       (coll-reduce [this f1]   (reduce (fn [acc v] (f1 acc v)) (f1) ents))
       (coll-reduce [_ f1 init] (reduce (fn [acc v] (f1 acc v)) init ents)))))
 
+
 ;;#Useful Vizualizations of the simulation context
+;;TODO port this over to the new scenegraph api.
 (defn demands->track [xs] 
-   (sketch/->track (map (fn [r] (merge r {:start (:startday r)})) xs) :track-name name))
+  ;(sketch/->track (map (fn [r] (merge r {:start (:startday r)})) xs) :track-name name)
+  )
 
 (defn demand->tracks  
   [xs & {:keys [keyf] :or {keyf (juxt :demandgroup :src)}}]
@@ -372,21 +380,22 @@
 
 
 (defn visualize-events [es track-keyf color-keyf]  
-  (let [coloring (zipmap (map color-keyf es) (take (count es) (sketch/palette)))
-        tracks   (demand->tracks es :keyf track-keyf)
-        rendered-tracks (sketch/->tracks tracks)
-        track-width     (:width (spork.graphics2d.canvas/shape-bounds rendered-tracks))
-;        lgnd     (sketch/->legend coloring)
-;        lwidth   (:width (spork.graphics2d.canvas/shape-bounds lgnd))
-        ]
-    (sketch/with-event->color (fn [e] (get coloring (color-keyf e)))
-      (sketch/sketch-image
-       (sketch/scale 1.0 1.5
-                     (sketch/stack [(sketch/->tracks tracks)
-                                   ; (sketch/translate 10 5 
-                                   ;    (sketch/scale (float (/ track-width lwidth)) 2.0
-                                   ;      lgnd))
-                                    ]))))))
+;;   (let [coloring (zipmap (map color-keyf es) (take (count es) (sketch/palette)))
+;;         tracks   (demand->tracks es :keyf track-keyf)
+;;         rendered-tracks (sketch/->tracks tracks)
+;;         track-width     (:width (spork.graphics2d.canvas/shape-bounds rendered-tracks))
+;; ;        lgnd     (sketch/->legend coloring)
+;; ;        lwidth   (:width (spork.graphics2d.canvas/shape-bounds lgnd))
+;;         ]
+;;     (sketch/with-event->color (fn [e] (get coloring (color-keyf e)))
+;;       (sketch/sketch-image
+;;        (sketch/scale 1.0 1.5
+;;                      (sketch/stack [(sketch/->tracks tracks)
+;;                                    ; (sketch/translate 10 5 
+;;                                    ;    (sketch/scale (float (/ track-width lwidth)) 2.0
+;;                                    ;      lgnd))
+;;                                     ])))))
+  )
 
 (defn visualize-demands [ctx  & {:keys [track-keyf color-keyf] :or {track-keyf (juxt :demandgroup :src)
                                                                     color-keyf (juxt :vignette)}}]

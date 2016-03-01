@@ -216,8 +216,8 @@
 (deftest demand-activations
   (is (empty? (keys  (:activedemands (core/get-demandstore (demand/activate-demands 0 defaultctx)))))
       "Should have no demands active at t 0")
-  (is (same? '("2_R1_SRC3[1...91]" "2_R2_SRC3[1...2521]" "1_R3_SRC3[1...2521]" "1_R25_SRC3[1...541]")
-             (keys  (:activedemands (core/get-demandstore (demand/activate-demands 1 defaultctx)))))
+  (is (same?  (sort ["2_R1_SRC3[1...91]" "2_R2_SRC3[1...2521]" "1_R3_SRC3[1...2521]" "1_R25_SRC3[1...541]"])
+             (sort (keys  (:activedemands (core/get-demandstore (demand/activate-demands 1 defaultctx))))))
       "Should have four demands active at t 1"))
 
 (defn demand-step
@@ -269,9 +269,8 @@
               '(["1_R25_SRC3[1...541]" 1] ["1_R3_SRC3[1...2521]" 1] ["2_R1_SRC3[1...91]" 2] ["2_R2_SRC3[1...2521]" 2]))
       "Should have the same order and set of demands unfilled on day 1."))
 
-
 (def deployables  (filter unit/in-deployable-window? (vals  (core/units defaultctx))))
-(defn deployable-units [ctx] (filter unit/can-deploy?(vals  (core/units defaultctx))))
+(defn deployable-units [ctx] (filter unit/can-deploy? (vals  (core/units defaultctx))))
 (def deploynames  (map :name deployables))
 
 
@@ -279,6 +278,8 @@
 (def fillrules (map fill/derive-supply-rule (vals (core/demands defaultctx)) (core/get-fillstore defaultctx)))
 
 ;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
+
+;;These are analogous to entity queries btw...
 
 ;;using features from sim.query, we build some supply queries:
 (def odd-units (->> defaultctx
@@ -291,23 +292,28 @@
                                          :order-by query/uniform 
                                          :collect-by [:name :cycletime]})))
 
+;;These queries should not change from the sampledata.
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
   (is (same? deploynames 
              '("29_SRC3_NG" "36_SRC3_AC" "23_SRC3_NG" "11_SRC2_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG" "40_SRC3_AC"
                "34_SRC3_AC" "37_SRC3_AC" "8_SRC2_NG" "35_SRC3_AC"))
-      "Should have 5 units deployable")
-  (is (same? odd-units)
-      '(["24_SRC3_NG" 1601] ["38_SRC3_AC" 923] ["8_SRC2_NG" 1825] ["23_SRC3_NG" 1399] ["29_SRC3_NG" 1385] ["22_SRC3_NG" 1217] 
-          ["28_SRC3_NG" 929] ["10_SRC2_AC" 365] ["40_SRC3_AC" 365] ["4_SRC1_AC" 365] ["17_SRC3_NG" 509] ["16_SRC3_NG" 395] 
-            ["14_SRC3_NG" 187] ["33_SRC3_AC" 109] ["13_SRC3_NG" 91]))
-  (is (same? even-units)
-      '(["5_SRC1_AC" 912] ["11_SRC2_AC" 912] ["2_SRC1_NG" 1520] ["41_SRC3_AC" 912] ["37_SRC3_AC" 704] ["21_SRC3_NG" 1052] 
-        ["31_SRC3_NG" 912] ["20_SRC3_NG" 900] ["36_SRC3_AC" 522] ["19_SRC3_NG" 760] ["18_SRC3_NG" 630] ["35_SRC3_AC" 366] 
-        ["7_SRC2_NG" 730] ["1_SRC1_NG" 608] ["27_SRC3_NG" 564] ["34_SRC3_AC" 230] ["15_SRC3_NG" 288] ["26_SRC3_NG" 260] 
-        ["32_SRC3_AC" 0] ["9_SRC2_AC" 0] ["0_SRC1_NG" 0] ["3_SRC1_AC" 0] ["12_SRC3_NG" 0] ["6_SRC2_NG" 0] ["30_SRC3_NG" 0]
-        ["39_SRC3_AC" 0] ["25_SRC3_NG" 0])))
-
+      "Should have 12 units deployable")
+  (is (same? odd-units
+      '(["24_SRC3_NG" 1601]
+        ["8_SRC2_NG" 1825]
+        ["23_SRC3_NG" 1399]
+        ["29_SRC3_NG" 1385]
+        ["22_SRC3_NG" 1217]
+        ["40_SRC3_AC" 365])))
+  (is (same? even-units
+      '(["2_SRC1_NG" 1520]
+        ["11_SRC2_AC" 912]
+        ["37_SRC3_AC" 704]
+        ["36_SRC3_AC" 522]
+        ["35_SRC3_AC" 366]
+        ["34_SRC3_AC" 230]))))
+      
 ;;Try filling a demand.
 ;;We can query a demand and try to find feasible supply for it.
 ;;Given a generic demand, we want to see if:
@@ -339,17 +345,17 @@
 (def unfilled  (marathon.sim.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
 (def d         (first (vals unfilled)))
 (def suitables (query/match-supply {:src (:src d) :order-by query/uniform} :name  demandctx))
-(def needed    (dem/required d))
+(def needed    (dem/required   d))
 (def selected  (take 2 suitables))
 
 (defn ascending?  [xs] (reduce (fn [l r] (if (<= l r) r (reduced nil))) xs))
 (defn descending? [xs] (reduce (fn [l r] (if (>= l r) r (reduced nil))) xs))
 
-
 ;;find supply according to the strictest criteria, in this case,
 ;;supply that has the same category as demand; note: there should be
 ;;none, since the referenced demand actually has a category:
 (def strict-fills (fill/find-supply demandctx (fill/demand->rule d)))
+
 ;;we should find plentiful supply if we make the demand rule more
 ;;relaxed by removing the category.  This way, we look at all
 ;;categories of supply.  Also, fill/find-supply takes into account the
@@ -380,10 +386,46 @@
       "First demand should require 2 units")
   (is (same? selected  '("24_SRC3_NG" "2_SRC1_NG"))
       "Suitability of units is dictated by the ordering.  Best first."))
+
+;;Can we fill a demand at this point?
+;;We have a) an entity that's designated as filling a demand.
+;;b) the demand to fill.
+;;If we have a match, we
+
+;;deploy the entity,
+;;change location,
+;;change position in policy,
+;;change state/status,
+;;ask for an update time.
+
+;;register the entity with the demand,
+;;update the demand fill,
+;;possibly remove the demand from the unfilled.
+
+;;If we don't care about caching anything, if we only
+;;care about finding and searching for unfilled,
+;;then the process simplifies to:
+;;  Find the highest priority unfilled demand (sort the demand (already done))
+;;  Find available supply to fill the demand.
+;;  Deploy allocated supply to the demand.
+;;  Update the demand's fill (either filled or not).
+;;  Continue filling until the highest priority demand
+;;  cannot be filled.
+
+(def the-deployers  
+  (for [nm selected]
+    (get (core/units defaultctx) nm)))
+
+(def deployedctx  (deployment/deploy-units defaultctx the-deployers d))
+(def deployed-units (select-keys (core/units deployedctx) selected))
+
 ;;how do we turn suitable supply into a set of fills? 
 ;;Suitable supply is represented as a sequence of names of units...
 ;;Hmmm...can these imply promises? 
-;;What if we don't have enough supply? 
+;;What if we don't have enough supply?
+;;[For now, if we don't have enough supply, we have to define ways to find
+;; more supply, name supply generators]
+
 ;;At some point, we have a name of units that actually exist.
 ;;Maybe we partition off our jit supply into other areas...
 ;;In the original marathon, we encoded the ghost as a special case.
@@ -441,20 +483,21 @@
 ;;The supplystore is effectively a generator that 
 ;;produces units based on the existing supply.
 
-
 ;;Note: going this route, we can also treat demands as generators..
 ;;specifically, they "can" show up as suppliers.  This is good....
+
 
 ;;Right now....let's just get names of units, and then figure out
 ;;how to fill using the unit....
 (comment
-  (deployment/deploy-unit t/demandctx (:source t/fzero) (sim/get-time t/demandctx) t/d 10 t/fzero (core/interval->date (sim/get-time t/demandctx) (core/followon? (:source t/fzero))))
-  )
+  ;; (deployment/deploy-unit t/demandctx (:source t/fzero) (sim/get-time t/demandctx) t/d 10 t/fzero (core/interval->date (sim/get-time t/demandctx) (core/followon? (:source t/fzero))))
+  
 
 (def fzero  (first relaxed-fills))
-(def u0 (:source fzero))
+(def u0     (:source fzero))
 (def depres
   (deployment/deploy-unit
    demandctx  u0 (sim/get-time demandctx)
    d 10 fzero (core/interval->date (sim/get-time demandctx)
    (core/followon? u0))))
+)

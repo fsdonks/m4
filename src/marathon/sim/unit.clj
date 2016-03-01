@@ -9,6 +9,8 @@
             [marathon.policy.policydata :as pold])
   (:use [spork.util.record :only [defrecord+ inc-field dec-field get-vals]]))
 
+
+
 ;;Operations on marathon.suppply.unitdata
 ;;======================
 
@@ -377,7 +379,7 @@
   (do (println (str "*Warning*: marathon.sim.unit/change-state is a stub\n"
                     "we need to have it wrap an update via the unit's behavior\n"))
       (sim/trigger-event :Change-State-Stub :EntityFactory 
-        (:name entity) (core/msg  "State Change" (:name entity) "to " newstate)
+        (:name entity) (core/msg  "State Change " (:name entity) "to " newstate)
         [newstate deltat duration] ctx)))
 
 (defn push-location [unit newlocation]
@@ -395,9 +397,11 @@
       ctx
       (let [nextu    (-> (if (:moved unit)  (assoc unit :moved true) unit)
                          (push-location newlocation))
-            ctx     (core/set-supplystore ctx (add-unit supplystore nextu))]
-        (unit-moved-event! unit newlocation ctx)                                          
-        (unit-first-moved-event! unit newlocation ctx)))))
+            ctx      (core/set-supplystore ctx (add-unit supplystore nextu))]
+        (unit-moved-event! unit newlocation ctx)))))
+
+;;TODO -> bring this back in.
+;        (unit-first-moved-event! unit newlocation ctx)))))
 
 
 ;Predicate to indicate unit U's ability to bog.
@@ -468,7 +472,8 @@
    :deployable?    (can-deploy? u)
    :cycletime      (:cycletime  u)
    :dwell          (get-dwell   u)
-   :bog            (get-bog     u)})
+   :bog            (get-bog     u)
+   :location       (:locationname u)})
 
 ;;#Needs Porting#
 
@@ -549,14 +554,27 @@
 
 ;;This updates the unit statistics, and alters (drops) the followon
 ;;code.  re-deployment indicates followon?
-(defn  re-deploy-unit [unit t deployment-idx ctx]
+(defn  re-deploy-unit [unit t deployment-idx ctx] 
   (let [c    (:current-cycle unit)
-        deps (:deployments c)]
-    (-> unit
-        (increment-followons)
-        (increment-deployments)
-        (assoc :followoncode nil)
-        (keep-bogging-until-depleted ctx))))
+        deps (:deployments c)
+        new-unit      (-> unit
+                         (increment-followons)
+                         (increment-deployments)
+                         (assoc :followoncode nil))]
+    (->>   ctx
+          (core/set-unit new-unit)
+          (keep-bogging-until-depleted new-unit))))
+
+(defn  deploy-unit [unit t deployment-idx ctx] 
+  (let [c    (:current-cycle unit)
+        deps (:deployments c)
+        new-unit           (-> unit
+                               (increment-deployments)
+                               )]
+    (->> ctx
+         (core/set-unit new-unit)
+         (keep-bogging-until-depleted new-unit))))
+
 
 ;'Probably pull unit's changelocation into here as well.
 ;Public Sub changeLocation(unit As TimeStep_UnitData, newlocation As String, Optional context As TimeStep_SimContext)

@@ -76,13 +76,21 @@
 ;;Reducer/seq that provides an abstraction layer for implementing 
 ;;queries over deployable supply.  I really wish I had more time 
 ;;to hack out a better macro for the reducers, but this works for now.
-(defn ->deployers [supply & {:keys [cat src unit] :or {cat  identity 
+(defn ->deployers
+  "Given a supply store, returns a seqable, reducible object that can 
+   filter on category, the keys of the supply buckets in the supply 
+   store, on src, the subset of srcs within a specific category, or 
+   on a specific unit name.  In the partitioning of unit entities, 
+   we have a coordinate that maps to a specific unit of supply.
+   The coordinate is defined by [category src name], where name 
+   is the name of the unit."
+  [supply & {:keys [cat src unit] :or {cat  identity 
                                                        src  identity 
                                                        unit identity}}]
   (let [catfilter cat
         srcfilter src 
         unitfilter unit]
-    (reify     
+    (reify            
       clojure.lang.Seqable 
       (seq [this]  
         (for [[cat srcs]    (:deployable-buckets supply)
@@ -155,14 +163,22 @@
 ;;may not need all the supply.  Possible performance optimization.
 (defn find-feasible-supply 
   ([supply srcmap category src]
-     (let [src-selector (cond (or (identical? src :any) (identical? src  :*)) identity 
-                              (fn? src) src
-                              :else    (is? src))]
-       (if (is? category :any)
-         (->deployers supply :src src-selector)
-         (let [prefs (src->prefs  srcmap src)]
-           (->>  (->deployers supply :src #(contains? prefs %) :cat (is? category))
-                 (r/map (fn [[k v]] [(conj k (get prefs (second k))) v]))
+   (let [any-src?      (or (identical? src :any) (identical? src  :*))
+         any-category? (or (identical? category :any) (identical? category  :*))
+         src-selector  (cond any-src?  identity 
+                             (fn? src) src
+                             :else    (is? src))
+         category-selector (cond any-category?  identity 
+                                 (fn? cat)      cat
+                                 :else          (is? cat))]
+       (if (and any-category?  any-src?) ;if both category and src are unconstrained, we  can pull any unit. 
+           (->deployers supply :src src-selector)
+             ;;if category is constrained, but src is not, then we can pull any unit within the category.
+           (let [prefs (src->prefs  srcmap src)
+                 src-selector (if any-src? identity ;;ensure we enable filtering if indicated.
+                                  #(contains? prefs %))]
+           (->>  (->deployers supply :src src-selector :cat category-selector)
+                 (r/map (fn [[k v]] [(conj k (get prefs (second k) Long/MAX_VALUE)) v])) ;sort by a score.
                  (into [])
                  (sort-by  (fn [[k v]]  (nth k 2))))))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
@@ -504,6 +520,18 @@
              (if collect-by (core/collect collect-by (map second res)) 
                  res)))))
 
+(defn find-supply! [{:keys [src cat order-by where collect-by] :or 
+                    {src :any cat :default} :as env} ctx] 
+    (let [order-by (eval-order   order-by)
+          where    (eval-filter  where) ] 
+      (with-query-env env
+        (let [xs       (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
+              _        (println (count xs))
+              selected (select {:where    (when where   (fn wherf [kv]    (where (second kv))))
+                                :order-by (when order-by (ord-fn [l r] (order-by (second l) (second r))))}
+                               xs)]             
+          (if collect-by (core/collect collect-by (map second selected)) 
+              selected)))))
 
 ;;More sophisticated querying API
 ;;===============================

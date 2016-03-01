@@ -297,7 +297,6 @@
          ;;this should still be fast.  Alternately just modify locs directly...
          (schedule-demand demand newstore))))  
 
-
 ;;Note -> there's a setup here for bad things to happen.  I forgot
 ;;that the reduction function I was using, while happily
 ;;side-effecting as an optimization, was actually tossing out 
