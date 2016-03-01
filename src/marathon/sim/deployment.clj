@@ -19,13 +19,12 @@
         p             (policy/get-policy    (-> unit :policy :name) policystore)]
     (- bog-remaining  (protocols/overlap p))))
 
-(defn deploy! [followon? unit demand t ctx]
-  (let [supply (core/get-supplystore ctx)
-        ]
+(defn deploy!  [followon? unit demand t ctx]
+  (let [supply (core/get-supplystore ctx)]
           (->> ctx
                (supply/record-followon supply unit demand)
-               (u/re-deploy-unit unit t (:deployment-index unit)))                         
-          (u/deploy-unit unit t (:deployment-index unit) ctx))))
+               (u/re-deploy-unit unit t (:deployment-index unit)))
+          (u/deploy-unit unit t (:deployment-index unit) ctx)))
 
 
 (defn check-first-deployer!   [store unitname ctx]

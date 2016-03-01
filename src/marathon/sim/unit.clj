@@ -18,8 +18,8 @@
 ;pass a message to a unit, telling it to update itself.
 ;units pass themselves as state, along with some msg, to their referenced 
 ;behavior functions.
-(defn unit-update [u msg]
-  ((:behavior u) u msg))
+(defn unit-update [u msg ctx]
+  ((:behavior u) u msg ctx))
 
 ;;Pending.  When we move to the component entity system, we'll pull this back
 ;;in.
@@ -452,7 +452,6 @@
   ([u spawning?] (valid-deployer? u spawning? (:policy u)))
   ([u] (valid-deployer? u nil (:policy u))))
 
-
 ;;Added for unit behavior utility
 (defn add-traversal [u t from to]
   (assoc u :currentcycle 
@@ -464,16 +463,26 @@
 
 ;;Useful summary info for unitdata, helpful for debugging.
 (defn summary [u]
-  {:name           (:name u) 
-   :policy         (:name (:policy  u))
-   :positionpolicy (:positionpolicy u)
-   :src            (:src u)
-   :positionstate  (pol/get-state (:policy u) (:positionpolicy u))
-   :deployable?    (can-deploy? u)
-   :cycletime      (:cycletime  u)
-   :dwell          (get-dwell   u)
-   :bog            (get-bog     u)
-   :location       (:locationname u)})
+  (let [{:keys [curstate nextstate timeinstate duration statestart statehistory]}
+        (:statedata u)]
+    {:name              (:name u) 
+     :policy            (:name (:policy  u))
+     :positionpolicy    (:positionpolicy u)
+     :src               (:src u)
+     :positionstate     (pol/get-state (:policy u) (:positionpolicy u))
+     :deployable?       (can-deploy?      u)
+     :cycletime         (:cycletime       u)
+     :dwell             (get-dwell        u)
+     :bog               (get-bog          u)
+     :location          (:locationname    u)
+     :location-history  (:locationhistory u)
+     :curstate          curstate
+     :nextstate         nextstate
+     :timeinstate       timeinstate                                     
+     :duration          duration
+     :statestart        statestart
+     :statehistory      statehistory
+   }))
 
 ;;#Needs Porting#
 
