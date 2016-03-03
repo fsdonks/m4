@@ -375,6 +375,11 @@
 ;;Typically resides in unit/change-state, but we probably 
 ;;want to make it universal for any entity with an FSM.
 ;;Temporary Stub
+;;My resolution here is to implement a messaging system that appends
+;;messages for the entity.  Messages are processed at a later time,
+;;but they are guaranteed to be process on the entity's logical "thread"
+;;before the day is up.  If we ever use coroutines, this will still work nicely.
+;;We can just alter the interface to use channels to communicate with the entity.
 (defn change-state [entity newstate deltat duration ctx]
   (do (println (str "*Warning*: marathon.sim.unit/change-state is a stub\n"
                     "we need to have it wrap an update via the unit's behavior\n"))

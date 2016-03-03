@@ -416,8 +416,27 @@
   (for [nm selected]
     (get (core/units defaultctx) nm)))
 
-(def deployedctx  (deployment/deploy-units defaultctx the-deployers d))
+(def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
 (def deployed-units (select-keys (core/units deployedctx) selected))
+;;we have now deployed units and updated their state to a bare minimum
+;;to indicate they should be deploying.
+;;The trick now is to indicate that the entities should be updating.
+;;In other words, we want to send them messages, albeit without
+;;causing a side-effect (for this implementation).  So, we can
+;;accomplish the same effect if we leave a message in a place
+;;the entity is sure to find it, and have some assurance that
+;;the message will be processed according to the entity's logic
+;;at an appropriate point in the pending computation.
+;;Under the mutable VBA implementation, we'd normally just
+;;immediately dispatch the event and trigger a state change.
+;;In this case, the process is spread out.  The initial
+;;deployment triggers additional data (a notification is
+;;appended to the entity's messages).  We need to guarantee
+;;that the entity will have an opportunity to process the
+;;message (at least abstractly) before the day is out.
+
+
+
 
 ;;how do we turn suitable supply into a set of fills? 
 ;;Suitable supply is represented as a sequence of names of units...
