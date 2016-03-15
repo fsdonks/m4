@@ -438,7 +438,7 @@
    :startstate      reset 
    :endstate        available}
   [max-utilization              "Max Utilization policy for AC 45" (route-by max-util-waits  default-routing)]
-  [max-utilization-enabler      "Max Utilization policy for AC 30" (route-by max-util-waits  default-routing) :overlap 30]
+  [max-utilization-enabler      "Max Utilization policy for AC 30" (route-by max-util-waits  default-routing) :overlap   30]
   [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :bogbudget 270]
   [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :overlap 30 :bogbudget 270])
 
@@ -455,15 +455,30 @@
 ;;defines
 ;;#TODO Policy cycle lengths default to +inf+, we really want to
 ;;derive the length of the policy...
+;;Need to clamp down on the semantically infinite policy numbers.  We're having problems with
+;;9999999 vs 999999999, getting errors naturally.  So, for now, we'll clamp down the
+;;numbers to ensure the policy is valid.  We'll throw warnings if the numbers are beyond the
+;;expected range and interpret them correctly.
+(defn clamp-stats [name m]
+  (reduce-kv (fn [acc k n]
+               (assoc acc k
+                      (if (and (not (neg? n))
+                               (<= n +inf+))
+                        n
+                        (if (neg? n) (throw (Exception. (str [:negative-value name m k n])))
+                            (do (println [:interpreting-as-infinite name k n])
+                                +inf+)))))
+             m m))
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
   (if-let [ctor (get @templates name (get @templates (keyword name)))]
     (let [stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
           stats      (if overlap (assoc stats :overlap overlap) stats)
+          stats      (clamp-stats name stats)
           base       (ctor :deltas deltas :stats stats)
           baselength (core/compute-cycle-length base)
-          _          (println [name (min baselength +inf+)])]
+          _          (println [name (min baselength +inf+) stats])]
       (-> base
-          (core/set-deployable startdeployable stopdeployable)
+          (core/set-deployable (:startdeployable stats) (:stopdeployable stats))
           (assoc  :cyclelength (min baselength +inf+))))
     (throw (Exception. (str "Unknown template: " name)))))
 
@@ -498,7 +513,7 @@
    ;temporarily aliased until I get them ported....
    "ACFFG" ac13
    "RCFFG" ac13
-   "FFGMission" ac11
+   "FFGMission" ghost
    "RCOpSus" rc14
    })
 

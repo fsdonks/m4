@@ -141,10 +141,10 @@
   
 ;;We should consider move if our time in state has expired, or 
 ;;if we have a next-location planned.
-(befn should-move? [ctx bb entity] 
-  (->pred #(or (get ctx :next-position)
-               (zero? (remaining (get bb :statedata {})))
-               (spawning? bb))))
+(befn should-move? [bb next-position statedata] 
+  (or next-position
+      (zero? (remaining statedata))
+      (spawning? bb)))
 
 ;;simple predicates, semi-monadic interface....
 ;; (?  should-move? [*env* *statedata*]
@@ -152,7 +152,9 @@
 ;;             (zero? (remaining *statedata*))))
 ;; (!  record-move  (put! :moved true))       
                   
-(def record-move (->alter #(set-bb % :moved true)))
+;(def record-move (->alter #(set-bb % :moved true)))
+(befn record-move []
+      (bind! {:moved true}))
 
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
@@ -212,26 +214,39 @@
                   )))))
       (fail ctx)))
 
-(defn apply-state [ctx] 
-  (if-let [new-state (get-bb ctx :new-state)]
-    (let [;;#Todo change change-state into a fixed-arity
+;;#Todo change change-state into a fixed-arity
           ;;function, this will probably slow us down due to arrayseqs.
-          new-sd   (fsm/change-state (statedata ctx) new-state (get-bb ctx :new-duration))]
-      (success 
-       (merge-bb ctx ;update the context with information derived
-                                        ;from moving
-                 {:statedata    new-sd})))
-      (fail ctx)))
+(befn apply-state [statedata new-duration]
+      (when-let [new-state (get-bb ctx :new-state)]
+        ;;update the context with information derived from moving
+        (bind! {:statedata (fsm/change-state statedata new-state  new-duration)])))
+
+
+;; (defn apply-state [ctx] 
+;;   (if-let [new-state (get-bb ctx :new-state)]
+;;     (let [
+;;           new-sd   (fsm/change-state (statedata ctx) new-state (get-bb ctx :new-duration))]
+;;       (success 
+;;        (merge-bb ctx ;update the context with information derived
+;;                                         ;from moving
+;;                  {:statedata    new-sd})))
+;;     (fail ctx)))
 
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
 ;;unit for storage until the next update.
 ;; (defn update-entity [ctx]
 ;;   (if-let [
-  
+
+(comment 
 (def apply-changes (->and [apply-move 
                            apply-state                                                    
                            ]))
+)
+
+(befn apply-changes []
+      (->and [apply-move
+              apply-state]))
 
 ;; ;;apply-state? should update the entity's state, change the duration
 ;; ;;to be the current wait-time, etc.
@@ -246,19 +261,33 @@
 ;;                     :new-state    newstate})))
 ;;     (fail ctx)))
 
+(comment 
 (def set-next-position  
   (->alter #(let [e (entity %)
                   p (get-next-position e  (:positionpolicy e))]
               (merge-bb %  {:next-position  p
                             :wait-time     (get-wait-time e p %)}))))
+)
 
-(def find-move  (->and [should-move? 
-                        set-next-position ;;the problem here is that
-                        ;;we don't see what's being changed....the
-                        ;;context is changing, but where? At least
-                        ;;it's not side-effecting, but can we keep
-                        ;;track of our changes better?
-                        ]))
+(befn set-next-position [ctx entity]
+      (let [e entity
+            p (get-next-position e (:positionpolicy e))]
+        (bind! {:next-position p
+                :wait-time (get-wait-time e p ctx)})))
+
+
+;; (def find-move  (->and [should-move? 
+;;                         set-next-position ;;the problem here is that
+;;                         ;;we don't see what's being changed....the
+;;                         ;;context is changing, but where? At least
+;;                         ;;it's not side-effecting, but can we keep
+;;                         ;;track of our changes better?
+;;                         ]))
+
+(befn find-move []
+      (->and [should-move?
+              set-next-position]))
+
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.

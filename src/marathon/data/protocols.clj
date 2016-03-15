@@ -186,7 +186,13 @@
 ;;this is inconsistent.  Need to alter...
 (defn dwell-at? [p position] (= (get-state p position) Dwelling))
 
-(def find-position (memoize get-position))
+;;#Optimize
+;;this may be bogging us down....
+(defmacro find-position [& body]
+  `(get-position ~@body))
+;;memoization was not helping us here, at least not
+;;this version.
+;(def find-position (memoize get-position))
 
 ;;Returns the deployable window for the policy [start stop]
 (defn deployable-window [policy]
