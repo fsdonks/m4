@@ -413,6 +413,7 @@
          roll-forward-beh)
 ;;API
 ;;===
+;;__load-entity!__ 
 ;;We need to determine if we're going to compute deltas, or provide
 ;;them.
 ;;The original scheme had us providing absolute time, not deltas.
@@ -420,7 +421,7 @@
 ;;so long as we have a reference to the previous point in time.  
 ;;We always have [lastupdate, current-time, deltat], one can be 
 ;;computed from the others...
-(defn load-ctx 
+(defn load-entity! 
   "Prepare the blackboard relative to the entity's sensory context. 
    tupdate is inferred to be a time at which the update is occuring, 
    and is inferred to be the current simulation time if none is provided.
@@ -430,12 +431,13 @@
                     :entity   unit
                     :original unit 
                     :deltat   deltat}))
-  ([unit deltat ctx] (load-ctx unit deltat (sim/current-time ctx) ctx)))
+  ([unit deltat ctx] (load-entity! unit deltat (sim/current-time ctx) ctx)))
 
 (defn changed? [orig e sd]    
   (or (not (identical? e orig))
       (not (identical? (get orig :statedata) sd))))
- 
+
+;;__commit-entity!__ 
 (defn merge-updates [ctx]
   (with-bb [[entity statedata original] ctx]
     (if (changed? original entity statedata)
@@ -458,6 +460,7 @@
 ;;the simcontext along with the behavior context (treating it
 ;;as a huge blackboard) seems like the simplest thing to do.
 
+;;__update-entity!__
 ;;Similarly, we'll have update take the context last.
 ;;update will depend on change-state-beh, but not change-state.
 ;;change-state is a higher-level api for changing things.
@@ -469,14 +472,14 @@
      (update-unit unit deltat (sim/current-time ctx) ctx))
   ([unit deltat tupdate ctx]
      (->>  ctx  
-           (load-ctx unit deltat tupdate)
+           (load-entity! unit deltat tupdate)
            (roll-forward-beh) ;update the unit according to the change in
                                         ;time.
            (error-on-fail)    ;unit updates should never fail.       
            (second  ;result is in terms of [:success|:fail ctx], pull out
                                         ;the ctx
             )
-           (merge-updates)
+           (commit-entity!)
 ;           (clear-bb)
            )))
 
@@ -506,6 +509,12 @@
     (->> (synch unit ctx)
          (update-unit unit deltat)
          (u/unit-update! nm (core/msg "Updated " nm)))))
+
+;;we can wrap these up and just pass a generic message for the
+;;behavior to interpret.
+;;change-state becomes
+;;load-entity
+;;add-message {:to-state to-state :deltat deltat :ctx ctx}
 
 ;;This implementation takes the context last.
 (defn change-state [unit to-state deltat ctx]
@@ -563,9 +572,8 @@
 ;;vars we're expecting from the context.  typically we'll 
 ;;just be passing around the simulation context, perhaps 
 ;;with some supplementary keys.
-(def change-state-beh 
-  (fn [{:keys [entity deltat statedata newstate duration followingstate] 
-        :or   {deltat 0 duration 0 } :as ctx}]
+(befn change-state-beh  [entity deltat statedata newstate duration followingstate] 
+                          :or   {deltat 0 duration 0 } :as ctx}]
     (let [followingstate (or followingstate newstate)
           newdata (change-statedata statedata newstate duration followingstate)
           ctx     (set-bb ctx :statedata newdata)]
@@ -707,7 +715,7 @@
 ;;path.  For instance, on first encountering the unit,
 ;;we establish a mutable cell to its location and use that 
 ;;during the update process.
-;(def commit-entity (->alter merge-updates))
+;(def commit-entity (->alter commit-entity!))
 
 ;;I like looking at unit updates like transactional semantics.
 ;;We probably want to pull out the unit and establish a mutable

@@ -676,226 +676,78 @@ Dim policies As Dictionary
 
 Set policies = New Dictionary
 
-Set policy = RegisterTemplate(AC12, 365 * 3, 365 * 2, 365, 365 * 2, 365 * 2 + 1, 45)
-;;RegisterPolicyLocations policy
-policy.name = "AC12Strict"
-policies.add policy.name, policy
 
+(name maxdwell mindwell maxbog startdeployable stopdeployable overlap)
+"AC12Strict" (AC12, 365 * 3, 365 * 2, 365, 365 * 2, 365 * 2 + 1, 45)
 ;;Changed from +- 90, to +- 180
-Set policy = RegisterTemplate(AC12, 365 * 3, 365 * 2, 365, 365 * 2 - 180, 365 * 2 + 180, 45)
-;;RegisterPolicyLocations policy
-policy.name = "AC12"
-policies.add policy.name, policy
-
+"AC12" (AC12, 365 * 3, 365 * 2, 365, 365 * 2 - 180, 365 * 2 + 180, 45)
 ;;units can go until end of available
-Set policy = RegisterTemplate(AC12, 365 * 3, 365, 365, 365 * 1, 1095, 45)
-policy.name = "AC12Loose"
-policies.add policy.name, policy
-
-
-Set policy = RegisterTemplate(AC13, 365 * 3, 825, 270, 825, 825 + 1, 45)
-;;RegisterPolicyLocations policy
-policy.name = "AC13Strict"
-policies.add policy.name, policy
-
+"AC12Loose" (AC12, 365 * 3, 365, 365, 365 * 1, 1095, 45)
+"AC13Strict" (AC13, 365 * 3, 825, 270, 825, 825 + 1, 45)
 ;;change +-180
-Set policy = RegisterTemplate(AC13, 365 * 3, 825, 270, 825 - 180, 825 + 180, 45)
-;;RegisterPolicyLocations policy
-policy.name = "AC13"
-policies.add policy.name, policy
-
+"AC13" (AC13, 365 * 3, 825, 270, 825 - 180, 825 + 180, 45)
 ;;made this actually loose.
-Set policy = RegisterTemplate(AC13, 365 * 3, 365, 270, 365, 365 * 3, 45)
-policy.name = "AC13Loose"
-policies.add policy.name, policy
-
-
-Set policy = RegisterTemplate(AC11, 365 * 2, 365, 365, 365, 365 * 2, 0) ;;0 overlap
-;;RegisterPolicyLocations policy
-policies.add policy.name, policy
-
-Set policy = RegisterTemplate(RC14, 365 * 5, 365 * 2, 270, 365 * 4, 365 * 4 + 1, 45)
-;;RegisterPolicyLocations policy
-policy.name = "RC14Strict"
-policies.add policy.name, policy
-
+"AC13Loose" (AC13, 365 * 3, 365, 270, 365, 365 * 3, 45)
+;;0 overlap
+"AC11" (AC11, 365 * 2, 365, 365, 365, 365 * 2, 0) 
+"RC14Strict" (RC14, 365 * 5, 365 * 2, 270, 365 * 4, 365 * 4 + 1, 45)
 ;;+- 180
-Set policy = RegisterTemplate(RC14, 365 * 5, 365 * 2, 270, 365 * 4 - 180, 365 * 4 + 180, 45)
-;;RegisterPolicyLocations policy
-policy.name = "RC14"
-policies.add policy.name, policy
-
-Set policy = RegisterTemplate(RC14, 365 * 5, 365 * 2, 270, 365 * 2, 365 * 5 - 90, 45)
-policy.name = "RC14Loose"
-policies.add policy.name, policy
-
-
-Set policy = RegisterTemplate(RC15, 365 * 6, 365 * 3, 270, 365 * 5, 365 * 5 + 1, 45)
-;;RegisterPolicyLocations policy
-policy.name = "RC15Strict"
-policies.add policy.name, policy
-
+ "RC14" (RC14, 365 * 5, 365 * 2, 270, 365 * 4 - 180, 365 * 4 + 180, 45)
+"RC14Loose" (RC14, 365 * 5, 365 * 2, 270, 365 * 2, 365 * 5 - 90, 45)
+"RC15Strict" (RC15, 365 * 6, 365 * 3, 270, 365 * 5, 365 * 5 + 1, 45)
 ;;+- 180
-Set policy = RegisterTemplate(RC15, 365 * 6, 365 * 3, 270, 365 * 5 - 180, 365 * 5 + 180, 45)
-;;RegisterPolicyLocations policy
-policy.name = "RC15"
-policies.add policy.name, policy
-
-Set policy = RegisterTemplate(RC15, 365 * 6, 365 * 3, 270, 365 * 5 - 90, 365 * 5 + 90, 45)
-policy.name = "RC15Loose"
-policies.add policy.name, policy
-
+"RC15" (RC15, 365 * 6, 365 * 3, 270, 365 * 5 - 180, 365 * 5 + 180, 45)
+"RC15Loose" (RC15, 365 * 6, 365 * 3, 270, 365 * 5 - 90, 365 * 5 + 90, 45)
 ;;This is the RC surge policy...
 ;;Note -> changed to 0 overlap for surge.
 ;;TOM Change 13 July 2011
-Set policy = RegisterTemplate(RC12, 365 * 3, 365, 270, 365 * 2, (365 * 3) - 90, 0)
-policy.name = "RC12"
-policies.add policy.name, policy
-
-Set policy = policies(AC12).clone
-policy.name = GhostPermanent12
-policies.add policy.name, policy
-
-Set policy = policies(AC13).clone
-policy.name = GhostPermanent13
-policies.add policy.name, policy
-
-Set policy = RegisterGhostTemplate("Ghost365_45", 365, 45)
-policies.add policy.name, policy
-
-Set policy = RegisterGhostTemplate("Ghost270_45", 270, 45)
-policies.add policy.name, policy
-
-Set policy = RegisterGhostTemplate("BOGForever", inf, 0)
-policies.add policy.name, policy
-
-
+"RC12" (RC12, 365 * 3, 365, 270, 365 * 2, (365 * 3) - 90, 0)
+;;aliases
+"GhostPermanent12" ac12
+"GhostPermanent13" ac13
+;;ghost (name, maxbog overlap)
+"Ghost365_45" ("Ghost365_45", 365, 45)
+"Ghost270_45" ("Ghost270_45", 270, 45)
+"BOGForever" ("BOGForever", +inf+, 0)
 ;;;;Enabler policies....i.e. 30 day overlap
-
-Set policy = RegisterTemplate(AC13, 365 * 3, 825, 270, 825 - 180, 825 + 180, 30)
-policy.name = "AC13_Enabler"
-policies.add policy.name, policy
-
+"AC13_Enabler" (AC13, 365 * 3, 825, 270, 825 - 180, 825 + 180, 30)
 ;;units can go until end of available
-Set policy = RegisterTemplate(AC12, 365 * 3, 365, 365, 365 * 1, 1095, 30)
-policy.name = "AC12Loose_Enabler"
-policies.add policy.name, policy
-
-Set policy = RegisterTemplate(RC15, 365 * 6, 365 * 3, 270, 365 * 5 - 180, 365 * 5 + 180, 30)
-;;RegisterPolicyLocations policy
-policy.name = "RC15_Enabler"
-policies.add policy.name, policy
-
-Set policy = RegisterTemplate(RC14, 365 * 5, 365 * 2, 270, 365 * 2, 365 * 5 - 90, 30)
-policy.name = "RC14Loose_Enabler"
-policies.add policy.name, policy
-
-Set policy = RegisterGhostTemplate("Ghost365_30", 365, 30)
-policy.name = "Ghost365_30"
-policies.add policy.name, policy
-
-Set policy = Nothing
-
-;;Set DefaultArforgenPolicies = listVals(policies)
-Set DefaultArforgenPolicies = policies
-Set policies = Nothing
-
-End Function
-;;
-Public Function TFPolicies() As Dictionary
-Dim policy As TimeStep_Policy
-Set TFPolicies = New Dictionary
+"AC12Loose_Enabler" (AC12, 365 * 3, 365, 365, 365 * 1, 1095, 30)
+"RC15_Enabler" (RC15, 365 * 6, 365 * 3, 270, 365 * 5 - 180, 365 * 5 + 180, 30)
+"RC14Loose_Enabler" (RC14, 365 * 5, 365 * 2, 270, 365 * 2, 365 * 5 - 90, 30)
+"Ghost365_30" ("Ghost365_30", 365, 30)
 
 ;;This is a special policy adapted for T.F;;s study.
 ;;RC has an extra year of availability to deploy.  I don;;t think it will matter.
-Set policy = RegisterTemplate(RC14, 365 * 6, 365 * 2, 270, 365 * 2, 365 * 6 - 90, 45, _
-                                newdict(available, 365))
-policy.name = "RC14Loose_3Year"
-TFPolicies.add policy.name, policy
-
+"RC14Loose_3Year" (RC14, 365 * 6, 365 * 2, 270, 365 * 2, 365 * 6 - 90, 45, _
+                                {available 365})
 ;;This is a special policy adapted for T.F.;;s study.
-Set policy = RegisterTemplate(RC14ReMob, 365 * 7, 365 * 2, 270, 365 * 2, 365 * 7 - 90, 45, _
-                                newdict(available, 730))
-policy.name = RC14ReMob
-TFPolicies.add policy.name, policy
-
+"RC14ReMob" (RC14ReMob, 365 * 7, 365 * 2, 270, 365 * 2, 365 * 7 - 90, 45, _
+                        {available, 730})
 ;;This is a special policy adapted for T.F;;s study.
 ;;RC has an extra year of availability to deploy.  I don;;t think it will matter.
-Set policy = RegisterTemplate(RC14, 365 * 6, 365 * 2, 270, 365 * 2, 365 * 6 - 90, 30, _
-                                newdict(available, 365))
-policy.name = "RC14Loose_3Year_Enabler"
-TFPolicies.add policy.name, policy
-
+"RC14Loose_3Year_Enabler" (RC14, 365 * 6, 365 * 2, 270, 365 * 2, 365 * 6 - 90, 30, _
+                                {available  365})
 ;;This is a special policy adapted for T.F.;;s study.
-    Set policy = RegisterTemplate(RC14ReMob, 365 * 7, 365 * 2, 270, 365 * 2, 365 * 7 - 90, 30, _
-                                newdict(available, 730))
-policy.name = RC14ReMob & "_Enabler"
-TFPolicies.add policy.name, policy
-
-End Function
-
+"RC14ReMob_Enabler" (RC14ReMob, 365 * 7, 365 * 2, 270, 365 * 2, 365 * 7 - 90, 30, _
+                                         {available, 730})
 ;;Integrated 10 Sep 2012
 ;;TOM Hack! 24 July 2012 -> this is a temporary patch.  There;;s no reason this shouldn;;t be data driven...blah
-Public Function FFGPolicies() As Dictionary
-Set FFGPolicies = New Dictionary
-
-Dim policy As TimeStep_Policy
-
+"FFGACRoto"
 Set policy = ACFFGTemplate("FFGACRoto", 45)
-FFGPolicies.add policy.name, policy
-
 Set policy = ACFFGTemplate("FFGACRoto_Enabler", 30)
-FFGPolicies.add policy.name, policy
-
-
 Set policy = RCFFGTemplate("FFGRCRoto", 45)
-FFGPolicies.add policy.name, policy
-
-
 Set policy = RCFFGTemplate("FFGRCRoto_Enabler", 45)
-FFGPolicies.add policy.name, policy
-
-
 Set policy = FFGMissionTemplate("FFGMission", 45)
-FFGPolicies.add policy.name, policy
-
-
 Set policy = FFGMissionTemplate("FFGMission_Enabler", 30)
-FFGPolicies.add policy.name, policy
-
-
 Set policy = MarathonPolicy.RCOpSusTemplate("RCOpSus", 45)
-FFGPolicies.add policy.name, policy
-
-
 Set policy = MarathonPolicy.RCOpSusTemplate("RCOpSus_Enabler", 30)
-FFGPolicies.add policy.name, policy
 
-
-;;9999999 730 9999999 730 9999999 30  0   Auto    {}
-
-End Function
-
-
-Public Function MaxUtilizationPolicies() As Dictionary
-Set MaxUtilizationPolicies = New Dictionary
-Dim policy As TimeStep_Policy
-
-Set policy = MarathonPolicy.maxUtilizationTemplate("MaxUtilization", 365, 45, 0)
-MaxUtilizationPolicies.add policy.name, policy
-
-Set policy = MarathonPolicy.maxUtilizationTemplate("MaxUtilization_Enabler", 365, 30, 0)
-MaxUtilizationPolicies.add policy.name, policy
-
-Set policy = MarathonPolicy.maxUtilizationTemplate("NearMaxUtilization", 270, 45, 730)
-MaxUtilizationPolicies.add policy.name, policy
-
-Set policy = MarathonPolicy.maxUtilizationTemplate("NearMaxUtilization_Enabler", 270, 30, 730)
-MaxUtilizationPolicies.add policy.name, policy
-
-End Function
-
-
+;;maxutilizationtemplate (name, maxbog, overlap, mindwell)
+"MaxUtilization"             ("MaxUtilization", 365, 45, 0)
+"MaxUtilization_Enabler"     ("MaxUtilization_Enabler", 365, 30, 0)
+"NearMaxUtilization"         ("NearMaxUtilization", 270, 45, 730)
+"NearMaxUtilization_Enabler" ("NearMaxUtilization_Enabler", 270, 30, 730)
 )
 ;;
 ;;
