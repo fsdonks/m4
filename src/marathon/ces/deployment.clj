@@ -3,10 +3,10 @@
 ;;changes to the simulation context necessary to physically allocate supply to 
 ;;demand - or to execute deployments.  
 ;;Primarily used by __marathon.sim.fill__ .
-(ns marathon.sim.deployment
+(ns marathon.ces.deployment
   (:require [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim    [core :as core] [demand :as dem] 
+            [marathon.ces    [core :as core] [demand :as dem] 
                              [policy :as policy] [supply :as supply] 
                              [unit :as u]]
             [marathon.data   [protocols :as protocols]]
@@ -56,14 +56,16 @@
             from-position (:position-policy unit);
             to-location   demandname
             to-position   :deployed
-            unit          (-> unit ;MOVE THIS TO A SEPARATE FUNCTION? 
-                              (assoc :position-policy to-position) 
-                              (assoc :dwell-time-when-deployed (udata/get-dwell unit)))
+            unit-delta    {:position-policy to-position
+                           :dwell-time-when-deployed (udata/get-dwell unit)}
+            unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
+                                 unit-delta)
             demand        (d/assign demand unit) ;need to update this in ctx..          
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))]  
-        (->> (sim/merge-updates {:demandstore (dem/add-demand demandstore demand)
-                                 :supplystore (supply/add-unit supplystore unit)} ctx)
+        (->> (sim/merge-entity {unitname unit-delta
+                                :DemandStore (dem/add-demand demandstore demand)
+                                :SupplyStore (supply/add-unit supplystore unit)} ctx)
              (u/change-location unit (:name demand)) 
              (deploy! followon?  unit demand t)  ;;apply state changes.             
              ))))  

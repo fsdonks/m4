@@ -30,7 +30,7 @@
                         [cellular :as cells]]
             [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
-            [spork.entitysystem.store :refer :all :exclude [entity-name]]
+            [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity]]
             [spork.sim.simcontext :as sim]
             [spork.ai.core :as ai]
             [marathon.data.store :as simstate]            
@@ -75,7 +75,10 @@
 
 (defn get-parameters [ctx]  (get-entity ctx :parameters))
 (defn get-supplystore [ctx] (get-entity ctx :SupplyStore))
+(defn set-supplystore [ctx s] (add-entity ctx :SupplyStore s))
 (defn get-demandstore [ctx] (get-entity ctx :DemandStore))
+(defn set-demandstore [ctx s] (add-entity ctx :DemandStore s))
+
 (defn get-policystore [ctx] (get-entity ctx :PolicyStore))
 (defn get-fillstore [ctx]  (get-entity ctx :FillStore))
 (defn get-fill-function [ctx] (get (get-fillstore ctx) :fillfunction))
@@ -139,11 +142,13 @@
   entity-name]
  [spork.sim.simcontext 
   merge-updates
+  merge-entity
   get-time])
 
-;;nested updates are becoming a pain in my ass.
-
-;;right now we're using assoc-in, we'll see if we can optimize this.
+;;probably deprecate in near future.
+(defmacro ->msg
+   ([t msg] (sim/->packet t :message (:from msg) (:to msg) msg msg))
+   ([from to t msg] (sim/->packet t :message from to msg msg)))
 
 ;;New
 ;;Environment for evaluating entity behaviors, adapted for use with the simcontext.
@@ -200,7 +205,7 @@
   (ai/step-entity! ctx e (:t msg) msg)))
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
-(defn merge-parameters [s ps]  (updatee s :parameters  #(merge % ps)))
+(defn merge-parameters [s ps]  (mergee  s :parameters  ps))
 ;;Operations for recording new units in the context.
 ;;We now just merge the new entity into the context; no need to
 ;;mess with the supplystore.  We may also get away with only
@@ -366,7 +371,7 @@
       (seq [this]  (seq (map f xs))))))
 
 ;;legacy api, just using CES now.
-(defn entities [ctx] (entity-seq ctx))
+;(defmacro entities [ctx] `(entity-seq ~ctx))
 
 ;;#Useful Vizualizations of the simulation context
 ;;TODO port this over to the new scenegraph api.

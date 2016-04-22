@@ -1,11 +1,11 @@
 ;;A place for defining queries on simulation state.  Serves as a
 ;;useful hub for defining complicated queries.  May also eventually 
 ;;extend spork.entitystore protocols to marathon stores.
-(ns marathon.sim.query
-  (:require [marathon.sim  [core :as core]
+(ns marathon.ces.query
+  (:require [marathon.ces  [core :as core]
                            [unit :as unit]
                            [supply :as supply]]
-            [marathon.sim.fill.fillgraph]
+            [marathon.ces.fill.fillgraph]
             [spork.util.reducers]
             [spork.util [tags :as tag]]
             [clojure.core [reducers :as r]]))
@@ -55,12 +55,12 @@
 
 (defn find-deployable-supply  [supply src] (keys (get (supply/get-buckets supply) src)))
 (def  src->fillrule (memoize (fn [src] 
-                               (marathon.sim.fill.fillgraph/sink-label src))))
+                               (marathon.ces.fill.fillgraph/sink-label src))))
 
 ;;Provides an ordered vector of suitable supply buckets to look.
 (defn src->srcs [srcmap src] 
   (->> (for [[rule cost] (get srcmap (src->fillrule src))]
-             [(marathon.sim.fill.fillgraph/source-root rule) cost]) 
+             [(marathon.ces.fill.fillgraph/source-root rule) cost]) 
        (sort-by second)
        (mapv first)))
 
@@ -453,7 +453,7 @@
 ;;environmental queries and specifying which vars in an expression are 
 ;;drawn from the environment (i.e. the state monad....)
 (defmacro with-query-env [env & expr]
-  `(binding [~'marathon.sim.query/*env* ~env]
+  `(binding [~'marathon.ces.query/*env* ~env]
      ~@expr))
 
 

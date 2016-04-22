@@ -1,8 +1,8 @@
 (ns marathon.sim.testing
   (:require [marathon.sim.missing] 
-            [marathon.sim [engine :refer :all]]
-            [marathon.sim [fill  :as fill]]
-            [marathon.sim [core :as core]
+            [marathon.ces [engine :refer :all]]
+            [marathon.ces [fill  :as fill]]
+            [marathon.ces [core :as core]
                           [supply :as supply]
                           [demand :as demand]
                           [unit :as unit]
@@ -328,7 +328,7 @@
 ;;{:src ... :cat ... :where .... :order-by ...} 
 
 ;;Given the following holds....
-;;marathon.sim.testing> (query/match-supply (:src d) :name defaultctx)
+;;marathon.ces.testing> (query/match-supply (:src d) :name defaultctx)
 ;;("40_SRC3_AC" "37_SRC3_AC" "36_SRC3_AC" "35_SRC3_AC" "34_SRC3_AC" "29_SRC3_NG" "24_SRC3_NG" "23_SRC3_NG" "22_SRC3_NG" "2_SRC1_NG")
 
 ;;We should then be able to fill the supply.
@@ -342,7 +342,7 @@
 ;;xs <- units that match r in supply
 ;;us <- take n xs
 
-(def unfilled  (marathon.sim.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
+(def unfilled  (marathon.ces.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
 (def d         (first (vals unfilled)))
 (def suitables (query/match-supply {:src (:src d) :order-by query/uniform} :name  demandctx))
 (def needed    (dem/required   d))

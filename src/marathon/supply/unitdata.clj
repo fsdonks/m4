@@ -1,5 +1,5 @@
 (ns marathon.supply.unitdata
-  (:require [marathon.sim [core :as core]]
+  (:require [marathon.ces [core :as core]]
             [marathon.data [cycle :as cyc]
              ;[protocols :as p]
              ]

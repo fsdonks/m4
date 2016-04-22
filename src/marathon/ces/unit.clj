@@ -1,9 +1,10 @@
 ;A module for operations on units.
-(ns marathon.sim.unit
+(ns marathon.ces.unit
   (:require [spork.sim [simcontext :as sim]]
             [spork.util [general :as gen]
-                        [metaprogramming :as util]]
-            [marathon.sim.core :as core]
+             [metaprogramming :as util]]
+            [spork.entitysystem.store :as store]
+            [marathon.ces.core :as core]
             [marathon.data [protocols :as pol]
                            [cycle :as cyc]]
             [marathon.policy.policydata :as pold])
@@ -406,7 +407,7 @@
   ;;how about handle-message? 
   (core/handle-message! ctx entity (core/->msg :from entity :to entity)))
 
-
+;;Think about changing this to use the context.
 (defn push-location [unit newlocation]
   (-> unit 
       (assoc :locationname    newlocation)
@@ -417,13 +418,14 @@
 ;;we're going to have lots of location changes.  I have a feeling 
 ;;the associng is going to kill us when we have a lot of movement.
 (defn change-location [unit newlocation ctx]
-  (core/with-simstate [[supplystore] ctx]
-    (if (= newlocation (:locationname unit))
-      ctx
-      (let [nextu    (-> (if (:moved unit)  (assoc unit :moved true) unit)
-                         (push-location newlocation))
-            ctx      (core/set-supplystore ctx (add-unit supplystore nextu))]
-        (unit-moved-event! unit newlocation ctx)))))
+  (if (= newlocation (:locationname unit))
+    ctx
+    (->> (-> (if (:moved unit)
+               (assoc unit :moved true)
+               unit)
+             (push-location newlocation))
+         (store/mergee ctx (:name unit))
+         (unit-moved-event! unit newlocation))))
 
 ;;TODO -> bring this back in.
 ;        (unit-first-moved-event! unit newlocation ctx)))))

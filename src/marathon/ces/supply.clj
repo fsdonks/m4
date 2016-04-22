@@ -7,7 +7,10 @@
             [marathon.supply [unitdata :as udata]]
             [marathon.ces [missing :as missing]
                           [core :as core] [policy :as policy] 
-                          [unit :as u]]           
+                          [unit :as u]]
+            [spork.entitysystem.store :as store
+             :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
+                     update-ine update-entity get-ine]]
             [spork.sim    [simcontext :as sim] [updates :as updates]]
             [spork.util   [tags :as tag]
                           [general :as gen]]))
@@ -27,19 +30,19 @@
 
 (defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
 ;;estore version
-(defn set-ghosts [x ctx]  (assoce :SupplyStore :has-ghosts xs))
+(defn set-ghosts [x ctx]  (assoce :SupplyStore :has-ghosts x))
 
 ;;estore version
 (defn add-unit   [store unit]
   (-> store
       (add-entity unit)
-      (assoc-ine :SupplyStore [:unitmap (:name unit)] (:name unit))))
+      (assoc-ine  [:SupplyStore :unitmap (:name unit)] (:name unit))))
 
 ;might be able to ditch the unit-map entirely.
 (defn drop-unit  [store unitname]
   (-> store
       (drop-entity unitname)
-      (update-ine  :SupplyStore [:unitmap] dissoc unitname)))
+      (update-ine  [:SupplyStore :unitmap] dissoc unitname)))
 
 ;;this has changed....we no longer need the supplystore...
 (defn get-unit [store name] ;(get-in supplystore [:unitmap  name]))
@@ -154,7 +157,8 @@
 (defn remove-unit [store unitname]
   (-> store
       (drop-unit unitname)
-      (updatee :SupplyStore remove-src (:src (get-unit supply unitname)))))
+      (update-entity :SupplyStore remove-src (gete store unitname :src))
+      ))
 
 (defn get-buckets 
   ([supply bucket] (get (:deployable-buckets supply) bucket))
@@ -347,9 +351,9 @@
 ;Consolidated this from update-deployability, formalized into a function.
 (defn add-deployable-supply 
   ([supply bucket src unit ctx]
-     (->> (sim/merge-updates 
-           {:supplystore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} ctx)
-          (update-availability unit supply)))
+   (->> ctx
+        (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} )
+        (update-availability unit supply)))
   ([supply src unit ctx] 
      (add-deployable-supply supply :default src unit ctx)))
 
@@ -363,11 +367,9 @@
   ([supply bucket src unit ctx]
      (if-let [newstock (-> (get-in supply [:deployable-buckets bucket src])
                            (dissoc (get unit :name)))]
-       (sim/merge-updates 
-        {:supplystore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
-       (->> (sim/merge-updates 
-             {:supplystore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
-            (out-of-stock! (get unit :src)))))
+       (->> (sim/merge-entity  {:SupplyStore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
+       (->> (sim/merge-entity  {:SupplyStore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
+            (out-of-stock! (get unit :src))))))
   ([supply src unit ctx] (remove-deployable-supply supply :default src unit ctx)))
 
 (defn update-deployability
@@ -394,8 +396,11 @@
 ;;supply status via tags now, we don't need to partition the buckets separately.
 ;;I removed the buckets args, and this function got hollowed out.  
 ;;__DEPRECATE__
-(defn update-deploy-status [supply unit followon? spawning? ctx]
-    (update-deployability supply unit followon? spawning? ctx))
+(defn update-deploy-status
+  ([supply unit followon? spawning? ctx]
+   (update-deployability supply unit followon? spawning? ctx))
+  ([unit followon? spawning? ctx]
+   (update-deployability unit followon? spawning? ctx)))
 
 ;;#Registering New Supply
 
@@ -460,8 +465,7 @@
            (should-change-policy? unit))
     (let [new-policy (get-near-max-policy (:policy unit) 
                                           (core/get-policystore ctx))]
-      (sim/merge-updates 
-        {:supplystore (add-unit supply (conj-policy unit new-policy))} ctx))                                                  
+      (update-entity ctx (:name unit) conj-policy new-policy))                                                
     ctx))
 
 ;;#Tracking Follow-On Supply
@@ -512,19 +516,20 @@
 
 ;;__TODO__Detangle release-followon-unit.
 
+;;Relook this, I think we can manage the same effects much simpler.
 (defn release-followon-unit
   "Convoluted.  Need to detangle this guy. 
    Assuming a unit associated with unitname was held in follow-on status, the 
    unit is released from holding and allowed to progress back into the global 
    supply."
   [ctx unitname]
-  (let [store (core/get-supplystore ctx)
-        ctx   (->> (sim/merge-updates 
-                     {:supplystore (remove-followon store unitname)} ctx)
-                   (u/change-state (get-unit store unitname) 
-                                   :AbruptWithdraw 0 nil))]   
+  (let [ctx   (->> (update-entity ctx :SupplyStore remove-followon unitname)
+                   (u/change-state unitname 
+                                   :AbruptWithdraw 0 nil))
+        store (core/get-supplystore ctx)]   
     (update-deploy-status 
-      (core/get-supplystore ctx) (get-unit store unitname) nil nil ctx)))
+     store
+     (get-unit store unitname) nil nil ctx)))
 
 
 ;;Process the unused follow-on units, changing their policy to complete cycles.
@@ -541,14 +546,14 @@
                       (tag/get-subjects (:tags supplystore) :MaxUtilizer))
          updates {:supplystore (untag-units supplystore :MaxUtilizer 
                                             (concat followons normal))}]   
-    (reduce release-followon-unit (sim/merge-updates updates ctx)
+    (reduce release-followon-unit (sim/merge-entity updates ctx)
             followons)))         
 
 ;;#Deployment Related
 
 ;;announce that the unit is in fact following on, remove it from followons.
 (defn record-followon [supply unit demand ctx]
-  (->> (sim/merge-updates 
+  (->> (sim/merge-entity 
          {:supplystore (remove-followon supply (get unit :name))} ctx)
        (unit-followon-event! unit demand)))
 

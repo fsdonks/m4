@@ -1,6 +1,6 @@
 ;;A namespace for unimplemented functionality.  Also a 
 ;;litmus test for identifying pending work.
-(ns marathon.sim.missing)
+(ns marathon.ces.missing)
 
 ;;#Missing Functions#
 (defn assign-behavior [unit behaviorname] 

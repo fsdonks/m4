@@ -14,13 +14,13 @@
 ;;registering policies with the policystore, registering simulation periods with 
 ;;the policystore, and managing policies and periods during the simulation.
 
-(ns marathon.sim.policy
-  (:require [marathon.data [protocols :as protocols] 
-                           [period :as period]]
+(ns marathon.ces.policy
+  (:require [marathon.data   [protocols :as protocols] 
+                             [period :as period]]
             [marathon.policy [policydata :as p] [policystore :as pstore]]
-            [marathon.sim  [missing :as missing]    
-                           [core :as core]    
-                           [unit :as u]]            
+            [marathon.ces    [missing :as missing]    
+                             [core :as core]    
+                             [unit :as u]]            
             [spork.util [tags :as tag]
                         [general :as gen]]
             [spork.sim  [simcontext :as sim]]))
@@ -391,8 +391,8 @@
   (let [subscribers (get-subscribers policy policystore)
         new-policy  (protocols/on-period-change policy new-period)]
         (->> (alter-unit-policies subscribers new-period policy ctx)
-             (sim/merge-updates 
-               {:policystore (update-policy policystore new-policy)}))))
+             (core/merge-entity 
+               {:PolicyStore (update-policy policystore new-policy)}))))
 
 ;; (defn subscribe-unit 
 ;;   "Subscribes a unit to policy by establishing a relation with the policy in
@@ -533,7 +533,7 @@
            fromname (:name period)]
        (if (= fromname toname) ctx
            (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
-                (sim/merge-updates {:policystore (update-period day toname policystore)})
+                (core/merge-entity {:PolicyStore (update-period day toname policystore)})
                 (period-change! fromname toname)
                 (change-policies fromname toname)))))
   ([day ctx] (manage-policies day ctx 

@@ -9,16 +9,16 @@
 ;;Note: This is one of the more involved pieces of documentation, and could 
 ;;benefit from refinement.  However, filling has proven to be
 ;;a sensitive subject, so the extra layer of commentary is still useful.
-(ns marathon.sim.fill
+(ns marathon.ces.fill
   (:require [marathon.data   [protocols :as protocols]]
             [marathon.fill   [filldata :as filldata]]
             [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim [core :as core] [demand :as dem] [supply :as supply]
+            [marathon.ces [core :as core] [demand :as dem] [supply :as supply]
                           [policy :as policy] [unit :as u] 
                           [deployment :as deployment]
                           [query :as query]]
-            [marathon.sim.fill [fillgraph :as fg]]
+            [marathon.ces.fill [fillgraph :as fg]]
             [spork.sim  [simcontext :as sim] [updates :as updates]]
             [spork.util [tags :as tag]]
             [spork.util.reducers]

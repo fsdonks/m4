@@ -1,8 +1,8 @@
 ;;Fillgraph is a special case of the generic graph that enforces some structural constraints.
 ;;it is designed to provide a simple, consistent interface for building fillgraphs by adding supply,
 ;;demand, and substitutions.
-(ns marathon.sim.fill.fillgraph
-  (:require [marathon.sim.core :as core]
+(ns marathon.ces.fill.fillgraph
+  (:require [marathon.ces.core :as core]
             [spork.cljgraph.core :as graph]
             [clojure.core.reducers :as r]))
 

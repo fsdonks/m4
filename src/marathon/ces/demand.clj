@@ -4,13 +4,16 @@
 ;;notifications and a high-level demand management API.  
 ;Functions for creating, initializing, resetting, and updating state related to
 ;the demand simulation are also found here.
-(ns marathon.sim.demand
+(ns marathon.ces.demand
   (:require  [marathon.demand [demanddata :as d]
                               [demandstore :as store]]
-             [marathon.sim    [core :as core] 
+             [marathon.ces    [core :as core] 
                               [supply :as supply] 
                               [policy :as policy]
-                              [unit :as u]]           
+                              [unit :as u]]
+             [spork.entitysystem.store 
+              :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
+                      update-ine update-entity get-ine]]
              [spork.sim       [simcontext :as sim]]
              [spork.util      [tags :as tag] [general :as gen] [temporal :as temporal]]))
 
@@ -219,6 +222,8 @@
   (sim/trigger-event :added-demand "DemandStore" "DemandStore" 
        (core/msg "Added Demand " (:name demand)) nil ctx))
 
+;;We can revisit this in the entitystore context in the future...
+;;Can probably store this in a flatter context.
 ;;#Demand Registration and Scheduling
 (defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
 (defn set-activations   [dstore t m] (gen/deep-assoc dstore [:activations t] m)) ;;requires a double assoc.
@@ -235,7 +240,7 @@
     (set-activations dstore t (conj actives demandname))))
 
 ;Register demand deactviation for a given day, given demand.
-;1)Tom Note 20 May 2013 -> Our merge-updates function looks alot like entity 
+;1)Tom Note 20 May 2013 -> Our merge-entity function looks alot like entity 
 ;  updates in the component-based model.  Might be easy to port...
 (defn add-deactivation [t demandname demandstore]
   (let [inactives (get-deactivations demandstore t)
@@ -251,8 +256,8 @@
     (->> ctx
          (request-demand-update! startday demandname)
          (request-demand-update! endday demandname)
-         (core/merge-updates 
-          {:demandstore
+         (core/merge-entity 
+          {:DemandStore
            (->>  demandstore
                  (add-activation   startday name)
                  (add-deactivation endday name))}))))
@@ -289,6 +294,7 @@
 ;(comment) 
 
 (defn register-demand! [ctx demand demands dstore pstore]
+  (assert false "Only use persistent version for now pls..")
   (let [demand   (core/ensure-name demand demands)
         dname    (core/entity-name   demand) ;;replace with entity-name                      
         newstore (tag-demand demand (add-demand dstore demand))
@@ -307,22 +313,26 @@
 ;;want to take advantage of fine-grained mutation, you have 
 ;;to call out where the mutation lies.  This could lead to some 
 ;;problems and oversight if we're not careful....
-(defn register-demands! 
+(defn register-demands!
   ([register-f xs ctx]
+    (assert false "Only use persistent version for now pls..")
      ;;Cleaner representation, allow multiple cells to be defined in a
      ;;single binding.
-     (core/with-cells [{locations     [:state :policystore :locationmap]
-                        demandtags    [:state :demandstore :tags]  
-                        demands       [:state :demandstore :demandmap]
-                        activations   [:state :demandstore :activations] ;forgot this guy, has
-                        deactivations [:state :demandstore :deactivations]
-                        :as txn}    ctx]
-       (update-txn!
-        (core/with-transient-cells [locations demandtags demands activations deactivations]
-          (reduce  (fn [acc demand]                     
-                     (-> (register-demand! acc demand demands (core/get-demandstore acc) (core/get-policystore acc))
-                         (register-f  demand))) txn xs)))))
-  ([xs ctx] (register-demands! (fn [ctx d] ctx) xs ctx)))
+     ;; (core/with-cells [{locations     [:state :policystore :locationmap]
+     ;;                    demandtags    [:state :demandstore :tags]  
+     ;;                    demands       [:state :demandstore :demandmap]
+     ;;                    activations   [:state :demandstore :activations] ;forgot this guy, has
+     ;;                    deactivations [:state :demandstore :deactivations]
+     ;;                    :as txn}    ctx]
+     ;;   (update-txn!
+     ;;    (core/with-transient-cells [locations demandtags demands activations deactivations]
+     ;;      (reduce  (fn [acc demand]                     
+     ;;                 (-> (register-demand! acc demand demands (core/get-demandstore acc) (core/get-policystore acc))
+     ;;                     (register-f  demand))) txn xs))))
+     )
+  ([xs ctx] (register-demands! (fn [ctx d] ctx) xs ctx))
+
+  )
 
 ;; (defn register-demands! 
 ;;   ([register-f xs ctx]
@@ -350,10 +360,15 @@
      (let [dname    (:name demand)
            newstore (tag-demand demand (add-demand demandstore demand))]
        (->> (registering-demand! demand ctx)         
-            (core/merge-updates {:policystore (policy/register-location dname policystore)})
+            (core/merge-entity {:PolicyStore (policy/register-location dname policystore)})
             (schedule-demand demand newstore))))
   ([demand ctx] (register-demand demand (core/get-demandstore ctx)
                                  (core/get-policystore ctx) ctx)))
+
+;;persistent version is back for now...
+(defn register-demands
+  [xs ctx] (reduce (fn [acc d] (register-demand acc d)) ctx xs))
+
 ;;cop-out, see if it's faster...
 (comment
   (defn register-demand  [demand ctx] (register-demands! [demand] ctx))
@@ -464,7 +479,7 @@
 ;;               (let [dname    (:name demand)
 ;;                     newstore (tag-demand demand (add-demand dstore demand))]
 ;;                 (->> (registering-demand! demand ctx)         
-;;                      (core/merge-updates {:policystore (policy/register-location dname policystore)})
+;;                      (core/merge-entity {:policystore (policy/register-location dname policystore)})
 ;;                      (schedule-demand demand newstore)))) 
 
 ;utility function....
@@ -518,15 +533,14 @@
                 nextunfilled (if (zero? (count demandq)) 
                                  (dissoc unfilled src) 
                                  (assoc unfilled src demandq))]
-            (->> (removing-unfilled! demandstore demandname ctx)
-                 (core/merge-updates 
-                   {:demandstore (assoc demandstore :unfilledq nextunfilled)})))              
+            (-> (removing-unfilled! demandstore demandname ctx)
+                (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
           (deactivating-unfilled! demandstore demandname ctx))     ;notification
         ;demand is unfilled, make sure it's added
         (let [demandq (get unfilled src (sorted-map))]  
           (if (contains? demandq fill-key) ctx ;pass-through
-            (->> (core/merge-updates ;add to unfilled 
-                   {:demandstore 
+            (->> (core/merge-entity ;add to unfilled 
+                   {:DemandStore 
                     (gen/deep-assoc demandstore [:unfilledq src] 
                          (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
@@ -802,12 +816,12 @@
   [demand t ctx]
   (if (empty-demand? demand)
     (deactivating-empty-demand! demand t ctx)
-    (->> (:units-assigned demand) ;otherwise send every unit home.
-      (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
-      (core/merge-updates
-        {:demandstore 
-         (gen/deep-assoc (core/get-demandstore ctx) [:demandmap (:name demand)]
-                   (assoc demand :units-assigned {}))}))))
+    (-> (->> (:units-assigned demand) ;otherwise send every unit home.
+             (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
+      (update-entity
+       :DemandStore       
+        #(gen/deep-assoc % [:demandmap (:name demand)]
+                         (assoc demand :units-assigned {})))))))
 
 ;;#Demand DeActivation
 (defn deactivate-demand
