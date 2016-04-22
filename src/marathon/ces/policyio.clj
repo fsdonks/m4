@@ -1,5 +1,5 @@
-(ns marathon.sim.policyio
-  (:require [marathon.sim [policyops :as policyops]
+(ns marathon.ces.policyio
+  (:require [marathon.ces [policyops :as policyops]
                           [policy :as pol]]
             [marathon.data [protocols :as core]
                            [period :as per]]

@@ -1,5 +1,5 @@
-(ns marathon.sim.testing
-  (:require [marathon.sim.missing] 
+(ns marathon.ces.testing
+  (:require [marathon.ces.missing] 
             [marathon.ces [engine :refer :all]]
             [marathon.ces [fill  :as fill]]
             [marathon.ces [core :as core]
@@ -18,6 +18,7 @@
                            [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
             [spork.sim     [simcontext :as sim]]
+            [spork.entitysystem.store :as store]
             [spork.util.reducers]
             [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
@@ -64,17 +65,20 @@
 
 ;;#Event propogation tests.
 (defn push-message! [ctx edata name]
-  (let [s    (:state ctx)
-        msgs (get-in s [:state :messages] [])]
-    (->> (assoc-in s [:state :messages] (conj msgs [name edata]))
-        (assoc ctx :state))))
+  (let [s (spork.sim.pure.network/get-state ctx)
+        sn (store/updatee
+            (spork.sim.pure.network/get-state ctx) :state :messages conj  [name edata])]
+    (spork.sim.pure.network/set-state ctx sn)))
 
-(def listener-ctx (assoc core/emptysim :propogator 
-                     (:propogator (sim/make-debug-context 
-                                   :debug-handler push-message!))))
+(def listener-ctx
+  (->   core/emptysim
+        (assoc  :propogator 
+                (:propogator (sim/make-debug-context 
+                              :debug-handler push-message!)))
+        (store/add-entity :state {:messages []})))
 
 (deftest event-propogation-testing
-  (is (= (:messages (sim/get-state (sim/trigger-event :hello :dee :dumb "test!" nil listener-ctx)))
+  (is (=  (store/gete (sim/trigger-event :hello :dee :dumb "test!" nil listener-ctx) :state :messages)
          [[:debugger #spork.sim.simcontext.packet{:t 0, :type :hello, :from :dee, :to :dumb, :msg "test!", :data nil}]])
       "Should have one message logged."))
  
@@ -83,8 +87,8 @@
 ;;project.  The easiest way to do that is to provide marathon an API
 ;;for instantiating a project from tables.  Since we have canonical
 ;;references for project data, it's pretty easy to do this...  
-(def testctx  (assoc-in core/emptysim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
-(def debugctx (assoc-in core/debugsim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+(def testctx  (store/assoc-ine core/emptysim [:parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
+(def debugctx (store/assoc-ine core/debugsim [:parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
 
 (def demand-records    (sd/get-sample-records :DemandRecords))
 (def ds       (ent/demands-from-records demand-records testctx))
@@ -108,7 +112,7 @@
 (def earliest (reduce min (map :startday ds)))
 (def latest   (reduce max (map #(+ (:startday %) (:duration %)) ds)))
 
-(def multiple-demands (demand/register-demands! ds testctx))
+(def multiple-demands (demand/register-demands ds testctx))
 
 (def m-dstore (core/get-demandstore multiple-demands))
 (def times    (map sim/get-time (take-while spork.sim.agenda/still-time? (iterate sim/advance-time multiple-demands))))
@@ -161,7 +165,6 @@
   (is (== (sim/get-next-time multiple-demands) earliest) "Next event should be demand activation")
   (is (= (last times) (:tlastdeactivation m-dstore))
       "Last event should be a deactivation time.")) 
-
 
 ;;we can't build supply without policy....initializing supply with
 ;;an understanding of policy...

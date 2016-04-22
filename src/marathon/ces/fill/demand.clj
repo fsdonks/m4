@@ -1,8 +1,8 @@
 ;;Functions for coordinating the filling of demands.  Specifically, we deal 
 ;;with the querying and selection of demands.
 
-(ns marathon.sim.fill.demand
-  (:require [marathon.sim    [core :as core] 
+(ns marathon.ces.fill.demand
+  (:require [marathon.ces    [core :as core] 
                              [supply :as supply]
                              [demand :as dem]
                              [fill :as fill]]           
@@ -48,8 +48,8 @@
             next-ctx    (if (= fill-status :unfilled) fill-ctx 
                           (->> fill-ctx 
                                (dem/demand-fill-changed! demandstore demand) ;2)
-                               (sim/merge-updates               ;UGLY 
-                                 {:demandstore 
+                               (core/merge-entity               ;UGLY 
+                                 {:DemandStore 
                                   (dem/register-change demandstore demandname)})))]
         (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
           next-ctx                                                           ;3)

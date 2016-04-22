@@ -1,7 +1,7 @@
-(ns marathon.sim.policyops
+(ns marathon.ces.policyops
   (:require [spork.util.metaprogramming :refer [keyvals->constants]]
             [spork.cljgraph.core :as graph]
-            [marathon.sim.core :refer [+inf+]]
+            [marathon.ces.core :refer [+inf+]]
             [marathon.policy.policydata :as policydata]            
             [marathon.data.protocols :as core :refer [Bogging 
                                                       Dwelling 
@@ -471,7 +471,8 @@
              m m))
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
   (if-let [ctor (get @templates name (get @templates (keyword name)))]
-    (let [stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
+    (let [_ (println [:trying name maxdwell mindwell maxbog startdeployable stopdeployable])
+          stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
           stats      (if overlap (assoc stats :overlap overlap) stats)
           stats      (clamp-stats name stats)
           base       (ctor :deltas deltas :stats stats)
@@ -512,7 +513,7 @@
    "NearMaxUtilization" near-max-utilization
    ;temporarily aliased until I get them ported....
    "ACFFG" ac13
-   "RCFFG" ac13
+   "RCFFG" rc14
    "FFGMission" ghost
    "RCOpSus" rc14
    })

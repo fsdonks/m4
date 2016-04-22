@@ -74,13 +74,17 @@
 ;;    demand-tags   [:demandstore :tags]})
 
 (defn get-parameters [ctx]  (get-entity ctx :parameters))
+(defn set-parameters [ctx ps]  (add-entity ctx :parameters ps))
 (defn get-supplystore [ctx] (get-entity ctx :SupplyStore))
 (defn set-supplystore [ctx s] (add-entity ctx :SupplyStore s))
 (defn get-demandstore [ctx] (get-entity ctx :DemandStore))
 (defn set-demandstore [ctx s] (add-entity ctx :DemandStore s))
 
-(defn get-policystore [ctx] (get-entity ctx :PolicyStore))
+(defn get-policystore [ctx]   (get-entity ctx :PolicyStore))
+(defn set-policystore [ctx p] (add-entity ctx :PolicyStore p))
+
 (defn get-fillstore [ctx]  (get-entity ctx :FillStore))
+(defn set-fillstore [ctx e]  (add-entity ctx :FillStore e))
 (defn get-fill-function [ctx] (get (get-fillstore ctx) :fillfunction))
 (defn get-fillmap    [ctx]   (get (get-fillstore ctx)  :fillmap))
 ;;probably not useful.

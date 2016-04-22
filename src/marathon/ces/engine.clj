@@ -21,14 +21,14 @@
 ;for every bit of logic executed during the course of the simulation. The 
 ;primary function, __event-step-marathon__, prescribes the order of application 
 ;;of each logical subsystem. 
-(ns marathon.sim.engine
-  (:require [marathon.sim.missing] 
-            [marathon.sim.core   :refer [now]]           
-            [marathon.sim.supply :as supply :refer [manage-supply manage-followons update-all]]
-            [marathon.sim.demand :as demand :refer [manage-demands manage-changed-demands]]
-            [marathon.sim.fill.demand       :refer [fill-demands]]
-            [marathon.sim.policy :as policy :refer [manage-policies]]
-            [marathon.data [simstate :as simstate]]
+(ns marathon.ces.engine
+  (:require [marathon.ces.missing] 
+            [marathon.ces.core   :as core :refer [now]]           
+            [marathon.ces.supply :as supply :refer [manage-supply manage-followons update-all]]
+            [marathon.ces.demand :as demand :refer [manage-demands manage-changed-demands]]
+            [marathon.ces.fill.demand       :refer [fill-demands]]
+            [marathon.ces.policy :as policy :refer [manage-policies]]
+            [marathon.data [store :as simstate]]
             [spork.sim     [simcontext :as sim]]))
 
 
@@ -272,8 +272,8 @@
    the simulation state.  If we don't, we currently toss an 
    error."
   [ctx] 
-  (let [dem  (marathon.sim.core/get-demandstore ctx)
-        supp (marathon.sim.core/get-supplystore ctx)]
+  (let [dem  (core/get-demandstore ctx)
+        supp (core/get-supplystore ctx)]
     (and 
      (supply/can-simulate? supp)
      (demand/can-simulate? dem))))

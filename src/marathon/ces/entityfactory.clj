@@ -10,20 +10,20 @@
 ;;For now, we'll keep it in a similar namespace, but as 
 ;;opportunities arise, we may be able to abastract out 
 ;;functionality.
-(ns marathon.sim.entityfactory
+(ns marathon.ces.entityfactory
   (:require [marathon        [schemas :as s]]            
             [marathon.data.protocols :as generic] ;rename
             [marathon.data   [cycle :as cyc] 
                              [fsm :as fsm]]
             [marathon.demand [demanddata :as d]]
-            [marathon.sim.demand :as demand]
-            [marathon.sim.unit :as unitsim]
+            [marathon.ces.demand :as demand]
+            [marathon.ces.unit :as unitsim]
             [marathon.supply [unitdata :as u]]
-            [marathon.sim.supply :as supply]
-            [marathon.sim.policy :as plcy]
+            [marathon.ces.supply :as supply]
+            [marathon.ces.policy :as plcy]
 ;;            [marathon.sim.engine :as engine]
             [spork.sim.simcontext :as sim]
-            [marathon.sim.core :as core]
+            [marathon.ces.core :as core]
             [spork.util      [table :as tbl]]
             [clojure.core    [reducers :as r]]))
 
@@ -399,7 +399,7 @@
   "Ensures the unit is uniquely named, unless non-strictness rules are 
    applied."
   [name supply strictname]  
-    (if (supply/get-unit name supply)
+    (if (supply/unit? supply name)
       (if strictname 
         (throw (Error. (str  "A unit already exists with the name " 
                              name " in SupplyManager " (:name supply)  
@@ -596,14 +596,37 @@
     (let [prepped   (-> raw-unit       
                         (associate-unit supplystore true)
                         (assign-policy policystore parameters)      
-                        (prep-cycle ctx))]
-      (->> (core/set-policystore ctx
-              (plcy/subscribe-unit prepped (:policy prepped) policystore))
+                        (prep-cycle ctx))
+          newstore (plcy/subscribe-unit prepped (:policy prepped) policystore)
+          _ (println [(:name prepped) newstore])
+          newctx  (core/set-policystore ctx newstore)]
+      (->> newctx
            (supply/register-unit supplystore behaviors prepped nil extra-tags)
            ;CHECK added this guy, lifted out from initialize-cycle,
            ;since it operates on a context, not a unit directly.
 ;           (unitsim/change-location prepped (:positionpolicy prepped))
            ))))
+
+;;(def res (atom nil))
+;; (defn process-unit2 [raw-unit extra-tags parameters behaviors ctx]
+;;   (core/with-simstate [[supplystore policystore] ctx] ;could get expensive 
+;;     (let [prepped   (-> raw-unit       
+;;                         (associate-unit supplystore true)
+;;                         (assign-policy policystore parameters)      
+;;                         (prep-cycle ctx))
+;;           newstore  (plcy/subscribe-unit prepped (:policy prepped) policystore)
+;;           _ (do (reset! res {:store newstore :ctx ctx}))
+;;           newctx  (core/set-policystore ctx newstore)]
+;;       newctx
+;;       (comment 
+;;       (->> newctx
+;;            (supply/register-unit supplystore behaviors prepped nil extra-tags)
+;;            ;CHECK added this guy, lifted out from initialize-cycle,
+;;            ;since it operates on a context, not a unit directly.
+;; ;           (unitsim/change-location prepped (:positionpolicy prepped))
+;;            )
+;;       )
+;;       )))
 
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters behaviors] ctx]
@@ -644,24 +667,26 @@
 ;;At the highest level, we have to thread a supply around 
 ;;and modify it, as well as a policystore.
 (defn process-units! [raw-units ctx]
-    (core/with-simstate [[parameters behaviors] ctx]
-      (core/with-cells [{supplystore   [:state :supplystore]
-                         policystore   [:state :policystore]
-                         subscriptions [:state :policystore :subscriptions]
-                         unitmap       [:state :supplystore :unitmap]
-                         unittags      [:state :supplystore :tags]
-                         buckets       [:state :supplystore :deployable-buckets]
-                         :as ctx2}         ctx]
-        (let [newctx  (update-ctx2!
-                       (core/with-transient-cells [unittags subscriptions buckets]
-                         (-> (reduce (fn [acc unit]
-                                       (process-unit! unit nil parameters behaviors supplystore policystore acc))
-                                     ctx2 
-                                     raw-units))))]
-          (core/with-simstate [[supplystore policystore] newctx]
-            (core/merge-updates 
-             {:policystore (subscribe-units! (vals (get supplystore :unitmap)) policystore)}
-             newctx))))))              
+  (assert false "use persistent version of process units for now!")
+    ;; (core/with-simstate [[parameters behaviors] ctx]
+    ;;   (core/with-cells [{supplystore   [:state :supplystore]
+    ;;                      policystore   [:state :policystore]
+    ;;                      subscriptions [:state :policystore :subscriptions]
+    ;;                      unitmap       [:state :supplystore :unitmap]
+    ;;                      unittags      [:state :supplystore :tags]
+    ;;                      buckets       [:state :supplystore :deployable-buckets]
+    ;;                      :as ctx2}         ctx]
+    ;;     (let [newctx  (update-ctx2!
+    ;;                    (core/with-transient-cells [unittags subscriptions buckets]
+    ;;                      (-> (reduce (fn [acc unit]
+    ;;                                    (process-unit! unit nil parameters behaviors supplystore policystore acc))
+    ;;                                  ctx2 
+    ;;                                  raw-units))))]
+    ;;       (core/with-simstate [[supplystore policystore] newctx]
+    ;;         (core/merge-entity 
+    ;;          {:PolicyStore (subscribe-units! (vals (get supplystore :unitmap)) policystore)}
+    ;;          newctx)))))
+    )              
 
  ;;Are there any abstractions we can level?  Any patterns that are
   ;;becoming apparent?

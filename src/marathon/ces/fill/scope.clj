@@ -1,8 +1,8 @@
 ;;Functions that illuminate dependencies and infeasible data for 
 ;;marathon runs based on the topology of fill graphs.  
-(ns marathon.sim.fill.scope
-  (:require [marathon.sim [core :as core] [demand :as demand] [supply :as supply]]
-            [marathon.sim.fill [fillgraph :as fillgraph]]
+(ns marathon.ces.fill.scope
+  (:require [marathon.ces [core :as core] [demand :as demand] [supply :as supply]]
+            [marathon.ces.fill [fillgraph :as fillgraph]]
             [spork.sim    [simcontext :as sim]]
             [spork.cljgraph [core :as graph]]))
 
@@ -80,9 +80,9 @@
          (->> ctx
               (scoped-demand!  islands)
               (scoped-supply!  islands)
-              (core/merge-updates 
-               {:demandstore (demand/scope-demand demandstore (:demand islands))
-                :supplystore (supply/scope-supply supplystore (:supply islands))
+              (core/merge-entity 
+               {:DemandStore (demand/scope-demand demandstore (:demand islands))
+                :SupplyStore (supply/scope-supply supplystore (:supply islands))
                 :parameters  (-> parameters 
                                  (update-in [:SRCs-In-Scope] merge in-scope)
                                  (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))

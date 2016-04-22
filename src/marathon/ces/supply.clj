@@ -18,9 +18,9 @@
 ;;#Primitive Operations and Supply Queries
 ;'TODO -> formalize dependencies and pre-compilation checks....
 ;;estore version....
-(defn can-simulate? [store]
-  (-> store
-      (gete  :SupplyStore :tags) 
+(defn can-simulate? [supply]
+  (-> supply
+      (:tags) 
       (tag/get-subjects :enabled)
       (empty?)
       (not)))
@@ -33,10 +33,12 @@
 (defn set-ghosts [x ctx]  (assoce :SupplyStore :has-ghosts x))
 
 ;;estore version
-(defn add-unit   [store unit]
-  (-> store
-      (add-entity unit)
-      (assoc-ine  [:SupplyStore :unitmap (:name unit)] (:name unit))))
+(defn add-unit
+  ([supply store unit]
+   (-> store
+       (add-entity unit)
+       (updatee :SupplyStore :unitmap assoc (:name unit) (:name unit))))
+  ([store unit] (add-unit (get-entity store :SupplyStore) store unit))) 
 
 ;might be able to ditch the unit-map entirely.
 (defn drop-unit  [store unitname]
@@ -47,6 +49,8 @@
 ;;this has changed....we no longer need the supplystore...
 (defn get-unit [store name] ;(get-in supplystore [:unitmap  name]))
   (get-entity store name))
+
+(defn unit? [store name] (get-in store [:unitmap name])) 
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
 
@@ -412,7 +416,7 @@
 ;added on-top-of the default tags derived from the unit data.
 (defn register-unit [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-        supply (-> (add-unit supply unit)
+        supply (-> (assoc-in supply [:unitmap (:name unit)]  (:name unit))
                    (tag-unit unit extra-tags)
                    (add-src (get unit :src)))
         ctx    (core/set-supplystore ctx supply) ;this happens in a

@@ -367,7 +367,7 @@
 
 ;;persistent version is back for now...
 (defn register-demands
-  [xs ctx] (reduce (fn [acc d] (register-demand acc d)) ctx xs))
+  [xs ctx] (reduce (fn [acc d] (register-demand d acc) ) ctx xs))
 
 ;;cop-out, see if it's faster...
 (comment

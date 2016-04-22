@@ -141,7 +141,7 @@
   [id]
   {:components
    [:name :SupplyStore
-    :srcs-in-scope #{} ;Set of unique SRCs in scope.
+    :srcs-in-scope {} ;Set of unique SRCs in scope.
     :deployable-buckets {} ;{category entity}, indicates entities that can fill demand.
 ;   :unitmap        ;{entity-name unitdata}, map of unique unit entities.
 ;   :unit-behaviors ;map of named unit behaviors.  may move this out...

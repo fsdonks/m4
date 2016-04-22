@@ -1,4 +1,4 @@
-(ns marathon.sim.sampledata
+(ns marathon.ces.sampledata
   (:require [spork.util [table :as tbl]]
             [marathon [schemas :as s]]))
 

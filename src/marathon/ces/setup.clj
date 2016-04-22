@@ -1,16 +1,15 @@
 ;;Functions for instantiating simstate from a variety of serialized
 ;;formats.  Also functions for providing sample or test data in the 
 ;;form of a fully prepped simstate.
-
-(ns marathon.sim.setup
-  (:require [marathon.sim.sampledata :as sd]
-            [marathon.sim [core :as core]
+(ns marathon.ces.setup
+  (:require [marathon.ces.sampledata :as sd]
+            [marathon.ces [core :as core]
                           [demand :as demand]
                           [supply :as supply]
                           [policy :as policy]
                           [policyio :as policyio]
                           [entityfactory :as ent]]
-            [marathon.sim.fill [fillgraph :as fillgraph]
+            [marathon.ces.fill [fillgraph :as fillgraph]
                                [scope :as scope]]
             [marathon.fill [fillstore :as fillstore]]
             [spork.util.tags :as tags]))
@@ -111,7 +110,9 @@
 (defn default-demand [ctx & {:keys  [records]
                              :or {records (sd/get-sample-records :DemandRecords)}}]
   (let [ds  (ent/demands-from-records records ctx)]
-    (demand/register-demands! ds ctx)))  
+    ;(demand/register-demands! ds ctx) ;;outed for arch changes...
+    (demand/register-demands ds ctx)
+    ))  
 
 ;;TODO parameterize this to work off data, rather than the default
 ;;records we have baked in at the moment....
