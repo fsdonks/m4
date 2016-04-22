@@ -207,10 +207,10 @@
 
 (deftest correct-context
   (is (= nonzero-supply-srcs
-         (set (map :src (vals (core/units defaultctx)))))
+         (set (map :src (core/units defaultctx))))
       "Should have all the supply loaded.")
   (is (= nonzero-demand-srcs
-         (set (map :src (vals (core/demands defaultctx)))))
+         (set (map :src  (core/demands defaultctx))))
       "Should have all the demand loaded."))
 
 ;;can we run a demand simulation?
