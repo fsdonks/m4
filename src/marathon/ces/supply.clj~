@@ -1,6 +1,7 @@
 ;;An implementation of the supply simulation used by Marathon.  
 ;;All the operations for pushing supply, in the context of a simulation are 
-;;maintained here.
+;;maintained here.  Backing structure is an entitystore.  Supporting
+;;Entity is the supply manager.
 (ns marathon.sim.supply
   (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
@@ -12,42 +13,50 @@
                           [general :as gen]]))
 
 ;;#Primitive Operations and Supply Queries
-
 ;'TODO -> formalize dependencies and pre-compilation checks....
-(defn can-simulate? [supply]
-  (not (empty? (tag/get-subjects (:tags supply) :enabled))))
-
+;;estore version....
+(defn can-simulate? [store]
+  (-> store
+      (gete  :SupplyStore :tags) 
+      (tag/get-subjects :enabled)
+      (empty?)
+      (not)))
+;;no change for estore.
 (defn unit-msg [unit]
   (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
 
 (defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
-(defn set-ghosts [x ctx] (assoc-in ctx [:state :supplystore :has-ghosts] x))
+;;estore version
+(defn set-ghosts [x ctx]  (assoce :SupplyStore :has-ghosts xs))
 
-;;Note -> modified these to be compatible with cellular updates.
+;;estore version
+(defn add-unit   [store unit]
+  (-> store
+      (add-entity unit)
+      (assoc-ine :SupplyStore [:unitmap (:name unit)] (:name unit))))
 
-(comment
-  (defn add-unit   [supply unit]     
-           (assoc-in supply [:unitmap (get unit :name)] unit)))
+;might be able to ditch the unit-map entirely.
+(defn drop-unit  [store unitname]
+  (-> store
+      (drop-entity unitname)
+      (update-ine  :SupplyStore [:unitmap] dissoc unitname)))
 
-(defn add-unit   [supply unit]     
-  (gen/assoc2 supply :unitmap (get unit :name) unit))
-
-(defn drop-unit  [supply unitname] 
-  (update-in supply [:unitmap] dissoc unitname))
-
-(defn get-unit [supplystore name] (get-in supplystore [:unitmap  name]))
+;;this has changed....we no longer need the supplystore...
+(defn get-unit [store name] ;(get-in supplystore [:unitmap  name]))
+  (get-entity store name))
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
 
 ;;#TODO  Generalize this.  We have a single case statement for
 ;;assigning behaviors.  Works okay, but it's kind of a choke point...
-(defn assign-behavior [behaviors unit]
-  (->>  (case (clojure.string/upper-case (:component unit))
-          "AC" :ac
-          ("NG" "RC") :rc
-          "GHOST" :ghost 
-          (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit)))))
-        (assoc unit :behavior)))
+(defn assign-behavior
+  [behaviors unit]
+   (->>  (case (clojure.string/upper-case (:component unit))
+           "AC" :ac
+           ("NG" "RC") :rc
+           "GHOST" :ghost 
+           (throw (Exception. (str "Trying to assign behavior based on unknown component: " (:component unit)))))
+         (assoc unit :behavior)))
 
 (defn empty-position? [unit] (nil? (:positionpolicy unit)))
 
@@ -124,10 +133,28 @@
 
 (defn remove-src [supply src] (update-in supply [:srcs-in-scope] dissoc src))
 
+;;Operations on units like add/remove happen at a high level, since the
+;;supply store, via the unit-map, served as the logical "container" for
+;;all the unit entities.
+
+;;There might be a general container entity type...
+;;If an entity is contained by another, then we want
+;;to remove all of its relations.
+;;Perhaps we can have a generalized relational setup.
+;;As we create entities, we could specify relationships.
+;;If an entity is removed, it's no longer contained by
+;;any dependent entities.  Rather than manually managing
+;;this stuff, we can let the framework do it.  Or we can
+;;define supplemental functions that help us.
+
+;;For instance, removing demands is probably identical to
+;;removing units.
+
 ;DOUBLE CHECK....do we really mean to drop the entire src? 
-(defn remove-unit [supply unitname]
-  (-> (drop-unit supply unitname)
-      (remove-src (:src (get-unit supply unitname))))) 
+(defn remove-unit [store unitname]
+  (-> store
+      (drop-unit unitname)
+      (updatee :SupplyStore remove-src (:src (get-unit supply unitname)))))
 
 (defn get-buckets 
   ([supply bucket] (get (:deployable-buckets supply) bucket))
@@ -180,14 +207,24 @@
 ;;__TODO__ move up-to-date? to the simcontext library.
 ;;This is a pretty general function, we can probably elevate to the core or to
 ;;sim context.
-(defn up-to-date? [t ctx unitname] (= (sim/last-update unitname ctx) t))
+;;CES version...
+;;we can change sim/last-update to be a general function.
+;;store/last-update
+;;This is generic...we can check to see if any entity is up to date by
+;;examining its update component.
+(defn up-to-date? [t ctx unitname]
+  (= (gete ctx unitname :last-update) t))
 
 (defn supply-update! "Notifies the context of a supply update."
   [supply unit msg ctx]
   (sim/trigger-event :supplyUpdate (:name supply) (:name unit) msg nil ctx))
 
 (defn get-supply-updates "Get all units with pending supply updates." 
-  [t ctx]  (sim/get-updates t :supply-update ctx))
+  [t ctx]
+  ;;select entities from the :supply-update component.
+                                        ;(sim/get-updates t :supply-update ctx)
+  (select-entities ctx :from [:supply update] :where  
+  )
 
 (defn request-unit-update! "Schedule an update for unit at time t." 
   [t unit ctx] 
@@ -253,7 +290,6 @@
 (defn out-of-stock! [src ctx]
   (sim/trigger-event :outofstock "SupplyManager" src 
      (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
-
 
 ;Aux function for logging/recording the fact that a unit changed locations
 (defn log-move! [t fromloc toloc unit & [duration ctx]]
@@ -527,6 +563,10 @@
   (not (tag/has-tag? (:tags store) (get unit :name) :hasdeployed))) 
 
 ;;##Supply Management
+;;the supply system queries the entity store to find entities with
+;;supply updates.
+;;From here ,it updates each entity in turn; really it invokes the
+;;unit-update system.
 (defn manage-supply
   "High level hook for the supply system.  For entities that have scheduled 
    updates at time t, they are brought up to date and have their changes 
@@ -538,20 +578,17 @@
       (update-units t supply ctx today-updates)
       ctx)))
 
-(comment 
-;;the entity-board version of this...
-(defn manage-supply
-  "High level hook for the supply system.  For entities that have scheduled 
-   updates at time t, they are brought up to date and have their changes 
-   incorporated into the context.  The entity behaviors will typically 
-   use some of the supply system functions defined above to alter the context."
-  [t ctx]
-  (let [supply (core/get-supplystore ctx)]
-    (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
-      (update-units t supply ctx today-updates)
-      ctx)))
-)
 
+;; (defn manage-supply
+;;   "High level hook for the supply system.  For entities that have scheduled 
+;;    updates at time t, they are brought up to date and have their changes 
+;;    incorporated into the context.  The entity behaviors will typically 
+;;    use some of the supply system functions defined above to alter the context."
+;;   [t ctx]
+;;   (let [supply (core/get-supplystore ctx)]
+;;     (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
+;;       (update-units t supply ctx today-updates)
+;;       ctx)))
 
 ;;A simple wrapper to unify the high level supply management.  We were calling 
 ;;this inline, it's more consistent now.

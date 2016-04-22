@@ -20,7 +20,7 @@
 ;;insight.  
 ;;Even for intrepid readers, the section header __Developer Notes__ may be 
 ;;largely ignored.
-(ns marathon.sim.core
+(ns marathon.ces.core
   (:require [clojure    [inspector :as inspect]]
             [spork.util [metaprogramming :as util]
                         [general :as gen]
@@ -30,28 +30,11 @@
                         [cellular :as cells]]
             [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
-            [spork.entitysystem.store]
+            [spork.entitysystem.store :refer :all :exclude [entity-name]]
             [spork.sim.simcontext :as sim]
             [spork.ai.core :as ai]
-            [marathon.data.simstate :as simstate]            
+            [marathon.data.store :as simstate]            
             [clojure.core.reducers :as r]))
-
-;;Possible use of dynamic context for later....
-;;Dunno if I want to do this yet..
-;(def ^:dynamic *ctx* nil)
-;; (defmacro defcontextual 
-;;   "Define functions that work with or without a name context, ctx.
-;;    Yields functions that an extra arity fun, taking ctx as a final argument.
-;;    If no contextual function is provided, uses the var bound to marathon.sim.core/*ctx*
-;;    Designed to eliminate boilerplate, and allow us to maintain contextual functions 
-;;    that can use dynamic binding.  Note -> the main reason to use this, in lieu of."
-;;   [name args & expr]
-;;   (assert (vector? args) "arguments must be a vector")
-;;   (let [rawargs (if (= (last args) 'ctx)
-;;                     (subvec args 0 (dec (count args)))
-;;                     args)]                                
-;;   `(defn ~name ([~@rawargs] ~@expr)
-;;                ([~@(conj rawargs 'ctx)] ~@expr))))
 
 ;;#Providing Common Access to the State in the Simulation Context
 ;;The simulation context contains the simulation state - a large nested map of 
@@ -78,22 +61,39 @@
 ;;dissect our nested map of state a bit easier.  Each symbol in the defpath 
 ;;binding returns a function that, given a simulation context, points to the 
 ;;named resource using standard clojure map operations via clojure.core/get-in.
-(util/defpaths   [:state] 
-  {parameters    [:parameters]
-   supplystore   [:supplystore]
-   demandstore   [:demandstore]
-   policystore   [:policystore]
-   fillstore     [:fillstore]
-   fill-function [:fillstore :fillfunction]
-   fillmap       [:fillstore :fillmap]
-   behaviors     [:behaviormanager]
-   supply-tags   [:supplystore :tags]
-   demand-tags   [:demandstore :tags]})
+;; (util/defpaths   [:state] 
+;;   {parameters    [:parameters]
+;;    supplystore   [:supplystore]
+;;    demandstore   [:demandstore]
+;;    policystore   [:policystore]
+;;    fillstore     [:fillstore]
+;;    fill-function [:fillstore :fillfunction]
+;;    fillmap       [:fillstore :fillmap]
+;;    behaviors     [:behaviormanager]
+;;    supply-tags   [:supplystore :tags]
+;;    demand-tags   [:demandstore :tags]})
 
-(defn demands [ctx] (:demandmap (get-demandstore ctx)))
-(defn units   [ctx] (:unitmap   (get-supplystore ctx)))
+(defn get-parameters [ctx]  (get-entity ctx :parameters))
+(defn get-supplystore [ctx] (get-entity ctx :SupplyStore))
+(defn get-demandstore [ctx] (get-entity ctx :DemandStore))
+(defn get-policystore [ctx] (get-entity ctx :PolicyStore))
+(defn get-fillstore [ctx]  (get-entity ctx :FillStore))
+(defn get-fill-function [ctx] (get (get-fillstore ctx) :fillfunction))
+(defn get-fillmap    [ctx]   (get (get-fillstore ctx)  :fillmap))
+;;probably not useful.
+(defn get-behaviors  [ctx] (get-entity ctx :behaviormanager))
+(defn get-demand-tags [ctx] (get (get-demandstore ctx) :tags))
+(defn get-supply-tags [ctx] (get (get-supplystore ctx) :tags))
+
+(defn demands [ctx]
+  (for [id  (keys (:demandmap (get-demandstore ctx)))]
+    (get-entity ctx id)))
+              
+(defn units   [ctx]
+    (for [id  (keys (:unitmap   (get-supplystore ctx)))]
+      (get-entity ctx id)))
+
 (defn periods [ctx] (:periods   (get-policystore ctx)))
-
 
 (defmacro with-simstate 
   "Given a destructuring of [[path1 path2...] the-simstate], paired
@@ -120,31 +120,23 @@
 
 ;;#Protocols 
 ;;Alias for entity protocol.  Helps us unify name access.
-(defn entity-name [x]
-  ;; (if (satisfies? spork.entitysystem.store/IEntity x)
-  ;;   (spork.entitysystem.store/entity-name x)
-    (get x :name))
+
+;(defn entity-name [x] (get x :name))
 
 ;;#Operations for working with mutable references
 ;;particularly working with pieces of state in a nested associative
 ;;structure.
 
-
 ;;Imports from spork.util.cellular and simcontext
 (util/import-vars 
  [spork.util.cellular
-  assoc-any
-  conj-any
-  dissoc-any
-  disj-any
-  assoc-in-any
-  update-in-any
-  contains-any?
   with-cells
   with-transient-cells
   swap-cell!
   reset-cell!
   ->cell]
+ [spork.entitysystem.store
+  entity-name]
  [spork.sim.simcontext 
   merge-updates
   get-time])
@@ -157,13 +149,13 @@
 ;;Environment for evaluating entity behaviors, adapted for use with the simcontext.
 ;;If we provide an address, the entity is pushed there.  So, we can have nested
 ;;updates inside associative structures.
-(defrecord behaviorenv [entity behavior current-messages new-messages ctx current-message address]
+(defrecord behaviorenv [entity behavior current-messages new-messages ctx current-message]
   ai/IEntityMessaging
   (entity-messages- [e id] current-messages)
   (push-message-    [e from to msg] ;should probably guard against posing as another entity
     (let [t        (.valAt ^clojure.lang.ILookup  msg :t)
-          _        (debug [:add-new-messages-to new-messages])
-          additional-messages (swap!! (or new-messages  (atom []))
+          _        (ai/debug [:add-new-messages-to new-messages])
+          additional-messages (spork.ai.behavior/swap!! (or new-messages  (atom []))
                                         (fn [^clojure.lang.IPersistentCollection xs]
                                           (.cons  xs
                                              (.assoc ^clojure.lang.Associative msg :from from))))]                            
@@ -173,89 +165,24 @@
                     additional-messages
                     ctx
                     current-message
-                    address)))
+                    )))
   ai/IEntityStorage
   (commit-entity- [env]
-    (let [ctx      (deref! ctx)
-          ent      (deref! entity)
+    (let [ctx      (ai/deref! ctx)
+          ent      (ai/deref! entity)
          ; existing-messages (atom (:messages ent))          
           id  (:name ent)
-          _   (debug  [:committing ent])
-          _   (debug  [:new-messages new-messages])
+          _   (ai/debug  [:committing ent])
+          _   (ai/debug  [:new-messages new-messages])
           ]
       (reduce
        (fn [acc m]
          (do 
           ;(println [:pushing m :in acc])
-          (sim/notify acc (:from m) (:to m) m )))
-       (assoc-in ctx address ent)
+          (sim/trigger-event m acc)))
+       (mergee ctx (:name ent) ent)
        new-messages))))
-
-;;This only really matters when we're sending messages...
-(defn find-entity [ctx id]
-  ;;Right now, we just need this shit to work.
-  ;;So, there are only two locations an entity can
-  ;;be in.
-  (cond (contains? (-> ctx [:state :supplystore :unitmap]) id)
-        [:state :supplystore :unitmap]
-        (contains? (-> ctx [:state :supplystore :demandmap]) id)
-        [:state :supplystore :demandmap]
-        :else (throw (Exception. (str "unknown entity... " id)))))
-                 
-;;we can allow-path-to to function based on types...                  
-;;if the entity is a unit, then the path is in [:supplystore :unitmap (:name unit)]
-;;if demand, then [:demandstore :demandmap (:name demand)]                       
-
-
-                 
-;;we want to register all the entities...
-;;Specifically, "Where" they live in our nested
-;;associative bliss.
-;;note: 
-;;If we weren't using the store mechanism, they'd all just
-;;be flatly stored in the entitystore...
-;;alternately....
-;;entitystore keeps leaf entities (units, demands)
-;;we maintain stores in the simstate like normal...
-;;unit-map, entity-map only contain ids....
-;;behaving a unit is easier...
-;;unitmap == entities where supply
-;;demandmap == entities where demand
-;;I want to send a message to entity A.
-;;I have a mailbox for entity A.
-;;The mailbox for entity A has an associated handler.
-;;So, I send A mail; it's handler works by
-;;creating a behavior context from the current
-;;context, evaluating the behavior, and committing
-;;the entity back into the context.
-;;So, mailboxes need to know how to load and commit
-;;entities...?
-
-;;Does that mean we can maintain an entity registry?
-;;Alternately, we have an entity store....
- 
-;;entities live in the context...(comment
-(defn add-unit   [supply unit]     
-  (assoc-in supply [:unitmap (get unit :name)] unit))
-
-(defn add-unit   [supply unit]     
-  (gen/assoc2 supply :unitmap (get unit :name) unit))
-
-(defn drop-unit  [supply unitname] 
-  (update-in supply [:unitmap] dissoc unitname))
-
-;;currently, if you want to find an entity by name,
-;;you have to look at each of the stores and
-;;look call get-entity- on them...
-
-;;If everything was in the entitystore, it'd be simpler;
-;;we just find-by-id, or select-entities where (= name id)...
-;;There are no paths to entities.
-
-;;an entity-ref could be
-;;commit-
-;;load-
-
+                
 ;;all we need to do is create  a behavior context,
 ;;eval the behavior, and store the entity in the
 ;;evaluated context.
@@ -263,7 +190,8 @@
 ;;Message handling is equivalent to stepping the entity
 ;;immediately.
 (defn handle-message! [ctx e msg]
-  (let [benv (behaviorenv.  (atom e)
+  (let [ent  (get-entity ctx e)
+        benv (behaviorenv.  (atom ent)
                             (.valAt ^clojure.lang.ILookup e :behavior) 
                             [msg]
                             nil
@@ -271,52 +199,19 @@
                             msg)]    
   (ai/step-entity! ctx e (:t msg) msg)))
 
-
-;; (def  assoc-any  cells/assoc-any)
-;; (def  conj-any   cells/conj-any)
-;; (def  dissoc-any cells/dissoc-any)
-;; (def  disj-any   cells/disj-any)
-;; (def  assoc-in-any cells/assoc-in-any)
-;; (def  update-in-any cells/update-in-any)
-;; (def  contains-any? cells/contains-any?)
-;; (def  with-cells cells/with-cells)
-;; (def  with-transient-cells cells/with-transient-cells)
-;; (def  swap-cell! cells/swap-cell!)
-
-
-;(def merge-updates sim/merge-updates)
-
-;;Experimental...
-;;Overloading of simcontext/merge-updates, in that we short-circuit 
-;;cells.  If an updated value is a cell, we do not merge.  Idiomatically, 
-;;operations that modify simulation state use this merge/updates instead 
-;;of simcontext/merge-updates.  We'll move this into spork in the 
-;;future, for now it's a proof of principle.
-;; (definline merge-updates  [m ctx] 
-;;   `(if (map? ~m)
-;;      (reduce-kv (fn [c# k# v#]
-;;                   (cond (cell? v#) c# ;short-circuit cells
-;;                         (= k# :trigger) (v# c#) 
-;;                         :else   (sim/assoc-state k# v# c#)))
-;;                 ~ctx ~m)
-;;      (reduce (fn [c# [k# v#]]
-;;                (cond (cell? v#) c#
-;;                      (= k# :trigger) (v# c#) 
-;;                      :else          (sim/assoc-state k# v# c#)))
-;;             ~ctx ~m)))
-
-
-(defn set-parameter    [s p v] (update-parameters s #(assoc % p v)))
-(defn merge-parameters [s ps]  (update-parameters s #(merge % ps)))
+(defn set-parameter    [s p v] (assoce  s :parameters p v))
+(defn merge-parameters [s ps]  (updatee s :parameters  #(merge % ps)))
 ;;Operations for recording new units in the context.
+;;We now just merge the new entity into the context; no need to
+;;mess with the supplystore.  We may also get away with only
+;;merging things that actually changed.
 (defn set-unit
-  ([u ctx]   (set-unit u    (get-supplystore ctx) ctx))
-  ([u s ctx] (merge-updates 
-              {:supplystore (assoc-in s [:unit-map (:name u)] u)}
-              ctx)))
+  ([u ctx]   (mergee ctx (:name u) u)) 
+  ([u s ctx] (mergee ctx (:name u) u)))
 
 ;;#Empty Simulation Contexts
-(def emptystate (simstate/make-simstate))
+;;altered.
+(def emptystate (simstate/->store)) ;;now using ces
 (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
 ;;A useful debugging context for us.  Prints out everything it sees.
 (def ^:dynamic *debug* nil)
@@ -470,21 +365,8 @@
       clojure.lang.Seqable 
       (seq [this]  (seq (map f xs))))))
 
-;;This is a trivial proxy for the entity store.  We'll port this over
-;;once the backend/state management is stable.
-(defn entities [ctx]  
-  (let [xs   (->> ctx  ((juxt demands units periods)))
-        n    (reduce + (map count xs))
-        ents (-> xs  (r/mapcat rvals))]
-    (reify 
-      clojure.lang.Seqable 
-      (seq [obj] (concat (vals (units ctx)) (vals (demands ctx)) (vals (periods ctx))))
-      clojure.lang.Counted 
-      (count [obj] n)
-      clojure.core.protocols/CollReduce
-      (coll-reduce [this f1]   (reduce (fn [acc v] (f1 acc v)) (f1) ents))
-      (coll-reduce [_ f1 init] (reduce (fn [acc v] (f1 acc v)) init ents)))))
-
+;;legacy api, just using CES now.
+(defn entities [ctx] (entity-seq ctx))
 
 ;;#Useful Vizualizations of the simulation context
 ;;TODO port this over to the new scenegraph api.
@@ -590,11 +472,14 @@
    fill phase."
   [supplystore] (keys (:followon-buckets supplystore)))
 
+;;Check the validity here...
+;;Do we need so much redundancy now?
 (defn update-unit
   "Associates unit u into the context's supply store, using the unit's name 
    as a key."
-  [u ctx]
-  (assoc-in ctx [:state :supplystore :unitmap (:name u)] u))
+  [u ctx]                    
+  (set-unit u ctx)  
+  )
 
 (defn ghost? [unit] (= (clojure.string/upper-case (:src unit)) "GHOST"))
 (defn followon? [u] (:followoncode u))
@@ -750,7 +635,7 @@
   (->> ctx
        (sim/request-update tupdate requested-by request-type)
        (sim/trigger-event request-type requested-by :update-manager 
-                          (msg requested-by " requested an " request-type " at " tupdate) nil)))
+              (msg requested-by " requested an " request-type " at " tupdate) nil)))
 
 ;;##Developer Notes
 
