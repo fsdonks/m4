@@ -36,8 +36,8 @@
 (defn add-unit
   ([supply store unit]
    (-> store
-       (add-entity unit)
-       (updatee :SupplyStore :unitmap assoc (:name unit) (:name unit))))
+       (add-entity (:name unit) unit)
+       (assoc-ine  [:SupplyStore :unitmap (:name unit)] (:name unit))))
   ([store unit] (add-unit (get-entity store :SupplyStore) store unit))) 
 
 ;might be able to ditch the unit-map entirely.
@@ -371,9 +371,9 @@
   ([supply bucket src unit ctx]
      (if-let [newstock (-> (get-in supply [:deployable-buckets bucket src])
                            (dissoc (get unit :name)))]
-       (->> (sim/merge-entity  {:SupplyStore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
+       (sim/merge-entity  {:SupplyStore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
        (->> (sim/merge-entity  {:SupplyStore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
-            (out-of-stock! (get unit :src))))))
+            (out-of-stock! (get unit :src)))))
   ([supply src unit ctx] (remove-deployable-supply supply :default src unit ctx)))
 
 (defn update-deployability
@@ -408,6 +408,7 @@
 
 ;;#Registering New Supply
 
+
 ;Note -> the signature for this originally returned the supply, but we're not 
 ;returning the context.  I think our other functions that use this guy will be
 ;easy to adapt, just need to make sure they're not expecting supplystores.
@@ -416,19 +417,19 @@
 ;added on-top-of the default tags derived from the unit data.
 (defn register-unit [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-        supply (-> (assoc-in supply [:unitmap (:name unit)]  (:name unit))
+        ctx    (-> supply
                    (tag-unit unit extra-tags)
-                   (add-src (get unit :src)))
-        ctx    (core/set-supplystore ctx supply) ;this happens in a
-                                                 ;pure context,
+                   (add-src (get unit :src))
+                   (add-unit  ctx unit)) ;this happens in a
+                                        ;pure context,
                                                  ;cellular need not do
-                                                 ;anything here.
+                                        ;anything here.
         ]
     (if ghost 
       (->> (spawning-ghost! unit ctx)
            (set-ghosts true))
       (->> (spawning-unit! unit ctx)
-           (update-deployability supply unit nil nil)))))
+           (update-deployability unit nil nil)))))
 
 (defn register-unit! [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))

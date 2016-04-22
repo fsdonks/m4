@@ -186,9 +186,7 @@
 ;;bulk updates where possible.  
 (def loadedctx        (ent/process-units us loadedctx))
 
-
 ;;TODO# add tests for mutable version of process-units!
-
 (def test-fillstore   (setup/default-fillstore))
 (def loadedctx        (core/set-fillstore loadedctx test-fillstore))
 
@@ -272,10 +270,9 @@
               '(["1_R25_SRC3[1...541]" 1] ["1_R3_SRC3[1...2521]" 1] ["2_R1_SRC3[1...91]" 2] ["2_R2_SRC3[1...2521]" 2]))
       "Should have the same order and set of demands unfilled on day 1."))
 
-(def deployables  (filter unit/in-deployable-window? (vals  (core/units defaultctx))))
-(defn deployable-units [ctx] (filter unit/can-deploy? (vals  (core/units defaultctx))))
+(def deployables  (filter unit/in-deployable-window?    (core/units defaultctx)))
+(defn deployable-units [ctx] (filter unit/can-deploy?   (core/units defaultctx)))
 (def deploynames  (map :name deployables))
-
 
 ;;fill queries...
 (def fillrules (map fill/derive-supply-rule (vals (core/demands defaultctx)) (core/get-fillstore defaultctx)))
@@ -417,10 +414,10 @@
 
 (def the-deployers  
   (for [nm selected]
-    (get (core/units defaultctx) nm)))
+    (store/get-entity defaultctx nm)))
 
 (def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
-(def deployed-units (select-keys (core/units deployedctx) selected))
+(def deployed-units (store/get-entities deployedctx selected))
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
 ;;The trick now is to indicate that the entities should be updating.

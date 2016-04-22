@@ -151,8 +151,8 @@
 
 ;;probably deprecate in near future.
 (defmacro ->msg
-   ([t msg] (sim/->packet t :message (:from msg) (:to msg) msg msg))
-   ([from to t msg] (sim/->packet t :message from to msg msg)))
+   ([t msg] `(sim/->packet ~t :message (:from ~msg) (:to ~msg) ~msg ~msg))
+   ([from to t msg] `(sim/->packet ~t :message ~from ~to ~msg ~msg)))
 
 ;;New
 ;;Environment for evaluating entity behaviors, adapted for use with the simcontext.
@@ -205,8 +205,11 @@
                             [msg]
                             nil
                             (atom ctx)
-                            msg)]    
-  (ai/step-entity! ctx e (:t msg) msg)))
+                            msg)]
+    (println ["Handling Message Stub!" (:name e) msg])
+                                        ;    (ai/step-entity! ctx e (:t msg) msg)
+    ctx
+    ))
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
 (defn merge-parameters [s ps]  (mergee  s :parameters  ps))
@@ -228,11 +231,11 @@
 (def ^:dynamic *ignored* #{})
 
 (defmacro debugging [& expr]
-  `(binding [~'marathon.sim.core/*debug* true]
+  `(binding [~'marathon.ces.core/*debug* true]
      ~@expr))
 
 (defmacro ignoring [es & expr]
-  `(binding [~'marathon.sim.core/*ignored*  (into ~'marathon.sim.core/*ignored* ~es)]
+  `(binding [~'marathon.ces.core/*ignored*  (into ~'marathon.ces.core/*ignored* ~es)]
      ~@expr))
 
 (defmacro noisy 
@@ -247,7 +250,7 @@
 
 (def ^:dynamic *event-filter* visible?)
 (defmacro with-event-filter [f & expr]
-  `(binding [~'marathon.sim.core/*event-filter* ~f]
+  `(binding [~'marathon.ces.core/*event-filter* ~f]
      ~@expr))
 
 (defn debug-listener  [ctx edata name] 

@@ -597,8 +597,7 @@
                         (associate-unit supplystore true)
                         (assign-policy policystore parameters)      
                         (prep-cycle ctx))
-          newstore (plcy/subscribe-unit prepped (:policy prepped) policystore)
-          _ (println [(:name prepped) newstore])
+          newstore (plcy/subscribe-unit prepped (:policy prepped) policystore)         
           newctx  (core/set-policystore ctx newstore)]
       (->> newctx
            (supply/register-unit supplystore behaviors prepped nil extra-tags)
@@ -630,7 +629,7 @@
 
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters behaviors] ctx]
-    (reduce (fn [acc unit]
+    (reduce (fn [acc unit]              
               (process-unit unit nil parameters behaviors acc))
             ctx                 raw-units)))
 

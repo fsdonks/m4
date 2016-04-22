@@ -65,7 +65,8 @@
                                                                        (:name unit)))]  
         (->> (sim/merge-entity {unitname unit-delta
                                 :DemandStore (dem/add-demand demandstore demand)
-                                :SupplyStore (supply/add-unit supplystore unit)} ctx)
+                                ;:SupplyStore (supply/add-unit supplystore unit)
+                                } ctx)
              (u/change-location unit (:name demand)) 
              (deploy! followon?  unit demand t)  ;;apply state changes.             
              ))))  

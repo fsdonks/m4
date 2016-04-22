@@ -470,18 +470,22 @@
                                 +inf+)))))
              m m))
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
-  (if-let [ctor (get @templates name (get @templates (keyword name)))]
-    (let [_ (println [:trying name maxdwell mindwell maxbog startdeployable stopdeployable])
-          stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
-          stats      (if overlap (assoc stats :overlap overlap) stats)
-          stats      (clamp-stats name stats)
-          base       (ctor :deltas deltas :stats stats)
-          baselength (core/compute-cycle-length base)
-          _          (println [name (min baselength +inf+) stats])]
-      (-> base
-          (core/set-deployable (:startdeployable stats) (:stopdeployable stats))
-          (assoc  :cyclelength (min baselength +inf+))))
-    (throw (Exception. (str "Unknown template: " name)))))
+  (try  (if-let [ctor (get @templates name (get @templates (keyword name)))]
+          (let [
+                stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
+                stats      (if overlap (assoc stats :overlap overlap) stats)
+                stats      (clamp-stats name stats)
+                base       (ctor :deltas deltas :stats stats)
+                baselength (core/compute-cycle-length base)
+                ]
+            (-> base
+                (core/set-deployable (:startdeployable stats) (:stopdeployable stats))
+                (assoc  :cyclelength (min baselength +inf+))))
+          (throw (Exception. (str "Unknown template: " name))))
+        (catch Exception e
+          (throw (Exception. (str  [:trying   [name maxdwell mindwell maxbog startdeployable stopdeployable]
+                                   
+                                   :e e]))))))
 
 ;;Possible vestigial design cruft....we may be able to unify this and
 ;;remove excess....
