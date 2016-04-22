@@ -6,14 +6,15 @@
 ;the demand simulation are also found here.
 (ns marathon.ces.demand
   (:require  [marathon.demand [demanddata :as d]
-                              [demandstore :as store]]
+                              [demandstore :as dstore]
+                              ]
              [marathon.ces    [core :as core] 
                               [supply :as supply] 
                               [policy :as policy]
                               [unit :as u]]
-             [spork.entitysystem.store 
+             [spork.entitysystem.store :as store
               :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
-                      update-ine update-entity get-ine]]
+                      update-ine update-entity get-ine] ]
              [spork.sim       [simcontext :as sim]]
              [spork.util      [tags :as tag] [general :as gen] [temporal :as temporal]]))
 
@@ -299,7 +300,8 @@
         dname    (core/entity-name   demand) ;;replace with entity-name                      
         newstore (tag-demand demand (add-demand dstore demand))
         _        (policy/register-location dname pstore)]
-    (->> (registering-demand! demand ctx)     ;;doesn't care.                       
+    (->> (store/add-entity ctx demand)
+         (registering-demand! demand)     ;;doesn't care.         
          ;;this should still be fast.  Alternately just modify locs directly...
          (schedule-demand demand newstore))))  
 
@@ -359,7 +361,8 @@
   ([demand demandstore policystore ctx]
      (let [dname    (:name demand)
            newstore (tag-demand demand (add-demand demandstore demand))]
-       (->> (registering-demand! demand ctx)         
+       (->> (store/add-entity ctx (:name demand) demand)
+            (registering-demand! demand)
             (core/merge-entity {:PolicyStore (policy/register-location dname policystore)})
             (schedule-demand demand newstore))))
   ([demand ctx] (register-demand demand (core/get-demandstore ctx)

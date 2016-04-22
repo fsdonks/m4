@@ -433,7 +433,6 @@
 
 (defn visualize-supply [ctx]
   (->> (units ctx)
-       (vals)
        (map (fn [u] (update-in u [:policy] :name)))
        (spork.util.table/records->table)
        (spork.util.table/visualize)))
