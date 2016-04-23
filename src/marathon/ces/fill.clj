@@ -250,13 +250,17 @@
 
 ;;#TODO elevate stock queries into user-defined rules.
 (def stock-queries
-  {"ac-first"  query/ac-first
-   "AC"        query/ac-first
-   "rc-first"  query/rc-first
-   "RC"        query/rc-first
-   "RCAD"      query/RCAD
-   "RCAD-BIG"  query/RCAD-BIG
-   "uniform"   query/uniform})
+  (let [m {"ac-first"  query/ac-first
+           "AC"        query/ac-first
+           "rc-first"  query/rc-first
+           "RC"        query/rc-first
+           "RCAD"      query/RCAD
+           "RCAD-BIG"  query/RCAD-BIG
+           "uniform"   query/uniform}]
+    (reduce-kv (fn [acc nm r]
+                 (assoc acc (keyword nm) r))
+               m m)))
+
 
 (defn resolve-source-first [sf]
   (if-let [r  ( get stock-queries sf)]

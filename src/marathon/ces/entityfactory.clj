@@ -14,7 +14,8 @@
   (:require [marathon        [schemas :as s]]            
             [marathon.data.protocols :as generic] ;rename
             [marathon.data   [cycle :as cyc] 
-                             [fsm :as fsm]]
+                             [fsm :as fsm]
+                             [store :as store]]
             [marathon.demand [demanddata :as d]]
             [marathon.ces.demand :as demand]
             [marathon.ces.unit :as unitsim]
@@ -122,9 +123,11 @@
         empty-vig (core/empty-string? Vignette)
         idx       (if (or empty-op empty-vig) (core/next-idx) 0)
         vig       (if empty-vig (core/msg "Vig-ANON-" idx) Vignette)
-        op        (if empty-op  (core/msg "Op-ANON-" idx) Operation)]
-    (d/->demanddata    ;unique name associated with the demand entity.
-     (or DemandKey (demand-key SRC vig op Priority StartDay Duration)) 
+        op        (if empty-op  (core/msg "Op-ANON-" idx) Operation)
+        demandname (or DemandKey (demand-key SRC vig op Priority StartDay Duration)) ]
+    (store/demand    ;unique name associated with the demand entity.
+     demandname
+     demandname
      SRC ;demand-type, or other identifier of the capability demanded.
      Priority ;numerical value representing the relative fill priority.
      StartDay ;the day upon which the demand is activated and requiring fill.
@@ -137,12 +140,38 @@
      vig  ;Descriptor of the force list that generated this demand entity.
      op ;Fine-grained, unique description of the demand.
      DemandGroup ;Ket that associates a demand with other linked demands.  
-     {} ;an ordered collection of all the fills recieved over time.                   
-     {} ;map of the units currently associated with the demand.
-     {} ;map of the units currently associated with this demand,
-                                        ;that are not actively contributing toward filling the
-                                        ;demand, due to a relief-in-place state.
-      )))
+     )))
+
+;; (defn create-demand   
+;;   "Produces a validated demand from the inputs.  We enforce invariants about 
+;;    demanddata here to ensure that invalid values are caught and excepted."
+;;   [DemandKey SRC  Priority StartDay Duration Overlap Category 
+;;    SourceFirst Quantity  OITitle Vignette Operation  DemandGroup]  
+;;   (let [empty-op  (core/empty-string? Operation)
+;;         empty-vig (core/empty-string? Vignette)
+;;         idx       (if (or empty-op empty-vig) (core/next-idx) 0)
+;;         vig       (if empty-vig (core/msg "Vig-ANON-" idx) Vignette)
+;;         op        (if empty-op  (core/msg "Op-ANON-" idx) Operation)]
+;;     (d/->demanddata    ;unique name associated with the demand entity.
+;;      (or DemandKey (demand-key SRC vig op Priority StartDay Duration)) 
+;;      SRC ;demand-type, or other identifier of the capability demanded.
+;;      Priority ;numerical value representing the relative fill priority.
+;;      StartDay ;the day upon which the demand is activated and requiring fill.
+;;      Duration ;the total time the demand is activated.
+;;      Overlap  ;the demand-specific overlap requirement, if any
+;;      Category ;descriptor for deployed unit behavior over-rides.
+;;      SourceFirst  ;descriptor for supply preference. 
+;;      Quantity  ;the total amount of entities required to fill the demand.
+;;      OITitle   ;formerly OITitle.  Long-form description of the src capability.
+;;      vig  ;Descriptor of the force list that generated this demand entity.
+;;      op ;Fine-grained, unique description of the demand.
+;;      DemandGroup ;Ket that associates a demand with other linked demands.  
+;;      {} ;an ordered collection of all the fills recieved over time.                   
+;;      {} ;map of the units currently associated with the demand.
+;;      {} ;map of the units currently associated with this demand,
+;;                                         ;that are not actively contributing toward filling the
+;;                                         ;demand, due to a relief-in-place state.
+;;       )))
 
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
@@ -359,26 +388,56 @@
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
 ;;nothing. parametrically create a new unit.
 
-(defn create-unit [name src oititle component cycletime policy behavior]
-  (u/->unitdata
-   name ;unit entity's unique name. corresponds to a UIC 
-   src ;unit entity's type, or capability it can supply.
-   component ;unit entity's membership in supply.
-   policy  ;the policy the entity is currently following.
-   [] ;a stack of any pending policy changes.
-   behavior ;the behavior the unit uses to interpret policy and messages.
-   fsm/blank-data ;generic state data for the unit's finite state machine.
-   cycletime ;the unit's current coordinate in lifecycle space.
-   nil       ;description of the categories this unit serve as a followon to.
-   :spawning ;the current physical location of the unit.
-   :spawning ;the current position of the unit in its policy space.
-   nil ;the current cycle data structure for the unit.
-   [] ;an ordered collection of the cycles that the unit has completed.
-   -1 ;the time in which the unit spawned.
-   oititle ;the description of the unit.
-   [] ;list of all the locations visited.
-   0  ;dwell time before deployment
-   ))
+;; (defn create-unit [name src oititle component cycletime policy behavior]
+;;   (u/->unitdata
+;;    name ;unit entity's unique name. corresponds to a UIC 
+;;    src ;unit entity's type, or capability it can supply.
+;;    component ;unit entity's membership in supply.
+;;    policy  ;the policy the entity is currently following.
+;;    [] ;a stack of any pending policy changes.
+;;    behavior ;the behavior the unit uses to interpret policy and messages.
+;;    fsm/blank-data ;generic state data for the unit's finite state machine.
+;;    cycletime ;the unit's current coordinate in lifecycle space.
+;;    nil       ;description of the categories this unit serve as a followon to.
+;;    :spawning ;the current physical location of the unit.
+;;    :spawning ;the current position of the unit in its policy space.
+;;    nil ;the current cycle data structure for the unit.
+;;    [] ;an ordered collection of the cycles that the unit has completed.
+;;    -1 ;the time in which the unit spawned.
+;;    oititle ;the description of the unit.
+;;    [] ;list of all the locations visited.
+;;    0  ;dwell time before deployment
+;;    ))
+
+(defn create-unit [name src oititle component cycletime policy behavior & {:keys [home speed]}]
+  (into 
+   (store/unit
+    name ;id of the unit entity; for now we'll stick with the name.
+    name ;unit entity's unique name. corresponds to a UIC 
+    src ;unit entity's type, or capability it can supply.
+    component ;unit entity's membership in supply.
+    policy  ;the policy the entity is currently following.
+    ;;[] ;a stack of any pending policy changes. was statestack..                                        
+    :spawning ;the current physical location of the unit. ;fsm/blank-data ;generic state data for the unit's finite state machine.
+    :blank-icon
+    name
+    [0 0]     ;the current position of the unit in its 2D space.
+    [0 0]     ;velocity of the unit
+    nil       ;color of the unit
+    (or home :default) ;unit's home station.
+    :location :spawning ;the current physical location of the unit.
+    :speed (or speed 8) ;speed per unit of time the unit can move.
+    :behavior behavior ;the behavior the unit uses to interpret policy and messages.
+    )
+   (merge {:cycletime    cycletime ;the unit's current coordinate in lifecycle space.
+           :followoncode nil       ;description of the categories this unit serve as a followon to.                      
+           :currentcycle nil ;the current cycle data structure for the unit.
+           :cycles [] ;an ordered collection of the cycles that the unit has completed.
+           :spawntime -1 ;the time in which the unit spawned.
+           :oititle oititle ;the description of the unit.
+           :locationhistory [] ;list of all the locations visited.
+           :dwell-time-when-deployed 0}  ;dwell time before deployment  
+          )))
 
 ;;Derives a default unit from a record that describes unitdata.
 ;;Vestigial policy objects and behavior fields are not defined.  We

@@ -122,10 +122,37 @@
     :currentcycle nil ;the current cycle data structure for the unit.
     :cycles   []
     :oi-title "no-description" ;the description of the unit.
-    :locationhistory [] ;list of all the locations visited.
-                                        ;:dwell-time-when-deployed nil
+    :locationhistory [] ;list of all the locations visited.  ;:dwell-time-when-deployed nil                                       
     ]
    })
+
+(defentity demand
+  "Defines a specification for entities that correspond to force structure demands."
+  [id name type priority startday duration overlap category source-first quantity title
+   vignette operation demandgroup 
+   & {:keys [location behavior fills  source-first ]}]
+  {
+   :components
+   [:name name ;unique name associated with the demand entity.
+    :src  type ;demand-type, or other identifier of the capability demanded.
+    :priority priority ;numerical value representing the relative fill priority.
+    :startday startday ;the day upon which the demand is activated and requiring fill.
+    :duration duration ;the total time the demand is activated.
+    :overlap overlap  ;the demand-specific overlap requirement, if any
+    :category (or category :rotational) ;descriptor for deployed unit behavior over-rides.
+    :source-first (or source-first :uniform)  ;descriptor for supply preference. 
+    :quantity (or quantity 0) ;the total amount of entities required to fill the demand.
+    :title  title  ;formerly OITitle.  Long-form description of the src capability.
+    :vignette vignette ;Descriptor of the force list that generated this demand entity.
+    :operation operation ;Fine-grained, unique description of the demand.
+    :demandgroup demandgroup ;Ket that associates a demand with other linked demands.  
+    :fills (or fills {}) ;an ordered collection of all the fills recieved over time.                   
+    :units-assigned {} ;map of the units currently associated with the demand.
+    :units-overlapping {};map of the units currently associated with this demand, 
+                           ;that are not actively contributing toward filling the 
+                                        ;demand, due to a relief-in-place state.
+    :location (or location name) ;;physical location of the demand.
+    ]})
 
 ;;not sure how much of this needs to stick around...
 ;;Since entities are dispersed now, we may not need these guys
