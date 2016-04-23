@@ -35,9 +35,9 @@
 ;;estore version
 (defn add-unit
   ([supply store unit]
-   (-> store
+   (-> store       
        (add-entity (:name unit) unit)
-       (assoc-ine  [:SupplyStore :unitmap (:name unit)] (:name unit))))
+       (store/mergee :SupplyStore (assoc-in supply [:unitmap (:name unit)] (:name unit)))))
   ([store unit] (add-unit (get-entity store :SupplyStore) store unit))) 
 
 ;might be able to ditch the unit-map entirely.
@@ -417,7 +417,7 @@
 ;added on-top-of the default tags derived from the unit data.
 (defn register-unit [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-        ctx    (-> supply
+        newctx    (-> supply
                    (tag-unit unit extra-tags)
                    (add-src (get unit :src))
                    (add-unit  ctx unit)) ;this happens in a
@@ -426,9 +426,9 @@
                                         ;anything here.
         ]
     (if ghost 
-      (->> (spawning-ghost! unit ctx)
+      (->> (spawning-ghost! unit newctx)
            (set-ghosts true))
-      (->> (spawning-unit! unit ctx)
+      (->> (spawning-unit! unit newctx)
            (update-deployability unit nil nil)))))
 
 (defn register-unit! [supply behaviors unit ghost extra-tags ctx]

@@ -19,7 +19,8 @@
             [marathon.demand [demanddata :as dem]]
             [spork.sim     [simcontext :as sim]]
             [spork.entitysystem.store :as store]
-            [spork.util.reducers]
+            [spork.util [reducers]
+                        [tags :as tags]]
             [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]))
@@ -313,7 +314,22 @@
         ["36_SRC3_AC" 522]
         ["35_SRC3_AC" 366]
         ["34_SRC3_AC" 230]))))
-      
+
+
+(def supplytags (store/gete defaultctx :SupplyStore :tags))
+(def odd-tags
+  (map (fn [[id _]] (tags/subject->tags supplytags id)) odd-units))
+;;As a brief interlude; we'd like to check the tags to ensure they're
+;;properly tagged.
+(deftest tag-queries 
+  (is (same? odd-tags
+             '(#{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+               #{:COMPO_NG :SOURCE_SRC2 :POLICY_RC15 :BEHAVIOR_:default :enabled :TITLE_no-description}
+               #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+               #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+               #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+               #{:COMPO_AC :SOURCE_SRC3 :POLICY_FFGACRoto :BEHAVIOR_:default :enabled :TITLE_no-description}))))
+
 ;;Try filling a demand.
 ;;We can query a demand and try to find feasible supply for it.
 ;;Given a generic demand, we want to see if:
