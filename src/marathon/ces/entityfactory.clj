@@ -492,7 +492,8 @@
 ;;but now we don't have to worry about that.  We'll probably just 
 ;;have a map of functions, or types that can fulfill the unit behavior
 ;;protocol.
-(defn get-default-behavior [supply] :default)
+(defn get-default-behavior [supply]
+  :default)
 
 ;;Adds multiple units according to a template.
 ;;Associates each unit with a

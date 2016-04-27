@@ -1,7 +1,9 @@
-;;A namespace for simple entity behaviors.  Trying to decouple our
-;;stub behaviors from the drawing/entityboard implementation.
-(ns quilsample.behavior
-  (:require [spork.ai.behavior :as behavior
+;;A namespace for simple entity behaviors.
+;;We'll define core behaviors here.
+(ns marathon.ces.behavior
+  (:require [spork.ai.core :as ai :refer
+             [deref! fget fassoc  push-message- map->entityctx debug ->msg]]
+            [spork.ai.behavior :as behavior
              :refer [beval
                      success?
                      success
@@ -18,14 +20,78 @@
                      ->wait-until
                      ->if
                      ->and
+                     ->and!
                      ->pred
                      ->or
                      ->bnode
                      ->while
+                     ->reduce
                      always-succeed
                      always-fail
                      bind!
-                     befn]]))
+                     bind!!
+                     merge!
+                     merge!!
+                     push!
+                     return!
+                     val!
+                     befn
+                     ] :as b]
+            [spork.util.general     :as gen]        
+            [spork.data.priorityq   :as pq]
+            [clojure.core.reducers  :as r]
+            [spork.entitysystem.store :as store :refer :all :exclude [default]]
+            [spork.sim.simcontext :as sim]
+            ))
+
+
+;;an alternative idea here...
+;;use a closure to do all this stuff, and reify to give us implementations
+;;for the object.  We can also just us a mutable hashmap behind the
+;;scene if we want to...at some point, it's probably better to have
+;;the shared-nothing approach and just leave entities in their
+;;own mutable cells, isolated from other state.  We can
+;;still maintain persistent history.  Everything becomes a lookup though;
+;;we have to find the current value of the entity at time t;
+;;More to think of here..
+
+;;New
+;;Environment for evaluating entity behaviors, adapted for use with the simcontext.
+;;If we provide an address, the entity is pushed there.  So, we can have nested
+;;updates inside associative structures.
+(defrecord behaviorenv [entity behavior current-messages new-messages ctx current-message]
+  ai/IEntityMessaging
+  (entity-messages- [e id] current-messages)
+  (push-message-    [e from to msg] ;should probably guard against posing as another entity
+    (let [t        (.valAt ^clojure.lang.ILookup  msg :t)
+          _        (ai/debug [:add-new-messages-to new-messages])
+          additional-messages (spork.ai.behavior/swap!! (or new-messages  (atom []))
+                                        (fn [^clojure.lang.IPersistentCollection xs]
+                                          (.cons  xs
+                                             (.assoc ^clojure.lang.Associative msg :from from))))]                            
+      (behaviorenv. entity
+                    behavior
+                    current-messages
+                    additional-messages
+                    ctx
+                    current-message
+                    )))
+  ai/IEntityStorage ;we could just have commit-entity- return something we can append...another idea.
+  (commit-entity- [env]
+    (let [ctx      (ai/deref! ctx)
+          ent      (ai/deref! entity)
+         ; existing-messages (atom (:messages ent))          
+          id  (:name ent)
+          _   (ai/debug  [:committing ent])
+          _   (ai/debug  [:new-messages new-messages])
+          ]
+      (reduce
+       (fn [acc m]
+         (do 
+          ;(println [:pushing m :in acc])
+          (sim/trigger-event m acc)))
+       (mergee ctx (:name ent) ent)
+       new-messages))))
 
 ;;__Utility functions__
 ;;Entity step operations...
@@ -53,7 +119,196 @@
 ;;eliminate the store dependency, but for now it's fine.  For instance,
 ;;we could capture the changes as instructions, and queue them up for
 ;;integration via a higher-level system.
+(defn rconcat
+  ([& colls]
+   (reify clojure.core.protocols/CollReduce
+     (coll-reduce [this f1]
+       (let [c1   (first colls)
+             init (reduce (fn [acc x] (reduced x)) (r/take 1 c1))
+             a0   (reduce f1 init (r/drop 1 c1))]
+         (if (reduced? a0) @a0
+             (reduce (fn [acc coll]
+                       (reduce (fn [acc x]
+                                 (f1 acc x)) acc coll)) a0 (r/drop 1 colls)))))
+     (coll-reduce [this f init]
+       (reduce (fn [acc coll]
+                (reduce (fn [acc x]
+                          (f acc x)) acc coll)) init colls))
+     clojure.lang.ISeq
+     (seq [this] (seq (into [] (r/mapcat identity colls) )))
+     )))
 
+
+;;__behaviors__
+
+;;logs the state of the entity.
+(befn notify-change {:keys [entity] :as ctx}
+ (do (debug 
+       (let [{:keys [state wait-time name t]} (deref! entity)
+             ]
+         (str "<"  t "> " "Entity " name
+              " is now in state " state
+              " for " wait-time " steps")))
+     (success ctx)))
+
+;;if we have a message, and the message indicates
+;;a time delta, we should wait the amount of time
+;;the delta indicates.  Waiting induces a change in the
+;;remaining wait time, as well as a chang
+(befn wait-in-state ^behaviorenv [entity current-message ctx]
+  (let [;_ (println [:wait-in-state entity msg])
+        msg    current-message
+        t     (fget msg :t)
+        delta (- t (fget (deref! entity) :t))]
+    (when-let [duration (fget  (deref! entity) :wait-time)]
+      (if (<= delta duration) ;time remains or is zero.
+         ;(println [:entity-waited duration :remaining (- duration delta)])
+        (merge!!  entity {:wait-time (- duration delta)
+                          :t t}) ;;update the time.
+        (do ;can't wait out entire time in this state.
+          (merge!! entity {:wait-time 0
+                           :t (- t duration)}) ;;still not up-to-date
+           ;;have we handled the message?
+           ;;what if time remains? this is akin to roll-over behavior.
+           ;;we'll register that time is left over. We can determine what
+           ;;to do in the next evaluation.  For now, we defer it.
+          (bind!! {:current-message (.assoc ^clojure.lang.Associative msg :delta (- delta duration))}
+                 )
+
+          )))))
+                
+;;choose-state only cares about the entity.
+(befn choose-state  ^behaviorenv [entity]
+      (let [nxt (gen/case-identical? (:state (deref! entity))        
+                    :dwelling  :deploying
+                    :deploying :dwelling
+                    :dwelling
+                    )]       
+        (push! entity :state nxt)))
+
+(befn choose-time ^behaviorenv [entity]
+      (let [twait
+            (gen/case-identical? (:state (deref! entity))
+              :dwelling  (unchecked-add (int 365)  (rand-int 730))
+              :deploying (unchecked-add (int 230)  (rand-int 40)))]
+        (push! entity :wait-time twait)))
+
+(defn up-to-date? [e ctx] (== (:t e) (:t ctx)))
+
+;;This will become an API call...
+;;instead of associng, we can invoke the protocol.
+(befn schedule-update  ^behaviorenv {:keys [entity ctx new-messages] :as benv}
+      (let [st       (deref! entity)
+            nm       (:name st)
+            duration (:wait-time st)
+            tnow     (:t (deref! ctx))
+            tfut     (+ tnow duration)
+            _        (debug 4 [:entity nm :scheduled :update tfut])
+            ;_ (when new-messages (println [:existing :new-messages new-messages]))
+            ]        
+        (success (push-message- benv nm nm (->msg nm nm tfut :update)))))
+
+(definline move [ctx]
+  `(->and! [choose-state
+            choose-time
+            notify-change
+            schedule-update] ~ctx))
+
+;;pick an initial move, log the spawn.
+(befn spawn ^behaviorenv {:keys [entity] :as ctx}
+      (when (identical? (:state (deref! entity)) :spawning)
+        (->and! [(->do (fn [_] (debug (str  "Entity " (:name (deref! entity)) " spawned"))))
+                 move]
+                ctx)))
+       
+;;the entity will see if a message has been sent
+;;externally, and then compare this with its current internal
+;;knowledge of messages that are happening concurrently.
+(befn check-messages ^behaviorenv [entity current-messages ctx]
+  (when-let [old-msgs (fget (deref! entity) :messages)]
+    (when-let [msgs  (pq/chunk-peek! old-msgs)]
+      (let [new-msgs (rconcat (r/map val  msgs) current-messages)
+            _        (b/swap!! entity (fn [^clojure.lang.Associative m]
+                                        (.assoc m :messages
+                                                (pq/chunk-pop! old-msgs msgs)
+                                                )))]
+            (bind!! {:current-messages new-msgs})))))
+
+;;we need the ability to loop here, to repeatedly
+;;evaluate a behavior until a condition changes.
+;;->while is nice, or ->until
+;;We'd like to continue evaluating the behavior (looping)
+;;until some predicate is tripped.  Another way to do
+;;this is to send a message....If there's time remaining,
+;;we tell ourselves to keep moving, and move again prior to
+;;committing.
+(befn advance ^behaviorenv [entity ctx]
+      (if (not (identical? (:state (deref! entity)) :spawn))
+        (->and [wait-in-state move])
+        spawn))
+;;this is a dumb static message handler.
+;;It's a simple little interpreter that
+;;dispatches based on the message information.
+;;Should result in something that's beval compatible.
+;;we can probably override this easily enough.
+;;#Optimize:  We're bottlnecking here, creating lots of
+;;maps....
+
+;;Where does this live?
+;;From an OOP perspective, every actor has a mailbox and a message handler.
+;;
+
+;;type sig:: msg -> benv/Associative -> benv/Associative
+;;this gets called a lot.
+(defn message-handler [msg ^behaviorenv benv]
+  (let [entity           (.entity benv)
+        current-messages (.current-messages benv)
+        ctx              (.ctx benv)]
+    (do ;(println (str [(:name (deref! entity)) :handling msg]))
+      (beval 
+       (gen/case-identical? (:msg msg)
+           ;;generic update function.  Temporally dependent.
+           :update (if (== (:t (deref! entity)) (:t (deref! ctx)))
+                     (do (success benv)) ;entity is current
+                     (->and [(fn [^clojure.lang.Associative ctx] (success (.assoc ctx :current-message msg)))                           
+                             advance
+                             ]))
+           :spawn  (->and [(push! entity :state :spawning)                        
+                           spawn]
+                          )
+           ;;allow the entity to change its behavior.
+           :become (push! entity :behavior (:data msg))
+           :do     (->do (:data msg))
+           (throw  (Exception. (str [:unknown-message-type (:msg msg) :in  msg]))))
+       benv))))
+
+;;message handling is currently baked into the behavior.
+;;We should parameterize it.
+
+;;handle the current batch of messages that are pending for the
+;;entity.  We currently define a default behavior.
+(befn handle-messages ^behaviorenv {:keys [entity current-messages ctx] :as benv}
+      (when current-messages
+        (reduce (fn [acc msg]                  
+                  (do ;(debug [:handling msg])
+                    (message-handler msg (val! acc))))
+                (success benv)
+                current-messages)))
+
+;;Basic entity behavior is to respond to new external
+;;stimuli, and then try to move out.
+
+;;This is a pretty typical prototype for entities to follow.
+(befn default ^behaviorenv [entity]
+      (->or [(->and [check-messages
+                     handle-messages])             
+             advance]))
+
+
+
+
+
+(comment 
 
 ;;[change width to time-in-state or something if possible...]
 ;;[we're using width here...]
@@ -219,7 +474,7 @@
 (befn apply-state [statedata new-duration]
       (when-let [new-state (get-bb ctx :new-state)]
         ;;update the context with information derived from moving
-        (bind! {:statedata (fsm/change-state statedata new-state  new-duration)])))
+        (bind! {:statedata (fsm/change-state statedata new-state  new-duration)})))
 
 
 ;; (defn apply-state [ctx] 
@@ -334,4 +589,10 @@
   (behavior/->or [deploying ;this hoses us...we end up "deploying" twice.
                   resetting
                   moving]))
+)
+
+
+
+
+
 )

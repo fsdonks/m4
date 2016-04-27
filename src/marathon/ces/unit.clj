@@ -399,15 +399,21 @@
 ;;before the day is up.  If we ever use coroutines, this will still work nicely.
 ;;We can just alter the interface to use channels to communicate with the entity.
 ;;For now, we may only ever have one message for the entity, and we may always process it
-;;synchronously.
+;;synchronously.  This presents a functional api around the former OOP method call.
+;;The old way used to be to update the state externally, set up the transition, and
+;;then invoke the change-state function on the unit.  We'll try to tell the entity
+;;what to do more often, and let the behavior be decoupled via messaging.
+;;we may no longer need the deltat arg...
 (defn change-state [entity newstate deltat duration ctx] 
-  ;; (do (println (str "*Warning*: marathon.sim.unit/change-state is a stub\n"
-  ;;                   "we need to have it wrap an update via the unit's behavior\n"))
-  ;;     (sim/trigger-event :Change-State-Stub :EntityFactory 
-  ;;       (:name entity) (core/msg  "State Change " (:name entity) "to " newstate)
-  ;;       [newstate deltat duration] ctx))
   ;;how about handle-message? 
-  (core/handle-message! ctx entity (core/->msg :from entity :to entity)))
+  (core/handle-message! ctx entity
+      (core/->msg (:name entity) (:name entity)
+                  (core/get-time ctx)
+                  {:topic :change-state
+                   :new-state newstate
+                   :deltat deltat
+                   :duration duration
+                   })))
 
 ;;Think about changing this to use the context.
 (defn push-location [unit newlocation]

@@ -33,7 +33,8 @@
             [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity]]
             [spork.sim.simcontext :as sim]
             [spork.ai.core :as ai]
-            [marathon.data.store :as simstate]            
+            [marathon.data.store :as simstate]
+            [marathon.ces.behavior :as b]
             [clojure.core.reducers :as r]))
 
 ;;#Providing Common Access to the State in the Simulation Context
@@ -153,44 +154,6 @@
 (defmacro ->msg
    ([t msg] `(sim/->packet ~t :message (:from ~msg) (:to ~msg) ~msg ~msg))
    ([from to t msg] `(sim/->packet ~t :message ~from ~to ~msg ~msg)))
-
-;;New
-;;Environment for evaluating entity behaviors, adapted for use with the simcontext.
-;;If we provide an address, the entity is pushed there.  So, we can have nested
-;;updates inside associative structures.
-(defrecord behaviorenv [entity behavior current-messages new-messages ctx current-message]
-  ai/IEntityMessaging
-  (entity-messages- [e id] current-messages)
-  (push-message-    [e from to msg] ;should probably guard against posing as another entity
-    (let [t        (.valAt ^clojure.lang.ILookup  msg :t)
-          _        (ai/debug [:add-new-messages-to new-messages])
-          additional-messages (spork.ai.behavior/swap!! (or new-messages  (atom []))
-                                        (fn [^clojure.lang.IPersistentCollection xs]
-                                          (.cons  xs
-                                             (.assoc ^clojure.lang.Associative msg :from from))))]                            
-      (behaviorenv. entity
-                    behavior
-                    current-messages
-                    additional-messages
-                    ctx
-                    current-message
-                    )))
-  ai/IEntityStorage
-  (commit-entity- [env]
-    (let [ctx      (ai/deref! ctx)
-          ent      (ai/deref! entity)
-         ; existing-messages (atom (:messages ent))          
-          id  (:name ent)
-          _   (ai/debug  [:committing ent])
-          _   (ai/debug  [:new-messages new-messages])
-          ]
-      (reduce
-       (fn [acc m]
-         (do 
-          ;(println [:pushing m :in acc])
-          (sim/trigger-event m acc)))
-       (mergee ctx (:name ent) ent)
-       new-messages))))
                 
 ;;all we need to do is create  a behavior context,
 ;;eval the behavior, and store the entity in the
@@ -199,17 +162,16 @@
 ;;Message handling is equivalent to stepping the entity
 ;;immediately.
 (defn handle-message! [ctx e msg]
-  (let [ent  (get-entity ctx e)
-        benv (behaviorenv.  (atom ent)
-                            (.valAt ^clojure.lang.ILookup e :behavior) 
-                            [msg]
-                            nil
-                            (atom ctx)
-                            msg)]
-    (println ["Handling Message Stub!" (:name e) msg])
-                                        ;    (ai/step-entity! ctx e (:t msg) msg)
-    ctx
-    ))
+  (let [^clojure.lang.ILookup  ent (get-entity ctx e)
+        benv (marathon.ces.behavior.behaviorenv.  (atom ent)
+             (.valAt e :behavior b/default) ;right now there's only one behavior :default
+             [msg]
+             nil
+             (atom ctx)
+             msg)]
+    (-> (beval (.behavior benv) benv)
+        (return!)
+        (commit-entity-))))
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
 (defn merge-parameters [s ps]  (mergee  s :parameters  ps))
