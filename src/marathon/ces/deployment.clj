@@ -19,6 +19,17 @@
         p             (policy/get-policy    (-> unit :policy :name) policystore)]
     (- bog-remaining  (protocols/overlap p))))
 
+;;These seem like lower level concerns.....
+;;Can we push this down to the unit entity behavior?
+;;Let that hold more of the complexity?  The unit can be responsible
+;;for the bulk of the implementation detail of what a
+;;deployment entails...
+;;Since units have access to the simulation context, like
+;;every other system, they could apply all the updating necessary.
+;;Now, we move the updates into a behavior function, where
+;;we can more efficiently handle the state updates...
+;;For instance, we can perform bulk updates with the same
+;;or a simular behavior context.....this is more appealing.
 (defn deploy!  [followon? unit demand t ctx]
   (let [supply (core/get-supplystore ctx)]
       (if followon?

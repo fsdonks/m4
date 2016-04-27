@@ -5,11 +5,11 @@
   (:require [marathon.ces  [core :as core]
                            [unit :as unit]
                            [supply :as supply]]
+            [spork.entitysystem.store :as store]
             [marathon.ces.fill.fillgraph]
             [spork.util.reducers]
             [spork.util [tags :as tag]]
             [clojure.core [reducers :as r]]))
-
 
 ;; (defmacro napply [f k & xs]
 ;;   `(fn [m#] (~f (get m# ~k) ~@xs)))
@@ -72,6 +72,31 @@
   `(if ~test
      ~@body
      ~default))
+
+
+;;we could replace this with an entity query going forward. 
+;;For now, it'll work;  We accomplish the same thing in the
+;;end: we get a selection of unit entities that meet our
+;;selection criteria (namely deployable).
+
+;;really, an equally valid way is
+;;for each unit that has a deployable category,
+
+;; (defn ->deployers
+;;   "Given a supply store, returns a seqable, reducible object that can 
+;;    filter on category, the keys of the supply buckets in the supply 
+;;    store, on src, the subset of srcs within a specific category, or 
+;;    on a specific unit name.  In the partitioning of unit entities, 
+;;    we have a coordinate that maps to a specific unit of supply.
+;;    The coordinate is defined by [category src name], where name 
+;;    is the name of the unit."
+;;   [ctx & {:keys [cat src unit weight]
+;;              :or {cat  identity 
+;;                   src  identity 
+;;                   unit identity
+;;                   weight (fn [_ _] 1.0)}}]
+;;   (store/select-entities 
+
 
 ;;Reducer/seq that provides an abstraction layer for implementing 
 ;;queries over deployable supply.  I really wish I had more time 

@@ -493,6 +493,14 @@
 ;;that the entity will have an opportunity to process the
 ;;message (at least abstractly) before the day is out.
 
+;;Easiest way to do this is to just handle the message synchronously
+;;entity by entity.  Invoke the deployment function (to apply the
+;;fill), and update the entity.
+
+
+
+
+
 
 ;;how do we turn suitable supply into a set of fills? 
 ;;Suitable supply is represented as a sequence of names of units...
@@ -564,15 +572,4 @@
 
 ;;Right now....let's just get names of units, and then figure out
 ;;how to fill using the unit....
-(comment
-  ;; (deployment/deploy-unit t/demandctx (:source t/fzero) (sim/get-time t/demandctx) t/d 10 t/fzero (core/interval->date (sim/get-time t/demandctx) (core/followon? (:source t/fzero))))
-  
 
-(def fzero  (first relaxed-fills))
-(def u0     (:source fzero))
-(def depres
-  (deployment/deploy-unit
-   demandctx  u0 (sim/get-time demandctx)
-   d 10 fzero (core/interval->date (sim/get-time demandctx)
-   (core/followon? u0))))
-)

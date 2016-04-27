@@ -356,7 +356,11 @@
 (defn add-deployable-supply 
   ([supply bucket src unit ctx]
    (->> ctx
-        (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} )
+        (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)
+                           (:name unit) {:deployable-bucket bucket
+                                         :deployable-cat    src
+                                         :deployable true} ;;tacking on component data to help with queries.
+                           })
         (update-availability unit supply)))
   ([supply src unit ctx] 
      (add-deployable-supply supply :default src unit ctx)))
@@ -369,11 +373,14 @@
 ;Consolidated this from update-deployability, formalized into a function.
 (defn remove-deployable-supply 
   ([supply bucket src unit ctx]
+   (let [ctx (store/update-entity ctx (:name unit)
+                                  (fn [m] (-> m (dissoc :deployable-bucket)
+                                                (assoc  :deployable false))))] ;no longer deployable, tracking with component data.
      (if-let [newstock (-> (get-in supply [:deployable-buckets bucket src])
                            (dissoc (get unit :name)))]
        (sim/merge-entity  {:SupplyStore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
-       (->> (sim/merge-entity  {:SupplyStore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
-            (out-of-stock! (get unit :src)))))
+       (->>  (sim/merge-entity  {:SupplyStore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx) ;we can phase this out maybe
+             (out-of-stock! (get unit :src))))))
   ([supply src unit ctx] (remove-deployable-supply supply :default src unit ctx)))
 
 (defn update-deployability
@@ -419,8 +426,10 @@
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
         newctx    (-> supply
                    (tag-unit unit extra-tags)
-                   (add-src (get unit :src))
-                   (add-unit  ctx unit)) ;this happens in a
+                   (add-src   (get unit :src))
+                   (add-unit  ctx unit)
+                   (store/assoce (:name unit) :supply true) ;starting to shift to component tagging.
+                   ) ;this happens in a
                                         ;pure context,
                                                  ;cellular need not do
                                         ;anything here.
