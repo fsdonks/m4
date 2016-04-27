@@ -225,7 +225,7 @@
 ;;externally, and then compare this with its current internal
 ;;knowledge of messages that are happening concurrently.
 (befn check-messages ^behaviorenv [entity current-messages ctx]
-  (when-let [old-msgs (fget (deref! entity) :messages)]
+  (let [old-msgs     (fget (deref! entity) :messages)]
     (when-let [msgs  (pq/chunk-peek! old-msgs)]
       (let [new-msgs (rconcat (r/map val  msgs) current-messages)
             _        (b/swap!! entity (fn [^clojure.lang.Associative m]
@@ -264,7 +264,7 @@
   (let [entity           (.entity benv)
         current-messages (.current-messages benv)
         ctx              (.ctx benv)]
-    (do ;(println (str [(:name (deref! entity)) :handling msg]))
+    (do (println (str [(:name (deref! entity)) :handling msg]))
       (beval 
        (gen/case-identical? (:msg msg)
            ;;generic update function.  Temporally dependent.
@@ -279,7 +279,8 @@
            ;;allow the entity to change its behavior.
            :become (push! entity :behavior (:data msg))
            :do     (->do (:data msg))
-           (throw  (Exception. (str [:unknown-message-type (:msg msg) :in  msg]))))
+           (do (println (str [:ignoring :unknown-message-type (:msg msg) :in  msg]))
+               (success benv)))
        benv))))
 
 ;;message handling is currently baked into the behavior.
@@ -304,9 +305,26 @@
                      handle-messages])             
              advance]))
 
-
-
-
+(def args  (atom  nil))
+;;like ai/step-entity!, we should find a way to reuse it.
+(defn step-entity! [ctx e msg]
+  (let [^clojure.lang.ILookup  ent (atom (if (map? e) e (get-entity ctx e)))
+        beh   (.valAt e :behavior default)
+        beh   (if (identical? beh :default)
+                  (do  (swap! ent assoc :behavior default)
+                       default)
+                  beh)
+        benv (marathon.ces.behavior.behaviorenv.  ent
+             beh ;right now there's only one behavior :default
+             [msg]
+             nil
+             (atom ctx)
+             msg)
+        _    (println [:stepping (:name e) msg])
+        _ (reset! args benv)]
+    (-> (beval beh benv)
+        (return!)
+        (ai/commit-entity-))))
 
 (comment 
 

@@ -152,8 +152,9 @@
 
 ;;probably deprecate in near future.
 (defmacro ->msg
-   ([t msg] `(sim/->packet ~t :message (:from ~msg) (:to ~msg) ~msg ~msg))
-   ([from to t msg] `(sim/->packet ~t :message ~from ~to ~msg ~msg)))
+   ([t msg]              `(sim/->packet ~t :message (:from ~msg) (:to ~msg) ~msg))
+   ([from to t msg]      `(sim/->packet ~t :message ~from ~to ~msg nil))
+   ([from to t msg data] `(sim/->packet ~t :message ~from ~to ~msg ~data)))
                 
 ;;all we need to do is create  a behavior context,
 ;;eval the behavior, and store the entity in the
@@ -162,16 +163,8 @@
 ;;Message handling is equivalent to stepping the entity
 ;;immediately.
 (defn handle-message! [ctx e msg]
-  (let [^clojure.lang.ILookup  ent (get-entity ctx e)
-        benv (marathon.ces.behavior.behaviorenv.  (atom ent)
-             (.valAt e :behavior b/default) ;right now there's only one behavior :default
-             [msg]
-             nil
-             (atom ctx)
-             msg)]
-    (-> (beval (.behavior benv) benv)
-        (return!)
-        (commit-entity-))))
+  (println [:handling e msg])
+  (b/step-entity! ctx e msg))
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
 (defn merge-parameters [s ps]  (mergee  s :parameters  ps))

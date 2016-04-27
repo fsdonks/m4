@@ -409,8 +409,8 @@
   (core/handle-message! ctx entity
       (core/->msg (:name entity) (:name entity)
                   (core/get-time ctx)
-                  {:topic :change-state
-                   :new-state newstate
+                  :change-state
+                  {:new-state newstate
                    :deltat deltat
                    :duration duration
                    })))
