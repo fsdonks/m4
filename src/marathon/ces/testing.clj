@@ -271,16 +271,30 @@
               '(["1_R25_SRC3[1...541]" 1] ["1_R3_SRC3[1...2521]" 1] ["2_R1_SRC3[1...91]" 2] ["2_R2_SRC3[1...2521]" 2]))
       "Should have the same order and set of demands unfilled on day 1."))
 
-(def deployables  (filter unit/in-deployable-window?    (core/units defaultctx)))
-(defn deployable-units [ctx] (filter unit/can-deploy?   (core/units defaultctx)))
+;;Note:
+;;simpler solution is to NOT maintain deployable buckets; Rather let
+;;demand sort supply as needed....
+
+(def deployables  (filter unit/can-deploy? (core/units defaultctx)))
+(defn deployable-units [ctx] (filter unit/can-deploy?   (core/units ctx)))
 (def deploynames  (map :name deployables))
 
+;;Every demand has a corresponding supply rule that indicates its preference for unit
+;;types among other things.
 ;;fill queries...
-(def fillrules (map fill/derive-supply-rule (vals (core/demands defaultctx)) (core/get-fillstore defaultctx)))
+(def fillrules (map fill/derive-supply-rule (core/demands defaultctx))); (core/get-fillstore defaultctx)))
+
+;;We've got a couple of issues with categories atm.
+;;We need to ensure that the demand categories are consistent (i.e. difference between Foundational and Foundation...)
+;;probably could use better pre-processing checks when we're reading in data.
 
 ;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
 
 ;;These are analogous to entity queries btw...
+
+;;These are using query/find-feasible-supply to examine all the
+;;units in the deployable-buckets when they draw supply.  So,
+;;if we put them in there, it's our bad.
 
 ;;using features from sim.query, we build some supply queries:
 (def odd-units (->> defaultctx
@@ -314,7 +328,6 @@
         ["36_SRC3_AC" 522]
         ["35_SRC3_AC" 366]
         ["34_SRC3_AC" 230]))))
-
 
 (def supplytags (store/gete defaultctx :SupplyStore :tags))
 (def odd-tags
@@ -358,11 +371,17 @@
 ;;xs <- units that match r in supply
 ;;us <- take n xs
 
+;;It might be better to have a non-zero notion of distance be the general
+;;scheme for matching units.  Then, we can specificy unit distance in terms of
+;;distance, sort, and work on it appropriately.  It's just a matter of changing
+;;distance functions then...
 (def unfilled  (marathon.ces.demand/unfilled-demands "SRC3" (core/get-demandstore demandctx)))
 (def d         (first (vals unfilled)))
 (def suitables (query/match-supply {:src (:src d) :order-by query/uniform} :name  demandctx))
 (def needed    (dem/required   d))
 (def selected  (take 2 suitables))
+
+
 
 (defn ascending?  [xs] (reduce (fn [l r] (if (<= l r) r (reduced nil))) xs))
 (defn descending? [xs] (reduce (fn [l r] (if (>= l r) r (reduced nil))) xs))
@@ -370,6 +389,11 @@
 ;;find supply according to the strictest criteria, in this case,
 ;;supply that has the same category as demand; note: there should be
 ;;none, since the referenced demand actually has a category:
+;;We find that there are no SRC 2 elements available to fill
+;;in this population.  Further, the fills should be
+;;sorted in order of suitability, preference, etc.  So, the unit
+;;with the same type of supply should edge higher on the sorting
+;;function.
 (def strict-fills (fill/find-supply demandctx (fill/demand->rule d)))
 
 ;;we should find plentiful supply if we make the demand rule more
@@ -384,7 +408,7 @@
 ;;system more sophisticated (probably at read-time when we load
 ;;demands).  For instance, we may want the :source-first val for a
 ;;demand to be a user-defined function.
-(def relaxed-fills (fill/find-supply demandctx (dissoc (fill/demand->rule d) :cat)))
+(def relaxed-fills (fill/find-supply demandctx (dissoc (fill/demand->rule d) :cat :src)))
 
 (deftest demandmatching 
   (is (= (set (map (comp :name :source) relaxed-fills)) (set suitables))
@@ -450,8 +474,6 @@
 ;;appended to the entity's messages).  We need to guarantee
 ;;that the entity will have an opportunity to process the
 ;;message (at least abstractly) before the day is out.
-
-
 
 
 ;;how do we turn suitable supply into a set of fills? 

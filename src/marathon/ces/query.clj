@@ -76,6 +76,10 @@
 ;;Reducer/seq that provides an abstraction layer for implementing 
 ;;queries over deployable supply.  I really wish I had more time 
 ;;to hack out a better macro for the reducers, but this works for now.
+;;Deployers provides a view of the deployable supply partitioned by
+;;category and src.  We'll likely have even more categories later,
+;;but for now these are the main branches that we organize deployable
+;;supply by.
 (defn ->deployers
   "Given a supply store, returns a seqable, reducible object that can 
    filter on category, the keys of the supply buckets in the supply 
@@ -84,9 +88,11 @@
    we have a coordinate that maps to a specific unit of supply.
    The coordinate is defined by [category src name], where name 
    is the name of the unit."
-  [supply & {:keys [cat src unit] :or {cat  identity 
-                                                       src  identity 
-                                                       unit identity}}]
+  [supply & {:keys [cat src unit weight]
+             :or {cat  identity 
+                  src  identity 
+                  unit identity
+                  weight (fn [_ _] 1.0)}}]
   (let [catfilter cat
         srcfilter src 
         unitfilter unit]
@@ -97,7 +103,7 @@
               [src units]   srcs
               [nm u]        units
               :when (and (catfilter cat) (srcfilter src) (unitfilter u))]
-          [[cat src] u]))
+          [[cat src (weight cat src)] u]))
       clojure.core.protocols/CollReduce
       (coll-reduce [this f1]        
         (reduce-kv (fn [acc cat srcs]
@@ -106,7 +112,7 @@
                                              (change-if acc (srcfilter src)
                                                         (reduce-kv (fn [acc nm unit]
                                                                      (change-if units (unitfilter unit)
-                                                                                (f1 acc [[cat src] unit]))) acc units)))
+                                                                                (f1 acc [[cat src (weight cat src)] unit]))) acc units)))
                                            acc srcs))) (f1) (:deployable-buckets supply)))
       (coll-reduce [_ f1 init]      
         (reduce-kv (fn [acc cat srcs]
@@ -115,7 +121,7 @@
                                              (change-if acc (srcfilter src)
                                                         (reduce-kv (fn [acc nm unit]
                                                                      (change-if units (unitfilter unit)
-                                                                                (f1 acc [[cat src] unit]))) acc units)))
+                                                                                (f1 acc [[cat src (weight cat src)] unit]))) acc units)))
                                            acc srcs))) init (:deployable-buckets supply))))))
 (defn is? 
   ([x y] (or (identical? x y) (= x y)))
@@ -155,6 +161,20 @@
 ;;fact...Also, they're primitive supply for our more general fill
 ;;query language...
 
+
+;;When we apply a primitive query, we want some notion of the original
+;;distance or weight associated with the supply.  When we're returning
+;;the elements, we have [[rule w] entry] as the results.
+;;We can then pass these through additional transformation pipelines
+;;likes filters and sorters to get the final ordering of
+;;entries, but we should maintain the [rule w] as a context for
+;;the rule and for the distance for said entry.  This will protect
+;;us from sorting unintentionally outside the confines of the
+;;overall preference for instance.  [Note: supply queries are
+;;also "just" entity queries over the store.  We don't need to
+;;tack ourselves down to looking at entities in the supply
+;;map, or deployables for instance]
+
 ;;#TODO supplement this with supply queries, so we can change the
 ;;sort-order, etc.  allow caller to provide custom sort
 ;;function...this is pretty huge.  From that, we can build all kinds
@@ -177,13 +197,22 @@
            (let [prefs (src->prefs  srcmap src)
                  src-selector (if any-src? identity ;;ensure we enable filtering if indicated.
                                   #(contains? prefs %))]
-           (->>  (->deployers supply :src src-selector :cat category-selector)
-                 (r/map (fn [[k v]] [(conj k (get prefs (second k) Long/MAX_VALUE)) v])) ;sort by a score.
+           (->>  (->deployers supply :src src-selector :cat category-selector :weight (fn [_ src] (get prefs src Long/MAX_VALUE)))
+                 (r/map (fn [[k v]]
+                          [(conj k (get prefs (second k) Long/MAX_VALUE)) v])) ;sort by a score.
                  (into [])
-                 (sort-by  (fn [[k v]]  (nth k 2))))))))
+                 (sort-by  (fn [[k v]]  (nth k 2))) ;;note, this is just a way of assigning distance.
+                 )))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
   ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src)))
 
+;;might it not be easier to just define rules loosley?  We've got a lot o infrastructure built up here
+;;that we might be able to just pass via functions....
+
+;;It'd be nice to describe this via relations, possibly graph arcs in a multigraph.
+;;We have several partitioned nodes of information; might be possible to define more
+;;declarative queries that return ordered traversals instead of outright queries like
+;;this.
 
 ;;Once we find a supply...we want to sort the supply.
 ;;This is where a slew of suitability functions come into play.
@@ -505,7 +534,19 @@
 (defn select [{:keys [where order-by]} xs]   
   ((selection :where where :order-by order-by) xs))
 
+;;This is where our ordering is falling down.
+;;We need to have the option to expose the weight here.
+;;By default, all weight is the same.  So, if we alter the preference,
+;;it should naturally be accounted for in the sort order.
+;;The problem is, we're ignoring it in our order-by clause,
+;;only ordering based on the unit information.
+;;We could order based on the 
+(defn compare-double [^double lw ^double rw]
+  (if (== lw rw) 0
+      (if (< lw rw) -1
+          1)))
 
+;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
 (defn find-supply [{:keys [src cat order-by where collect-by] :or 
@@ -514,8 +555,15 @@
           where    (eval-filter where)] 
       (with-query-env env
         (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
-                   (select {:where    (when where   (fn wherf [kv]    (where (second kv))))
-                            :order-by (when order-by (ord-fn [l r] (order-by (second l) (second r))))}))
+                   (select {:where    (when where   (fn wherf [kv] (where (second kv))))
+                            :order-by (when order-by
+                                        (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]
+                                                (let [res (compare-double (.nth ^clojure.lang.Indexed (.nth l 0) 2)
+                                                                          (.nth ^clojure.lang.Indexed (.nth r 0) 2))]
+                                                  (if (zero? res) ;weights are equal. 
+                                                       ;;always compare weight first, by default...                                                    
+                                                    (order-by (second l) (second r))
+                                                    res))))}))
               res               
              (if collect-by (core/collect collect-by (map second res)) 
                  res)))))

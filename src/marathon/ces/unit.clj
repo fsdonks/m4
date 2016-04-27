@@ -211,14 +211,16 @@
 ;    CanDeploy = (followoncode <> vbNullString) Or (cycletime >= .StartDeployable And cycletime < .StopDeployable)
 ;End With
 
-;End Function
+                                        ;End Function
+
+
 ;Note -> this is obsolete.....need to use the version in sim.unit instead.
-(defn can-deploy? [u & [spawning policy]]
-  (let [policy (or policy (:policy u))
-        ct (:cycletime u)
-        [start stop] [(:StartDeployable policy) (:StopDeployable policy)]] 
-  (or (not= (:followoncode u) nil) 
-      (and (>= ct start) (< ct stop)))))
+;; (defn can-deploy? [u & [spawning policy]]
+;;   (let [policy (or policy (:policy u))
+;;         ct (:cycletime u)
+;;         [start stop] [(:StartDeployable policy) (:StopDeployable policy)]] 
+;;   (or (not= (:followoncode u) nil) 
+;;       (and (>= ct start) (< ct stop)))))
 
 ;Public Property Get bog() As Single
 ;bog = CurrentCycle.bog

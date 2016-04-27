@@ -59,9 +59,6 @@
         (ghost-followed! unit ctx) 
         (ghost-deployed! unit ctx))))
 
-
-
-
 ;##Decomposing the Fill Process....
 ;Sourcing a demand is really the composition of three simpler tasks: 
 ;find-supply, take n items from the supply, fill the demand with the n items.
