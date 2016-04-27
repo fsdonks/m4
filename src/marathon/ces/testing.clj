@@ -409,23 +409,41 @@
 ;;demands).  For instance, we may want the :source-first val for a
 ;;demand to be a user-defined function.
 (def relaxed-fills (fill/find-supply demandctx (dissoc (fill/demand->rule d) :cat :src)))
+;;aux function to help testing...
+(defn sort-names [xs]
+  (sort-by (fn [s] (clojure.edn/read-string
+                    (first (clojure.string/split s #"_")))) xs))
+(def any-supply
+  (->> relaxed-fills
+       (map (comp :name :source))
+       sort-names))
 
 (deftest demandmatching 
-  (is (= (set (map (comp :name :source) relaxed-fills)) (set suitables))
-      "The relaxed fills and the original suitable units should be equal.")
+  (is (same? '("2_SRC1_NG" "8_SRC2_NG" "11_SRC2_AC" "22_SRC3_NG"
+               "23_SRC3_NG" "24_SRC3_NG" "29_SRC3_NG" "34_SRC3_AC" "35_SRC3_AC"
+               "36_SRC3_AC" "37_SRC3_AC" "40_SRC3_AC")
+             any-supply)
+      "The relaxed fills actually have two more elements of supply - SRC 2 - since the 
+       default preference for SRC 3 only allows substitution for SRC 1.  Thus, we 
+       expand the set of compatible SRCs to include all buckets of supply, leading us 
+       to include SRC2, which adds two deployable elements to our set.")
   (is (ascending? (map :priority (vals unfilled)))
       "Priorities of unfilled demand should be sorted in ascending order, i.e. low to hi")
   (is (same? suitables 
-             '("24_SRC3_NG" "2_SRC1_NG" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" 
-               "37_SRC3_AC" "36_SRC3_AC" "35_SRC3_AC" "40_SRC3_AC" "34_SRC3_AC"))
-      "The feasible supply names that match the first demand should be consistent")
+             '("24_SRC3_NG" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" "37_SRC3_AC"
+               "36_SRC3_AC" "35_SRC3_AC" "40_SRC3_AC" "34_SRC3_AC" "2_SRC1_NG"))
+      "The feasible supply names that match the first demand should be consistent.  Since SRC1 is a lower
+       order of supply via its substitution weight, it should end up last, even though the unit's cycle 
+       time is actually pretty good.")
   (is (same? (map (comp :name :source) (fill/find-supply demandctx {:src "SRC3" :order-by query/uniform}))
              suitables)
       "fill/find-supply should be synonymous with match-supply")
   (is (== needed 2)
       "First demand should require 2 units")
-  (is (same? selected  '("24_SRC3_NG" "2_SRC1_NG"))
-      "Suitability of units is dictated by the ordering.  Best first."))
+  (is (same? selected  '("24_SRC3_NG" "23_SRC3_NG"))
+      "Suitability of units is dictated by the ordering.  Best first. In this case, we expect 
+       the units with the greatest cycle times [most deployable] and of like type to be most 
+       suited for deployment."))
 
 ;;Can we fill a demand at this point?
 ;;We have a) an entity that's designated as filling a demand.
