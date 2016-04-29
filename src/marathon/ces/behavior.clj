@@ -306,6 +306,11 @@
              advance]))
 
 (def args  (atom  nil))
+
+;;note: if we change over to a set of coroutines running the ECS,
+;;we can just put the message on their channel and let the coro
+;;handle updates.
+
 ;;like ai/step-entity!, we should find a way to reuse it.
 (defn step-entity! [ctx e msg]
   (let [^clojure.lang.ILookup  ent (atom (if (map? e) e (get-entity ctx e)))

@@ -341,6 +341,43 @@
     (end-day day)           ;End of day logic and notifications.
     (manage-changed-demands day)));Clear set of changed demands in demandstore.
 
+;;in ECS parlance, the functions in sim-step are just systems.
+;;Each of these systems operates on the ECS, or more specifically,
+;;the components within the ECS that are of interest, and
+;;then narrowly computes the new components for the system from
+;;the inputs.  We have composition of system by applying them
+;;in-order to the input ECS; however, it's entirely possible that
+;;we could define different means of composition, namely parallel
+;;composition and the like, to allow the system execution to
+;;run any way we'd like.
+;;Since systems are just functions, we can build them up from smaller
+;;systems (functions) and layer the behavior.
+;;This is right and proper and functional;
+
+;;Thinking of systems as vertical (in the sense of operating on columns of components),
+;;we can think of single-purpose systems the operate on broad-swaths of components
+;;-namely on an entity-by-entity basis- like messaging and behaviors - as
+;;horizontal systems.  Horizontal systems may act at sporadic times, and
+;;across many components (for instance at the entity level rather than
+;;at the component level);   If we have an abstract entity that is
+;;able to receive messages, its behavior is dictated by some system.
+;;This system will be called as a function of events;  we'd like the
+;;convenience of "triggering" events now or later.  One type of apparent
+;;event that gets called quite a bit is the "behavior" or update event,
+;;which we currently implement as handling a message.  We can let
+;;the entity handle the message in any number of ways, but this means
+;;we have an ambient system that can be invoked concurrently with
+;;any currently running system (or really, we can queue it for invokation).
+;;Do we really need to use messaging, or can we just apply the behavior
+;;system on ad-hoc basis?   I think we can go adhoc, and just allow
+;;other systems to have access to the behavior system if they need it.
+;;For now, we can just do everything synchronously and not worry about
+;;scaling it via messaging.  Alternately, we can queue the messages/events
+;;and have them handled in-between system calls (part of binding the system)
+;;Before and afte running any system, we maybe handle pending messages.
+;;Either that, or we deal with messages in-line.  Either way, it works out and
+;;can be handled synchronously.
+
 ;#Simulation Interface
 ;sim.engine/event-step-marathon is the entry point for Marathon.
 (defn event-step-marathon
@@ -352,7 +389,7 @@
     (assert (can-simulate? init-ctx) 
             "There's nothing to simulate. Check Supply, Demand, and Relations!")
     (loop [day    0
-           ctx init-ctx]
+           ctx    init-ctx]
       (if (not (keep-simulating? ctx))
           (finalize day ctx) ;base case, return the final state and clean up.
           (let [next-day   (sim/advance-time ctx) ;WRONG
