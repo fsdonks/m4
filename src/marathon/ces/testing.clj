@@ -1,6 +1,6 @@
 (ns marathon.ces.testing
   (:require [marathon.ces.missing] 
-            [marathon.ces [engine :refer :all]]
+            [marathon.ces [engine  :as engine  :refer :all]]
             [marathon.ces [fill  :as fill]]
             [marathon.ces [core :as core]
                           [supply :as supply]
@@ -11,7 +11,6 @@
                           [sampledata :as sd]
                           [entityfactory :as ent]
                           [setup :as setup]
-                          [engine :as engine]
                           [query :as query]
                           [deployment :as deployment]]                        
             [marathon.data [simstate :as simstate]

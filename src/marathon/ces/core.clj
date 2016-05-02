@@ -23,9 +23,9 @@
 (ns marathon.ces.core
   (:require [clojure    [inspector :as inspect]]
             [spork.util [metaprogramming :as util]
-                        [general :as gen]
-                        [tags :as tag]
-                        [table :as tbl]
+                        [general  :as gen]
+                        [tags     :as tag]
+                        [table    :as tbl]
                         [reducers]
                         [cellular :as cells]]
             [spork.cljgraph [jungapi :as jung]]
@@ -33,8 +33,8 @@
             [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity]]
             [spork.sim.simcontext :as sim]
             [spork.ai.core :as ai]
+            [marathon.ces.basebehavior :as b]
             [marathon.data.store :as simstate]
-            [marathon.ces.behavior :as b]
             [clojure.core.reducers :as r]))
 
 ;;#Providing Common Access to the State in the Simulation Context
@@ -164,7 +164,8 @@
 ;;immediately.
 (defn handle-message! [ctx e msg]
   ;(println [:handling e msg])
-  (b/step-entity! ctx e msg))
+  (b/step-entity! ctx e msg (:behavior e))
+  )
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
 (defn merge-parameters [s ps]  (mergee  s :parameters  ps))

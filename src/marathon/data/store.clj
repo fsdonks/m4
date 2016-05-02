@@ -7,7 +7,7 @@
     [spork.entitysystem.store :refer :all]
     [spork.sim.core :as sim]
     [spork.util.tags :as tag]
-    [marathon.data [period :as p]]
+    [marathon.data [period :as p] [fsm :as fsm]]
 ;    [quilsample.shared :as shared :refer :all]
 ;    [quilsample.events :refer [notify!] :as events]
 ;    [quilsample.entityevents :as entevents]
@@ -85,7 +85,7 @@
   [id {:keys [messages behavior statedata last-update t] 
        :or {messages nil
             behavior :default
-            statedata {:wait-time 0}}}]
+            statedata fsm/blank-data}}]
   {:components [:behavior    behavior
                 :messages    messages
                 :interactive true

@@ -40,7 +40,8 @@
             [marathon.data [fsm :as fsm]
                            [protocols :as protocols]
              ]
-            [marathon.ces [core :as core]
+            [marathon.ces [basebehavior :refer :all]
+                          [core :as core]
                           [unit :as u]
                           [supply :as supply]
                           [demand :as d]
@@ -51,7 +52,8 @@
             [clojure.core.reducers  :as r]
             [spork.entitysystem.store :as store :refer :all :exclude [default]]
             [spork.sim.simcontext :as sim]
-            ))
+            )
+  (:import [marathon.ces.basebehavior behaviorenv]))
 
 
 
@@ -78,42 +80,7 @@
 ;;Environment for evaluating entity behaviors, adapted for use with the simcontext.
 ;;If we provide an address, the entity is pushed there.  So, we can have nested
 ;;updates inside associative structures.
-(defrecord behaviorenv [entity behavior current-messages new-messages ctx current-message
-                        tupdate deltat]
-  ai/IEntityMessaging
-  (entity-messages- [e id] current-messages)
-  (push-message-    [e from to msg] ;should probably guard against posing as another entity
-    (let [t        (.valAt ^clojure.lang.ILookup  msg :t)
-          _        (ai/debug [:add-new-messages-to new-messages])
-          additional-messages (spork.ai.behavior/swap!! (or new-messages  (atom []))
-                                        (fn [^clojure.lang.IPersistentCollection xs]
-                                          (.cons  xs
-                                             (.assoc ^clojure.lang.Associative msg :from from))))]                            
-      (behaviorenv. entity
-                    behavior
-                    current-messages
-                    additional-messages
-                    ctx
-                    current-message
-                    tupdate
-                    deltat
-                    )))
-  ai/IEntityStorage ;we could just have commit-entity- return something we can append...another idea.
-  (commit-entity- [env]
-    (let [ctx      (ai/deref! ctx)
-          ent      (ai/deref! entity)
-         ; existing-messages (atom (:messages ent))          
-          id  (:name ent)
-          _   (ai/debug  [:committing ent])
-          _   (ai/debug  [:new-messages new-messages])
-          ]
-      (reduce
-       (fn [acc m]
-         (do 
-          ;(println [:pushing m :in acc])
-          (sim/trigger-event m acc)))
-       (mergee ctx (:name ent) ent)
-       new-messages))))
+
 
 ;;__Utility functions__
 ;;Entity step operations...
@@ -500,7 +467,7 @@
 
 ;;This hooks us up with a next-position and a wait-time
 ;;going forward.
-(befn prepare-to-wait ^behaviorenv [entity]  
+(befn find-wait ^behaviorenv [entity]  
   (let [e @entity
         p (get-next-position e  (:positionpolicy e))]
     (bind!! {:next-position  p
@@ -521,7 +488,7 @@
 ;;at the location until a specified time.
 (def moving-beh 
   (->and [should-move?
-          prepare-to-wait
+          find-wait
           apply-changes
           wait]))
 
@@ -749,13 +716,14 @@
 ;;Known changes occur when we're told about them...i.e. 
 ;;when time elapses, when an external state change happens, 
 ;;etc.  It's ALWAYS externally driven by the caller.
+(comment 
 (def default-behavior 
   (->seq [spawning-beh ;make sure we're alive 
           moving-beh   ;if were' alive move
           update-current-state ;update once we're done moving
           age-unit ;if we're not moving, age in place.
           ]))
-
+)
 
 (comment 
 ;;default behavior is this...
@@ -1027,44 +995,6 @@
              advance     ;advance in policy, time, statistics, etc.
              ]))
 
-(def args  (atom  nil))
-
-;;note: if we change over to a set of coroutines running the ECS,
-;;we can just put the message on their channel and let the coro
-;;handle updates.
-
-;;We have a way to send messages now....dispatch is handled through
-;;send-message, which uses step-entity! to handle the message.
-
-;;immediate steps happen with no time-delta.
-;;like ai/step-entity!, we should find a way to reuse it.
-(defn step-entity! [ctx e msg]
-  (let [^clojure.lang.ILookup  e  (if (map? e) e (get-entity ctx e))
-         ent (atom e)
-        beh   (.valAt e :behavior default)
-        beh   (if (identical? beh :default)
-                  (do  (swap! ent assoc :behavior default)
-                       default)
-                  beh)
-        tupdate (:t msg)
-        ;;load a behavior context for the entity to behave in.
-        ;;Note: if we're using stateful object-like entities,
-        ;;they'll maintain a stateful behavior environment.
-        benv (marathon.ces.behavior.behaviorenv.  ent
-             beh ;right now there's only one behavior :default
-             [msg]
-             nil
-             (atom ctx)
-             msg     
-             tupdate ;current time.
-             (if-let [tprev (:last-update e)] ;deltat
-               (- tupdate tprev)
-               0))        
-        _    (println [:stepping (:name e) msg])
-        _ (reset! args benv)]
-    (-> (beval beh benv)
-        (return!)
-        (ai/commit-entity-))))
 
 (comment 
 
@@ -1263,9 +1193,9 @@
 ;;                         ;;track of our changes better?
 ;;                         ]))
 
-(befn find-move []
-      (->and [should-move?
-              set-next-position]))
+;; (befn find-move []
+;;       (->and [should-move?
+;;               set-next-position]))
 
 
 ;;We know how to wait.  If there is an established wait-time, we
