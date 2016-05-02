@@ -205,17 +205,6 @@
 ;;load-entity
 ;;add-message {:to-state to-state :deltat deltat :ctx ctx}
 
-;;note-we have a wait time in the context, under :wait-time
-;;updates an entity after a specified duration, relative to the 
-;;current simulation time + duration.
-(defn update-after 
-  ([entity duration ctx]
-     (core/request-update (+ (sim/current-time ctx) duration) 
-                          (:name entity)
-                          :supplyupdate
-                          ctx))
-  ([duration {:keys [entity] :as benv}]
-   (update-after @entity duration benv)))
 
 ;;Move this out to marathon.ces.unit?
 ;;auxillary function that helps us wrap updates to the unit.
@@ -264,6 +253,21 @@
 
 ;;Behaviors
 ;;=========
+
+(befn +nothing-state+ [deltat]
+     (->do (fn [_] (log! (str (:name (entity ctx)) " is doing nothing for " deltat) ctx)
+             )))
+
+;;note-we have a wait time in the context, under :wait-time
+;;updates an entity after a specified duration, relative to the 
+;;current simulation time + duration.
+(befn update-after  ^behaviorenv [entity duration ctx]
+   (bind!!  {:ctx (swap! ctx (fn [ctx] 
+                               (core/request-update (+ (sim/current-time ctx) duration) 
+                                   (:name entity)
+                                   :supplyupdate
+                                   ctx)))}))
+
 ;;our idioms for defining behaviors will be to unpack 
 ;;vars we're expecting from the context.  typically we'll 
 ;;just be passing around the simulation context, perhaps 
@@ -333,7 +337,7 @@
   (when (pos? deltat)
     (loop [dt  deltat
            benv benv]
-      (let [sd (:statedata benv)            
+      (let [sd (:statedata    benv)            
             _  (log! [:sd sd] benv)
             timeleft    (fsm/remaining sd)
             _  (log! [:rolling :dt dt :remaining timeleft] benv)]
@@ -379,22 +383,6 @@
 ;;state...so....that's also doable.
 
 
-
-;;We assume the the entity-behavior is stored in the context....
-;;so, update-state-beh is just using the behavior associated with the
-;;entity...
-(declare default-behavior) ;;we need to make a default root behavior..
-
-;;#Possibly remove this...
-;;Heh, that's pretty weak, but it's technically correct
-;;All we do is provide a reference to the time the update, note we can
-;;easily override the default behavior by providing a root-behavior in
-;;the context.  This is pretty cool for things like overriding
-;;behaviors if we have temporary effects.
-(defn update-state-beh [{:keys [root-behavior] :as ctx
-                         :or   {root-behavior default-behavior}}]
-  (beval root-behavior ctx))
-
 ;;Only Movement....
 ;;===================
 
@@ -425,12 +413,11 @@
 ;;if we have a next-location planned.
 (befn should-move? ^behaviorenv [next-position statedata]
   (or next-position
-      (zero? (fsm/remaining statedata))
+      (zero? (fsm/remaining statedata)) ;;time is up...
       (spawning? statedata)))
 
 ;;This may not matter...                  
-(befn record-move {:as benv}
-      (bind!! {:moved true}))
+(befn record-move {:as benv} (bind!! {:moved true}))
 
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
@@ -473,12 +460,12 @@
             wt       (get-wait-time  u  nextpos ctx)  ;;how long will we be waiting?
             ]
         (if (= frompos nextpos)  ;;if we're already there...  
-          ctx ;do nothing, no move has taken place.          
+          benv ;do nothing, no move has taken place.          
           (let [newstate (get-state u nextpos) 
                  ;;#Todo change change-state into a fixed-arity
                 ;;function, this will probably slow us down due to arrayseqs.
                 new-sd   (fsm/change-state statedata newstate wt)
-                _      (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
+                _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
                 ]
          (bind!!  ;update the context with information derived
                                         ;from moving
@@ -489,70 +476,45 @@
           (u/unit-moved-event! new-u nextpos benv))
          )))))
 
-(defn apply-state [ctx] 
-  (if-let [new-state (get-bb ctx :new-state)]
-    (let [;;#Todo change change-state into a fixed-arity
-          ;;function, this will probably slow us down due to arrayseqs.
-          new-sd   (fsm/change-state (statedata ctx) new-state (get-bb ctx :new-duration))]
-      (success 
-       (merge-bb ctx ;update the context with information derived
+;;Dont' think we need this...
+;;more expressive...
+(befn apply-state [new-state new-duration statedata] 
+  (when new-state
+    (bind!! ;update the context with information derived
                                         ;from moving
-                 {:statedata    new-sd})))
-      (fail ctx)))
+     {:statedata    (fsm/change-state statedata  new-state new-duration)})))
 
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
 ;;unit for storage until the next update.
-;; (defn update-entity [ctx]
-;;   (if-let [
-  
 (def apply-changes (->and [apply-move 
                            apply-state                                                    
                            ]))
-
-;; ;;apply-state? should update the entity's state, change the duration
-;; ;;to be the current wait-time, etc.
-;; (defn apply-state [ctx] 
-;;   (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
-;;     (let [new-state (get-bb :new-state)]
-;;         (success
-;;          (merge-bb ctx ;update the context with information derived
-;;                                         ;from moving
-;;                    {:entity       (traverse-unit u t frompos nextpos)
-;;                     :old-position frompos ;record information 
-;;                     :new-state    newstate})))
-;;     (fail ctx)))
-
-(def set-next-position  
-  (->alter #(let [e (entity %)
-                  p (get-next-position e  (:positionpolicy e))]
-              (merge-bb %  {:next-position  p
-                            :wait-time     (get-wait-time e p %)}))))
-
-(def find-move  (->and [should-move? 
-                        set-next-position ;;the problem here is that
-                        ;;we don't see what's being changed....the
-                        ;;context is changing, but where? At least
-                        ;;it's not side-effecting, but can we keep
-                        ;;track of our changes better?
-                        ]))
+;;This hooks us up with a next-position and a wait-time
+;;going forward.
+(befn prepare-to-wait ^behaviorenv [entity]  
+  (let [e @entity
+        p (get-next-position e  (:positionpolicy e))]
+    (bind!! {:next-position  p
+             :wait-time     (get-wait-time e p)})))
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
-(defn wait [ctx]
-  (if-let [wt (wait-time ctx)] ;;if we have an established wait time...    
-    (->> (if (zero? wt) 
-           ctx ;skip the wait, instantaneous.  No need to request an
-               ;update.
-           (log! (str "waiting for " wt) (update-after  wt ctx)))           
-         (success))
-    (fail      ctx)))
+(befn wait {:keys [wait-time] :as benv}          
+  (when-let [wt wait-time] ;;if we have an established wait time...    
+    (if (zero? wt) 
+      (success benv) ;skip the wait, instantaneous.  No need to request an
+      ;update.
+      (log! (str "waiting for " wt)
+            (update-after  wt benv)))))
     
 ;;Movement is pretty straightforward: find a place to go, determine 
 ;;any changes necessary to "get" there, apply the changes, wait 
 ;;at the location until a specified time.
 (def moving-beh 
-  (->and [find-move
+  (->and [should-move?
+          find-move
+          prepate-to-wait
           apply-changes
           wait]))
 
@@ -568,95 +530,32 @@
   (->> (success ctx)
        (core/debug-print [:passing msg])))
 
-;;Should we keep a timestamp with the unit? That way we can keep track
-;;of how fresh it is.
-(defn age-unit [ctx]
-  (let [dt (get-bb ctx :deltat 0)
-        _  (log!   [:aging dt] ctx)]
-    (if (zero? dt) (success ctx) ;nothing changed.
-        ;otherwise we age the unit by an amount...
-        ;Maybe aging the unit also means processing messages...dunno.
-        (success 
-         (merge-bb ctx {:deltat 0 ;is this the sole consumer of time? 
-                        :statedata (fsm/add-duration (statedata ctx)  dt)
-                        :entity    (u/add-duration   (entity ctx) dt)})))))
-
 ;;State handler for generic updates that occur regardless of the state.
 ;;These are specific to the unit data structure, not any particular state.
-;; Private Function Global_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-;; Dim nextposition As String
-;; Dim nextstate As String
-;; Dim change As Boolean
-
-;; change = False
-;; 'bring the unit up to current time
-;; Set unit = ageUnit(unit, deltat)
-
-;;this is should-move...it kicks us off to move
-
-;; If StateExpired(unit, deltat) Then 'time in current state has expired
-;;     nextposition = getNextPosition(unit) 'what is the next position according to policy?
-;;     Set Global_State = Moving_State(unit, 0, nextposition) 'TOM Note 29 Mar 2011 -> this now reflects an instant move.
-;; End If
-
-;; Set Global_State = unit
-;; End Function
-
-;(defn global-beh [ctx] (success (age-unit ctx)))
-(def global-beh age-unit)
-
-;;State-dependent functions, the building blocks of our state machine.
-(def +nothing-state+ 
-  (fn [ctx] (success (do (log! (str (:name (entity ctx)) " is doing nothing for " (deltat ctx) ) ctx)
-                         ctx))))
-
-;; 'Units dwelling will accumulate dwell over time.
-;; Private Function Dwelling_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-;; If deltat > 0 Then unit.AddDwell deltat
-;; Set Dwelling_State = unit
-;; End Function
-
-;;maybe have an altering macro...
-;;(altering [[entity statedata] bb]
-;;  expr)....
-;;
-  
-;;Another way to look at these as producing "diffs" 
-;;We can compose diffs like monoids...an empty diff is 
-;;just identity
-;;An alteration applies the function to the element to be altered 
-;;in the context
-;;A commit stores the element in the context...
-;; (altering-bb [ctx {entity    (add-dwell entity)
-;;                    statedata (do-stuff  statedata)}])
-
-;;working on making a nicer dsl for defining updates to the 
-;;blackboard.  Some boiler plate is cropping up, not terrible, 
-;;but it'd be nice to abstract out the cruft for doing things 
-;;like updating stats, running functions against and entity, 
-;;altering state data, etc.
-
-;; (defmacro map-bb [key-exprs ctx]
-;;   (let [ks (keys key-exprs)
-;;         keyworded (reduce-kv (fn [acc k v] 
-;;                                (assoc acc (keyword k) v)) {} key-exprs)]
-;;     `(with-bb [[~@ks] ~ctx]
-;;        (merge-bb ~ctx ~keyworded))))
-;(update-bb {:entity (u/add-dwell bb-entity bb-deltat)} ctx)
-
+;;Should we keep a timestamp with the unit? That way we can keep track
+;;of how fresh it is.
+(befn age-unit ^behaviorenv {:keys [deltat statedata entity ctx] :as benv}
+  (let [dt (or deltat 0)]
+    (if (zero? dt) (success benv) ;done aging.
+        (let [_  (log!   [:aging dt] benv)
+              _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
+              ]
+          (bind!! {:deltat 0 ;is this the sole consumer of time? 
+                   :statedata (fsm/add-duration statedata dt)})))))
+ 
 ;;We're going to copy this a bunch of times...
-(defn dwelling-beh [ctx]   
-  (success (with-bb [[entity deltat] ctx] 
-             (set-bb ctx :entity (u/add-dwell  entity deltat)))))
-(defn bogging-beh [ctx]
-  (success (with-bb [[entity deltat] ctx] 
-             (set-bb ctx :entity (u/add-bog  entity deltat)))))
+(befn dwelling-beh ^behaviorenv {:keys [entity deltat] :as benv}
+      (do (swap! entity  #(u/add-dwell % deltat))
+          (success benv)))
+(befn bogging-beh ^behaviorenv {:keys [entity deltat] :as benv}
+      (do (swap! entity  #(u/add-bog % deltat))
+          (success benv)))
 
 ;;states are identical to leaf behaviors, with 
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
 (def default-states 
-  {:global           global-beh
+  {:global          age-unit
    :reset            #(pass :spawning %)
    :bogging          bogging-beh
    :dwelling         dwelling-beh
@@ -736,61 +635,32 @@
 ;;So, what we really want to do is update the unit initially, possibly 
 ;;with a negative time, and advance it forward to time 0 via the
 ;;deltat being the timeinstate.
-(defn spawning-beh [ctx]
-  (if (spawning? ctx)     
-    (success 
-     (with-bb [[topos cycletime tupdate statedata entity] ctx]
-       (let [{:keys [positionpolicy policy]} entity
-             {:keys [curstate prevstate nextstate timeinstate 
-                     timeinstateprior duration durationprior 
-                     statestart statehistory]} statedata
-                     cycletime (or cycletime (:cycletime entity))
-                     topos     (if (not (or topos positionpolicy))
-                                 (protocols/get-position (u/get-policy entity) cycletime)
-                                 (:positionpolicy entity))
-                     timeinstate   (- cycletime 
-                                      (protocols/get-cycle-time policy
-                                           (:positionpolicy entity)))
-                     timeremaining (protocols/transfer-time policy
-                                      positionpolicy 
-                                      (protocols/next-position policy positionpolicy))
-                     newduration   (- timeremaining timeinstate)
-                     nextstate     (protocols/get-state policy positionpolicy)
-                     spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime))]
-         (->> ;; (merge-bb  {:entity spawned-unit 
-              ;;             :next ctx
-              ctx
-              (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
-              ))))
-    (fail ctx)))
-
-(befn spawning-beh ^behaviorenv {:keys [topos cycletime tupdate statedata entity ctx] :as  benv}
-  (if (spawning? entity)     
-    (success 
-     (with-bb [ctx]
-       (let [{:keys [positionpolicy policy]} entity
-             {:keys [curstate prevstate nextstate timeinstate 
-                     timeinstateprior duration durationprior 
-                     statestart statehistory]} statedata
-                     cycletime (or cycletime (:cycletime entity))
-                     topos     (if (not (or topos positionpolicy))
-                                 (protocols/get-position (u/get-policy entity) cycletime)
-                                 (:positionpolicy entity))
-                     timeinstate   (- cycletime 
-                                      (protocols/get-cycle-time policy
-                                           (:positionpolicy entity)))
-                     timeremaining (protocols/transfer-time policy
-                                      positionpolicy 
-                                      (protocols/next-position policy positionpolicy))
-                     newduration   (- timeremaining timeinstate)
-                     nextstate     (protocols/get-state policy positionpolicy)
-                     spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime))]
-         (->> ;; (merge-bb  {:entity spawned-unit 
-              ;;             :next ctx
-              ctx
-              (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
-              ))))
-    (fail ctx)))
+(befn spawning-beh ^behaviorenv {:keys [to-position cycletime tupdate statedata entity ctx]
+                                 :as  benv}
+  (when (spawning? statedata)     
+    (let [ent @entity
+          {:keys [positionpolicy policy]} ent
+          {:keys [curstate prevstate nextstate timeinstate 
+                  timeinstateprior duration durationprior 
+                  statestart statehistory]} statedata
+          cycletime (or cycletime (:cycletime ent))
+          topos     (if (not (or to-position positionpolicy))
+                         (protocols/get-position (u/get-policy ent) cycletime)
+                         (:positionpolicy ent))
+          timeinstate   (- cycletime 
+                           (protocols/get-cycle-time policy
+                                                     (:positionpolicy ent)))
+          timeremaining (protocols/transfer-time policy
+                                                 positionpolicy 
+                                                 (protocols/next-position policy positionpolicy))
+          newduration   (- timeremaining timeinstate)
+          nextstate     (protocols/get-state policy positionpolicy)
+          spawned-unit  (-> ent (u/initCycles tupdate) (u/add-dwell cycletime))
+          _             (reset! entity spawned-unit)
+          ]
+      (->>  ctx
+            (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
+            ))))
 
 ;;This is actually pretty cool, and might be a nice catch-all
 ;;behavior...
@@ -1309,30 +1179,6 @@
 ;;to, we will add the wait-time to the context.  That way,
 ;;downstream behaviors can pick up on the wait-time, and 
 ;;apply it.
-(defn apply-move [ctx] 
-    (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
-      (let [t        (get-bb ctx :tupdate) ;(tupdate ctx)
-            u        (entity  ctx)
-            frompos  (get     u      :positionpolicy)
-            wt       (get-wait-time  u  nextpos ctx)]
-        (success
-         (if (= frompos nextpos)  
-           ctx ;do nothing, no move has taken place.          
-           (let [newstate (get-state u nextpos)
-                 ;;#Todo change change-state into a fixed-arity
-                 ;;function, this will probably slow us down due to arrayseqs.
-                 new-sd   (fsm/change-state (statedata ctx) newstate wt)
-                 new-u    (traverse-unit u t frompos nextpos)]
-             (->> (merge-bb ctx ;update the context with information derived
-                                        ;from moving
-                            {:entity       new-u
-                             :old-position frompos ;record information 
-                             :new-state    newstate
-                             :statedata    new-sd
-                             :new-duration wt})
-                  (u/unit-moved-event! new-u nextpos)
-                  )))))
-      (fail ctx)))
 
 ;;#Todo change change-state into a fixed-arity
           ;;function, this will probably slow us down due to arrayseqs.
@@ -1341,31 +1187,11 @@
         ;;update the context with information derived from moving
         (bind! {:statedata (fsm/change-state statedata new-state  new-duration)})))
 
-
-;; (defn apply-state [ctx] 
-;;   (if-let [new-state (get-bb ctx :new-state)]
-;;     (let [
-;;           new-sd   (fsm/change-state (statedata ctx) new-state (get-bb ctx :new-duration))]
-;;       (success 
-;;        (merge-bb ctx ;update the context with information derived
-;;                                         ;from moving
-;;                  {:statedata    new-sd})))
-;;     (fail ctx)))
-
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
 ;;unit for storage until the next update.
-;; (defn update-entity [ctx]
-;;   (if-let [
-
-(comment 
-(def apply-changes (->and [apply-move 
-                           apply-state                                                    
-                           ]))
-)
-
 (befn apply-changes []
-      (->and [apply-move
+      (->or [apply-move
               apply-state]))
 
 ;; ;;apply-state? should update the entity's state, change the duration
@@ -1535,5 +1361,44 @@
         (merge-bb ctx {:tupdate (sim/current-time ctx)
                        :entity   unit
                        :deltat   deltat})))
+
+;;Dont' think we need this...
+;;more expressive...
+(befn apply-state [new-state new-duration statedata] 
+  (when new-state
+    (bind!! ;update the context with information derived
+                                        ;from moving
+     {:statedata    (fsm/change-state statedata  new-state new-duration)})))
+
+
+
+(defn spawning-beh [ctx]
+  (if (spawning? ctx)     
+    (success 
+     (with-bb [[topos cycletime tupdate statedata entity] ctx]
+       (let [{:keys [positionpolicy policy]} entity
+             {:keys [curstate prevstate nextstate timeinstate 
+                     timeinstateprior duration durationprior 
+                     statestart statehistory]} statedata
+                     cycletime (or cycletime (:cycletime entity))
+                     topos     (if (not (or topos positionpolicy))
+                                 (protocols/get-position (u/get-policy entity) cycletime)
+                                 (:positionpolicy entity))
+                     timeinstate   (- cycletime 
+                                      (protocols/get-cycle-time policy
+                                           (:positionpolicy entity)))
+                     timeremaining (protocols/transfer-time policy
+                                      positionpolicy 
+                                      (protocols/next-position policy positionpolicy))
+                     newduration   (- timeremaining timeinstate)
+                     nextstate     (protocols/get-state policy positionpolicy)
+                     spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime))]
+         (->> ;; (merge-bb  {:entity spawned-unit 
+              ;;             :next ctx
+              ctx
+              (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
+              ))))
+    (fail ctx)))
+
 
 )
