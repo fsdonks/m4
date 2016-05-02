@@ -353,6 +353,7 @@
   ([position ctx] (get-wait-time (entity ctx) position ctx))
   ([ctx] (wait-time ctx)))
 
+
 ;;todo# move to generic statedata library.
 ;;this should be lifted out
 ;;This just keeps track of where we are, how long we're waiting, and 
@@ -1030,7 +1031,6 @@
           age-unit ;if we're not moving, age in place.
           ]))
 
-
       
 ;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
 
@@ -1051,11 +1051,7 @@
 ;; With unit
 ;;     MarathonOpSupply.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration, simstate.context
 ;; End With
-
 ;; End Function
-
-
-
 
 
 
@@ -1067,10 +1063,7 @@
 ;;         Set FinishCycle = StartCycle_State(EndCycle_State(unit, 0), 0) 'wrap up the cycle.
 ;;     End If
 ;; End If
-
 ;; End Function
-
-
 
 ;; 'TODO -> reduce this down to one logical condition man....
 ;; 'TOM Change 6 June -> pointed disengagement toward demand name, via unit.LocationName
@@ -1795,10 +1788,6 @@
 
 ;; Set StartCycle_State = unit
 ;; End Function
-
-
-
-
 
 
 ;; 'Units ending cycles will record their last cycle locally.

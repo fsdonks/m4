@@ -685,41 +685,45 @@
           update-current-state ;update once we're done moving
           age-unit ;if we're not moving, age in place.
           ]))
-
-
       
-;; Private Function Spawning_State(unit As TimeStep_UnitData, deltat As Single, Optional topos As String, Optional cycletime As Single) As TimeStep_UnitData
+;;Units starting cycles will go through a series of procedures.
+;;Possibly log this as an event?
+(befn start-cycle {:keys [entity deltat tupdate] :as benv}
+   (let [unit   @entity
+         pstack (:policystack unit)]
+     (do  (swap! entity #(merge % {:cycletime 0
+                                   :date-to-reset tupdate}))
+          (if (pos? (count pstack))
+            (bind!! {:next-policy (first pstack)
+                     :policy-change true})
+            benv))))    
 
-;; With unit
-;;     .spawnTime = tnow
-;;     'hack...
-;;         timeinstate = .cycletime - .policy.GetCycleTime(.PositionPolicy) 'derived time in state upon spawning.
-;;         unit.InitCycles tnow
-;;         unit.AddDwell .cycletime
-;;     timeremaining = .policy.TransferTime(.PositionPolicy, .policy.nextposition(.PositionPolicy)) 'time remaining in this state
-;;     newduration = timeremaining - timeinstate
-  
-;;     'initialize cycle from policy
+;;Units ending cycles will record their last cycle locally.  We broadcast
+;;the change...Maybe we should just queue this as a message instead..
+(befn end-cycle {:keys [entity ctx tupdate] :as benv}
+  (let [cyc (assoc (:currentcycle @entity) :tfinal tupdate)
+        _  (swap! entity (fn [unit]
+                           (->  unit
+                                (assoc :currentcycle cyc)
+                                (u/recordcycle tupdate))))
+        _  (swap! ctx (fn [ctx] (sim/trigger-event :CycleCompleted
+                                                   (:name @entity)
+                                                   :SupplyStore
+                                                   "Completed A Cycle" ctx)))]
+    (success benv)))
 
-;; Set Spawning_State = ChangeState(unit, nextstate, 0, newduration)
+;;dunno, just making this up at the moment until I can find a
+;;definition of new-cycle.  This might change since we have local
+;;demand effects that can cause units to stop cycling.
+(defn new-cycle? [unit frompos topos]
+  (identical? (protocols/end-state (:policy unit) topos)))
 
-;; 'TOM Change -> Changed from "Initialized" to "Spawning"
-;; With unit
-;;     MarathonOpSupply.LogMove .spawnTime, "Spawning", .PositionPolicy, unit, newduration, simstate.context
-;; End With
-
-;; End Function
-
-;; Private Function FinishCycle(unit As TimeStep_UnitData, frompos As String, topos As String) As TimeStep_UnitData
-;; Set FinishCycle = unit
-
-;; If NewCycle(unit, frompos, topos) Then
-;;     If Not JustSpawned(unit) Then
-;;         Set FinishCycle = StartCycle_State(EndCycle_State(unit, 0), 0) 'wrap up the cycle.
-;;     End If
-;; End If
-
-;; End Function
+(befn finish-cycle {[entity from-position to-position] :as benv}
+      (when (and (not (just-spawned? benv))
+                 (new-cycle? @entity from-position to-position))
+        (->> benv
+             (start-cycle)
+             (end-cycle))))
 
 ;; 'TODO -> reduce this down to one logical condition man....
 ;; 'TOM Change 6 June -> pointed disengagement toward demand name, via unit.LocationName
