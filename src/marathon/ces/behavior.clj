@@ -994,7 +994,7 @@
 ;;Basic entity behavior is to respond to new external
 ;;stimuli, and then try to move out.
 
-(defn recovered? [u] false)
+(defn recovered?       [u] false)
 (defn deployment-over? [u] false)
 
 ;;Typically, there will be no external stimuli in the
@@ -1039,9 +1039,9 @@
 ;;immediate steps happen with no time-delta.
 ;;like ai/step-entity!, we should find a way to reuse it.
 (defn step-entity! [ctx e msg]
-  (let [e       (if (map? e) e (get-entity ctx e))
-        ^clojure.lang.ILookup  ent (atom e)
-        beh   (.valAt ent :behavior default)
+  (let [^clojure.lang.ILookup  e  (if (map? e) e (get-entity ctx e))
+         ent (atom e)
+        beh   (.valAt e :behavior default)
         beh   (if (identical? beh :default)
                   (do  (swap! ent assoc :behavior default)
                        default)
