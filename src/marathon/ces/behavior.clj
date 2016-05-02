@@ -42,7 +42,9 @@
              ]
             [marathon.ces [core :as core]
                           [unit :as u]
-                          [supply :as supply]]
+                          [supply :as supply]
+                          [demand :as d]
+             ]
             
             [spork.util.general     :as gen]        
             [spork.data.priorityq   :as pq]
@@ -57,6 +59,10 @@
   `(if (= (clojure.string/upper-case (read)) "Y")
      ~expr 
      ~@else))
+
+(defmacro log! [msg ctx]
+  `(do (println ~msg)
+       ~ctx))
 
 ;;an alternative idea here...
 ;;use a closure to do all this stuff, and reify to give us implementations
@@ -255,8 +261,8 @@
 ;;Behaviors
 ;;=========
 
-(befn +nothing-state+ [deltat]
-     (->do (fn [_] (log! (str (:name (entity ctx)) " is doing nothing for " deltat) ctx)
+(befn +nothing-state+ [entity deltat ctx]
+     (->do (fn [_] (log! (str (:name @entity) " is doing nothing for " deltat) ctx)
              )))
 
 ;;note-we have a wait time in the context, under :wait-time
@@ -344,9 +350,9 @@
             _  (log! [:rolling :dt dt :remaining timeleft] benv)]
         (if (<= dt timeleft)
           (do (log! [:updating-for timeleft] benv)
-              (beval update-state-beh (bind!! benv {:deltat dt})))
+              (beval update-state-beh (bind!!  {:deltat dt} benv)))
           (let [residual   (max (- dt timeleft) 0)
-                res        (beval update-state-beh (bind!! benv {:deltat timeleft}))]
+                res        (beval update-state-beh (bind!! {:deltat timeleft} benv))]
             (if (success? res) 
               (recur  residual ;advance time be decreasing delta
                       res)
@@ -458,7 +464,7 @@
       (let [t        tupdate
             u        @entity 
             frompos  (get     u      :positionpolicy) ;;look up where we're coming from.
-            wt       (get-wait-time  u  nextpos ctx)  ;;how long will we be waiting?
+            wt       (get-wait-time  u  nextpos benv)  ;;how long will we be waiting?
             ]
         (if (= frompos nextpos)  ;;if we're already there...  
           benv ;do nothing, no move has taken place.          
@@ -474,7 +480,7 @@
            :new-state    newstate
            :statedata    new-sd
            :new-duration wt}
-          (u/unit-moved-event! new-u nextpos benv))
+          (u/unit-moved-event! @entity nextpos benv))
          )))))
 
 ;;Dont' think we need this...
@@ -491,6 +497,7 @@
 (def apply-changes (->and [apply-move 
                            apply-state                                                    
                            ]))
+
 ;;This hooks us up with a next-position and a wait-time
 ;;going forward.
 (befn prepare-to-wait ^behaviorenv [entity]  
@@ -514,17 +521,9 @@
 ;;at the location until a specified time.
 (def moving-beh 
   (->and [should-move?
-          find-move
-          prepate-to-wait
+          prepare-to-wait
           apply-changes
           wait]))
-
-;; ;;a better moving-beh would be...
-;; (def moving-beh2 
-;;   (->or  [(->while should-move?
-;;                     [find-move
-;;                      apply-changes])
-;;           wait]))
 
 (defn pass 
   [msg ctx]  
@@ -561,6 +560,8 @@
 ;;states are identical to leaf behaviors, with 
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
+(comment
+  
 (def default-states 
   {:global          age-unit
    :reset            #(pass :spawning %)  
@@ -586,6 +587,13 @@
 ;   #{:deployable :dwelling} #(pass :deployable-dwelling)
    })
 
+)
+
+;;this is significantly different than the fsm approach we used before...
+;;now, we handle each case as a specific branch of the tree...
+;;note: we can parameterize this and build the tree dynamically to
+;;define higher-order behaviors.
+
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
      res# 
@@ -595,6 +603,7 @@
 ;;simple FSM behavior....
 ;;Or, we completely meld what were FSM states into leaf behaviors.
 
+(comment 
 ;;perform a simple update via the entity's FSM.
 (defn update-current-state 
   ([states ctx] 
@@ -606,6 +615,8 @@
          (do (log! [:unknown-state st] ctx)
              (fail ctx)))))
   ([ctx] (update-current-state default-states ctx)))
+
+)
 
 ;;similar to moving behavior, we have a stationary behavior...
 ;;If we're stationary, we're not moving, but staying in the same 
@@ -671,20 +682,6 @@
 
 ;;[looks a lot like my naive test behavior]
 
-
-;;This is actually pretty cool, and might be a nice catch-all
-;;behavior...
-;;We try to compute changes, apply the changes, then wait until 
-;;the next known change...
-;;Known changes occur when we're told about them...i.e. 
-;;when time elapses, when an external state change happens, 
-;;etc.  It's ALWAYS externally driven by the caller.
-(def default-behavior 
-  (->seq [spawning-beh ;make sure we're alive 
-          moving-beh   ;if were' alive move
-          update-current-state ;update once we're done moving
-          age-unit ;if we're not moving, age in place.
-          ]))
       
 ;;Units starting cycles will go through a series of procedures.
 ;;Possibly log this as an event?
@@ -716,17 +713,14 @@
 ;;definition of new-cycle.  This might change since we have local
 ;;demand effects that can cause units to stop cycling.
 (defn new-cycle? [unit frompos topos]
-  (identical? (protocols/end-state (:policy unit) topos)))
+  (identical? (protocols/end-state (:policy unit)) topos))
 
-(befn finish-cycle {[entity from-position to-position] :as benv}
+(befn finish-cycle ^behaviorenv {:keys [entity from-position to-position] :as benv}
       (when (and (not (just-spawned? benv))
                  (new-cycle? @entity from-position to-position))
         (->> benv
              (start-cycle)
              (end-cycle))))
-
-;; 'TODO -> reduce this down to one logical condition man....
-;; 'TOM Change 6 June -> pointed disengagement toward demand name, via unit.LocationName
 
 ;;this is really a behavior, modified from the old state.  called from overlapping_state.
 ;;used to be called check-overlap
@@ -747,6 +741,43 @@
                      (protocols/deployable-at? p to-position)))
       (do (swap! ctx #(supply/update-deploy-status u nil nil %))
           (success benv)))))
+
+;;This is actually pretty cool, and might be a nice catch-all
+;;behavior...
+;;We try to compute changes, apply the changes, then wait until 
+;;the next known change...
+;;Known changes occur when we're told about them...i.e. 
+;;when time elapses, when an external state change happens, 
+;;etc.  It's ALWAYS externally driven by the caller.
+(def default-behavior 
+  (->seq [spawning-beh ;make sure we're alive 
+          moving-beh   ;if were' alive move
+          update-current-state ;update once we're done moving
+          age-unit ;if we're not moving, age in place.
+          ]))
+
+
+(comment 
+;;default behavior is this...
+(->or [check-messages 
+       spawning ;;try to spawn the unit if possible.
+       exiting  ;;if the unit is dead, kill it.
+       age-unit ;;get the unit up to date, following its current behavior.
+       moving   ;;if we're not able to move, we can accumulate statistics...
+       (->or  [deploying   (->or [bogging ;;accumulate bog
+                                  overlapping ;;change state to overlap, accumulat bog probably..
+                                  abrupt-withdraw ;;unit is abruptly removed.
+                                  ])
+               disengaging (->or [recovering  ;;try to recover
+                                  redeploying ;;try to redeploy to become available...                                  
+                                  ])
+               resetting                               
+               dwelling    [add-dwell]])])
+
+[resetting [finish-cycle
+            moving]]
+)
+
 
 ;;__Behavior Definitions__
 ;;Note: there are only a couple of small places where the behaviors need to
@@ -963,6 +994,9 @@
 ;;Basic entity behavior is to respond to new external
 ;;stimuli, and then try to move out.
 
+(defn recovered? [u] false)
+(defn deployment-over? [u] false)
+
 ;;Typically, there will be no external stimuli in the
 ;;form of messages, so the entity will derive its operation
 ;;based on its current surroundings.  Note: we can
@@ -970,17 +1004,17 @@
 ;;set appropriately...in that case these behaviors
 ;;are dispatched via a case statement; everything
 ;;still works nicely.
-(befn try-dwell [{:keys [entity] :as benv}]
+(befn try-dwell ^behaviorenv {:keys [entity] :as benv}
       (when (or (deployment-over? @entity)
                 (recovered? @entity))
-        find-move
-        (advance  )))
+        [find-move
+         advance]))
 
 (defn deploy-to [o benv]
   ;;stub
   (success benv))
 
-(befn try-deploy [{:keys [entity] :as benv}]
+(befn try-deploy ^behaviorenv {:keys [entity] :as benv}
       (when-let [o (:deploy-order @entity)]
         (deploy-to o)))
 
@@ -1007,7 +1041,7 @@
 (defn step-entity! [ctx e msg]
   (let [e       (if (map? e) e (get-entity ctx e))
         ^clojure.lang.ILookup  ent (atom e)
-        beh   (.valAt e :behavior default)
+        beh   (.valAt ent :behavior default)
         beh   (if (identical? beh :default)
                   (do  (swap! ent assoc :behavior default)
                        default)
