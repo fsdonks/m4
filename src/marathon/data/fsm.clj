@@ -20,19 +20,37 @@
 
 (def inf (java.lang.Double/POSITIVE_INFINITY))
 
-(defrecord statedata [curstate prevstate nextstate 
-                      timeinstate timeinstateprior duration durationprior
-                      statestart statehistory])
+(defrecord statedata [curstate
+                      prevstate
+                      nextstate 
+                      timeinstate
+                      timeinstateprior
+                      duration
+                      durationprior
+                      statestart
+                      statehistory])
 
 (def blank-data (statedata. nil nil nil 0 0 inf inf 0 [])) 
   
 
-(defn change-state [fsm newstate & [newduration followingstate instant]]
+(defn change-state [^statedata fsm newstate & [newduration followingstate instant]]
   (merge fsm {:curstate newstate 
               :nextstate followingstate
               :statehistory (conj (:statehistory fsm) newstate)
               :duration newduration
               :timeinstate 0}))
+
+(defn ^statedata change-statedata [^statedata  sdata tostate duration followingstate]
+  (statedata. 
+   tostate
+   (.curstate sdata)
+   followingstate
+   0
+   (.timeinstate sdata)
+   duration
+   (.duration sdata)
+   (.statestart sdata)
+   (conj (.statehistory sdata) tostate)))
 
 (defn remaining [fsm]  
    (- (:duration fsm) (:timeinstate fsm)))
@@ -85,11 +103,12 @@
 ;StateHistory.add CurrentState 'shows the reversion
 ;End Sub
 
-(defn progress [{:keys [duration timeinstate] :as sd}] 
-  (if (and (pos? duration) (not= duration inf))
-    (double (/ timeinstate duration))
-    0))
+(defn progress [^statedata sd ]
+  (let [duration (.duration sd)
+        timeinstate (.timeinstate sd)]
+    (if (and (pos? duration) (not= duration inf))
+      (double (/ timeinstate duration))
+      0)))
 
-
-(defn add-duration [{:keys [timeinstate] :as sd} amt]
-  (assoc sd :timeinstate (+ timeinstate amt)))
+(defn add-duration [^statedata sd  amt]
+  (assoc sd :timeinstate (+ (.timeinstate sd) amt)))

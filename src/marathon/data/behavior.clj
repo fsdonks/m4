@@ -122,8 +122,6 @@
     (do (sim/trigger-event :log :unit-behavior :all msg nil ctx) ctx)
     ctx))
 
-(defrecord behaviorstore [name behaviors])
-
 ;;#Pending  - Import Behavior Implementations From marathon.sim.legacy
 
 ;;_Begin Porting Legacy Behavior_
@@ -253,7 +251,6 @@
 ;;entity, and the behavior tree - upon re-evaluation - should be
 ;;able to suss out what it should be doing.
 
-
 ;;One strategy could be to isolate the state-independent parts of the 
 ;;existing logic and identify them as behaviors; in other words, 
 ;;remove all state-changes.  We then have the idiom of defining 
@@ -288,30 +285,9 @@
 ;;BlackBoard and Accessors
 ;;=======================
 
-;;Accessors for our behavior context.
-;;We don't "have" to do this, but I wanted to lift up
-;;from raw lookups and formalize the interface.  we seem to be using
-;;these alot, enough to warrant a new idiom possibly.
+;;The blackboard is the behaviorcontext, although we
+;;can adapt it to our needs.
 
-;;Get an item from the blackboard, which is stored in the simstate of 
-;;the context, under :state 
-(defn get-bb   
-  ([ctx k]      (get (core/get-blackboard ctx) k))
-  ([ctx k else] (if-let [res (get (core/get-blackboard ctx) k)]
-                  res 
-                  else)))
-(defn set-bb   [ctx k v]  (core/set-blackboard ctx (assoc (core/get-blackboard ctx) k v)))
-(defn merge-bb [ctx m]    (core/set-blackboard ctx (merge (core/get-blackboard ctx) m)))
-
-(defmacro with-bb [[opts ctx] & expr]
-  (let [lhs (cond (map? opts) (if (contains? opts :as) opts (assoc opts :as 'bb))
-                  (vector? opts) {:as 'bb :keys opts} 
-                  :else (throw (Exception. (str "Options need to be a vector or a map... " opts))))]
-    `(let [~lhs (core/get-blackboard ~ctx)]
-       ~@expr)))
-  
-
-;;we could use a macro here....maybe later..
 
 (defn entity        [m] (get-bb m :entity))
 (defn from-position [m] (get-bb m :from-position))
@@ -321,17 +297,17 @@
 (defn wait-time     [m] (get-bb m :wait-time fsm/inf))
 (defn statedata     [m] (get-bb m :statedata))
 
-(defn spawning?     [m] (nil? (:curstate (statedata m))))
 
+(defn spawning?     [{:keys [statedata]}] (nil? (:curstate statedata)))
 (defn eget [m k]
   (if-let  [res (get m k)]
     res
     (throw (Exception. (str "Expected to find key " k " in " m)))))
 
 ;;aux function
-(defn remaining [statedata]
-  (- (eget statedata :duration) 
-     (eget statedata :timeinstate)))
+(defn remaining [{:keys [duration timeinstate] :as statedata}]
+  (- duration
+     timeinstate))
 
 ;; Private Function getState(unit As TimeStep_UnitData, position As String) As String
 ;; getState = unit.policy.getState(position)
@@ -343,8 +319,7 @@
 ;;either don't want this or we want to have it mean something.
 (defn get-state [unit position] 
   (let [s (protocols/get-state (:policy unit) position)]
-    (if (number? s)  :dwelling s)))
-    
+    (if (number? s)  :dwelling s)))    
 
 ;; 'Tom Change 24 May 2011
 ;; Private Function getNextPosition(unit As TimeStep_UnitData) As String

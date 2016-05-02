@@ -163,7 +163,7 @@
 ;;Message handling is equivalent to stepping the entity
 ;;immediately.
 (defn handle-message! [ctx e msg]
-  (println [:handling e msg])
+  ;(println [:handling e msg])
   (b/step-entity! ctx e msg))
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))

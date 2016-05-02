@@ -557,6 +557,13 @@
 ;unit.ChangeState "Bogging", 0, unit.CurrentCycle.bogbudget - unit.policy.overlap, context
 ;End Sub
 
+;;if we boil down change-state :bogging and a wait time;
+;;it's actually a primitive behavior.
+;;We probably want to have a keep-bogging-until-depleted behavior...
+;;which means, change your state to bog, according to your
+;;policy's bog budget.  Wait until the bog budget elapses, or
+;;someone interrupts you.
+
 (defn keep-bogging-until-depleted [u ctx]
   (change-state u :bogging 0 (boggable-time u) ctx))
 
@@ -608,6 +615,9 @@
     (->>   ctx
           (core/set-unit new-unit)
           (keep-bogging-until-depleted new-unit))))
+
+;;We can probably combine these into a unit behavior.
+;;For instance, notice we update the deployments.
 
 (defn  deploy-unit [unit t deployment-idx ctx] 
   (let [c    (:current-cycle unit)
