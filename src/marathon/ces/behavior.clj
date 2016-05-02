@@ -40,7 +40,8 @@
             [marathon.data [fsm :as fsm]
                            [protocols :as protocols]
              ]
-            [marathon.ces.core :as core]
+            [marathon.ces [core :as core]
+                          [unit :as u]]
             
             [spork.util.general     :as gen]        
             [spork.data.priorityq   :as pq]
@@ -49,6 +50,12 @@
             [spork.sim.simcontext :as sim]
             ))
 
+
+
+(defmacro if-y [expr & else]
+  `(if (= (clojure.string/upper-case (read)) "Y")
+     ~expr 
+     ~@else))
 
 ;;an alternative idea here...
 ;;use a closure to do all this stuff, and reify to give us implementations
@@ -207,7 +214,8 @@
                           (:name entity)
                           :supplyupdate
                           ctx))
-  ([duration {:keys [entity] :as benv}] (update-after @entity duration benv)))
+  ([duration {:keys [entity] :as benv}]
+   (update-after @entity duration benv)))
 
 ;;Move this out to marathon.ces.unit?
 ;;auxillary function that helps us wrap updates to the unit.
@@ -247,6 +255,13 @@
 (defn to-position?   [to   benv]  (identical? (:next-position benv)  to))
 (defn from-position? [from  benv] (identical? (:from-position benv) from))
 
+;;Capturing change information in a structure, rather than passing it
+;;around willy-nilly in the environment.  If we have a pending
+;;change, there will be changeinfo.  This only applies for instantaneous
+;;changes....That way, we can communicate our state updates serially
+;;by adding (and removing) changeinfo.
+(defrecord changeinfo [newstate duration followingstate])
+
 ;;Behaviors
 ;;=========
 ;;our idioms for defining behaviors will be to unpack 
@@ -257,21 +272,36 @@
 ;;Are we in fact changing the root of the behavior?
 ;;This is where the transition from FSM to behavior tree
 ;;comes in....
-(befn change-state-beh  {:keys [entity ctx deltat statedata newstate duration followingstate] 
-                               :or   {deltat 0 duration 0} :as benv}
-    (let [followingstate (or followingstate newstate)
-          newdata 
-          benv    (bind!! {:statedata (fsm/change-statedata statedata newstate duration followingstate)}
-                          benv)]
-      (cond
-        ;state change inducing a wait until update.
-        (pos? duration)  (success (update-after  entity duration benv))
-        ;immediate change, force an update.
-        (zero? duration) (success (update-state-beh benv)) 
-        :else (throw   (Exception. "Error, cannot have negative duration!"))))))
+(befn change-state-beh  {:keys [entity ctx statedata changeinfo deltat] 
+                         :or   {deltat 0 duration 0} :as benv}
+     (when changeinfo
+       (let [{:keys [newstate duration followingstate]} changeinfo
+             followingstate (or followingstate newstate)
+             newdata (fsm/change-statedata statedata newstate duration followingstate)
+             benv    (bind!! {:statedata newdata}
+                             (dissoc benv :changeinfo))]
+         (cond
+                                        ;state change inducing a wait until update.
+           (pos? duration)  (success (update-after  entity duration benv))
+                                        ;immediate change, force an update.
+           (zero? duration) (success (update-state-beh benv))
+           ;;supposed to immediately jump to the next beh 
+           :else (throw   (Exception. "Error, cannot have negative duration!"))))))
+     
+;;Maybe we never have a change-state, we just set the new state of the unit
+;;and update its behavior....
 
 ;;implement update-state-beh
-(def change-and-update (->and [change-state-beh update-state-beh]))
+;;basically, all this does is modify the state data in the fsm (reading from
+;;the behavior context), set the time, etc, and then process an update.
+;;So, the update-state-beh is really the key here; it's (currently) just a
+;;case statement, ala the FSM design.  Could we capture this in the tree
+;;structure ala Btrees?
+
+;;change-state-beh will fail if there's no changeinfo....cool.
+(def change-and-update
+  (->and [change-state-beh
+          update-state-beh]))
 
 ;;we want to update the unit to its current point in time.  Basically, 
 ;;we are folding over the behavior tree, updating along the way by 
@@ -281,10 +311,6 @@
 ;;deltat = 0 in the context.  Note, this is predicated on the
 ;;assumption that we can eventually pass time in some behavior....
 
-(defmacro if-y [expr & else]
-  `(if (= (clojure.string/upper-case (read)) "Y")
-     ~expr 
-     ~@else))
 ;;note: we have the current behavior in the behavior environment.
 ;;we can use that as our stack.
 
@@ -304,22 +330,22 @@
 ;;FSM implementation went off of absolute time, and measured 
 ;;deltas internally.
 (befn roll-forward-beh {:keys [deltat] :as benv}
-  (loop [dt  deltat
-         benv benv]
-    (let [sd (:statedata benv)            
-          _  (log! [:sd sd] benv)
-          timeleft    (fsm/remaining sd)
-          _  (log! [:rolling :dt dt :remaining timeleft] benv)]
-      (if (<= dt timeleft)
-        (do (log! [:updating-for timeleft] benv)
-            (beval update-state-beh (set-bb benv :deltat dt))) ;gives us [stat benv]
-        (let [residual   (max (- dt timeleft) 0)
-              res        (beval update-state-beh (set-bb benv :deltat timeleft))                  
-              ]
-          (if (success? res) 
-            (recur  residual ;advance time be decreasing delta
-                    res)
-            res))))))
+  (when (pos? deltat)
+    (loop [dt  deltat
+           benv benv]
+      (let [sd (:statedata benv)            
+            _  (log! [:sd sd] benv)
+            timeleft    (fsm/remaining sd)
+            _  (log! [:rolling :dt dt :remaining timeleft] benv)]
+        (if (<= dt timeleft)
+          (do (log! [:updating-for timeleft] benv)
+              (beval update-state-beh (bind!! benv {:deltat dt})))
+          (let [residual   (max (- dt timeleft) 0)
+                res        (beval update-state-beh (bind!! benv {:deltat timeleft}))]
+            (if (success? res) 
+              (recur  residual ;advance time be decreasing delta
+                      res)
+              res)))))))
 
 ;;I think deltat is okay....
 ;;We're saying "take enough steps until this much time has elapsed." 
@@ -342,6 +368,16 @@
 ;;The later definition seems more consistent with the behavior tree
 ;;approach.  We want the whole enchilada to be updated every time
 ;;step.
+
+;;We can go with the halo bitmask behavior approach...
+;;Being in a state precludes certain behaviors from running...
+;;Rather than selecting a specific behavior, we just outlaw
+;;known behaviors as a function of the state.
+
+;;This broadens the utility of the behavior tree.
+;;Another approach is we just check inside the behavior for
+;;state...so....that's also doable.
+
 
 
 ;;We assume the the entity-behavior is stored in the context....
@@ -391,7 +427,8 @@
   (or next-position
       (zero? (fsm/remaining statedata))
       (spawning? statedata)))
-                  
+
+;;This may not matter...                  
 (befn record-move {:as benv}
       (bind!! {:moved true}))
 
@@ -428,30 +465,29 @@
 ;;to, we will add the wait-time to the context.  That way,
 ;;downstream behaviors can pick up on the wait-time, and 
 ;;apply it.
-(defn apply-move [ctx] 
-    (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
-      (let [t        (get-bb ctx :tupdate) ;(tupdate ctx)
-            u        (entity  ctx)
-            frompos  (get     u      :positionpolicy)
-            wt       (get-wait-time  u  nextpos ctx)]
-        (success
-         (if (= frompos nextpos)  
-           ctx ;do nothing, no move has taken place.          
-           (let [newstate (get-state u nextpos)
+(befn apply-move ^behaviorenv {:keys [entity next-position tupdate statedata] :as benv} 
+    (when-let [nextpos next-position] ;we must have a position computed, else we fail.                                       
+      (let [t        tupdate
+            u        @entity 
+            frompos  (get     u      :positionpolicy) ;;look up where we're coming from.
+            wt       (get-wait-time  u  nextpos ctx)  ;;how long will we be waiting?
+            ]
+        (if (= frompos nextpos)  ;;if we're already there...  
+          ctx ;do nothing, no move has taken place.          
+          (let [newstate (get-state u nextpos) 
                  ;;#Todo change change-state into a fixed-arity
-                 ;;function, this will probably slow us down due to arrayseqs.
-                 new-sd   (fsm/change-state (statedata ctx) newstate wt)
-                 new-u    (traverse-unit u t frompos nextpos)]
-             (->> (merge-bb ctx ;update the context with information derived
+                ;;function, this will probably slow us down due to arrayseqs.
+                new-sd   (fsm/change-state statedata newstate wt)
+                _      (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
+                ]
+         (bind!!  ;update the context with information derived
                                         ;from moving
-                            {:entity       new-u
-                             :old-position frompos ;record information 
-                             :new-state    newstate
-                             :statedata    new-sd
-                             :new-duration wt})
-                  (u/unit-moved-event! new-u nextpos)
-                  )))))
-      (fail ctx)))
+          {:old-position frompos ;record information 
+           :new-state    newstate
+           :statedata    new-sd
+           :new-duration wt}
+          (u/unit-moved-event! new-u nextpos benv))
+         )))))
 
 (defn apply-state [ctx] 
   (if-let [new-state (get-bb ctx :new-state)]
