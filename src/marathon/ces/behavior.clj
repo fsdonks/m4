@@ -41,7 +41,8 @@
                            [protocols :as protocols]
              ]
             [marathon.ces [core :as core]
-                          [unit :as u]]
+                          [unit :as u]
+                          [supply :as supply]]
             
             [spork.util.general     :as gen]        
             [spork.data.priorityq   :as pq]
@@ -551,14 +552,20 @@
       (do (swap! entity  #(u/add-bog % deltat))
           (success benv)))
 
+;;So, this precludes is from having shared behaviors
+;;across states.  If we go the state-based route, we
+;;end up partitioning our behavior and having
+;;to duplicate it internally. 
+
+
 ;;states are identical to leaf behaviors, with 
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
 (def default-states 
   {:global          age-unit
-   :reset            #(pass :spawning %)
-   :bogging          bogging-beh
-   :dwelling         dwelling-beh
+   :reset            #(pass :spawning %)  
+   :bogging          bogging-beh   ;simple updates f(t)
+   :dwelling         dwelling-beh  ;simple updates f(t)
    ;Currently, we encode multiple states in the policy graph.  We may
    ;want to re-evaluate that...right now, we have multiple
    ;combinations of states to handle...that all correspond to dwelling.
@@ -662,6 +669,9 @@
             (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
             ))))
 
+;;[looks a lot like my naive test behavior]
+
+
 ;;This is actually pretty cool, and might be a nice catch-all
 ;;behavior...
 ;;We try to compute changes, apply the changes, then wait until 
@@ -713,41 +723,26 @@
 
 ;; 'TODO -> reduce this down to one logical condition man....
 ;; 'TOM Change 6 June -> pointed disengagement toward demand name, via unit.LocationName
-;; Private Sub checkOverlap(unit As TimeStep_UnitData, frompos As String, nextpos As String)
-
-;; If nextpos = "Overlapping" Then
-;;     'Decoupled*
-;;     'unit.parent.parent.demandManager.disengage unit, unit.LocationName, True
-;;     MarathonOpDemand.disengage simstate.demandstore, unit, unit.LocationName, simstate.context, True
-;; ElseIf frompos = "Overlapping" Then
-;;     'Decoupled*
-;;     'unit.parent.parent.demandManager.disengage unit, unit.LocationName, False
-;;     MarathonOpDemand.disengage simstate.demandstore, unit, unit.LocationName, simstate.context, False
-;; End If
-
-;; End Sub
 
 ;;this is really a behavior, modified from the old state.  called from overlapping_state.
 ;;used to be called check-overlap
-(defn disengage [ctx]
-  (let [unit (entity ctx)]
-    (cond (to-position? :overlapping ctx)
-            (success (d/disengage (core/get-demandstore ctx) unit (:locationname unit) ctx true))
-          (from-position? :overlapping ctx)
-            (success (d/disengage (core/get-demandstore ctx) unit (:locationname unit) ctx false))
-            :else (fail ctx))))
+(befn disengage {:keys [entity to-position from-position ctx] :as benv}
+      (let [res   (cond (identical? to-position   :overlapping)   true
+                        (identical? from-position :overlapping)   false
+                        :else :none)]
+        (when (not (identical? res :none)) ;ugh?
+          (do (swap! ctx ;;update the context...
+                     #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % res))
+              (success benv)))))
 
-;; Private Sub checkDeployable(unit As TimeStep_UnitData, frompos As String, nextpos As String)
-;; With unit
-;;     If .policy.Deployable(frompos) <> .policy.Deployable(nextpos) Then 'came home from deployment, "may" back in Reset
-;;         'Decoupled*
-;;         '.parent.UpdateDeployStatus unit
-;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
-;;     End If
-;; End With
-;; End Sub
-
-(defn check-deployable [])
+(befn check-deployable ^behaviorenv {:keys [entity to-position ctx] :as benv}
+  (let [u @entity
+        p (:policy entity)]
+    (when (and to-position
+               (not= (protocols/deployable-at? p (:positionpolicy u))
+                     (protocols/deployable-at? p to-position)))
+      (do (swap! ctx #(supply/update-deploy-status u nil nil %))
+          (success benv)))))
 
 ;;__Behavior Definitions__
 ;;Note: there are only a couple of small places where the behaviors need to
