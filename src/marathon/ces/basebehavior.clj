@@ -43,6 +43,9 @@
 
 (def args  (atom  nil))
 
+;;global var...
+(def default-behavior (atom nil))
+
 ;;note: if we change over to a set of coroutines running the ECS,
 ;;we can just put the message on their channel and let the coro
 ;;handle updates.
@@ -56,7 +59,7 @@
 ;;immediate steps happen with no time-delta.
 ;;like ai/step-entity!, we should find a way to reuse it.
 (defn step-entity!
-   [ctx e msg default]
+  ([ctx e msg default]
    (let [^clojure.lang.ILookup  e  (if (map? e) e (get-entity ctx e))
          ent    (atom e)
          beh   (.valAt e :behavior default)
@@ -84,3 +87,4 @@
     (-> (beval beh benv)
         (return!)
         (ai/commit-entity-))))
+  ([ctx e msg] (step-entity! ctx e msg @default-behavior)))

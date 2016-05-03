@@ -40,7 +40,7 @@
             [marathon.data [fsm :as fsm]
                            [protocols :as protocols]
              ]
-            [marathon.ces [basebehavior :refer :all]
+            [marathon.ces [basebehavior :as base :refer :all]
                           [core :as core]
                           [unit :as u]
                           [supply :as supply]
@@ -415,10 +415,10 @@
 ;;   (->and [(->pred :changed)
 ;;            commit-unit]))
 
-(defmacro get-else [m k v]
-  `(if-let [res# (get ~m ~k)]
-     res#
-     ~v))
+;;We probably need to account for location component
+;;changes as well, since these will be tied to position...
+;;Or, we tie in the physical position changes with the
+;;abstract position changes...
 
 ;;Given that we have the context for a move in place, 
 ;;we want to move as directed by the context.  If there 
@@ -458,6 +458,10 @@
                                         ;from moving
      {:statedata    (fsm/change-state statedata  new-state new-duration)})))
 
+;; (befn find-move []
+;;       (->and [should-move?
+;;               set-next-position]))
+
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
 ;;unit for storage until the next update.
@@ -475,7 +479,7 @@
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
-(befn wait {:keys [wait-time] :as benv}          
+(befn wait ^behaviorenv {:keys [wait-time] :as benv}          
   (when-let [wt wait-time] ;;if we have an established wait time...    
     (if (zero? wt) 
       (success benv) ;skip the wait, instantaneous.  No need to request an
@@ -528,6 +532,8 @@
 ;;the possibility for some states to invoke transitions.
 ;;we'll continue to port them.
 (comment
+
+  ;;these are state masks, effectively....
   
 (def default-states 
   {:global          age-unit
@@ -556,6 +562,7 @@
 
 )
 
+(comment
 ;;this is significantly different than the fsm approach we used before...
 ;;now, we handle each case as a specific branch of the tree...
 ;;note: we can parameterize this and build the tree dynamically to
@@ -565,12 +572,7 @@
   `(if-let [res# (get ~m ~k)]
      res# 
      ~@else))
-
-;;we should be able to define a nice FSM interface, and then derive a
-;;simple FSM behavior....
-;;Or, we completely meld what were FSM states into leaf behaviors.
-
-(comment 
+  
 ;;perform a simple update via the entity's FSM.
 (defn update-current-state 
   ([states ctx] 
@@ -582,6 +584,9 @@
          (do (log! [:unknown-state st] ctx)
              (fail ctx)))))
   ([ctx] (update-current-state default-states ctx)))
+
+;;this is another btree node:
+;;(->case) or (->states ) 
 
 )
 
@@ -727,20 +732,22 @@
 
 (comment 
 ;;default behavior is this...
-(->or [check-messages 
-       spawning ;;try to spawn the unit if possible.
-       exiting  ;;if the unit is dead, kill it.
-       age-unit ;;get the unit up to date, following its current behavior.
-       moving   ;;if we're not able to move, we can accumulate statistics...
-       (->or  [deploying   (->or [bogging ;;accumulate bog
-                                  overlapping ;;change state to overlap, accumulat bog probably..
-                                  abrupt-withdraw ;;unit is abruptly removed.
-                                  ])
-               disengaging (->or [recovering  ;;try to recover
-                                  redeploying ;;try to redeploy to become available...                                  
-                                  ])
-               resetting                               
-               dwelling    [add-dwell]])])
+(->or [[:messaging (->and [check-messages ;;state-specific, and one-off externally driven behavior.
+                           handle-messages])]
+       spawning       ;;try to spawn the unit if possible.
+       exiting        ;;if the unit is dead, kill it.
+       age-unit       ;;get the unit up to date, following its current behavior.       
+       moving          ;;if we're not able to move, we can accumulate statistics...       
+       [:cycling
+         (->or  [deploying   (->or [bogging ;;accumulate bog
+                                    overlapping ;;change state to overlap, accumulat bog probably..
+                                    abrupt-withdraw ;;unit is abruptly removed.
+                                    ])
+                 disengaging (->or [recovering  ;;try to recover
+                                    redeploying ;;try to redeploy to become available...                                  
+                                    ])
+                 resetting   ;go to reset...                            
+                 dwelling    [add-dwell]])]])
 
 [resetting [finish-cycle
             moving]]
@@ -961,7 +968,6 @@
 
 ;;Basic entity behavior is to respond to new external
 ;;stimuli, and then try to move out.
-
 (defn recovered?       [u] false)
 (defn deployment-over? [u] false)
 
@@ -978,6 +984,15 @@
         [find-move
          advance]))
 
+;;wire in functionality here for a unit to invoke its own
+;;deployment order...
+;;From here on, the system will append a deployment order to
+;;the unit, and send the unit a message to update.
+;;The unit will handle the message by appending a
+;;deployment order to its state and invoking an update.
+;;This way, we handle messages first, which preps the
+;;behavior environment to respond to stimulii (like
+;;the presence of a deploy order)
 (defn deploy-to [o benv]
   ;;stub
   (success benv))
@@ -995,6 +1010,9 @@
              advance     ;advance in policy, time, statistics, etc.
              ]))
 
+;;This is kind of weak, but I don't have a better solution at the moment...
+(do (println [:setting-defaults])
+    (reset! base/default-behavior default))
 
 (comment 
 
@@ -1006,8 +1024,6 @@
 ;;the deployment system handle everything in a monolothic
 ;;fashion.  Fills => orders.  
 
-
-  
 ;;[change width to time-in-state or something if possible...]
 ;;[we're using width here...]
 
@@ -1063,162 +1079,10 @@
         new-ctx (-> ctx 
                     )]
     (bind! {:ctx new-ctx})))
-
-  )
-
-;;Only Movement....
-;;===================
-
-;;How would the behavior tree look rooted at update-state-beh, so that 
-;;we get an equivalent behavior tree to a unit that ONLY knows how to 
-;;move (i.e. follow a script).
-
-;;we need to implement movement-beh 
-;;so, the movement behavior depends on several subgoals...
-;;To get an entity to move, 
-;;We need to know where it's moving to, and make that part of the context
-;;We (may) need to know where it currently is....
-;;We (may) need to know what it's supposed to after it gets there
-;;(default is to wait)
-;;We (may) need to know how long it's supposed to wait (if it's
-;;waiting).
-
-;;So, at the high level, we have a simple behavior that checks to see
-;;if it can move, finds where to move to, starts the process of
-;;moving (maybe instantaneous), and waits...
-;;Maybe our implied behavior is really [move wait]
-;;move == 
-;; [should-move? get-next-location move-next-location]
-;;move(transport-time)== 
-;;  [should-move? get-next-location (move-next-location transport-time)]
-  
-;;We should consider move if our time in state has expired, or 
-;;if we have a next-location planned.
-(befn should-move? [bb next-position statedata] 
-  (or next-position
-      (zero? (fsm/remaining statedata))
-      (spawning? bb)))
-
-;;simple predicates, semi-monadic interface....
-;; (?  should-move? [*env* *statedata*]
-;;         (or (:next-position *env*)
-;;             (zero? (remaining *statedata*))))
-;; (!  record-move  (put! :moved true))       
-                  
-;(def record-move (->alter #(set-bb % :moved true)))
-(befn record-move []
-      (bind! {:moved true}))
-
-;;after updating the unit bound to :entity in our context, 
-;;we commit it into the supplystore.  This is probably 
-;;slow....we may want to define a mutable version, 
-;;or detect if mutation is allowed for a faster update
-;;path.  For instance, on first encountering the unit,
-;;we establish a mutable cell to its location and use that 
-;;during the update process.
-;(def commit-entity (->alter merge-updates))
-
-;;I like looking at unit updates like transactional semantics.
-;;We probably want to pull out the unit and establish a mutable
-;;context if we find out we have to change it.  For instance, 
-;;we can just bind the mutable cell to the :entity in the context,
-;;and then detect if mutation (or even simple change) has occurred.
-;;Another way to do this is to just check identity (since we're using 
-;;immmutable objects) and 
-;;Commmit our changes iff we recorded a change to the unit (we 
-;;may not during the course of the update)
-;; (def commit-if-changed 
-;;   (->and [(->pred :changed)
-;;            commit-unit]))
-
-(defmacro get-else [m k v]
-  `(if-let [res# (get ~m ~k)]
-     res#
-     ~v))
-
-;;Given that we have the context for a move in place, 
-;;we want to move as directed by the context.  If there 
-;;is a wait time associated with the place we're moving 
-;;to, we will add the wait-time to the context.  That way,
-;;downstream behaviors can pick up on the wait-time, and 
-;;apply it.
-
-;;#Todo change change-state into a fixed-arity
-          ;;function, this will probably slow us down due to arrayseqs.
-(befn apply-state [statedata new-duration]
-      (when-let [new-state (get-bb ctx :new-state)]
-        ;;update the context with information derived from moving
-        (bind! {:statedata (fsm/change-state statedata new-state  new-duration)})))
-
-;;consume all the ambient changes in the blackboard, such as the
-;;statedata we've built up along the way, and pack it back into the 
-;;unit for storage until the next update.
-(befn apply-changes []
-      (->or [apply-move
-              apply-state]))
-
-;; ;;apply-state? should update the entity's state, change the duration
-;; ;;to be the current wait-time, etc.
-;; (defn apply-state [ctx] 
-;;   (if-let [nextpos (next-position ctx)] ;we must have a position computed, else we fail.                                       
-;;     (let [new-state (get-bb :new-state)]
-;;         (success
-;;          (merge-bb ctx ;update the context with information derived
-;;                                         ;from moving
-;;                    {:entity       (traverse-unit u t frompos nextpos)
-;;                     :old-position frompos ;record information 
-;;                     :new-state    newstate})))
-;;     (fail ctx)))
-
-(comment 
-(def set-next-position  
-  (->alter #(let [e (entity %)
-                  p (get-next-position e  (:positionpolicy e))]
-              (merge-bb %  {:next-position  p
-                            :wait-time     (get-wait-time e p %)}))))
 )
 
-(befn set-next-position [ctx entity]
-      (let [e entity
-            p (get-next-position e (:positionpolicy e))]
-        (bind! {:next-position p
-                :wait-time (get-wait-time e p ctx)})))
-
-
-;; (def find-move  (->and [should-move? 
-;;                         set-next-position ;;the problem here is that
-;;                         ;;we don't see what's being changed....the
-;;                         ;;context is changing, but where? At least
-;;                         ;;it's not side-effecting, but can we keep
-;;                         ;;track of our changes better?
-;;                         ]))
-
-;; (befn find-move []
-;;       (->and [should-move?
-;;               set-next-position]))
-
-
-;;We know how to wait.  If there is an established wait-time, we
-;;request an update after the time has elapsed using update-after.
-(defn wait [ctx]
-  (if-let [wt (wait-time ctx)] ;;if we have an established wait time...    
-    (->> (if (zero? wt) 
-           ctx ;skip the wait, instantaneous.  No need to request an
-               ;update.
-           (log! (str "waiting for " wt) (update-after  wt ctx)))           
-         (success))
-    (fail      ctx)))
-    
-;;Movement is pretty straightforward: find a place to go, determine 
-;;any changes necessary to "get" there, apply the changes, wait 
-;;at the location until a specified time.
-(def moving-beh 
-  (->and [find-move
-          apply-changes
-          wait]))
-
-
 (comment
+
 ;;Composed behaviors
 ;;==================
 ;;how can we handle messages?

@@ -155,7 +155,7 @@
    ([t msg]              `(sim/->packet ~t :message (:from ~msg) (:to ~msg) ~msg))
    ([from to t msg]      `(sim/->packet ~t :message ~from ~to ~msg nil))
    ([from to t msg data] `(sim/->packet ~t :message ~from ~to ~msg ~data)))
-                
+
 ;;all we need to do is create  a behavior context,
 ;;eval the behavior, and store the entity in the
 ;;evaluated context.
@@ -163,8 +163,8 @@
 ;;Message handling is equivalent to stepping the entity
 ;;immediately.
 (defn handle-message! [ctx e msg]
-  ;(println [:handling e msg])
-  (b/step-entity! ctx e msg (:behavior e))
+  ;(println [:handling (:name e) msg])
+  (b/step-entity! ctx e msg)
   )
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
