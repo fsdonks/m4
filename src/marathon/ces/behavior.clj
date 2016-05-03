@@ -737,7 +737,7 @@
        spawning       ;;try to spawn the unit if possible.
        exiting        ;;if the unit is dead, kill it.
        age-unit       ;;get the unit up to date, following its current behavior.       
-       moving          ;;if we're not able to move, we can accumulate statistics...       
+       moving         ;;if we're not able to move, we can accumulate statistics...       
        [:cycling
          (->or  [deploying   (->or [bogging ;;accumulate bog
                                     overlapping ;;change state to overlap, accumulat bog probably..
@@ -778,7 +778,6 @@
      clojure.lang.ISeq
      (seq [this] (seq (into [] (r/mapcat identity colls) )))
      )))
-
 
 ;;__behaviors__
 
@@ -1013,6 +1012,17 @@
 ;;This is kind of weak, but I don't have a better solution at the moment...
 (do (println [:setting-defaults])
     (reset! base/default-behavior default))
+
+
+
+
+
+(comment ;testing
+
+
+  )
+
+
 
 (comment 
 
