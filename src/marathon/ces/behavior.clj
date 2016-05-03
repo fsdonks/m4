@@ -131,8 +131,8 @@
            ]
        (- wt (fsm/remaining statedata))))
   ([unit position {:keys [deltat statedata] :as benv}]
-   (let [np (get-next-position unit position)
-         wt (protocols/transfer-time (:policy unit) position np)
+   (let [np     (get-next-position unit position)
+         wt     (protocols/transfer-time (:policy unit) position np)
          deltat (or  deltat  0)]
      (- wt (fsm/remaining statedata))))
   ([position {:keys [entity] :as benv}] (get-wait-time @entity position benv))
@@ -253,11 +253,15 @@
 (befn change-state-beh  {:keys [entity ctx statedata change-info deltat] 
                          :or   {deltat 0} :as benv}
      (when change-info
-       (let [{:keys [newstate duration followingstate]} change-info
-             followingstate (or followingstate newstate)             
+       (let [{:keys [newstate duration followingstate timeinstate]} change-info
+             followingstate (or followingstate newstate)
+             ;;we change statedata here...
              newdata (fsm/change-statedata statedata newstate duration followingstate)
              benv    (merge (dissoc benv :changeinfo) {:statedata newdata
-                                                       :duration duration})]
+                                                       :duration duration
+                                                       :timeinstate timeinstate})
+             _       (swap! entity #(assoc % :state newstate )) ;;update the entity state, currently redundant.
+             ]
          (cond
                                         ;state change inducing a wait until update.
            (pos? duration)  (update-after  benv)
@@ -265,7 +269,9 @@
            (zero? duration) (success (update-state-beh benv))
            ;;supposed to immediately jump to the next beh 
            :else (throw   (Exception. "Error, cannot have negative duration!"))))))
-     
+
+
+ 
 ;;Maybe we never have a change-state, we just set the new state of the unit
 ;;and update its behavior....
 
@@ -385,10 +391,11 @@
   
 ;;We should consider move if our time in state has expired, or 
 ;;if we have a next-location planned.
-(befn should-move? ^behaviorenv [next-position statedata]
-  (or next-position
-      (zero? (fsm/remaining statedata)) ;;time is up...
-      (spawning? statedata)))
+(befn should-move? ^behaviorenv {:keys [next-position statedata] :as benv}
+  (when (or next-position
+            (zero? (fsm/remaining statedata)) ;;time is up...
+            (spawning? statedata))
+      (success benv)))
 
 ;;This may not matter...                  
 (befn record-move {:as benv} (bind!! {:moved true}))
@@ -426,20 +433,23 @@
 ;;to, we will add the wait-time to the context.  That way,
 ;;downstream behaviors can pick up on the wait-time, and 
 ;;apply it.
-(befn apply-move ^behaviorenv {:keys [entity next-position tupdate statedata] :as benv} 
+(befn apply-move ^behaviorenv {:keys [entity next-position tupdate statedata ctx] :as benv} 
     (when-let [nextpos next-position] ;we must have a position computed, else we fail.                                       
       (let [t        tupdate
             u        @entity 
             frompos  (get     u      :positionpolicy) ;;look up where we're coming from.
-            wt       (get-wait-time  u  nextpos benv)  ;;how long will we be waiting?
+            wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?
+            _        (println [:apply-move frompos nextpos wt (select-keys benv [:next-position :tupdate :statedata :wait-time])])
             ]
         (if (= frompos nextpos)  ;;if we're already there...  
-          benv ;do nothing, no move has taken place.          
-          (let [newstate (get-state u nextpos) 
+          (success benv) ;do nothing, no move has taken place.          
+          (let [_ (println [:moving frompos nextpos])
+                newstate (get-state u nextpos) 
                  ;;#Todo change change-state into a fixed-arity
                 ;;function, this will probably slow us down due to arrayseqs.
                 new-sd   (fsm/change-state statedata newstate wt)
                 _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
+                _        (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event. 
                 ]
          (bind!!  ;update the context with information derived
                                         ;from moving
@@ -447,8 +457,8 @@
            :new-state    newstate
            :statedata    new-sd
            :new-duration wt}
-          (u/unit-moved-event! @entity nextpos benv))
-         )))))
+          ))
+         ))))
 
 ;;Dont' think we need this...
 ;;more expressive...
@@ -456,7 +466,7 @@
   (when new-state
     (bind!! ;update the context with information derived
                                         ;from moving
-     {:statedata    (fsm/change-state statedata  new-state new-duration)})))
+     {:statedata  (fsm/change-state statedata  new-state new-duration)})))
 
 ;; (befn find-move []
 ;;       (->and [should-move?
@@ -465,17 +475,21 @@
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
 ;;unit for storage until the next update.
-(def apply-changes (->and [apply-move 
-                           apply-state                                                    
+(def apply-changes (->and [(echo :apply-move)
+                           apply-move
+                           (echo :apply-state)
+                           apply-state
+                           (echo :changed)
                            ]))
 
 ;;This hooks us up with a next-position and a wait-time
 ;;going forward.
-(befn find-wait ^behaviorenv [entity]  
+(befn find-wait ^behaviorenv {:keys [entity] :as benv}
   (let [e @entity
         p (get-next-position e  (:positionpolicy e))]
     (bind!! {:next-position  p
-             :wait-time     (get-wait-time e p)})))
+             :wait-time     (get-wait-time e p)}  ;;have a move scheduled...
+            )))
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
@@ -486,15 +500,22 @@
       ;update.
       (log! (str "waiting for " wt)
             (update-after  wt benv)))))
-    
+
+(def execute-move
+  (->and [(echo :executing)
+          apply-changes
+          (echo :waiting)
+          wait]))
+
 ;;Movement is pretty straightforward: find a place to go, determine 
 ;;any changes necessary to "get" there, apply the changes, wait 
 ;;at the location until a specified time.
 (def moving-beh 
   (->and [should-move?
+          (echo :find-wait)
           find-wait
-          apply-changes
-          wait]))
+          (echo :apply-changes)
+          execute-move]))
 
 (defn pass 
   [msg ctx]  
@@ -628,7 +649,8 @@
 (befn spawning-beh ^behaviorenv {:keys [to-position cycletime tupdate statedata entity ctx]
                                  :as  benv}
   (when (spawning? statedata)     
-    (let [_ (println :spawning!)
+    (let [_
+          (println :spawning!)
           ent @entity
           {:keys [positionpolicy policy]} ent
           {:keys [curstate prevstate nextstate timeinstate 
@@ -653,9 +675,19 @@
           ]
       (->>  (assoc benv :change-info {:newstate nextstate
                                       :duration timeremaining
-                                      :followingstate nil})
+                                      :followingstate nil
+                                      :timeinstate timeinstate
+                                      }
+                   :next-position   topos ;queue up a move...
+                   :wait-time newduration
+                   )
             (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
-            (change-state-beh)))))
+            (beval (->seq [(echo :change-state)
+                           change-state-beh
+                           (echo :execute-move)
+                           execute-move])
+            )))))
+                   
 
 ;;[looks a lot like my naive test behavior]
 

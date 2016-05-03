@@ -47,7 +47,7 @@
   (cycle-length     [p] cyclelength)
   (end-state        [p] endstate)
   (get-cycle-time   [p position] (if (= position startstate) 0 
-                                     (-> (graph/depth-first-search positiongraph startstate position)
+                                     (-> (graph/depth-first-search positiongraph startstate position {:weightf graph/arc-weight})
                                          (get :distance)
                                          (get position))))                                          
   (get-policy-type  [p] :atomic)
