@@ -250,17 +250,17 @@
 ;;Are we in fact changing the root of the behavior?
 ;;This is where the transition from FSM to behavior tree
 ;;comes in....
-(befn change-state-beh  {:keys [entity ctx statedata changeinfo deltat] 
-                         :or   {deltat 0 duration 0} :as benv}
-     (when changeinfo
-       (let [{:keys [newstate duration followingstate]} changeinfo
-             followingstate (or followingstate newstate)
+(befn change-state-beh  {:keys [entity ctx statedata change-info deltat] 
+                         :or   {deltat 0} :as benv}
+     (when change-info
+       (let [{:keys [newstate duration followingstate]} change-info
+             followingstate (or followingstate newstate)             
              newdata (fsm/change-statedata statedata newstate duration followingstate)
-             benv    (bind!! {:statedata newdata}
-                             (dissoc benv :changeinfo))]
+             benv    (merge (dissoc benv :changeinfo) {:statedata newdata
+                                                       :duration duration})]
          (cond
                                         ;state change inducing a wait until update.
-           (pos? duration)  (success (update-after  entity duration benv))
+           (pos? duration)  (update-after  benv)
                                         ;immediate change, force an update.
            (zero? duration) (success (update-state-beh benv))
            ;;supposed to immediately jump to the next beh 
@@ -628,7 +628,8 @@
 (befn spawning-beh ^behaviorenv {:keys [to-position cycletime tupdate statedata entity ctx]
                                  :as  benv}
   (when (spawning? statedata)     
-    (let [ent @entity
+    (let [_ (println :spawning!)
+          ent @entity
           {:keys [positionpolicy policy]} ent
           {:keys [curstate prevstate nextstate timeinstate 
                   timeinstateprior duration durationprior 
@@ -647,10 +648,14 @@
           nextstate     (protocols/get-state policy positionpolicy)
           spawned-unit  (-> ent (u/initCycles tupdate) (u/add-dwell cycletime))
           _             (reset! entity spawned-unit)
+          _             (println [:nextstate nextstate])
+          
           ]
-      (->>  ctx
+      (->>  (assoc benv :change-info {:newstate nextstate
+                                      :duration timeremaining
+                                      :followingstate nil})
             (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
-            ))))
+            (change-state-beh)))))
 
 ;;[looks a lot like my naive test behavior]
 
@@ -804,10 +809,10 @@
       (if (<= delta duration) ;time remains or is zero.
          ;(println [:entity-waited duration :remaining (- duration delta)])
         (merge!!  entity {:wait-time (- duration delta)
-                          :t t}) ;;update the time.
+                          :tupdate t}) ;;update the time.
         (do ;can't wait out entire time in this state.
           (merge!! entity {:wait-time 0
-                           :t (- t duration)}) ;;still not up-to-date
+                           :tupdate (- t duration)}) ;;still not up-to-date
            ;;have we handled the message?
            ;;what if time remains? this is akin to roll-over behavior.
            ;;we'll register that time is left over. We can determine what
@@ -836,7 +841,7 @@
               :deploying (unchecked-add (int 230)  (rand-int 40)))]
         (push! entity :wait-time twait)))
 
-(defn up-to-date? [e ctx] (== (:t e) (:t ctx)))
+(defn up-to-date? [e ctx] (== (:tupdate e) (:tupdate ctx)))
 
 ;;This will become an API call...
 ;;instead of associng, we can invoke the protocol.
@@ -844,7 +849,7 @@
       (let [st       (deref! entity)
             nm       (:name st)
             duration (:wait-time st)
-            tnow     (:t (deref! ctx))
+            tnow     (:tupdate (deref! ctx))
             tfut     (+ tnow duration)
             _        (debug 4 [:entity nm :scheduled :update tfut])
             ;_ (when new-messages (println [:existing :new-messages new-messages]))
@@ -905,6 +910,8 @@
 
 ;;so now we can handle changing state and friends.
 ;;we can define a response-map, ala compojure and friends.
+(defn echo [msg]
+  (fn [ctx] (do (println msg) (success ctx))))
 
 ;;type sig:: msg -> benv/Associative -> benv/Associative
 ;;this gets called a lot.
@@ -916,12 +923,19 @@
       (beval 
        (case (:msg msg)
            ;;generic update function.  Temporally dependent.
-           :update (if (== (:t (deref! entity)) (:t (deref! ctx)))
+           :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
                      (do (success benv)) ;entity is current
-                     (->and [(fn [^clojure.lang.Associative ctx] (success (.assoc ctx :current-message msg)))                           
-                             advance
+                     (->and [(echo :update)
+                             (fn [^clojure.lang.Associative ctx]
+                               (success (.assoc ctx :current-message msg
+                                                   )
+                                        ))
+                             ;(.behavior benv)
+                             ;advance ;;we don't do anything
+                             ;(echo :blah)
                              ]))
-           :spawn  (->and [(push! entity :state :spawning)                        
+           :spawn  (->and [(echo :spawn)
+                           (push! entity :state :spawning)                        
                            spawn]
                           )
            ;;allow the entity to change its behavior.
@@ -970,6 +984,7 @@
 (defn recovered?       [u] false)
 (defn deployment-over? [u] false)
 
+(defn find-move [ctx] nil)
 ;;Typically, there will be no external stimuli in the
 ;;form of messages, so the entity will derive its operation
 ;;based on its current surroundings.  Note: we can
@@ -1017,10 +1032,6 @@
 
 
 
-(comment ;testing
-
-
-  )
 
 
 
@@ -1207,35 +1218,6 @@
                                         ;from moving
      {:statedata    (fsm/change-state statedata  new-state new-duration)})))
 
-
-
-(defn spawning-beh [ctx]
-  (if (spawning? ctx)     
-    (success 
-     (with-bb [[topos cycletime tupdate statedata entity] ctx]
-       (let [{:keys [positionpolicy policy]} entity
-             {:keys [curstate prevstate nextstate timeinstate 
-                     timeinstateprior duration durationprior 
-                     statestart statehistory]} statedata
-                     cycletime (or cycletime (:cycletime entity))
-                     topos     (if (not (or topos positionpolicy))
-                                 (protocols/get-position (u/get-policy entity) cycletime)
-                                 (:positionpolicy entity))
-                     timeinstate   (- cycletime 
-                                      (protocols/get-cycle-time policy
-                                           (:positionpolicy entity)))
-                     timeremaining (protocols/transfer-time policy
-                                      positionpolicy 
-                                      (protocols/next-position policy positionpolicy))
-                     newduration   (- timeremaining timeinstate)
-                     nextstate     (protocols/get-state policy positionpolicy)
-                     spawned-unit  (-> entity (u/initCycles tupdate) (u/add-dwell cycletime))]
-         (->> ;; (merge-bb  {:entity spawned-unit 
-              ;;             :next ctx
-              ctx
-              (log! (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
-              ))))
-    (fail ctx)))
 
 
 )

@@ -5,7 +5,7 @@
             [spork.sim.simcontext :as sim]))
 
 (defrecord behaviorenv [entity behavior current-messages new-messages ctx current-message
-                        tupdate deltat]
+                        tupdate deltat statedata]
   ai/IEntityMessaging
   (entity-messages- [e id] current-messages)
   (push-message-    [e from to msg] ;should probably guard against posing as another entity
@@ -23,6 +23,7 @@
                     current-message
                     tupdate
                     deltat
+                    statedata
                     )))
   ai/IEntityStorage ;we could just have commit-entity- return something we can append...another idea.
   (commit-entity- [env]
@@ -56,11 +57,8 @@
 
 ;;we could go ahead and extend-protocol to simcontext.
 
-;;immediate steps happen with no time-delta.
-;;like ai/step-entity!, we should find a way to reuse it.
-(defn step-entity!
-  ([ctx e msg default]
-   (let [^clojure.lang.ILookup  e  (if (map? e) e (get-entity ctx e))
+(defn ->benv [ctx e msg default]
+    (let [^clojure.lang.ILookup  e  (if (map? e) e (get-entity ctx e))
          ent    (atom e)
          beh   (.valAt e :behavior default)
          beh   (cond (identical? beh :default)
@@ -81,10 +79,19 @@
              tupdate ;current time.
              (if-let [tprev (:last-update e)] ;deltat
                (- tupdate tprev)
-               0))        
-        _    (println [:stepping (:name e) msg])
-        _ (reset! args benv)]
-    (-> (beval beh benv)
+               0)
+             (:statedata e))        
+          _ (reset! args benv)]
+      benv))
+
+;;immediate steps happen with no time-delta.
+;;like ai/step-entity!, we should find a way to reuse it.
+(defn step-entity!
+  ([ctx e msg default]
+   (let [^behaviorenv benv (->benv ctx e msg default)
+        _    (println [:stepping (:name e) msg])]
+    (-> (beval (.behavior benv) benv)
         (return!)
         (ai/commit-entity-))))
   ([ctx e msg] (step-entity! ctx e msg @default-behavior)))
+

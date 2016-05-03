@@ -1,15 +1,20 @@
 ;;this is pretty cool; we can test entity
 ;;behaviors in isolation here.  very nice.
 (ns marathon.ces.behaviortest
-  (:require [marathon.ces.behavior :as b]
+  (:require [spork.ai.behavior :refer [beval]]
+            [marathon.ces.behavior :as b]
+            [marathon.ces.basebehavior :as base]
             [marathon.ces.core :as core]
+            [spork.entitysystem.store :as store]
             [marathon.ces.testing :as t]))
 
+(set! *print-level* 5)
+(set! *print-length* 100)
 ;;gives us a base context to work with, for messaging and
 ;;stuff.
 (def ctx marathon.ces.testing/defaultctx)
 
-(def e 
+(def ent 
   {:oi-title "no-description",
    :cycles [],
    :policystack [],
@@ -133,3 +138,17 @@
    :followoncode nil,
    :location :spawning,
    :velocity [0 0]})
+
+;;we want to verify our individual behaviors here...
+;;instead of stepping the entity fully, we'll
+;;beval and see what happens...
+
+;;let's do a spawning test...
+(def e (:name ent))
+;;we should the the entity spawn...
+
+(defn spawn-unit []
+  (let [spawning-ent (assoc ent :behavior b/spawning-beh)]
+    (-> ctx
+        (base/step-entity! spawning-ent (core/->msg e e 0 :update nil))
+        (store/get-entity e))))
