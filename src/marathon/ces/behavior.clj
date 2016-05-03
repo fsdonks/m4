@@ -3,7 +3,7 @@
 (ns marathon.ces.behavior
   (:require [spork.ai.core :as ai :refer
              [deref! fget fassoc  push-message- map->entityctx debug ->msg]]
-            [spork.ai.behavior :as behavior
+            [spork.ai.behavior 
              :refer [beval
                      success?
                      success
@@ -56,6 +56,25 @@
   (:import [marathon.ces.basebehavior behaviorenv]))
 
 
+(defn ->seq2
+  "Defines a sequential node, more or less the bread-and-butter of behavior tree architecture.
+   A sequential node will traverse xs, in order, only short circuiting if a node is running.  
+   After the reduction is complete, the value of the sequence is successful."
+  [xs]
+  (b/->bnode  :seq2 nil
+     (fn seq2 [ctx]
+       (reduce (fn seqf [acc child]
+                 (try
+                   (do 
+                     (println (type acc)
+                       (b/with-result [[res ctx] (beval child (val! acc))]
+                         (spork.util.general/case-identical? res
+                                                             :run       (reduced (b/run ctx))
+                                                             :success   (b/success ctx)
+                                                             :fail      (b/fail ctx)))))
+                   (catch Exception e (println {:child child :acc acc :e e} )))) (b/success ctx) xs))
+     xs))
+
 
 (defmacro if-y [expr & else]
   `(if (= (clojure.string/upper-case (read)) "Y")
@@ -65,6 +84,9 @@
 (defmacro log! [msg ctx]
   `(do (println ~msg)
        ~ctx))
+
+(defn echo [msg]
+  (fn [ctx] (do (println msg) (success ctx))))
 
 ;;an alternative idea here...
 ;;use a closure to do all this stuff, and reify to give us implementations
@@ -151,31 +173,17 @@
 
 ;;might ditch these....
 (declare change-state-beh update-state-beh update-state 
-         roll-forward-beh)
+         roll-forward-beh
+         check-overlap
+         check-deployable
+         finish-cycle
+         spawning-beh
+;         age-unit
+         moving-beh
+         )
 
-(def change-position
-  (->seq [check-overlap
-          check-deployable
-          finish-cycle]))
 
-;;if there's a location change queued, we see it in the env.
-(befn change-location {:keys [entity location-change ctx] :as benv}
-  (when-let [info location-change]
-    (let [{:keys [to-location]} info]
-      (when (not (identical? (:locationname @entity) to-location))
-        (let [_  (reset! entity (unit/push-location @entity to-location))
-              _  (swap! ctx    #(unit-moved-event! unit to-location %))] 
-          ;;we need to trigger a location change on the unit...
-          (success (dissoc benv :location-change)))))))
 
-(def global-state (->seq [age-unit
-                          moving-beh]))
-  
-(def update-state-beh
-  (->seq [(echo :update-state)
-          (->or [special-state
-                 (->and [do-current-state
-                         global-state])]))))
         
 
 ;;API
@@ -262,11 +270,12 @@
 ;;updates an entity after a specified duration, relative to the 
 ;;current simulation time + duration.
 (befn update-after  ^behaviorenv [entity duration ctx]
-   (bind!!  {:ctx (swap! ctx (fn [ctx] 
-                               (core/request-update (+ (sim/current-time ctx) duration) 
-                                   (:name entity)
-                                   :supplyupdate
-                                   ctx)))}))
+      (->do (fn [_]
+              (swap! ctx (fn [ctx] 
+                           (core/request-update (+ (sim/current-time ctx) duration) 
+                                                (:name entity)
+                                                :supplyupdate
+                                                ctx))))))
 
 ;;our idioms for defining behaviors will be to unpack 
 ;;vars we're expecting from the context.  typically we'll 
@@ -291,8 +300,8 @@
                                         ;state change inducing a wait until update.
          (if (not (neg? duration))
            (->> (if (pos? duration)
-                  (update-after  benv) ;;schedule a later update.
-                  benv)
+                  (val (update-after benv))                  
+                  benv)                
                 (beval update-state-beh))
            ;;supposed to immediately jump to the next beh 
            (throw   (Exception. "Error, cannot have negative duration!"))))))
@@ -419,10 +428,15 @@
 ;;We should consider move if our time in state has expired, or 
 ;;if we have a next-location planned.
 (befn should-move? ^behaviorenv {:keys [next-position statedata] :as benv}
-  (when (or next-position
-            (zero? (fsm/remaining statedata)) ;;time is up...
-            (spawning? statedata))
-      (success benv)))
+      (do (println [:should?
+                    {:next-position next-position
+                     :remaining (fsm/remaining statedata)
+                     :spawning? (spawning? statedata)
+                     :wait-time (:wait-time benv)}])
+          (when (or next-position
+                    (zero? (fsm/remaining statedata)) ;;time is up...
+                    (spawning? statedata))
+            (success benv))))
 
 ;;This may not matter...                  
 (befn record-move {:as benv} (bind!! {:moved true}))
@@ -471,52 +485,51 @@
             wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?
             _        (println [:apply-move frompos nextpos wt (select-keys benv [:next-position :tupdate :statedata :wait-time])])
             ]
-        (if (= frompos nextpos)  ;;if we're already there...  
-          (success benv) ;do nothing, no move has taken place.          
+        (if (= frompos nextpos)  ;;if we're already there...
+          (do (println [:no-movement frompos nextpos (type benv)])
+              (fail benv)) ;do nothing, no move has taken place.          
           (let [_        (println [:moving frompos nextpos])
                 newstate (get-state u nextpos) 
                 new-sd   (fsm/change-state statedata newstate wt)
                 _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
                 _        (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event. 
                 ]
-         (bind!!  ;update the context with information derived
+            (bind!!  ;update the context with information derived
                                         ;from moving
-          {:old-position frompos ;record information 
-           :new-state    newstate
-           :statedata    new-sd
-           :new-duration wt}
-          ))
-         ))))
+             {:old-position frompos ;record information 
+              :new-state    newstate
+              :statedata    new-sd
+              :new-duration wt}
+             ))
+          ))))
 
 ;;Dont' think we need this...
 ;;more expressive...
-(befn apply-state [new-state new-duration statedata] 
-  (when new-state
-    (bind!! ;update the context with information derived
+(befn apply-state {:keys [new-state new-duration statedata] :as benv}
+   (do   (println [:applying-state new-state new-duration])
+         (when new-state
+           (do (println [:applying-state!])
+               (bind!! ;update the context with information derived
                                         ;from moving
-     {:statedata  (fsm/change-state statedata  new-state new-duration)})))
-
-;; (befn find-move []
-;;       (->and [should-move?
-;;               set-next-position]))
+                {:statedata  (fsm/change-state statedata  new-state new-duration)})))))
 
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
 ;;unit for storage until the next update.
-(def apply-changes (->and [(echo :apply-move)
+(def apply-changes (->seq [(echo :apply-move)
                            apply-move
                            (echo :apply-state)
-                           apply-state
-                           (echo :changed)
+                           apply-state                          
                            ]))
 
 ;;This hooks us up with a next-position and a wait-time
 ;;going forward.
-(befn find-wait ^behaviorenv {:keys [entity] :as benv}
-  (let [e @entity
-        p (get-next-position e  (:positionpolicy e))]
+(befn find-wait ^behaviorenv {:keys [entity next-position wait-time] :as benv}      
+  (let [e  @entity
+        p  (or next-position get-next-position e  (:positionpolicy e))
+        wt (or wait-time (protocols/transfer-time (:policy e) (:positionpolicy e) p))]
     (bind!! {:next-position  p
-             :wait-time     (get-wait-time e p)}  ;;have a move scheduled...
+             :wait-time     wt}  ;;have a move scheduled...
             )))
 
 ;;We know how to wait.  If there is an established wait-time, we
@@ -527,10 +540,10 @@
       (success benv) ;skip the wait, instantaneous.  No need to request an
       ;update.
       (log! (str "waiting for " wt)
-            (update-after  wt benv)))))
+            (update-after  benv)))))
 
 (def execute-move
-  (->and [(echo :executing)
+  (->seq [(echo :executing)
           apply-changes
           (echo :waiting)
           wait]))
@@ -539,17 +552,17 @@
 ;;any changes necessary to "get" there, apply the changes, wait 
 ;;at the location until a specified time.
 (def moving-beh 
-  (->and [should-move?
-          (echo :find-wait)
+  (->and [(echo :moving-beh)
+          should-move?          
           find-wait
-          (echo :apply-changes)
+          (echo :execute-move)
           execute-move]))
 
 ;;temporarily stored here...
 (def move1
   (->seq [change-position     
           change-location
-          change-state]))
+          change-state-beh]))
 
 (defn pass 
   [msg ctx]  
@@ -561,21 +574,63 @@
 ;;Should we keep a timestamp with the unit? That way we can keep track
 ;;of how fresh it is.
 (befn age-unit ^behaviorenv {:keys [deltat statedata entity ctx] :as benv}
-  (let [dt (or deltat 0)]
-    (if (zero? dt) (success benv) ;done aging.
-        (let [_  (log!   [:aging dt] benv)
-              _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
-              ]
-          (bind!! {:deltat 0 ;is this the sole consumer of time? 
-                   :statedata (fsm/add-duration statedata dt)})))))
+      (let [dt (or deltat 0)            
+            ]
+        (if (zero? dt) (success benv) ;done aging.
+            (let [
+                                        ;_  (log!   [:aging dt] benv)
+                  _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
+                  ]
+              (bind!! {:deltat 0 ;is this the sole consumer of time? 
+                       :statedata (fsm/add-duration statedata dt)})))))
  
 ;;We're going to copy this a bunch of times...
 (befn dwelling-beh ^behaviorenv {:keys [entity deltat] :as benv}
       (do (swap! entity  #(u/add-dwell % deltat))
           (success benv)))
+
 (befn bogging-beh ^behaviorenv {:keys [entity deltat] :as benv}
       (do (swap! entity  #(u/add-bog % deltat))
           (success benv)))
+
+
+(def change-position
+  (->seq [check-overlap
+          check-deployable
+          finish-cycle]))
+
+;;if there's a location change queued, we see it in the env.
+(befn change-location {:keys [entity location-change ctx] :as benv}
+  (when-let [info location-change]
+    (let [{:keys [to-location]} info]
+      (when (not (identical? (:locationname @entity) to-location))
+        (let [_  (reset! entity (u/push-location @entity to-location))
+              _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
+          ;;we need to trigger a location change on the unit...
+          (success (dissoc benv :location-change)))))))
+
+(befn special-state {:keys [entity statedata] :as benv}
+      (let [s (:curstate statedata)]
+        (case s
+          :spawning spawning-beh
+          :abrupt-withdraw (echo :abrupt-withdraw) ;abrupt-withdraw-beh
+          (fail benv))))
+
+(befn do-current-state {:keys [entity statedata] :as benv}
+      (echo :do-current-state)
+      )
+
+(def global-state (->seq [(echo :aging)
+                           age-unit
+                           (echo :aged)
+                           moving-beh]))
+
+(def update-state-beh
+  (->seq [(echo :update-state)
+          (->or [special-state
+                 (->and [do-current-state
+                         (echo :global-state)
+                         global-state])])]))
 
 ;;So, this precludes is from having shared behaviors
 ;;across states.  If we go the state-based route, we
@@ -683,9 +738,7 @@
 (befn spawning-beh ^behaviorenv {:keys [to-position cycletime tupdate statedata entity ctx]
                                  :as  benv}
   (when (spawning? statedata)     
-    (let [_
-          (println :spawning!)
-          ent @entity
+    (let [ent @entity
           {:keys [positionpolicy policy]} ent
           {:keys [curstate prevstate nextstate timeinstate 
                   timeinstateprior duration durationprior 
@@ -704,21 +757,22 @@
           nextstate     (protocols/get-state policy positionpolicy)
           spawned-unit  (-> ent (u/initCycles tupdate) (u/add-dwell cycletime)) ;;may not want to do this..
           _             (reset! entity spawned-unit)
-          _             (println [:nextstate nextstate])
+          state-change {:newstate nextstate
+                        :duration timeremaining
+                        :followingstate nil
+                        :timeinstate timeinstate
+                        }
+          _             (println [:nextstate nextstate :state-change state-change])
           
           ]
-      (->>  (assoc benv :state-change {:newstate nextstate
-                                       :duration timeremaining
-                                       :followingstate nil
-                                       :timeinstate timeinstate
-                                      }
+      (->>  (assoc benv :state-change state-change
                    :next-position   topos ;queue up a move...
                    :wait-time newduration
                    )
             (log!  (core/msg "Spawning unit " (select-keys (u/summary spawned-unit) [:name :positionstate :positionpolicy :cycletime])))
             (beval (->seq [(echo :change-state)
                            change-state-beh])
-            )))))
+                   )))))
                    
 
 ;;[looks a lot like my naive test behavior]
@@ -976,8 +1030,7 @@
 
 ;;so now we can handle changing state and friends.
 ;;we can define a response-map, ala compojure and friends.
-(defn echo [msg]
-  (fn [ctx] (do (println msg) (success ctx))))
+
 
 ;;type sig:: msg -> benv/Associative -> benv/Associative
 ;;this gets called a lot.
@@ -1257,32 +1310,6 @@
          (update-unit unit deltat)
          (u/unit-update! nm (core/msg "Updated " nm)))))
 
-
-;;API-level call, if we need to process a state change with
-;;a follow-on deltat, i.e. a wait time.
-;;Just realized, we can compose [new-behavior wait-in-state]
-;;to get this....
-
-;;Expected to be called from outside, sets up the behavior context
-;;for bevaluation...
-
-;;This implementation takes the context last.
-;;already implemented in unit/change-state....
-
-(defn change-state [unit to-state deltat ctx]
- (beval (->and [#(update unit deltat %) ;ensure the unit is up-to-date
-                  change-state-beh])    ;execute the change
-        (merge-bb ctx {:tupdate (sim/current-time ctx)
-                       :entity   unit
-                       :deltat   deltat})))
-
-;;Dont' think we need this...
-;;more expressive...
-(befn apply-state [new-state new-duration statedata] 
-  (when new-state
-    (bind!! ;update the context with information derived
-                                        ;from moving
-     {:statedata    (fsm/change-state statedata  new-state new-duration)})))
 
 
 

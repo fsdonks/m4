@@ -28,7 +28,7 @@
   ai/IEntityStorage ;we could just have commit-entity- return something we can append...another idea.
   (commit-entity- [env]
     (let [ctx      (ai/deref! ctx)
-          ent      (ai/deref! entity)
+          ent      (-> (ai/deref! entity) (assoc  :statedata statedata))
          ; existing-messages (atom (:messages ent))          
           id  (:name ent)
           _   (ai/debug  [:committing ent])

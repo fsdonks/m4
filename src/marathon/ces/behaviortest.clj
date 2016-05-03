@@ -146,6 +146,21 @@
 ;;let's do a spawning test...
 (def e (:name ent))
 ;;we should the the entity spawn...
+(defn changed-unit []
+  (let [spawning-ent (assoc ent :behavior b/change-state-beh)]
+    (-> ctx
+        (base/step-entity! spawning-ent (core/->msg e e 0 :change-state nil ;{:newstate
+                                                                            ; :duration
+                                                                            ; :followingstate
+                                                                            ; :timeinstate}
+                                                    ))
+        (store/get-entity e))))
+
+(defn aged-unit []
+  (let [spawning-ent (assoc ent :behavior b/age-unit)]
+    (-> ctx
+        (base/step-entity! spawning-ent (core/->msg e e 0 :update nil))
+        (store/get-entity e))))
 
 (defn spawn-unit []
   (let [spawning-ent (assoc ent :behavior b/spawning-beh)]
