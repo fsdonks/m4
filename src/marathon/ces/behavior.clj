@@ -554,14 +554,20 @@
                               :timeinstate 0
                               }
                 _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
-                _        (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event. 
+                _        (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
+                new-loc  (when (clojure.set/interection
+                              #{"Dwelling" "DeMobilizing" "Recovering"
+                                :deployable :dwelling} newstate)
+                           nextpos
+                          )
                 ]
             (bind!!  ;update the context with information derived
                                         ;from moving
              {:from-position frompos ;record information
               :to-position   nextpos
-              :state-change state-change
-              :wait-time nil
+              :state-change  state-change
+              :next-location new-loc
+              :wait-time     nil
               :next-position nil}
              ))
           ))))
@@ -671,7 +677,6 @@
           (swap! ctx #(supply/update-deploy-status u nil nil %))
           (success benv)))))
 
-
 (def change-position
   (->seq [check-overlap
           check-deployable
@@ -679,14 +684,13 @@
           (->alter (fn [benv] (dissoc benv :from-position :to-position)))]))
 
 ;;if there's a location change queued, we see it in the env.
-(befn change-location {:keys [entity location-change ctx] :as benv}
-  (when-let [info location-change]
-    (let [{:keys [to-location]} info]
-      (when (not (identical? (:locationname @entity) to-location))
-        (let [_  (reset! entity (u/push-location @entity to-location))
-              _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
-          ;;we need to trigger a location change on the unit...
-          (success (dissoc benv :location-change)))))))
+(befn change-location {:keys [entity to-position ctx] :as benv}
+      (when to-position        
+        (when (not (identical? (:locationname @entity) to-location))
+          (let [_  (reset! entity (u/push-location @entity to-location))
+                _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
+            ;;we need to trigger a location change on the unit...
+            (success (dissoc benv :location-change)))))))
 
 
 ;;with a wait-time and a next-position secured,

@@ -256,13 +256,19 @@
                      (get :distance)
                      (get x))
            offset (- cycletime tprev)
-           dnxt   (- (graph/arc-weight pg x nxt) offset)]                          
+           dnxt   (- (graph/arc-weight pg x nxt) offset)
+           xdata   (graph/get-node pg x)
+           nxtdata (graph/get-node pg nxt)
+           ]                          
        (set-position-graph policy
             (-> pg 
                 (graph/disj-arc x nxt)
+                (graph/conj-node name #{name})
+                (graph/conj-node [x name] (if (set? xdata) (conj xdata name)
+                                              #{name xdata}))
                 (graph/add-arcs [[x name offset]
-                                  [name [x name] weight]
-                                  [[x name] nxt dnxt]])))))
+                                 [name [x name] weight]
+                                 [[x name] nxt dnxt]])))))
   ([policy cycletime] (insert-modifier policy cycletime {})))
 
 (defn drop-ends [xs] (drop 1 (butlast xs)))
