@@ -144,6 +144,14 @@
 (defn get-next-position [unit position]
   (protocols/next-position (:policy unit) position))
 
+(defn policy-wait-time [policy statedata position deltat]
+  (let [frompos  (protocols/next-position policy position)
+        topos    (protocols/next-position policy frompos)
+        t (protocols/transfer-time policy frompos topos)
+        _ (println [frompos topos t])
+        ]
+    (- t (- deltat (fsm/remaining statedata)))))
+
 ;;Could be a cleaner way to unpack our data, but this is it for now...
 ;;need to fix this...let's see where we use it.
 (defn get-wait-time
@@ -153,10 +161,7 @@
            ]
        (- wt (fsm/remaining statedata))))
   ([unit position {:keys [deltat statedata] :as benv}]
-   (let [np     (get-next-position unit position)
-         wt     (protocols/transfer-time (:policy unit) position np)
-         deltat (or  deltat  0)]
-     (- wt (fsm/remaining statedata))))
+   (policy-wait-time (:policy unit) statedata position (or deltat 0)))
   ([position {:keys [entity] :as benv}] (get-wait-time @entity position benv))
   ([{:keys [wait-time] :as benv}] wait-time))
 
@@ -551,12 +556,11 @@
   (let [e  @entity
         currentpos (:positionpolicy e)
         p  (or next-position (get-next-position e  currentpos))
-        wt (or wait-time (protocols/transfer-time (:policy e) (:positionpolicy e) p))
+        wt (or wait-time     (get-wait-time @entity (:positionpolicy e) benv))
         _ (println [:found-move {:next-position p :wait-time wt}])]
     (bind!! {:next-position  p
              :wait-time      wt}  ;;have a move scheduled...
             )))
-
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.

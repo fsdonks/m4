@@ -111,4 +111,12 @@
       0)))
 
 (defn add-duration [^statedata sd  amt]
-  (assoc sd :timeinstate (+ (.timeinstate sd) amt)))
+  (let [res  (+ (.timeinstate sd) amt)
+        diff (- (.duration sd) res)
+        ]
+    (if (not (neg? diff))
+      (assoc sd :timeinstate res)
+      (throw (Exception. (str ["time-in-state exceeds duration in fsm statedata."
+                               :tis      res
+                               :duration (.duration sd)
+                               :diff     diff]))))))
