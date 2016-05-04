@@ -55,6 +55,25 @@
             )
   (:import [marathon.ces.basebehavior behaviorenv]))
 
+;;__utils__
+(defn rconcat
+  ([& colls]
+   (reify clojure.core.protocols/CollReduce
+     (coll-reduce [this f1]
+       (let [c1   (first colls)
+             init (reduce (fn [acc x] (reduced x)) (r/take 1 c1))
+             a0   (reduce f1 init (r/drop 1 c1))]
+         (if (reduced? a0) @a0
+             (reduce (fn [acc coll]
+                       (reduce (fn [acc x]
+                                 (f1 acc x)) acc coll)) a0 (r/drop 1 colls)))))
+     (coll-reduce [this f init]
+       (reduce (fn [acc coll]
+                (reduce (fn [acc x]
+                          (f acc x)) acc coll)) init colls))
+     clojure.lang.ISeq
+     (seq [this] (seq (into [] (r/mapcat identity colls) )))
+     )))
 
 (defn ->seq2
   "Defines a sequential node, more or less the bread-and-butter of behavior tree architecture.
@@ -388,16 +407,19 @@
       (let [sd (:statedata    benv)            
             timeleft    (fsm/remaining sd)
             _  (println [:sd sd])
-            _  (println [:rolling :dt dt :remaining timeleft])]
-        (if (<= dt timeleft)
-          (do (println [:dt<=timeleft])
-              (beval update-state-beh (assoc   (log! [:updating-for dt] benv) :deltat dt)))
-          (let [residual   (max (- dt timeleft) 0)
-                res        (beval update-state-beh (assoc benv  :deltat timeleft))]
-            (if (success? res) 
-              (recur  residual ;advance time be decreasing delta
-                      (val! res))
-              res)))))))
+            _  (println [:rolling :dt dt :remaining timeleft])
+            ]
+        (if-y 
+         (if (<= dt timeleft)
+           (do (println [:dt<=timeleft])
+               (beval update-state-beh (assoc   (log! [:updating-for dt] benv) :deltat dt)))
+           (let [residual   (max (- dt timeleft) 0)
+                 res        (beval update-state-beh (assoc benv  :deltat timeleft))]
+             (if (success? res) 
+               (recur  residual ;advance time be decreasing delta
+                       (val! res))
+               res)))
+         nil)))))
 
 ;;roll-forward is a while behavior...
 ;;(->while (> deltat 
@@ -522,7 +544,7 @@
         (if (= frompos nextpos)  ;;if we're already there...
           (do (println [:no-movement frompos nextpos (type benv)])
               (success (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
-          (let [_        (println [:apply-move frompos nextpos wt (select-keys benv [:next-position :tupdate :statedata :wait-time])])
+          (let [ ;_        (println [:apply-move frompos nextpos wt (select-keys benv [:next-position :tupdate :statedata :wait-time])])
                 _        (println [:moving frompos nextpos])
                 newstate (get-state u nextpos)
 ;                new-sd   (fsm/change-state statedata newstate wt)
@@ -536,7 +558,8 @@
                 ]
             (bind!!  ;update the context with information derived
                                         ;from moving
-             {:old-position frompos ;record information 
+             {:from-position frompos ;record information
+              :to-position   nextpos
               :state-change state-change
               :wait-time nil
               :next-position nil}
@@ -558,22 +581,113 @@
 (befn find-move ^behaviorenv {:keys [entity next-position wait-time] :as benv}      
   (let [e  @entity
         currentpos (:positionpolicy e)
-        p  (or next-position (get-next-position e  currentpos))
-        wt (or wait-time     (get-wait-time @entity (:positionpolicy e) benv))
+        p  (or next-position
+               (do (println [:computing-position])
+                   (get-next-position e  currentpos)))
+        wt (or wait-time
+               (do (println [:computing-wait])
+                   (get-wait-time @entity (:positionpolicy e) benv)))
         _ (println [:found-move {:next-position p :wait-time wt}])]
     (bind!! {:next-position  p
-             :wait-time      wt}  ;;have a move scheduled...
+             :wait-time      wt
+             }  ;;have a move scheduled...
             )))
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
 (befn wait ^behaviorenv {:keys [wait-time] :as benv}          
   (when-let [wt wait-time] ;;if we have an established wait time...    
-    (if (zero? wt) 
-      (success benv) ;skip the wait, instantaneous.  No need to request an
+    (if (zero? wt)
+      (do
+        (println [:instantly-updating])
+                 update-state-beh) ;skip the wait, instantaneous.  No need to request an
       ;update.
       (log! (str "waiting for " wt)
             (update-after  benv)))))
+
+;;[looks a lot like my naive test behavior]
+
+      
+;;Units starting cycles will go through a series of procedures.
+;;Possibly log this as an event?
+(befn start-cycle {:keys [entity deltat tupdate] :as benv}
+   (let [unit   @entity
+         pstack (:policystack unit)]
+     (do  (swap! entity #(merge % {:cycletime 0
+                                   :date-to-reset tupdate}))
+          (if (pos? (count pstack))
+            (bind!! {:next-policy (first pstack)
+                     :policy-change true})
+            benv))))    
+
+;;Units ending cycles will record their last cycle locally.  We broadcast
+;;the change...Maybe we should just queue this as a message instead..
+(befn end-cycle {:keys [entity ctx tupdate] :as benv}
+  (let [cyc (assoc (:currentcycle @entity) :tfinal tupdate)
+        _  (swap! entity (fn [unit]
+                           (->  unit
+                                (assoc :currentcycle cyc)
+                                (u/recordcycle tupdate))))
+        _  (swap! ctx (fn [ctx] (sim/trigger-event :CycleCompleted
+                                                   (:name @entity)
+                                                   :SupplyStore
+                                                   "Completed A Cycle" ctx)))]
+    (success benv)))
+
+;;dunno, just making this up at the moment until I can find a
+;;definition of new-cycle.  This might change since we have local
+;;demand effects that can cause units to stop cycling.
+(defn new-cycle? [unit frompos topos]
+  (identical? (protocols/end-state (:policy unit)) topos))
+
+(befn finish-cycle ^behaviorenv {:keys [entity from-position to-position] :as benv}
+      (when (and (not (just-spawned? benv))
+                 (new-cycle? @entity from-position to-position))
+        (->> benv
+             (start-cycle)
+             (end-cycle))))
+
+;;this is really a behavior, modified from the old state.  called from overlapping_state.
+;;used to be called check-overlap
+(befn disengage {:keys [entity to-position from-position ctx] :as benv}
+      (let [res   (cond (identical? to-position   :overlapping)   true
+                        (identical? from-position :overlapping)   false
+                        :else :none)]
+        (when (not (identical? res :none)) ;ugh?
+          (do (swap! ctx ;;update the context...
+                     #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % res))
+              (success benv)))))
+
+(def check-overlap disengage)
+
+(befn check-deployable ^behaviorenv {:keys [entity from-position to-position ctx] :as benv}
+  (let [u @entity
+        p (:policy u)
+        _ (println [:checking-deployable  :from from-position :to to-position])]
+    (when (and to-position
+               (not= (protocols/deployable-at? p from-position)
+                     (protocols/deployable-at? p to-position)))
+      (do (println [:deployable-changed! (:positionpolicy u) to-position])
+          (swap! ctx #(supply/update-deploy-status u nil nil %))
+          (success benv)))))
+
+
+(def change-position
+  (->seq [check-overlap
+          check-deployable
+          finish-cycle
+          (->alter (fn [benv] (dissoc benv :from-position :to-position)))]))
+
+;;if there's a location change queued, we see it in the env.
+(befn change-location {:keys [entity location-change ctx] :as benv}
+  (when-let [info location-change]
+    (let [{:keys [to-location]} info]
+      (when (not (identical? (:locationname @entity) to-location))
+        (let [_  (reset! entity (u/push-location @entity to-location))
+              _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
+          ;;we need to trigger a location change on the unit...
+          (success (dissoc benv :location-change)))))))
+
 
 ;;with a wait-time and a next-position secured,
 ;;we can now move.  Movement may compute a statechange
@@ -629,20 +743,6 @@
       (do (swap! entity  #(u/add-bog % deltat))
           (success benv)))
 
-(def change-position
-  (->seq [check-overlap
-          check-deployable
-          finish-cycle]))
-
-;;if there's a location change queued, we see it in the env.
-(befn change-location {:keys [entity location-change ctx] :as benv}
-  (when-let [info location-change]
-    (let [{:keys [to-location]} info]
-      (when (not (identical? (:locationname @entity) to-location))
-        (let [_  (reset! entity (u/push-location @entity to-location))
-              _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
-          ;;we need to trigger a location change on the unit...
-          (success (dissoc benv :location-change)))))))
 
 (befn special-state {:keys [entity statedata] :as benv}
       (let [s (:state entity)]
@@ -654,6 +754,91 @@
 (befn do-current-state {:keys [entity statedata] :as benv}
       (echo :do-current-state)
       )
+
+;;the entity will see if a message has been sent
+;;externally, and then compare this with its current internal
+;;knowledge of messages that are happening concurrently.
+(befn check-messages ^behaviorenv {:keys [entity current-messages ctx] :as c}
+  (when-let [old-msgs     (fget (deref! entity) :messages)] ;we have messages
+    (when-let [msgs  (pq/chunk-peek! old-msgs)]
+      (let [new-msgs (rconcat (r/map val  msgs) current-messages)
+            _        (b/swap!! entity (fn [^clojure.lang.Associative m]
+                                        (.assoc m :messages
+                                                (pq/chunk-pop! old-msgs msgs)
+                                                )))]
+        (bind!! {:current-messages new-msgs})))
+;    (success c)
+    ))
+;;this is a dumb static message handler.
+;;It's a simple little interpreter that
+;;dispatches based on the message information.
+;;Should result in something that's beval compatible.
+;;we can probably override this easily enough.
+;;#Optimize:  We're bottlnecking here, creating lots of
+;;maps....
+
+;;Where does this live?
+;;From an OOP perspective, every actor has a mailbox and a message handler.
+;;
+
+;;so now we can handle changing state and friends.
+;;we can define a response-map, ala compojure and friends.
+
+
+;;type sig:: msg -> benv/Associative -> benv/Associative
+;;this gets called a lot.
+(defn message-handler [msg ^behaviorenv benv]
+  (let [entity           (.entity benv)
+        current-messages (.current-messages benv)
+        ctx              (.ctx benv)]
+    (do (ai/debug (println (str [(:name (deref! entity)) :handling msg])))
+      (beval 
+       (case (:msg msg)
+           ;;generic update function.  Temporally dependent.
+           :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
+                     (do (success benv)) ;entity is current
+                     (->and [(echo :update)
+                             (fn [^clojure.lang.Associative ctx]
+                               (success (.assoc ctx :current-message msg
+                                                   )
+                                        ))
+                             ;(.behavior benv)
+                             ;advance ;;we don't do anything
+                             ;(echo :blah)
+                             ]))
+           :spawn  (->and [(echo :spawn)
+                           (push! entity :state :spawning)                        
+                           spawning-beh]
+                          )
+           ;;allow the entity to change its behavior.
+           :become (push! entity :behavior (:data msg))
+           :do     (->do (:data msg))
+           :echo   (->do  (fn [_] (println (:data msg))))
+           (do ;(println (str [:ignoring :unknown-message-type (:msg msg) :in  msg]))
+               (sim/trigger-event msg @ctx) ;toss it over the fence
+               ;(throw (Exception. (str [:unknown-message-type (:msg msg) :in  msg])))
+               (success benv)
+               ))
+       benv))))
+
+;;we'd probably like to encapsulate this in a component that can be seen as a "mini system"
+;;basically, it'd be a simple record, or a function, that exposes a message-handling
+;;interface (could even be a generic fn that eats packets).  For now, we'll work
+;;inside the behavior context.  Note, the entity is a form of continuation....at
+;;least the message-handling portion of it is.
+
+;;message handling is currently baked into the behavior.
+;;We should parameterize it.
+
+;;handle the current batch of messages that are pending for the
+;;entity.  We currently define a default behavior.
+(befn handle-messages ^behaviorenv {:keys [entity current-messages ctx] :as benv}
+      (when current-messages
+        (reduce (fn [acc msg]                  
+                  (do (debug [:handling msg])
+                    (message-handler msg (val! acc))))
+                (success benv)
+                current-messages)))
 
 (defmacro ->as [nm & body]
   `(->seq [(echo ~nm)
@@ -674,7 +859,11 @@
           (->or [special-state
                  (->and [do-current-state
                          (echo :global-state)
-                         global-state
+                         (fn [ctx]
+                           (if-y 
+                            global-state
+                            (fail ctx)))
+                          
                          ])
                  (echo :up-to-date)])]))
 
@@ -826,69 +1015,6 @@
                    ))))))
                    
 
-;;[looks a lot like my naive test behavior]
-
-      
-;;Units starting cycles will go through a series of procedures.
-;;Possibly log this as an event?
-(befn start-cycle {:keys [entity deltat tupdate] :as benv}
-   (let [unit   @entity
-         pstack (:policystack unit)]
-     (do  (swap! entity #(merge % {:cycletime 0
-                                   :date-to-reset tupdate}))
-          (if (pos? (count pstack))
-            (bind!! {:next-policy (first pstack)
-                     :policy-change true})
-            benv))))    
-
-;;Units ending cycles will record their last cycle locally.  We broadcast
-;;the change...Maybe we should just queue this as a message instead..
-(befn end-cycle {:keys [entity ctx tupdate] :as benv}
-  (let [cyc (assoc (:currentcycle @entity) :tfinal tupdate)
-        _  (swap! entity (fn [unit]
-                           (->  unit
-                                (assoc :currentcycle cyc)
-                                (u/recordcycle tupdate))))
-        _  (swap! ctx (fn [ctx] (sim/trigger-event :CycleCompleted
-                                                   (:name @entity)
-                                                   :SupplyStore
-                                                   "Completed A Cycle" ctx)))]
-    (success benv)))
-
-;;dunno, just making this up at the moment until I can find a
-;;definition of new-cycle.  This might change since we have local
-;;demand effects that can cause units to stop cycling.
-(defn new-cycle? [unit frompos topos]
-  (identical? (protocols/end-state (:policy unit)) topos))
-
-(befn finish-cycle ^behaviorenv {:keys [entity from-position to-position] :as benv}
-      (when (and (not (just-spawned? benv))
-                 (new-cycle? @entity from-position to-position))
-        (->> benv
-             (start-cycle)
-             (end-cycle))))
-
-;;this is really a behavior, modified from the old state.  called from overlapping_state.
-;;used to be called check-overlap
-(befn disengage {:keys [entity to-position from-position ctx] :as benv}
-      (let [res   (cond (identical? to-position   :overlapping)   true
-                        (identical? from-position :overlapping)   false
-                        :else :none)]
-        (when (not (identical? res :none)) ;ugh?
-          (do (swap! ctx ;;update the context...
-                     #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % res))
-              (success benv)))))
-
-(def check-overlap disengage)
-
-(befn check-deployable ^behaviorenv {:keys [entity to-position ctx] :as benv}
-  (let [u @entity
-        p (:policy entity)]
-    (when (and to-position
-               (not= (protocols/deployable-at? p (:positionpolicy u))
-                     (protocols/deployable-at? p to-position)))
-      (do (swap! ctx #(supply/update-deploy-status u nil nil %))
-          (success benv)))))
 
 ;;This is actually pretty cool, and might be a nice catch-all
 ;;behavior...
@@ -936,24 +1062,7 @@
 ;;eliminate the store dependency, but for now it's fine.  For instance,
 ;;we could capture the changes as instructions, and queue them up for
 ;;integration via a higher-level system.
-(defn rconcat
-  ([& colls]
-   (reify clojure.core.protocols/CollReduce
-     (coll-reduce [this f1]
-       (let [c1   (first colls)
-             init (reduce (fn [acc x] (reduced x)) (r/take 1 c1))
-             a0   (reduce f1 init (r/drop 1 c1))]
-         (if (reduced? a0) @a0
-             (reduce (fn [acc coll]
-                       (reduce (fn [acc x]
-                                 (f1 acc x)) acc coll)) a0 (r/drop 1 colls)))))
-     (coll-reduce [this f init]
-       (reduce (fn [acc coll]
-                (reduce (fn [acc x]
-                          (f acc x)) acc coll)) init colls))
-     clojure.lang.ISeq
-     (seq [this] (seq (into [] (r/mapcat identity colls) )))
-     )))
+
 
 ;;__behaviors__
 
@@ -1040,21 +1149,6 @@
                  move]
                 ctx)))
        
-;;the entity will see if a message has been sent
-;;externally, and then compare this with its current internal
-;;knowledge of messages that are happening concurrently.
-(befn check-messages ^behaviorenv {:keys [entity current-messages ctx] :as c}
-  (when-let [old-msgs     (fget (deref! entity) :messages)] ;we have messages
-    (when-let [msgs  (pq/chunk-peek! old-msgs)]
-      (let [new-msgs (rconcat (r/map val  msgs) current-messages)
-            _        (b/swap!! entity (fn [^clojure.lang.Associative m]
-                                        (.assoc m :messages
-                                                (pq/chunk-pop! old-msgs msgs)
-                                                )))]
-        (bind!! {:current-messages new-msgs})))
-;    (success c)
-    ))
-
 ;;we need the ability to loop here, to repeatedly
 ;;evaluate a behavior until a condition changes.
 ;;->while is nice, or ->until
@@ -1067,87 +1161,7 @@
       (if (not (identical? (:state (deref! entity)) :spawn))
         (->and [wait-in-state move])
         spawn))
-;;this is a dumb static message handler.
-;;It's a simple little interpreter that
-;;dispatches based on the message information.
-;;Should result in something that's beval compatible.
-;;we can probably override this easily enough.
-;;#Optimize:  We're bottlnecking here, creating lots of
-;;maps....
 
-;;Where does this live?
-;;From an OOP perspective, every actor has a mailbox and a message handler.
-;;
-
-;;so now we can handle changing state and friends.
-;;we can define a response-map, ala compojure and friends.
-
-
-;;type sig:: msg -> benv/Associative -> benv/Associative
-;;this gets called a lot.
-(defn message-handler [msg ^behaviorenv benv]
-  (let [entity           (.entity benv)
-        current-messages (.current-messages benv)
-        ctx              (.ctx benv)]
-    (do (ai/debug (println (str [(:name (deref! entity)) :handling msg])))
-      (beval 
-       (case (:msg msg)
-           ;;generic update function.  Temporally dependent.
-           :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
-                     (do (success benv)) ;entity is current
-                     (->and [(echo :update)
-                             (fn [^clojure.lang.Associative ctx]
-                               (success (.assoc ctx :current-message msg
-                                                   )
-                                        ))
-                             ;(.behavior benv)
-                             ;advance ;;we don't do anything
-                             ;(echo :blah)
-                             ]))
-           :spawn  (->and [(echo :spawn)
-                           (push! entity :state :spawning)                        
-                           spawn]
-                          )
-           ;;allow the entity to change its behavior.
-           :become (push! entity :behavior (:data msg))
-           :do     (->do (:data msg))
-           :echo   (->do  (fn [_] (println (:data msg))))
-           (do ;(println (str [:ignoring :unknown-message-type (:msg msg) :in  msg]))
-               (sim/trigger-event msg @ctx) ;toss it over the fence
-               ;(throw (Exception. (str [:unknown-message-type (:msg msg) :in  msg])))
-               (success benv)
-               ))
-       benv))))
-
-;;can we compose more sophisticated behaviors?
-;;For instance, if we tell the entity to deploy,
-;;we need a destination, and a duration.
-;;  the entity then interprets what the deployment will entail,
-;;  sets its state accordingly, requests updates, etc. to
-;;  accomplish the deployment.
-;;from my simplistic behavior,
-;;I have
-;;
-
-
-;;we'd probably like to encapsulate this in a component that can be seen as a "mini system"
-;;basically, it'd be a simple record, or a function, that exposes a message-handling
-;;interface (could even be a generic fn that eats packets).  For now, we'll work
-;;inside the behavior context.  Note, the entity is a form of continuation....at
-;;least the message-handling portion of it is.
-
-;;message handling is currently baked into the behavior.
-;;We should parameterize it.
-
-;;handle the current batch of messages that are pending for the
-;;entity.  We currently define a default behavior.
-(befn handle-messages ^behaviorenv {:keys [entity current-messages ctx] :as benv}
-      (when current-messages
-        (reduce (fn [acc msg]                  
-                  (do (debug [:handling msg])
-                    (message-handler msg (val! acc))))
-                (success benv)
-                current-messages)))
 
 ;;Basic entity behavior is to respond to new external
 ;;stimuli, and then try to move out.
@@ -1196,14 +1210,7 @@
 
 ;;This is kind of weak, but I don't have a better solution at the moment...
 (do (println [:setting-defaults])
-    (reset! base/default-behavior default))
-
-
-
-
-
-
-
+    (reset! base/default-behavior +nothing-state+))
 
 (comment 
 
