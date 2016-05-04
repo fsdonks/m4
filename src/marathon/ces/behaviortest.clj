@@ -63,17 +63,17 @@
     :stopdeployable 1735,
     :positiongraph
     #spork.data.digraph.digraph{:nodes
-     {:deployable 7,
+     {:deployable #{:deployable},
       "DeMobilization" 6,
       "Ready" #{:dwelling},
-      ["Available" :non-deployable] 10,
+      ["Available" :non-deployable] #{:non-deployable :dwelling},
       "Train" #{:dwelling},
       "Deployed" #{:bogging},
-      ["Ready" :deployable] #{:deployable},
+      ["Ready" :deployable] #{:deployable :dwelling},
       "Reset" #{:dwelling},
-      :non-deployable 9,
+      :non-deployable #{:non-deployable},
       "Available" #{:deployable :dwelling},
-      "Overlapping" #{:overlapping}},
+      "Overlapping" #{:overlapping}}
      :sources
      {:deployable {"Ready" 486},
       "DeMobilization" {"Overlapping" 90},

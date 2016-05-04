@@ -673,7 +673,7 @@
     (when (and to-position
                (not= (protocols/deployable-at? p from-position)
                      (protocols/deployable-at? p to-position)))
-      (do (println [:deployable-changed! (:positionpolicy u) to-position])
+      (do (println [:deployable-changed! from-position to-position])
           (swap! ctx #(supply/update-deploy-status u nil nil %))
           (success benv)))))
 

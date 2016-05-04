@@ -236,7 +236,11 @@
 
 ;;more general, stick this into cljgraph...
 (defn update-node [g label f]
-  (graph/set-node g label (f (graph/get-node g label))))
+  (let [nd  (graph/get-node g label)
+        res (f nd)
+        ;_ (println [:updating label :from nd :to res])
+        ]
+  (graph/set-node g label res)))
 ;;also should be in cljgraph...should define path reducers too...
 (defn update-nodes [g nodes f] 
   (reduce (fn [acc nd] (update-node acc nd f)) g nodes))
@@ -249,26 +253,30 @@
 
 (defn insert-modifier 
   ([policy cycletime {:keys [name weight] :or {name :modified weight 0}}]
-     (let [x     (find-position policy cycletime)
-           nxt   (next-position policy x)      
+     (let [x     (find-position policy    cycletime)
+           nxt   (next-position policy    x)      
            pg    (get-position-graph policy)
            tprev (-> (graph/depth-first-search pg (start-state policy) x {:weightf graph/arc-weight})
                      (get :distance)
                      (get x))
-           offset (- cycletime tprev)
-           dnxt   (- (graph/arc-weight pg x nxt) offset)
+           offset  (- cycletime tprev)
+           dnxt    (- (graph/arc-weight pg x nxt) offset)
            xdata   (graph/get-node pg x)
            nxtdata (graph/get-node pg nxt)
+           newnode [x name]
+           newstate (if (set? xdata)
+                      (conj xdata name)
+                      #{name xdata})
+          ; _ (println [newnode newstate])
            ]                          
        (set-position-graph policy
             (-> pg 
                 (graph/disj-arc x nxt)
                 (graph/conj-node name #{name})
-                (graph/conj-node [x name] (if (set? xdata) (conj xdata name)
-                                              #{name xdata}))
+                (graph/conj-node newnode  newstate)
                 (graph/add-arcs [[x name offset]
-                                 [name [x name] weight]
-                                 [[x name] nxt dnxt]])))))
+                                 [name newnode weight]
+                                 [newnode nxt dnxt]])))))
   ([policy cycletime] (insert-modifier policy cycletime {})))
 
 (defn drop-ends [xs] (drop 1 (butlast xs)))
@@ -287,7 +295,7 @@
   [policy] 
   (let [pg (get-position-graph policy)]
     (if-let [path (graph/first-path (graph/depth-first-search pg :deployable :non-deployable))]    
-      (->> (update-nodes pg (drop 1 (butlast path)) #(toggle-tag % :deployable))
+      (->> (update-nodes pg (drop 1 (butlast path)) #(conj % :deployable))
            (set-position-graph policy))
       (throw (Exception. (str "No deployable range found between in " policy))))))
 
