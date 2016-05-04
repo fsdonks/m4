@@ -6,7 +6,8 @@
             [marathon.ces.basebehavior :as base]
             [marathon.ces.core :as core]
             [spork.entitysystem.store :as store]
-            [marathon.ces.testing :as t]))
+            [marathon.ces.testing :as t]
+            [spork.sim.simcontext :as sim]))
 
 (set! *print-level* 5)
 (set! *print-length* 100)
@@ -163,7 +164,14 @@
         (store/get-entity e))))
 
 (defn spawn-unit []
-  (let [spawning-ent (assoc ent :behavior b/spawning-beh)]
-    (-> ctx
-        (base/step-entity! spawning-ent (core/->msg e e 0 :update nil))
-        (store/get-entity e))))
+  (let [spawning-ent (assoc ent :behavior b/spawning-beh)
+        ctx (-> ctx
+                (base/step-entity! spawning-ent (core/->msg e e 0 :update nil)))]
+        
+        (with-meta (store/get-entity ctx e) {:ctx ctx})))
+
+(defn updated-unit []
+    (let [spawning-ent (assoc (spawn-unit) :behavior b/]
+      (-> ctx
+          (base/step-entity! e (core/->msg e e 10 :update nil))
+          (store/get-entity e))))

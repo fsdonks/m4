@@ -291,6 +291,7 @@
        (let [{:keys [newstate duration followingstate timeinstate]} state-change
              followingstate (or followingstate newstate)
              ;;we change statedata here...
+             _ (println [:changing-state state-change])
              newdata (fsm/change-statedata statedata newstate duration followingstate)
              benv    (merge (dissoc benv :state-change) {:statedata newdata
                                                          :duration duration
@@ -482,13 +483,13 @@
       (let [t        tupdate
             u        @entity 
             frompos  (get     u      :positionpolicy) ;;look up where we're coming from.
-            wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?
-            _        (println [:apply-move frompos nextpos wt (select-keys benv [:next-position :tupdate :statedata :wait-time])])
+            wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?            
             ]
         (if (= frompos nextpos)  ;;if we're already there...
           (do (println [:no-movement frompos nextpos (type benv)])
               (fail benv)) ;do nothing, no move has taken place.          
-          (let [_        (println [:moving frompos nextpos])
+          (let [_        (println [:apply-move frompos nextpos wt (select-keys benv [:next-position :tupdate :statedata :wait-time])])
+                _        (println [:moving frompos nextpos])
                 newstate (get-state u nextpos) 
                 new-sd   (fsm/change-state statedata newstate wt)
                 _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
@@ -506,12 +507,11 @@
 ;;Dont' think we need this...
 ;;more expressive...
 (befn apply-state {:keys [new-state new-duration statedata] :as benv}
-   (do   (println [:applying-state new-state new-duration])
-         (when new-state
-           (do (println [:applying-state!])
-               (bind!! ;update the context with information derived
+      (when new-state
+        (do (println [:applying-state!])
+            (bind!! ;update the context with information derived
                                         ;from moving
-                {:statedata  (fsm/change-state statedata  new-state new-duration)})))))
+             {:statedata  (fsm/change-state statedata  new-state new-duration)}))))
 
 ;;consume all the ambient changes in the blackboard, such as the
 ;;statedata we've built up along the way, and pack it back into the 
@@ -627,6 +627,10 @@
 
 (def update-state-beh
   (->seq [(echo :update-state)
+          (->or [(->and [(echo :check-messages)
+                         check-messages
+                         handle-messages])
+                 (echo :no-messages)])
           (->or [special-state
                  (->and [do-current-state
                          (echo :global-state)
@@ -739,30 +743,30 @@
                                  :as  benv}
   (when (spawning? statedata)     
     (let [ent @entity
-          {:keys [positionpolicy policy]} ent
+          {:keys [ positionpolicy policy]} ent
           {:keys [curstate prevstate nextstate timeinstate 
                   timeinstateprior duration durationprior 
                   statestart statehistory]} statedata
           cycletime (or cycletime (:cycletime ent))
           topos     (if (not (or to-position positionpolicy))
                          (protocols/get-position (u/get-policy ent) cycletime)
-                         (:positionpolicy ent))
+                         positionpolicy)
           timeinstate   (- cycletime 
                            (protocols/get-cycle-time policy
-                                                     (:positionpolicy ent)))
+                                                     positionpolicy))
           timeremaining (protocols/transfer-time policy
                                                  positionpolicy 
                                                  (protocols/next-position policy positionpolicy))
           newduration   (- timeremaining timeinstate)
           nextstate     (protocols/get-state policy positionpolicy)
-          spawned-unit  (-> ent (u/initCycles tupdate) (u/add-dwell cycletime)) ;;may not want to do this..
+          spawned-unit  (-> ent (u/initCycles tupdate) (u/add-dwell cycletime) (assoc :last-update tupdate)) ;;may not want to do this..
           _             (reset! entity spawned-unit)
           state-change {:newstate nextstate
                         :duration timeremaining
                         :followingstate nil
                         :timeinstate timeinstate
                         }
-          _             (println [:nextstate nextstate :state-change state-change])
+          _             (println [:nextstate nextstate :state-change state-change :current-state (:state ent)])
           
           ]
       (->>  (assoc benv :state-change state-change
@@ -993,7 +997,7 @@
 ;;externally, and then compare this with its current internal
 ;;knowledge of messages that are happening concurrently.
 (befn check-messages ^behaviorenv {:keys [entity current-messages ctx] :as c}
-  (if-let [old-msgs     (fget (deref! entity) :messages)] ;we have messages
+  (when-let [old-msgs     (fget (deref! entity) :messages)] ;we have messages
     (when-let [msgs  (pq/chunk-peek! old-msgs)]
       (let [new-msgs (rconcat (r/map val  msgs) current-messages)
             _        (b/swap!! entity (fn [^clojure.lang.Associative m]
@@ -1001,7 +1005,7 @@
                                                 (pq/chunk-pop! old-msgs msgs)
                                                 )))]
         (bind!! {:current-messages new-msgs})))
-    (success c)
+;    (success c)
     ))
 
 ;;we need the ability to loop here, to repeatedly
@@ -1093,7 +1097,7 @@
 (befn handle-messages ^behaviorenv {:keys [entity current-messages ctx] :as benv}
       (when current-messages
         (reduce (fn [acc msg]                  
-                  (do ;(debug [:handling msg])
+                  (do (debug [:handling msg])
                     (message-handler msg (val! acc))))
                 (success benv)
                 current-messages)))
