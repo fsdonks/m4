@@ -383,21 +383,24 @@
 ;;deltas internally.
 (befn roll-forward-beh {:keys [deltat] :as benv}
   (when (pos? deltat)
-    (loop [dt  deltat
+    (loop [dt   deltat
            benv benv]
       (let [sd (:statedata    benv)            
-            _  (log! [:sd sd] benv)
             timeleft    (fsm/remaining sd)
-            _  (log! [:rolling :dt dt :remaining timeleft] benv)]
+            _  (println [:sd sd])
+            _  (println [:rolling :dt dt :remaining timeleft])]
         (if (<= dt timeleft)
-          (do (log! [:updating-for timeleft] benv)
-              (beval update-state-beh (bind!!  {:deltat dt} benv)))
+          (do (println [:dt<=timeleft])
+              (beval update-state-beh (assoc   (log! [:updating-for dt] benv) :deltat dt)))
           (let [residual   (max (- dt timeleft) 0)
-                res        (beval update-state-beh (bind!! {:deltat timeleft} benv))]
+                res        (beval update-state-beh (assoc benv  :deltat timeleft))]
             (if (success? res) 
               (recur  residual ;advance time be decreasing delta
-                      res)
+                      (val! res))
               res)))))))
+
+;;roll-forward is a while behavior...
+;;(->while (> deltat 
 
 ;;I think deltat is okay....
 ;;We're saying "take enough steps until this much time has elapsed." 

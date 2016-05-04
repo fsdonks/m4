@@ -177,3 +177,9 @@
           (base/step-entity! spawning-ent (core/->msg e e t :update nil))
           (store/get-entity e))))
 
+;;using roll-forward-behavior...
+(defn rolled-unit [ & {:keys [t] :or {t 10}}]
+    (let [spawning-ent (assoc spawned :behavior b/roll-forward-beh)]
+      (-> ctx
+          (base/step-entity! spawning-ent (core/->msg e e t :update nil))
+          (store/get-entity e))))
