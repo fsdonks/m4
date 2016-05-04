@@ -313,7 +313,8 @@
              ;;we change statedata here...
              wt (- duration timeinstate)
              _ (println [:changing-state state-change :wait-time wt])
-             newdata (fsm/change-statedata statedata newstate duration followingstate)
+             newdata (assoc (fsm/change-statedata statedata newstate duration followingstate)
+                            :timeinstate timeinstate)
              benv    (merge (dissoc benv :state-change) {:statedata newdata
                                                          :duration duration
                                                          :timeinstate timeinstate
@@ -505,8 +506,7 @@
 ;;apply it.
 (befn move->statechange ^behaviorenv {:keys [entity next-position tupdate statedata ctx] :as benv}
     (when-let [nextpos next-position] ;we must have a position computed, else we fail.                                       
-      (let [
-            t        tupdate
+      (let [t        tupdate
             u        @entity 
             frompos  (get     u      :positionpolicy) ;;look up where we're coming from.
             wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?            
@@ -549,7 +549,8 @@
 ;;going forward.
 (befn find-move ^behaviorenv {:keys [entity next-position wait-time] :as benv}      
   (let [e  @entity
-        p  (or next-position (get-next-position e  (:positionpolicy e)))
+        currentpos (:positionpolicy e)
+        p  (or next-position (get-next-position e  currentpos))
         wt (or wait-time (protocols/transfer-time (:policy e) (:positionpolicy e) p))
         _ (println [:found-move {:next-position p :wait-time wt}])]
     (bind!! {:next-position  p
@@ -602,10 +603,10 @@
 ;;Should we keep a timestamp with the unit? That way we can keep track
 ;;of how fresh it is.
 (befn age-unit ^behaviorenv {:keys [deltat statedata entity ctx] :as benv}
-      (let [dt (or deltat 0)            
-            ]
-        (if (zero? dt) (success benv) ;done aging.
-            (let [
+      (let [dt (or deltat 0)]
+        (if (zero? dt)
+            (success benv) ;done aging.
+            (let [_ (println [:aging-unit deltat])
                                         ;_  (log!   [:aging dt] benv)
                   _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
                   ]
@@ -667,7 +668,8 @@
                  (->and [do-current-state
                          (echo :global-state)
                          global-state
-                         ])])]))
+                         ])
+                 (echo :up-to-date)])]))
 
 ;;So, this precludes is from having shared behaviors
 ;;across states.  If we go the state-based route, we
@@ -781,7 +783,7 @@
                   timeinstateprior duration durationprior 
                   statestart statehistory]} statedata
           cycletime (or cycletime (:cycletime ent))
-          topos     (if (not (or to-position positionpolicy))
+          topos     (if  (not (or to-position positionpolicy))
                          (protocols/get-position (u/get-policy ent) cycletime)
                          positionpolicy)
           timeinstate   (- cycletime 

@@ -169,9 +169,11 @@
                 (base/step-entity! spawning-ent (core/->msg e e 0 :update nil)))]
         
         (with-meta (store/get-entity ctx e) {:ctx ctx})))
+(def spawned (spawn-unit))
 
-;; (defn updated-unit []
-;;     (let [spawning-ent (assoc (spawn-unit) :behavior b/]
-;;       (-> ctx
-;;           (base/step-entity! e (core/->msg e e 10 :update nil))
-;;           (store/get-entity e))))
+(defn updated-unit [ & {:keys [t] :or {t 10}}]
+    (let [spawning-ent (assoc spawned :behavior b/update-state-beh)]
+      (-> ctx
+          (base/step-entity! spawning-ent (core/->msg e e t :update nil))
+          (store/get-entity e))))
+
