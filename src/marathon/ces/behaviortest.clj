@@ -21,7 +21,7 @@
    :policystack [],
    :statedata
    #marathon.data.fsm.statedata{
-      :curstate nil,
+      :curstate :spawning,
       :prevstate nil,
       :nextstate nil,
       :timeinstate 0,
@@ -170,8 +170,8 @@
         
         (with-meta (store/get-entity ctx e) {:ctx ctx})))
 
-(defn updated-unit []
-    (let [spawning-ent (assoc (spawn-unit) :behavior b/]
-      (-> ctx
-          (base/step-entity! e (core/->msg e e 10 :update nil))
-          (store/get-entity e))))
+;; (defn updated-unit []
+;;     (let [spawning-ent (assoc (spawn-unit) :behavior b/]
+;;       (-> ctx
+;;           (base/step-entity! e (core/->msg e e 10 :update nil))
+;;           (store/get-entity e))))

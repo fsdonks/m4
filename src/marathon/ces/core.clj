@@ -162,7 +162,7 @@
 ;;need to push this into simcontext...
 ;;Message handling is equivalent to stepping the entity
 ;;immediately.
-(defn handle-message! [ctx e msg]
+(defn handle-message! [ctx e msg]  
   ;(println [:handling (:name e) msg])
   (b/step-entity! ctx e msg)
   )

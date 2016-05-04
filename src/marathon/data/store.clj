@@ -85,7 +85,7 @@
   [id {:keys [messages behavior statedata last-update t] 
        :or {messages nil
             behavior :default
-            statedata fsm/blank-data}}]
+            statedata fsm/spawning-data}}]
   {:components [:behavior    behavior
                 :messages    messages
                 :interactive true

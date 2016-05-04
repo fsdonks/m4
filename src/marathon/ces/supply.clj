@@ -300,8 +300,10 @@
      (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
 
 ;Aux function for logging/recording the fact that a unit changed locations
-(defn log-move! [t fromloc toloc unit & [duration ctx]]
-  (sim/trigger-event :unitMoved (:name unit) toloc "" unit ctx))
+(defn log-move!
+  ([t fromloc toloc unit duration ctx]
+   (sim/trigger-event :unitMoved (:name unit) toloc (core/msg (:name unit) " moved from " fromloc " to " toloc) unit ctx))
+  ([t fromloc toloc unit ctx] (log-move! t fromloc toloc unit nil ctx)))
 
 ;TODO -> This should be renamed like positionEvent or something.
 ;Main dependencies are in the unit Behaviors.

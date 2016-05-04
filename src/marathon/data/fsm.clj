@@ -31,7 +31,7 @@
                       statehistory])
 
 (def blank-data (statedata. nil nil nil 0 0 inf inf 0 [])) 
-  
+(def spawning-data (statedata. :spawning nil nil 0 0 inf inf 0 [])) 
 
 (defn change-state [^statedata fsm newstate & [newduration followingstate instant]]
   (merge fsm {:curstate newstate 
