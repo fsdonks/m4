@@ -150,8 +150,7 @@
 (defn changed-unit []
   (let [spawning-ent (assoc ent :behavior b/change-state-beh)]
     (-> ctx
-        (base/step-entity! spawning-ent
-                           (core/->msg e e 0 :change-state nil))
+        (base/step-entity! spawning-ent (core/->msg e e 0 :change-state nil ))
         (store/get-entity e))))
 
 (defn aged-unit []
