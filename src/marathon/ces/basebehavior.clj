@@ -89,7 +89,7 @@
 (defn step-entity!
   ([ctx e msg default]
    (let [^behaviorenv benv (->benv ctx e msg default)
-        _    (println [:stepping (:name e) msg])]
+        _    (ai/debug [:stepping (:name e) msg])]
     (-> (beval (.behavior benv) benv)
         (return!)
         (ai/commit-entity-))))

@@ -392,8 +392,7 @@
 ;     (assert (not (empty-position? unit)) (core/msg "invalid position!" (:positionpolicy unit)))
    (let [position (:positionpolicy unit)
          src      (get unit :src)
-         can-deploy (u/can-deploy? unit spawning)
-         _ (println [:supply-checking-deployable position :can-deploy can-deploy :followon followon])]
+         can-deploy (u/can-deploy? unit spawning)]
        (if (or followon can-deploy)                         ;1)
          (->> (if followon  ;notifiying of followon data...
                 (new-followon!   unit ctx) 

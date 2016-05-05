@@ -430,8 +430,8 @@
             ]
         (if-y 
          (if (<= dt timeleft)
-           (do (debug [:dt<=timeleft])
-               (beval update-state-beh (assoc   (log! [:updating-for dt] benv) :deltat dt)))
+           (do (debug [:dt<=timeleft :updating-for dt])               
+               (beval update-state-beh (assoc benv :deltat dt)))
            (let [residual   (max (- dt timeleft) 0)
                  res        (beval update-state-beh (assoc benv  :deltat timeleft))]
              (if (success? res) 
@@ -457,9 +457,6 @@
                     (spawning? statedata))
             (success benv))))
 
-;;This may not matter...                  
-(befn record-move {:as benv} (bind!! {:moved true}))
-
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
 ;;slow....we may want to define a mutable version, 
@@ -484,27 +481,25 @@
         (if (= frompos nextpos)  ;;if we're already there...
           (do (debug [:no-movement frompos nextpos (type benv)])
               (success (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
-          (let [_        (debug [:moving frompos nextpos])
-                newstate (get-state u nextpos)
+          (let [_            (debug [:moving frompos nextpos])
+                newstate     (get-state u nextpos)
                 state-change {:newstate       newstate
                               :duration       wt
                               :followingstate nil
                               :timeinstate 0
                               }
-                _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
-                _        (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
-                from-loc (:locationname u)
-                to-loc   (when (clojure.set/intersection
-                                #{"Dwelling" "DeMobilizing" "Recovering"
-                                  :deployable :dwelling} newstate)
-                           nextpos
-                          )
-                ]
+                _            (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
+                _            (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
+                from-loc     (:locationname u)
+                to-loc       (when (clojure.set/intersection
+                                    #{"Dwelling" "DeMobilizing" "Recovering"
+                                      :deployable :dwelling} newstate)
+                               nextpos)]
             (bind!!  ;update the context with information derived
                                         ;from moving
              {:position-change {:from-position frompos ;record information
                                 :to-position   nextpos}
-              :state-change  state-change
+              :state-change    state-change
               :location-change (when (not (identical? from-loc to-loc))
                                           {:from-location  from-loc
                                            :to-location    to-loc})
@@ -539,8 +534,8 @@
        ;update.
       (do (debug [:instantly-updating])
           update-state-beh) 
-      (log! (str "waiting for " wt)
-            (update-after  benv)))))
+      (do (debug [:waiting  wt])
+          (update-after  benv)))))
 
 ;;Units starting cycles will go through a series of procedures.
 ;;Possibly log this as an event?
@@ -553,6 +548,10 @@
             (bind!! {:next-policy (first pstack)
                      :policy-change true})
             (success benv)))))
+
+;;We may not care about cycles....
+;;Should be able to specify this in our collections logic, go faster...
+
 
 ;;Units ending cycles will record their last cycle locally.  We broadcast
 ;;the change...Maybe we should just queue this as a message instead..
@@ -679,16 +678,17 @@
               (bind!! {:deltat 0 ;is this the sole consumer of time? 
                        :statedata (fsm/add-duration statedata dt)})))))
  
-;;We're going to copy this a bunch of times...
+;;Dwelling just increments statistics..
 (befn dwelling-beh ^behaviorenv {:keys [entity deltat] :as benv}
       (when (pos? deltat)
-        (do (println :dwelling deltat)
+        (do (debug [:dwelling deltat])
             (swap! entity  #(u/add-dwell % deltat))
             (success benv))))
 
+;;Bogging just increments stastistics..
 (befn bogging-beh ^behaviorenv {:keys [entity deltat] :as benv}
       (when (pos? deltat)
-        (do (println :bogging deltat)
+        (do (debug [:bogging deltat])
             (swap! entity  #(u/add-bog % deltat))
             (success benv))))
 
@@ -698,6 +698,60 @@
           :spawning spawning-beh
           :abrupt-withdraw (echo :abrupt-withdraw) ;abrupt-withdraw-beh
           (fail benv))))
+
+;;Follow-on state is an absorbing state, where the unit waits until a changestate sends it elsewhere.
+;;The only feasible state transfers are to a reentry state, where the unit re-enters the arforgen pool
+;;in a dynamically determined position, or the unit goes to another demand compatible with the
+;;followon code.
+(befn followon-beh {:keys [ctx] :as benv}
+      (do ;register the unit as a possible followOn 
+          (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
+          age-unit))
+
+;;way to get the unit back to reset.  We set up a move to the policy's start state,
+;;and rip off the followon code.
+(befn reset-beh {:keys [entity] :as benv}
+      (do (swap! entity #(assoc % :followoncode nil))
+          (beval moving-beh (assoc benv :next-position
+                                   (protocols/start-state (:policy @entity))))))
+
+;;Function to handle the occurence of an early withdraw from a deployment.
+;;when a demand deactivates, what happens to the unit?
+;;The behavior will be guided by (the unit's) policy.
+;;The default behavior is that a unit will check its policy to see if it CAN deploy.
+;;If policy says it's okay, the unit will return to the point time of its current lifecycle.
+;;We can parameterize the penalty it takes to get back into lifecycle from deployment.
+;;    A usual penalty is a move to "90 days of recovery"
+;;Note, we can also specify if the unit is instantly available to local demands.
+;;Recovery should now be an option by default, not specifically dictated by
+;;policy.
+
+;;1)Consult policy to determine if entry back into available / ready pool is feasible.
+;;TOM note 18 july 2012 -> this is erroneous.  We were check overlap....that's not the definition of
+;;a unit's capacity to re-enter the available pool.
+
+;;On second thought, this is sound.  If the unit is already in overlap, it's in a terminal state..
+;;For followon eligibility, it means another unit would immediately be overlapping this one anyway,
+;;and the demand would not be considered filled....It does nothing to alleviate the demand pressure,
+;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
+;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
+(befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
+      (let [_    (when (pos? deltat) (swap! entity #(unit/add-bog % deltat)))
+            unit @entity
+            ;1)
+            bogremaining (- (:bogbudget (:currentcycle unit))  
+                            (protocols/overlap (:policy unit)))]
+        (if (not (pos? bogremaining))
+          ;makes no sense for the unit to continue BOGGING, send it home.
+          reset-beh
+          ;unit has some feasible bogtime left, we can possibly have it followon or extend its bog...
+          ;A follow-on is when a unit can immediately move to fill an unfilled demand from the same
+          ;group of demands.  In otherwords, its able to locally fill in.
+          ;This allows us to refer to forcelists as discrete chunks of data, group them together,
+          ;and allow forces to flow from one to the next naturally.         
+          followon-beh)))
+
+
 
 
 ;;entities have actions that can be taken in a state...
