@@ -351,7 +351,8 @@
            (-> (apply policydata/make-policy (unzip (seq (assoc stats# :name ~'name))))
                (core/merge-policy-stats stats#)
                (core/add-positions ~positions)
-               (core/add-routes (modified-routes routes# (:overlap stats#) ~'deltas)))))
+               (core/add-routes (modified-routes routes# 0 ;(:overlap stats#)
+                                                 ~'deltas)))))
          (swap! templates assoc ~(str name) ~name)
          (quote ~name))))
 
