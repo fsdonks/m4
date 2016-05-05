@@ -277,7 +277,7 @@
 (defn new-deployable! [unit ctx]
   (assert (not= (:policy-position unit) :Recovery) "Recovery is not deployable")
   (sim/trigger-event :NewDeployable "SupplyManager" (:name unit) 
-      (str "Unit " (:name unit) " at position " (:position-policy unit) 
+      (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
            " is deployable") nil ctx))
 (defn new-followon! [unit ctx] 
   (sim/trigger-event :NewFollowOn "SupplyManager" (:name unit)

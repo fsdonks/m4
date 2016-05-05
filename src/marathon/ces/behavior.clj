@@ -94,18 +94,20 @@
                    (catch Exception e (println {:child child :acc acc :e e} )))) (b/success ctx) xs))
      xs))
 
+(def ^:dynamic *interact* false)
 
 (defmacro if-y [expr & else]
-  `(if (= (clojure.string/upper-case (read)) "Y")
-     ~expr 
-     ~@else))
+  `(if ~'*interact* (if (and  (= (clojure.string/upper-case (read)) "Y"))
+                      ~expr 
+                      ~@else)
+       ~expr))
 
 (defmacro log! [msg ctx]
   `(do (println ~msg)
        ~ctx))
 
 (defn echo [msg]
-  (fn [ctx] (do (println msg) (success ctx))))
+  (fn [ctx] (do (debug msg) (success ctx))))
 
 ;;an alternative idea here...
 ;;use a closure to do all this stuff, and reify to give us implementations
@@ -167,7 +169,6 @@
   (let [frompos  (protocols/next-position policy position)
         topos    (protocols/next-position policy frompos)
         t (protocols/transfer-time policy frompos topos)
-        _ (println [frompos topos t])
         ]
     (- t (- deltat (fsm/remaining statedata)))))
 
@@ -312,7 +313,7 @@
      (->alter
       #(let [tfut (+ tupdate wait-time) 
              e                       (:name @entity)
-             _    (println [e :requesting-update :at tfut])]
+             _    (debug [e :requesting-update :at tfut])]
          (swap! ctx (fn [ctx] 
                       (core/request-update tfut
                                            e
@@ -336,7 +337,7 @@
              followingstate (or followingstate newstate)
              ;;we change statedata here...
              wt (- duration timeinstate)
-             _ (println [:changing-state state-change :wait-time wt])
+             _ (debug [:changing-state state-change :wait-time wt])
              newdata (assoc (fsm/change-statedata statedata newstate duration followingstate)
                             :timeinstate timeinstate)
              benv    (merge (dissoc benv :state-change) {:statedata newdata
@@ -406,12 +407,12 @@
            benv benv]
       (let [sd (:statedata    benv)            
             timeleft    (fsm/remaining sd)
-            _  (println [:sd sd])
-            _  (println [:rolling :dt dt :remaining timeleft])
+            _  (debug [:sd sd])
+            _  (debug [:rolling :dt dt :remaining timeleft])
             ]
         (if-y 
          (if (<= dt timeleft)
-           (do (println [:dt<=timeleft])
+           (do (debug [:dt<=timeleft])
                (beval update-state-beh (assoc   (log! [:updating-for dt] benv) :deltat dt)))
            (let [residual   (max (- dt timeleft) 0)
                  res        (beval update-state-beh (assoc benv  :deltat timeleft))]
@@ -485,11 +486,11 @@
 ;;We should consider move if our time in state has expired, or 
 ;;if we have a next-location planned.
 (befn should-move? ^behaviorenv {:keys [next-position statedata] :as benv}
-      (do (println [:should?
-                    {:next-position next-position
-                     :remaining (fsm/remaining statedata)
-                     :spawning? (spawning? statedata)
-                     :wait-time (:wait-time benv)}])
+      (do (debug [:should?
+                  {:next-position next-position
+                   :remaining (fsm/remaining statedata)
+                   :spawning? (spawning? statedata)
+                   :wait-time (:wait-time benv)}])
           (when (or next-position
                     (zero? (fsm/remaining statedata)) ;;time is up...
                     (spawning? statedata))
@@ -542,10 +543,9 @@
             wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?            
             ]
         (if (= frompos nextpos)  ;;if we're already there...
-          (do (println [:no-movement frompos nextpos (type benv)])
+          (do (debug [:no-movement frompos nextpos (type benv)])
               (success (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
-          (let [ ;_        (println [:apply-move frompos nextpos wt (select-keys benv [:next-position :tupdate :statedata :wait-time])])
-                _        (println [:moving frompos nextpos])
+          (let [_        (debug [:moving frompos nextpos])
                 newstate (get-state u nextpos)
 ;                new-sd   (fsm/change-state statedata newstate wt)
                 state-change {:newstate       newstate
@@ -591,12 +591,12 @@
   (let [e  @entity
         currentpos (:positionpolicy e)
         p  (or next-position
-               (do (println [:computing-position])
+               (do (debug [:computing-position])
                    (get-next-position e  currentpos)))
         wt (if (and next-position wait-time) wait-time
-               (do (println [:computing-wait])
+               (do (debug [:computing-wait])
                    (get-wait-time @entity (:positionpolicy e) benv)))
-        _ (println [:found-move {:next-position p :wait-time wt}])]
+        _ (debug [:found-move {:next-position p :wait-time wt}])]
     (bind!! {:next-position  p
              :wait-time      wt
              }  ;;have a move scheduled...
@@ -608,7 +608,7 @@
   (when-let [wt wait-time] ;;if we have an established wait time...    
     (if (zero? wt)
       (do
-        (println [:instantly-updating])
+        (debug [:instantly-updating])
                  update-state-beh) ;skip the wait, instantaneous.  No need to request an
       ;update.
       (log! (str "waiting for " wt)
@@ -674,10 +674,10 @@
      (let [{:keys [from-position to-position]} position-change
            u @entity
            p (:policy u)
-           _ (println [:checking-deployable  :from from-position :to to-position])]
+           _ (debug [:checking-deployable  :from from-position :to to-position])]
        (when   (not= (protocols/deployable-at? p from-position)
                      (protocols/deployable-at? p to-position))
-         (do (println [:deployable-changed! from-position to-position])
+         (do (debug [:deployable-changed! from-position to-position])
              (swap! ctx #(supply/update-deploy-status u nil nil %))
              (success benv))))))
 
@@ -691,7 +691,7 @@
 (befn change-location {:keys [entity location-change ctx] :as benv}
    (when location-change
      (let [{:keys [from-location to-location]} location-change]
-       (let [_ (println [:location-change location-change])            
+       (let [_ (debug [:location-change location-change])            
              ;_  (swap! ctx    #(u/unit-moved-event! @entity to-location %))
              _  (reset! entity (u/push-location @entity to-location))] 
          ;;we need to trigger a location change on the unit...
@@ -739,7 +739,7 @@
             (let [
                                         ;_  (log!   [:aging dt] benv)
                   _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
-                  _ (println [:aging-unit deltat :cycletime (:cycletime @entity)]) 
+                  _ (debug [:aging-unit deltat :cycletime (:cycletime @entity)]) 
                   ]
               (bind!! {:deltat 0 ;is this the sole consumer of time? 
                        :statedata (fsm/add-duration statedata dt)})))))
@@ -801,7 +801,7 @@
   (let [entity           (.entity benv)
         current-messages (.current-messages benv)
         ctx              (.ctx benv)]
-    (do (ai/debug (println (str [(:name (deref! entity)) :handling msg])))
+    (do (ai/debug (str [(:name (deref! entity)) :handling msg]))
       (beval 
        (case (:msg msg)
            ;;generic update function.  Temporally dependent.
@@ -1007,7 +1007,7 @@
                         :followingstate nil
                         :timeinstate timeinstate
                         }
-          _             (println [:nextstate nextstate :state-change state-change :current-state (:state ent)])
+          _             (debug [:nextstate nextstate :state-change state-change :current-state (:state ent)])
           
           ]
       (->>  (assoc benv :state-change state-change
