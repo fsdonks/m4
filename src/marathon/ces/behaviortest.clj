@@ -160,15 +160,14 @@
                 (base/step-entity! spawning-ent (core/->msg e e 0 :update nil)))]        
     (with-meta (store/get-entity ctx e) {:ctx ctx})))
 
+(def spawned (spawn-unit))
 
 ;;we should the the entity spawn...
-(defn changed-unit []
-  (let [spawning-ent (assoc ent :behavior b/update-state-beh)]
+(defn changed-unit [& {:keys [newstate duration] :or {newstate :dwelling duration 99999}}]
+  (let [spawning-ent (assoc spawned :behavior b/update-state-beh)]
     (-> spawning-ent
-        (u/change-state :dwelling 0 99999 ctx) 
+        (u/change-state newstate 0 duration ctx) 
         (store/get-entity e))))
-
-(def spawned (spawn-unit))
 
 (defn updated-unit [ & {:keys [t] :or {t 10}}]
     (let [spawning-ent (assoc spawned :behavior b/update-state-beh)]

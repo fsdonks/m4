@@ -163,6 +163,14 @@
 (definline between? [t l r]
   `(and (>= ~t ~l) (<= ~t ~r)))
 
+;;Determining if we want to have this guy defined....
+;; (defn state-at [p position]
+;;   (if-let [res (get-state p position)]
+;;     res
+;;     (throw (Exception. (str [:position position :unknown-in-policy (:name p)])))))
+(defn state-at [p position]
+  (or (get-state p position) position))
+
 (def modifiers #{:deployable :not-deployable})
 (defn modifier? [pos] (contains? modifiers pos))
 
@@ -180,11 +188,15 @@
 ;;with the position is deployable.  We just store deployability in 
 ;;each node.
 (defn  deployable-at?       [p position]  
-  (deployable-state? (get-state p position)))
+  (deployable-state? (state-at p position)))
 
 ;;used to be isDwell
 ;;this is inconsistent.  Need to alter...
-(defn dwell-at? [p position] (= (get-state p position) Dwelling))
+(defn dwell-at? [p position]
+  (let [s (state-at p position)]
+    (or (= s Dwelling)
+        (= s :dwelling)
+        (:dwelling s))))
 
 ;;#Optimize
 ;;this may be bogging us down....

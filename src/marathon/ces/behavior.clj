@@ -491,10 +491,13 @@
                 _            (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
                 _            (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
                 from-loc     (:locationname u)
-                to-loc       (when (clojure.set/intersection
-                                    #{"Dwelling" "DeMobilizing" "Recovering"
-                                      :deployable :dwelling} newstate)
-                               nextpos)]
+                to-loc       nextpos  ;; (when (if (set? newstate)
+                             ;;         (clojure.set/intersection
+                             ;;          #{"Dwelling" "DeMobilizing" "Recovering"
+                             ;;            :deployable :dwelling} newstate)
+                                     
+                              
+                _            (println [from-loc to-loc])]
             (bind!!  ;update the context with information derived
                                         ;from moving
              {:position-change {:from-position frompos ;record information

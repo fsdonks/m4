@@ -60,7 +60,7 @@
                                               (throw (Exception. (str ["Cycletime exceeds policy, looped! " t name])))
                                               (recur nxt tnxt))))
                                       (throw (Exception. "Cycletime exceeds policy!")))))                                    
-  (get-state        [p position]   (graph/get-node positiongraph position))
+  (get-state        [p position]   (graph/get-node positiongraph position)
   (max-bog          [p]            maxbog)
   (max-dwell        [p]            maxdwell)
   (max-mob          [p]            maxMOB)
