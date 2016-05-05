@@ -593,7 +593,7 @@
         p  (or next-position
                (do (println [:computing-position])
                    (get-next-position e  currentpos)))
-        wt (or wait-time
+        wt (if (and next-position wait-time) wait-time
                (do (println [:computing-wait])
                    (get-wait-time @entity (:positionpolicy e) benv)))
         _ (println [:found-move {:next-position p :wait-time wt}])]
@@ -692,7 +692,7 @@
    (when location-change
      (let [{:keys [from-location to-location]} location-change]
        (let [_ (println [:location-change location-change])            
-             _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))
+             ;_  (swap! ctx    #(u/unit-moved-event! @entity to-location %))
              _  (reset! entity (u/push-location @entity to-location))] 
          ;;we need to trigger a location change on the unit...
          (success (dissoc benv :location-change))))))
