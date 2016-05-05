@@ -555,7 +555,8 @@
                               }
                 _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
                 _        (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
-                new-loc  (when (clojure.set/intersection
+                from-loc (:locationname u)
+                to-loc   (when (clojure.set/intersection
                                 #{"Dwelling" "DeMobilizing" "Recovering"
                                   :deployable :dwelling} newstate)
                            nextpos
@@ -566,8 +567,9 @@
              {:position-change {:from-position frompos ;record information
                                 :to-position   nextpos}
               :state-change  state-change
-              :location-change {:from-location  (:locationname u)
-                                :to-location    new-loc}
+              :location-change (when (not (identical? from-loc to-loc))
+                                          {:from-location  from-loc
+                                           :to-location    to-loc})
               :wait-time     nil
               :next-position nil}
              ))
@@ -689,8 +691,9 @@
 (befn change-location {:keys [entity location-change ctx] :as benv}
    (when location-change
      (let [{:keys [from-location to-location]} location-change]
-       (let [_  (reset! entity (u/push-location @entity to-location))
-             _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
+       (let [_ (println [:location-change location-change])            
+             _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))
+             _  (reset! entity (u/push-location @entity to-location))] 
          ;;we need to trigger a location change on the unit...
          (success (dissoc benv :location-change))))))
 
@@ -1008,6 +1011,8 @@
           
           ]
       (->>  (assoc benv :state-change state-change
+                   :location-change {:from-location "Spawning"
+                                     :to-location   topos}
                    :next-position   topos ;queue up a move...
                    ;:wait-time newduration ;;change-state handles this for us...
                    )
