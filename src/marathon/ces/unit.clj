@@ -149,9 +149,8 @@
 
 (defn recordcycle [u t]
   (merge u {:cycles (conj (:cycles u) (:currentcycle u)) 
-            :currentcycle (apply newcycle t 
-                           (get-vals (:policy u) [:MaxBOG :MaxDwell 
-                                                  :cyclelength :MaxMOB]))}))
+            :currentcycle (newcycle t  (:policy u) )}))
+                                   
 ;'TOM change 2 Sep 2011
 ;'mutate the current cycle object to reflect changes in expectations
 ;Public Function modify(bogtime As Long, dwelltime As Long, policyduration As Long, Optional MOBtime As Single) As TimeStep_CycleRecord
@@ -473,7 +472,10 @@
       (pol/deployable-at? policy (:positionpolicy u))
       (and (bog-remains? u) 
            (not (deployed? u)) 
-           (or (can-followon? u) (in-deployable-window? u policy)))))
+           (or (can-followon? u)
+;               (in-deployable-window? u policy)
+                (pol/deployable-at? policy (:positionpolicy u))                                    
+                                   ))))
   ([u] (valid-deployer? u nil (:policy u)))) 
 
 ;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated

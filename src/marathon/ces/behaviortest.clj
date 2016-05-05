@@ -150,11 +150,8 @@
 (defn changed-unit []
   (let [spawning-ent (assoc ent :behavior b/change-state-beh)]
     (-> ctx
-        (base/step-entity! spawning-ent (core/->msg e e 0 :change-state nil ;{:newstate
-                                                                            ; :duration
-                                                                            ; :followingstate
-                                                                            ; :timeinstate}
-                                                    ))
+        (base/step-entity! spawning-ent
+                           (core/->msg e e 0 :change-state nil))
         (store/get-entity e))))
 
 (defn aged-unit []
@@ -166,9 +163,9 @@
 (defn spawn-unit []
   (let [spawning-ent (assoc ent :behavior b/spawning-beh)
         ctx (-> ctx
-                (base/step-entity! spawning-ent (core/->msg e e 0 :update nil)))]
-        
-        (with-meta (store/get-entity ctx e) {:ctx ctx})))
+                (base/step-entity! spawning-ent (core/->msg e e 0 :update nil)))]        
+    (with-meta (store/get-entity ctx e) {:ctx ctx})))
+
 (def spawned (spawn-unit))
 
 (defn updated-unit [ & {:keys [t] :or {t 10}}]

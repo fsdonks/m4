@@ -262,9 +262,11 @@
   "Determines if the entity recently spawned, indicated by a default
    negative spawn time or a spawntime in the present."
   [{:keys [entity ctx] :as benv}]
-  (let [st (:spawntime @entity)]
-    (or (neg? st)
-        (==  st    (core/get-time @ctx)))))
+  (identical? (:state @entity) :spawning))
+;  (let [st (:spawntime @entity)]
+;    (or (neg? st)
+;        (==  st    (core/get-time @ctx))))
+  
 
 (defn state-expired? [{:keys [deltat statedata] :as benv}] 
   (let [r (fsm/remaining statedata)
@@ -627,7 +629,7 @@
           (if (pos? (count pstack))
             (bind!! {:next-policy (first pstack)
                      :policy-change true})
-            benv))))    
+            (success benv)))))
 
 ;;Units ending cycles will record their last cycle locally.  We broadcast
 ;;the change...Maybe we should just queue this as a message instead..
@@ -640,21 +642,29 @@
         _  (swap! ctx (fn [ctx] (sim/trigger-event :CycleCompleted
                                                    (:name @entity)
                                                    :SupplyStore
-                                                   "Completed A Cycle" ctx)))]
+                                                   (str (:name @entity) " Completed A Cycle") nil ctx)))]
     (success benv)))
 
 ;;dunno, just making this up at the moment until I can find a
 ;;definition of new-cycle.  This might change since we have local
 ;;demand effects that can cause units to stop cycling.
+;;Wow...just got burned on this..  strings are no good for identity
+;;checks....since some are interned and some ore instances.  wow....
 (defn new-cycle? [unit frompos topos]
-  (identical? (protocols/end-state (:policy unit)) topos))
+  (= (protocols/start-state (:policy unit)) topos))
 
-(befn finish-cycle ^behaviorenv {:keys [entity from-position to-position] :as benv}
-      (when (and (not (just-spawned? benv))
-                 (new-cycle? @entity from-position to-position))
-        (->> benv
-             (start-cycle)
-             (end-cycle))))
+(befn finish-cycle ^behaviorenv {:keys [entity position-change] :as benv}      
+  (when position-change
+    (let [{:keys [from-position to-position]} position-change
+          no-spawn? (not (just-spawned? benv))
+          new-cyc?  (new-cycle? @entity from-position to-position)
+          ;_ (println [:check-cycle no-spawn? new-cyc? (:tupdate benv)])
+          ]
+      (when (and no-spawn?
+                 new-cyc?)
+        (do (debug [:finishing-cycle (:name @entity) from-position])
+            (->seq [start-cycle
+                    end-cycle]))))))
 
 ;;this is really a behavior, modified from the old state.  called from overlapping_state.
 ;;used to be called check-overlap
