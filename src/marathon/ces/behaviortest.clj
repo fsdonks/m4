@@ -6,7 +6,8 @@
             [marathon.ces.basebehavior :as base]
             [marathon.ces.core :as core]
             [spork.entitysystem.store :as store]
-            [marathon.ces.testing :as t]
+            [marathon.ces [testing :as t]
+                          [unit :as u]]
             [spork.sim.simcontext :as sim]))
 
 (set! *print-level* 5)
@@ -146,12 +147,6 @@
 
 ;;let's do a spawning test...
 (def e (:name ent))
-;;we should the the entity spawn...
-(defn changed-unit []
-  (let [spawning-ent (assoc ent :behavior b/change-state-beh)]
-    (-> ctx
-        (base/step-entity! spawning-ent (core/->msg e e 0 :change-state nil ))
-        (store/get-entity e))))
 
 (defn aged-unit []
   (let [spawning-ent (assoc ent :behavior b/age-unit)]
@@ -164,6 +159,14 @@
         ctx (-> ctx
                 (base/step-entity! spawning-ent (core/->msg e e 0 :update nil)))]        
     (with-meta (store/get-entity ctx e) {:ctx ctx})))
+
+
+;;we should the the entity spawn...
+(defn changed-unit []
+  (let [spawning-ent (assoc ent :behavior b/update-state-beh)]
+    (-> spawning-ent
+        (u/change-state :dwelling 0 99999 ctx) 
+        (store/get-entity e))))
 
 (def spawned (spawn-unit))
 

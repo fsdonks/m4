@@ -31,8 +31,8 @@
           ent      (-> (ai/deref! entity) (assoc  :statedata statedata))
          ; existing-messages (atom (:messages ent))          
           id  (:name ent)
-          _   (ai/debug  [:committing ent])
-          _   (ai/debug  [:new-messages new-messages])
+;          _   (ai/debug  [:committing ent])
+;          _   (ai/debug  [:new-messages new-messages])
           ]
       (reduce
        (fn [acc m]

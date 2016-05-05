@@ -324,7 +324,7 @@
 (befn change-state-beh!  {:keys [entity ctx statedata state-change deltat] 
                          :or   {deltat 0} :as benv}
      (when state-change
-       (let [{:keys [newstate duration followingstate timeinstate]} state-change
+       (let [{:keys [newstate duration followingstate timeinstate] :or {timeinstate 0}} state-change
              followingstate (or followingstate newstate)
              ;;we change statedata here...
              wt (- duration timeinstate)
@@ -693,7 +693,9 @@
             (success benv))))
 
 (befn special-state {:keys [entity statedata] :as benv}
-      (let [s (:state entity)]
+      (let [s (:state entity)
+            ;_ (debug [:specialstate s])
+            ]
         (case s
           :spawning spawning-beh
           :abrupt-withdraw (echo :abrupt-withdraw) ;abrupt-withdraw-beh
@@ -703,7 +705,7 @@
 ;;The only feasible state transfers are to a reentry state, where the unit re-enters the arforgen pool
 ;;in a dynamically determined position, or the unit goes to another demand compatible with the
 ;;followon code.
-(befn followon-beh {:keys [ctx] :as benv}
+(befn followon-beh {:keys [entity ctx] :as benv}
       (do ;register the unit as a possible followOn 
           (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
           age-unit))
@@ -736,7 +738,7 @@
 ;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
 ;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
 (befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
-      (let [_    (when (pos? deltat) (swap! entity #(unit/add-bog % deltat)))
+      (let [_    (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
             unit @entity
             ;1)
             bogremaining (- (:bogbudget (:currentcycle unit))  
@@ -789,20 +791,20 @@
           (let [stats (r/filter identity (r/map (fn [s] (get state-map s)) state))]
             (->seq stats))
           (get state-map state))))
-            
-
 ;;the entity will see if a message has been sent
 ;;externally, and then compare this with its current internal
 ;;knowledge of messages that are happening concurrently.
-(befn check-messages ^behaviorenv {:keys [entity current-messages ctx] :as c}
-  (when-let [old-msgs     (fget (deref! entity) :messages)] ;we have messages
-    (when-let [msgs  (pq/chunk-peek! old-msgs)]
-      (let [new-msgs (rconcat (r/map val  msgs) current-messages)
-            _        (b/swap!! entity (fn [^clojure.lang.Associative m]
-                                        (.assoc m :messages
-                                                (pq/chunk-pop! old-msgs msgs)
-                                                )))]
-        (bind!! {:current-messages new-msgs})))))
+(befn check-messages ^behaviorenv {:keys [entity current-messages ctx] :as benv}
+   (if-let [old-msgs (fget (deref! entity) :messages)] ;we have messages
+     (when-let [msgs   (pq/chunk-peek! old-msgs)]
+       (let [new-msgs  (rconcat (r/map val  msgs) current-messages)
+             _         (b/swap!! entity (fn [^clojure.lang.Associative m]
+                                          (.assoc m :messages
+                                                  (pq/chunk-pop! old-msgs msgs)
+                                                 )))]
+         (bind!! {:current-messages new-msgs})))
+     (when current-messages
+       (success benv))))
 
 ;;this is a dumb static message handler.
 ;;It's a simple little interpreter that
@@ -825,28 +827,38 @@
   (let [entity           (.entity benv)
         current-messages (.current-messages benv)
         ctx              (.ctx benv)]
-    (do (ai/debug (str [(:name (deref! entity)) :handling msg]))
+    (do ;(ai/debug (str [(:name (deref! entity)) :handling msg]))
       (beval 
        (case (:msg msg)
+         ;;allow the entity to invoke a state-change-behavior
+         ;;We can always vary this by modifying the message-handler         
+         :change-state           
            ;;generic update function.  Temporally dependent.
-           :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
-                     (do (success benv)) ;entity is current
-                     (->and [(echo :update)
-                             (fn [^clojure.lang.Associative ctx]
-                               (success (.assoc ctx :current-message msg)))]))
-           :spawn  (->and [(echo :spawn)
-                           (push! entity :state :spawning)                        
-                           spawning-beh]
-                          )
-           ;;allow the entity to change its behavior.
-           :become (push! entity :behavior (:data msg))
-           :do     (->do (:data msg))
-           :echo   (->do  (fn [_] (println (:data msg))))
-           (do ;(println (str [:ignoring :unknown-message-type (:msg msg) :in  msg]))
-               (sim/trigger-event msg @ctx) ;toss it over the fence
-               ;(throw (Exception. (str [:unknown-message-type (:msg msg) :in  msg])))
-               (success benv)
-               ))
+         ;;we're already stepping the entity.  Can we just invoke the change-state behavior?
+         (let [state-change (:data msg)
+               _            (debug [:state-change-message state-change msg])
+               ]
+           (beval change-state-beh (assoc benv :state-change state-change
+                                               :next-position (or (:next-position state-change)
+                                                                  (:newstate state-change)))))
+         :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
+                   (do (success benv)) ;entity is current
+                   (->and [(echo :update)
+                           (fn [^clojure.lang.Associative ctx]
+                             (success (.assoc ctx :current-message msg)))]))
+         :spawn  (->and [(echo :spawn)
+                         (push! entity :state :spawning)                        
+                         spawning-beh]
+                        )
+         ;;allow the entity to change its behavior.
+         :become (push! entity :behavior (:data msg))
+         :do     (->do (:data msg))
+         :echo   (->do  (fn [_] (println (:data msg))))
+         (do ;(println (str [:ignoring :unknown-message-type (:msg msg) :in  msg]))
+           (sim/trigger-event msg @ctx) ;toss it over the fence
+                                        ;(throw (Exception. (str [:unknown-message-type (:msg msg) :in  msg])))
+           (success benv)
+           ))
        benv))))
 
 ;;we'd probably like to encapsulate this in a component that can be seen as a "mini system"
@@ -865,7 +877,7 @@
         (reduce (fn [acc msg]                  
                   (do (debug [:handling msg])
                     (message-handler msg (val! acc))))
-                (success benv)
+                (success (assoc benv :current-messages nil))
                 current-messages)))
 
 ;;The global sequence of behaviors that we'll hit every update.
@@ -884,7 +896,8 @@
                          handle-messages])
                  (echo :no-messages)])
           (->or [special-state
-                 (->and [do-current-state
+                 (->seq [(echo :<do-current-state>)
+                         do-current-state
                          (echo :global-state)
                          (fn [ctx]
                            (if-y 
@@ -1046,7 +1059,7 @@
 
 ;;Re-evaluate the need for this....can we synchronize from outside?
 ;;ideally, we just keep track of the unit's last update....
-(defn synch 
+(defn sync
   "Utility function.  Synchronize the unit to the current simulation time.  
    If the last update occured before the current time, we roll the unit forward 
    by the delta between the last update and the current time."
@@ -1068,7 +1081,7 @@
    simulation time)."
   [unit deltat ctx]
   (let [nm (get unit :name)]
-    (->> (synch unit ctx)
+    (->> (sync unit ctx)
          (update-unit unit deltat)
          (u/unit-update! nm (core/msg "Updated " nm)))))
 

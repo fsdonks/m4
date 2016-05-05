@@ -409,7 +409,7 @@
       (core/->msg (:name entity) (:name entity)
                   (core/get-time ctx)
                   :change-state
-                  {:new-state newstate
+                  {:newstate newstate
                    :deltat deltat
                    :duration duration
                    })))
