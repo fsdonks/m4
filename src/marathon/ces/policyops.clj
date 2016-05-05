@@ -164,6 +164,7 @@
    Overlapping :overlapping})
 
 
+
 ;;this is really ac12 routes.
 (def default-routes 
   [[reset train           182]
@@ -186,6 +187,17 @@
 
 (def ghost-routing [[Spawning Deployable Waiting Deploying NotDeployable 
                      deployed Overlapping ReturnToDeployable Deployable]])
+
+(def max-util-routing [[reset Deployable available] 
+                       [deployed Overlapping NotDeployable reset]])
+
+(defn max-util-waits [{:keys [overlap maxbog mindwell]}]
+  {reset mindwell
+   Deployable 0
+   available +inf+
+   NotDeployable 0
+   deployed (- maxbog overlap)
+   Overlapping overlap})
 
 (defn waits->routes 
   [wait-times routing]
@@ -286,6 +298,7 @@
    Overlapping overlap 
    ReturnToDeployable 0})
 
+
 ;;max utilization is pretty simple too...
 (defn max-util-waits [{:keys [overlap maxbog mindwell]}]
   {reset mindwell
@@ -344,7 +357,7 @@
     `(do 
        (defn ~name ~doc 
          [& {:keys [~'name ~'deltas ~'stats] 
-             :or {~'name ~(str name)      ~'deltas nil }}]       
+             :or   {~'name ~(str name) ~'deltas nil}}]       
          (let [stats#  (merge ~stats ~'stats)
                routes# ~routes 
                routes# (if (fn? routes#) (routes# stats#) routes#)]
@@ -470,6 +483,7 @@
                             (do (println [:interpreting-as-infinite name k n])
                                 +inf+)))))
              m m))
+
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
   (try  (if-let [ctor (get @templates name (get @templates (keyword name)))]
           (let [
@@ -477,8 +491,8 @@
                 stats      (if overlap (assoc stats :overlap overlap) stats)
                 stats      (clamp-stats name stats)
                 base       (ctor :deltas deltas :stats stats)
-                baselength (core/compute-cycle-length base)
-                ]
+                baselength (core/compute-cycle-length base)                
+               ]
             (-> base
                 (core/set-deployable (:startdeployable stats) (:stopdeployable stats))
                 (assoc  :cyclelength (min baselength +inf+))))

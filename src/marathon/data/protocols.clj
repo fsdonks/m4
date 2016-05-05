@@ -295,7 +295,8 @@
   [policy] 
   (let [pg (get-position-graph policy)]
     (if-let [path (graph/first-path (graph/depth-first-search pg :deployable :non-deployable))]    
-      (->> (update-nodes pg (drop 1 (butlast path)) #(conj % :deployable))
+      (->> (update-nodes pg (drop 1 (butlast path)) (fn [nd]  
+                                                       (conj (if (coll? nd) (set nd) #{nd}) :deployable)))
            (set-position-graph policy))
       (throw (Exception. (str "No deployable range found between in " policy))))))
 

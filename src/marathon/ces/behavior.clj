@@ -555,18 +555,19 @@
                               }
                 _        (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
                 _        (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
-                new-loc  (when (clojure.set/interection
-                              #{"Dwelling" "DeMobilizing" "Recovering"
-                                :deployable :dwelling} newstate)
+                new-loc  (when (clojure.set/intersection
+                                #{"Dwelling" "DeMobilizing" "Recovering"
+                                  :deployable :dwelling} newstate)
                            nextpos
                           )
                 ]
             (bind!!  ;update the context with information derived
                                         ;from moving
-             {:from-position frompos ;record information
-              :to-position   nextpos
+             {:position-change {:from-position frompos ;record information
+                                :to-position   nextpos}
               :state-change  state-change
-              :next-location new-loc
+              :location-change {:from-location  (:locationname u)
+                                :to-location    new-loc}
               :wait-time     nil
               :next-position nil}
              ))
@@ -666,31 +667,32 @@
 
 (def check-overlap disengage)
 
-(befn check-deployable ^behaviorenv {:keys [entity from-position to-position ctx] :as benv}
-  (let [u @entity
-        p (:policy u)
-        _ (println [:checking-deployable  :from from-position :to to-position])]
-    (when (and to-position
-               (not= (protocols/deployable-at? p from-position)
-                     (protocols/deployable-at? p to-position)))
-      (do (println [:deployable-changed! from-position to-position])
-          (swap! ctx #(supply/update-deploy-status u nil nil %))
-          (success benv)))))
+(befn check-deployable ^behaviorenv {:keys [entity position-change ctx] :as benv}
+   (when position-change
+     (let [{:keys [from-position to-position]} position-change
+           u @entity
+           p (:policy u)
+           _ (println [:checking-deployable  :from from-position :to to-position])]
+       (when   (not= (protocols/deployable-at? p from-position)
+                     (protocols/deployable-at? p to-position))
+         (do (println [:deployable-changed! from-position to-position])
+             (swap! ctx #(supply/update-deploy-status u nil nil %))
+             (success benv))))))
 
 (def change-position
   (->seq [check-overlap
           check-deployable
           finish-cycle
-          (->alter (fn [benv] (dissoc benv :from-position :to-position)))]))
+          (->alter  #(dissoc % :position-change))]))
 
 ;;if there's a location change queued, we see it in the env.
-(befn change-location {:keys [entity to-position ctx] :as benv}
-      (when to-position        
-        (when (not (identical? (:locationname @entity) to-location))
-          (let [_  (reset! entity (u/push-location @entity to-location))
-                _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
-            ;;we need to trigger a location change on the unit...
-            (success (dissoc benv :location-change)))))))
+(befn change-location {:keys [entity location-change ctx] :as benv}
+   (when location-change
+     (let [{:keys [from-location to-location]} location-change]
+       (let [_  (reset! entity (u/push-location @entity to-location))
+             _  (swap! ctx    #(u/unit-moved-event! @entity to-location %))] 
+         ;;we need to trigger a location change on the unit...
+         (success (dissoc benv :location-change))))))
 
 
 ;;with a wait-time and a next-position secured,
@@ -731,9 +733,10 @@
       (let [dt (or deltat 0)]
         (if (zero? dt)
             (success benv) ;done aging.
-            (let [_ (println [:aging-unit deltat])
+            (let [
                                         ;_  (log!   [:aging dt] benv)
                   _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
+                  _ (println [:aging-unit deltat :cycletime (:cycletime @entity)]) 
                   ]
               (bind!! {:deltat 0 ;is this the sole consumer of time? 
                        :statedata (fsm/add-duration statedata dt)})))))
