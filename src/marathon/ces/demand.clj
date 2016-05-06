@@ -746,9 +746,9 @@
 	  (cond 
 	    (ungrouped? demandgroup) 
 	      (->> (core/update-unit (set-followon unit demandgroup) ctx)          
-	           (u/change-state unitname :AbruptWithdraw 0 nil))                      
+	           (u/change-state unitname :abrupt-withdraw 0 nil))                      
 	    (not (ghost? unit))
-	      (u/change-state unitname :AbruptWithdraw 0 nil ctx)                   
+	      (u/change-state unitname :abrupt-withdraw 0 nil ctx)                   
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
 	            (u/change-state unitname :Reset 0 nil)))))                     
 

@@ -1698,10 +1698,6 @@
 ;; End Function
 
 
-
-
-
-
 ;; 'TOM Change 23 April 2012
 ;; 'Auxillary function to help us determine whether a unit should try to recover....
 ;; Private Function canRecover(unit As TimeStep_UnitData) As Boolean
@@ -1738,9 +1734,6 @@
 ;; End With
 
 ;; End Function
-
-
-
 
 
 ;; 'A state in which the unit will attempt to re-enter the available pool, if it has enough BOG time remaining.

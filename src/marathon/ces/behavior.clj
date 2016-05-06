@@ -394,8 +394,7 @@
                         :followingstate nil
                         :timeinstate timeinstate
                         }
-          _             (debug [:nextstate nextstate :state-change state-change :current-state (:state ent)])
-          
+          _             (debug [:nextstate nextstate :state-change state-change :current-state (:state ent)])          
           ]
       (->>  (assoc benv :state-change state-change
                    :location-change {:from-location "Spawning"
@@ -497,7 +496,8 @@
                              ;;            :deployable :dwelling} newstate)
                                      
                               
-                _            (println [from-loc to-loc])]
+                ;_            (println [from-loc to-loc])
+                ]
             (bind!!  ;update the context with information derived
                                         ;from moving
              {:position-change {:from-position frompos ;record information
@@ -709,9 +709,10 @@
 ;;in a dynamically determined position, or the unit goes to another demand compatible with the
 ;;followon code.
 (befn followon-beh {:keys [entity ctx] :as benv}
-      (do ;register the unit as a possible followOn 
+      (when (:followoncode @entity) ;if the unit has a followon code
+        (do ;register the unit as a possible followOn 
           (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
-          age-unit))
+          age-unit)))
 
 ;;way to get the unit back to reset.  We set up a move to the policy's start state,
 ;;and rip off the followon code.
@@ -749,26 +750,25 @@
         (if (not (pos? bogremaining))
           ;makes no sense for the unit to continue BOGGING, send it home.
           reset-beh
-          ;unit has some feasible bogtime left, we can possibly have it followon or extend its bog...
-          ;A follow-on is when a unit can immediately move to fill an unfilled demand from the same
-          ;group of demands.  In otherwords, its able to locally fill in.
-          ;This allows us to refer to forcelists as discrete chunks of data, group them together,
-          ;and allow forces to flow from one to the next naturally.         
-          followon-beh)))
-
-
-
+          (->or 
+             ;unit has some feasible bogtime left, we can possibly have it followon or extend its bog...
+             ;A follow-on is when a unit can immediately move to fill an unfilled demand from the same
+             ;group of demands.  In otherwords, its able to locally fill in.
+             ;This allows us to refer to forcelists as discrete chunks of data, group them together,
+             ;and allow forces to flow from one to the next naturally.         
+           [followon-beh
+            recovery-beh]))))
 
 ;;entities have actions that can be taken in a state...
 (def default-statemap
-  {;:reset
+  {:reset            reset-beh
 ;   :global          
-   :abrupt-withdraw (echo :abrupt-withdraw-beh)
-   :recovered       (echo :recovered-beh)
+   :abrupt-withdraw  abrupt-withdraw-beh
+   :recovered        (echo :recovered-beh)
    ;:end-cycle
 ;   :spawning        spawning-beh   
-   :demobilizing    dwelling-beh
-   "DeMobilizing"   dwelling-beh
+   :demobilizing     dwelling-beh
+   "DeMobilizing"    dwelling-beh
    protocols/demobilization dwelling-beh
 
    :bogging           bogging-beh
@@ -1092,3 +1092,399 @@
 
 
 )
+
+
+
+
+
+;; 'A state to handle reentry into the available pool....
+;; Private Function ReEntry_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+
+;; Dim newpolicy As IRotationPolicy
+;; Dim wasDeployable As Boolean
+;; Dim isDeployable As Boolean
+;; Dim newduration As Single
+;; Dim offset As Single
+;; Dim timeinstate As Single
+;; Dim timeremaining As Single
+;; Dim nextstate As String
+;; Dim newcycletime As Single
+;; Dim cycletimeA As Single
+;; Dim policynameA As String
+;; Dim policynameB As String
+;; Dim CycleProportionA As Single
+;; Dim CycleTimeB As Single
+;; Dim PositionA As String
+;; Dim PositionB As String
+
+;; With unit
+    
+;;     'TOM Change 20 April 2012
+;;     'wasDeployable = .policy.isDeployable(.cycletime)
+;;     wasDeployable = .policy.isDeployable(.cycletime)
+
+;;     'HACK to account for negative cycle times.
+;;     If .cycletime < 0 Then Err.Raise 101, , "Cycle Time Should not be negative!"
+    
+;;     If .PositionPolicy <> "Deployed" And .PositionPolicy <> "Overlapping" Then  'we can safely change the unit's policy.
+       
+;;         isDeployable = .policy.isDeployable(.cycletime)
+;;         PositionA = .PositionPolicy
+;;         If .PositionPolicy <> "Deployed" Then
+;;             If .PositionPolicy = "Overlapping" Then Err.Raise 101, , "Forgot about overlap.."
+;;             PositionB = .policy.getPosition(.cycletime) 'dwelling units can change positions.
+;;         Else
+;;             Err.Raise 101, , "Cannot be deployed!"
+;;         End If
+        
+;;         'position policy is the SAME as positionB
+;;         .PositionPolicy = PositionB
+        
+;;         timeremaining = .policy.TransferTime(PositionB, .policy.nextposition(PositionB)) 'time remaining in this state
+        
+;;         'How long will the unit have been in this state?
+;;             'Since it's a policy change....do we zero it out?
+;;             'Or do we assume that the unit has been in the state the exact amount of time required?
+;;         'We assume that the unit has been in the state the exact amount of time required.
+;;         'We also assume that the unit is not entering another cycle, merely extending or truncating.
+;;             'Its current cycle is modified.
+;;             'Does not get a cycle completion out of it.
+            
+;;         If .cycletime >= 0 Then
+;;             If PositionB <> "Deployed" Then
+;;                 timeinstate = .cycletime - .policy.GetCycleTime(PositionB) 'derived time in state upon spawning.
+;;             Else
+;;                 Err.Raise 101, , "Error, should not be deployed"
+;;             End If
+;;         End If
+        
+;;         newduration = timeremaining - timeinstate
+;;         nextstate = getState(unit, PositionB)
+        
+;;         'TOM change 23 july 2011
+;;         'Decoupled*
+;;         'parent.LogPosition parent.getTime, PositionA, PositionB, unit
+;;         MarathonOpSupply.LogPosition SimLib.getTime(simstate.context), PositionA, PositionB, unit, , simstate.context
+        
+;;         If nextstate = "Dwelling" Or nextstate = "DeMobilizing" _
+;;                 Or nextstate = Recovering Or nextstate = Recovered Then
+;;             'parent.LogMove parent.getTime, .LocationName, .PositionPolicy, unit
+;;             .changeLocation .PositionPolicy, simstate.context
+;;             '.LocationName = .PositionPolicy
+;;         End If
+        
+;;         'Decoupled*
+;;         '.parent.UpdateDeployStatus unit
+;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
+
+;;         'Decouple*
+;;         'parent.parent.trigger supplyUpdate, .name, .name, "Unit ReEntering with " & .CurrentCycle.bogbudget & " BOGBudget & " & .name
+;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Unit ReEntering with " & .CurrentCycle.bogbudget & " BOGBudget & " & .name, , simstate.context
+;;         Set ReEntry_State = ChangeState(unit, nextstate, 0, newduration)
+;;     Else
+;;         Err.Raise 101, , "Cannot handle during deployment or overlap"
+;;     End If
+;; End With
+;; End Function
+
+;;__CanRecover__
+
+;; 'TOM Change 23 April 2012
+;; 'Auxillary function to help us determine whether a unit should try to recover....
+;; Private Function canRecover(unit As TimeStep_UnitData) As Boolean
+;; Dim rtime As Single
+;; Dim demobtime As Single 'Tom Change 18 July 2012
+
+;; canRecover = False
+
+;; With unit
+;;     'Tom change 18 July 2012 ->
+;;         'Allowing general recovery as a default behavior, although policies can change it...
+;;             'I.e. RC14 remob is an example.
+;;         'If the unit's policy doesn't have a recovery state, we set an abitrary recoverytime.
+;;         'Derived from Parameters("DefaultRecoveryTime")
+        
+;;     'Tom Change 23 April 2012
+;;     If .policy.PositionGraph.nodeExists(recovery) Then
+;;         rtime = .policy.TransferTime(recovery, Recovered)
+;;     Else 'Decoupled*
+;;         'rtime = parent.parent.parameters.getKey("DefaultRecoveryTime")
+;;         rtime = simstate.parameters.getKey("DefaultRecoveryTime")
+;;         'Tom note -> I think this is a moot point, because our criteria for recovering is to not
+;;         'exceed the expected duration of a cycle.  If we're already exceeding it, we don't have to
+;;         'check demob.
+;;         'if the policy includes demob, we need to account for demob time as well.
+;; '        If .policy.PositionGraph.nodeExists(demobilization) Then
+;; '            rtime = .policy.TransferTime(demobilization, .policy.nextposition(demobilization))
+;; '        End If
+;;     End If
+    
+;;     If .CurrentCycle.bogbudget > 0 And .cycletime + rtime < .CurrentCycle.DurationExpected Then
+;;         canRecover = True
+;;     End If
+;; End With
+
+;; End Function
+
+
+
+
+;;__Recovering__
+
+;; 'TOM Change 23 April 2012 -> Check to see if we should even try to recover....
+;; 'Criteria: if cycletime + recoverytime > cycleduration then 'skip recovery....
+;; 'go straight to recovered.  This will push us into whatever the post recovery state was...
+;; Public Function Recovering_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+
+;; Dim nm As String
+;; If canRecover(unit) Then
+;;     If deltat > 0 Then unit.AddDwell deltat
+;;     Set Recovering_State = unit
+;; Else
+;;     nm = unit.name
+;;     'decoupled*
+;;     'parent.parent.trigger supplyUpdate, nm, nm, "Unit " & nm & " Skipping Recovery with " & unit.CurrentCycle.bogbudget & " BOGBudget"
+;;     SimLib.triggerEvent supplyUpdate, nm, nm, "Unit " & nm & " Skipping Recovery with " & unit.CurrentCycle.bogbudget & " BOGBudget", , simstate.context
+;;     'zero out the unit's ability to BOG, preventing recovery and re-Entry.
+;;     unit.CurrentCycle.bogbudget = 0
+;;     Set Recovering_State = Moving_State(unit, deltat) 'advance the unit forward in time.
+;; End If
+
+;; End Function
+
+
+
+;;___Policy Change___
+
+
+
+;; 'TOM Change 13 Jul 2011
+;; 'Needed to implement the transition from one policy to another.  I chose to add a state to handle just this.
+;; 'Visual analysis showed that PolicyChange looks a lot like Spawn, in that when a unit changes policies, it must change
+;; 'a lot of its internal state to follow the new policy.  The result of the policy change is:
+;; '   1: The unit's cycle time is normalized, and then transformed into the relevant cycletime in the new policy.
+;; '   2: The unit's position "may" change to reflect its position in the new policy.
+;; '   3: The unit's location "may" change to reflect its location in the new policy.
+;; 'TOM Change 20 April:
+;; '   4: The unit's BOGBudget "may" change to reflect either increased, or decreased, BOGBudget.
+;; 'TOM Change 24 April:
+;; '   5: The unit's BOGBudget and MAXBOG may only change (increase) as the result of a policy change.
+;; '   6: Policy changes can NOT happen during terminal states:
+;; '       [Deployed {Bogging, Overlapping}, Demobilizing]
+
+
+;; 'If NOT deployed (bogging, overlapping) or in a terminal state (demobilizing), then entities can change policy immediately.
+;; 'Otherwise, units change policy upon next reset (change is deferred).
+
+;; 'Assumes that the new policy is already set for the unit (i.e. the unitdata is pointing toward the new policy).
+;; 'Ideally, an outside agent will have modified the unit's policy, and subsequently told it to changestates to a policy-change
+;; 'state.
+
+;; 'Net effect is that policy changes to the same policy are idempotent.
+;; 'State to control how a unit acts when it changes policy.
+;; 'Note -> we extract the next policy from the unitdata's policy stack.
+
+;; 'TOM note -> figure out how to change this for the deployed population...they have negative cycle
+;; 'times.
+
+;; 'Note -> this assumes we have compatible policies, or at least policies that have a cyclical
+;; 'rotational lifecycle.
+;; Function PolicyChange_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+
+;; Dim newpolicy As IRotationPolicy
+
+;; Dim wasDeployable As Boolean
+;; Dim isDeployable As Boolean
+
+;; Dim newduration As Single
+;; Dim offset As Single
+;; 'tom change
+;; Dim tnow As Single
+;; Dim timeinstate As Single
+;; Dim timeremaining As Single
+;; Dim nextstate As String
+
+;; Dim newcycletime As Single
+
+;; Dim cycletimeA As Single
+;; Dim policynameA As String
+;; Dim policynameB As String
+;; Dim CycleProportionA As Single
+;; Dim CycleTimeB As Single
+;; Dim PositionA As String
+;; Dim PositionB As String
+
+
+;; tnow = SimLib.getTime(simstate.context)
+
+;; With unit
+
+;;     If .policyStack.count = 0 Then Err.Raise 101, , "no new policies on stack!"
+               
+;;     'fetch the new policy defined by the IRotationPolicy.
+;;     'Note, for composite policies, the newpolicy defers to the active policy.
+;;     'The active policy should have been modified for us.  That's a weak spot...
+;;     Set newpolicy = .policyStack(.policyStack.count)
+    
+;;     If newpolicy.bogbudget = 0 Then Err.Raise 101, , "No bog budget!"
+;;     policynameA = .policy.AtomicName 'points to the active atomic policy
+;;     policynameB = newpolicy.AtomicName 'points to the active atomic policy
+    
+;;     'TOM Change 20 April -> We need to separate the unit's experienced
+;;     'cycle length vs the NOMINAL cycle duration, which exists in
+;;     'POLICY SPACE.  In composite rotational policies, the NOMINAL cycle duration
+;;     'changes when Atomic policies change.  Specificallly, we map the unit's position
+;;     'or coordinates in the current atomic policy to coordinates in the new policy.
+;;     'The unit's actual experienced lifecycle, i.e. its cycletime property, is not
+;;     'an accurate mapping between policies.  The implicit assumption is that when
+;;     'mapping from one policy to another, if the policies have differing cycle lengths
+;;     'then there is a discount or exchange rate between the policies, such that time
+;;     'spent in one policy is NOT equal to time spent in another.  However, our
+;;     'unit's cyclelength property is not subject to this, since it technically
+;;     'exists OUTSIDE of the policy view of time.  The cyclelength property reflects the
+;;     'actual time a unit has spent, under ANY policy, until it has reset or started a
+;;     'new cycle.
+    
+;;     'Prior to 19 April 2012, The unit's ability to deploy, via the CanDeploy method,
+;;     'depended on it's position in the current policy as a function of the cyclelength property.
+;;     'We should prefer the duration of the current cycle record, which is an accurate reflection
+;;     'of the relative time in the unit's current policy.
+;;     cycletimeA = .cycletime
+    
+;;     'TOM Change 20 April 2012
+;;     'cycletimeA = .CurrentCycle.duration
+
+;;     PositionA = .PositionPolicy
+;;     'TOM Change 20 April 2012
+;;     'wasDeployable = .policy.isDeployable(.cycletime)
+;;     wasDeployable = .policy.isDeployable(.cycletime)
+
+    
+;;     'HACK to account for negative cycle times.
+;;     If .cycletime < 0 Then Err.Raise 101, , "Cycle Time Should not be negative!"
+    
+;;     CycleProportionA = .cycletime / .policy.cyclelength
+;;     'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
+    
+;;     If CycleProportionA <= 1# And PositionA <> "Deployed" And _
+;;         PositionA <> "Overlapping" And PositionA <> "DeMobilizing" Then   'we can safely change the unit's policy.
+
+;;         'Tom Change -> fixed to integers.
+;;         CycleTimeB = Fix(CycleProportionA * newpolicy.cyclelength)
+;;         If CycleTimeB > newpolicy.cyclelength Then Err.Raise 101, , "Cyclelength is too long!"
+        
+;;         isDeployable = newpolicy.isDeployable(CycleTimeB)
+        
+;;         If .PositionPolicy <> "Deployed" Then
+;;             If .PositionPolicy = "Overlapping" Then Err.Raise 101, , "Forgot about overlap.."
+;;             PositionB = newpolicy.getPosition(CycleTimeB) 'dwelling units can change positions.
+;;         Else
+;;             PositionB = .PositionPolicy 'deployed units remain deployed.
+;;         End If
+        
+;;         'Tom Note 12 July 2012
+;;         'This actually updates the unit's policy....
+;;         'What are the consequences?
+;;         'We 're setting its IRotation policy to the new policy....
+;;         'We should be setting it to the root policy....
+;;         Set .policy = newpolicy
+;;         'position policy is the SAME as positionB
+;;         .PositionPolicy = PositionB
+        
+;;         timeremaining = .policy.TransferTime(PositionB, .policy.nextposition(PositionB)) 'time remaining in this state
+        
+;;         'How long will the unit have been in this state?
+;;             'Since it's a policy change....do we zero it out?
+;;             'Or do we assume that the unit has been in the state the exact amount of time required?
+;;         'We assume that the unit has been in the state the exact amount of time required.
+;;         'We also assume that the unit is not entering another cycle, merely extending or truncating.
+;;             'Its current cycle is modified.
+;;             'Does not get a cycle completion out of it.
+;;         .cycletime = CycleTimeB
+       
+;;         If .cycletime >= 0 Then
+;;             If PositionB <> "Deployed" Then
+;;                 timeinstate = .cycletime - .policy.GetCycleTime(PositionB) 'derived time in state upon spawning.
+                
+;;                 'Decoupled*
+;; '                unit.ChangeCycle parent.getTime
+;;                 unit.ChangeCycle tnow
+;;                 unit.ModifyCycle newpolicy
+                
+;;             Else 'how long have we been deployed?  Assume it's BOG for now....
+;;                 timeinstate = .CurrentCycle.bog  'TOM Note This may change.
+;;             End If
+;;         Else
+;;             unit.AddBOG timeinstate
+;;             Err.Raise 101, , "Negative cycle times are not handled..."
+;;         End If
+        
+;;         newduration = timeremaining - timeinstate
+;;         nextstate = getState(unit, PositionB)
+        
+;;         'TOM change 23 july 2011
+;;         If PositionA <> PositionB Then
+;;             'Decoupled*
+;; '           parent.LogPosition parent.getTime, PositionA, PositionB, unit
+;;             MarathonOpSupply.LogPosition tnow, PositionA, PositionB, unit, , simstate.context
+
+;;             If nextstate = "Dwelling" Or nextstate = "DeMobilizing" _
+;;                     Or nextstate = Recovering Or nextstate = Recovered Then
+;;                 'parent.LogMove parent.getTime, .LocationName, .PositionPolicy, unit
+;;                 .changeLocation .PositionPolicy, simstate.context
+;;                 '.LocationName = .PositionPolicy
+;;             End If
+;;         End If
+        
+        
+;;         'If wasDeployable <> isDeployable Then .parent.UpdateDeployStatus unit
+;;         'Decoupled*
+;;         '.parent.UpdateDeployStatus unit
+;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
+        
+;;         'Adopt Policy B.
+;;         'Policy A ->
+;;         '    Find relative CT = ct/CLengthA
+;;         'Policy B ->
+;;         '    Find relative positionB = pos(RelativeCT * CLengthB)
+;;         'Movingstate from PositionA to relative PositionB.
+;;         'Update with delta0.
+;;         'TOM Change 2 Sep -> moved this north so that we can use the policy stack as a flag in unit's
+;;         'ChangeCycle logic.  Check for sideeffects
+;;         .policyStack.Remove 1
+        
+;;         'Decoupled*
+;; '        parent.parent.trigger UnitChangedPolicy, .name, .policy.AtomicName, "Unit " & .name & " changed policies: " & _
+;; '            policynameA & ":" & cycletimeA & "->" & policynameB & ":" & CycleTimeB
+;;         SimLib.triggerEvent UnitChangedPolicy, .name, .policy.AtomicName, "Unit " & .name & " changed policies: " & _
+;;             policynameA & ":" & cycletimeA & "->" & policynameB & ":" & CycleTimeB, , simstate.context
+
+        
+;;         'parent.parent.trigger SupplyUpdate, .name, .name, "Policy Change Caused Supply Update"
+;;         Set PolicyChange_State = ChangeState(unit, nextstate, 0, newduration)
+;;         'Decoupled*
+;; '        parent.parent.trigger supplyUpdate, .name, .name, "Policy Change Caused Supply Update for unit " & .name
+;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Policy Change Caused Supply Update for unit " & .name, , simstate.context
+
+;;         'NOTE -> I may need to consider changing location here.....
+;;     Else 'The unit's cycle cannot project onto another cycle.  We need to defer policy change until reset.
+;;         'leave the policy on the stack.  Catch it during reset.
+;;         ''TOM change 2 Sep 2011 -> we modify the cyclerecord to reflect changes in expectations...
+;;         'This is not a replacement...
+        
+;;         'TOM Change 23 April 2012 -> We do NOT modify the cycle.....screws with expectations?
+;;         '.ModifyCycle newpolicy
+        
+;;         'Decoupled*
+;; '        parent.parent.trigger AwaitingPolicyChange, .name, .policy.AtomicName, "Unit " & _
+;; '                .name & " in position " & .PositionPolicy & " is waiting until reset to change policies"
+;;         SimLib.triggerEvent AwaitingPolicyChange, .name, .policy.AtomicName, "Unit " & _
+;;                 .name & " in position " & .PositionPolicy & " is waiting until reset to change policies", , simstate.context
+;;         Set unit = RevertState(unit)
+;;         'We updated the unit in the process
+;;         'Decoupled*
+;;         'parent.parent.trigger supplyUpdate, .name, .name, "Policy Change Attempt Caused Supply Update for unit " & .name
+;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Policy Change Attempt Caused Supply Update for unit " & .name, , simstate.context
+;;     End If
+;; End With
+;; End Function

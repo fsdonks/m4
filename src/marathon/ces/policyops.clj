@@ -151,7 +151,7 @@
 ;;go/when, etc.  
 
 ;;For our generic policies, they ALL have an overlap...they all have 
-;;a start state at Reset and and end state at Available.
+;;a start state at Reset and an end state at Available.
 
 ;;It'd be nice to be able to define basic templates 
 
