@@ -3,34 +3,51 @@
             [spork.cljgraph.core :as graph]
             [marathon.ces.core :refer [+inf+]]
             [marathon.policy.policydata :as policydata]            
-            [marathon.data.protocols :as core :refer [Bogging 
-                                                      Dwelling 
-                                                      BogDeployable 
-                                                      DwellDeployable 
-                                                      Deployable 
-                                                      Overlapping
-                                                      ReturnToDeployable
-                                                      NotDeployable
-                                                      Spawning
-                                                      Waiting
-                                                      Deploying
-                                                      AC12  
-                                                      AC13  
-                                                      RC14  
-                                                      RC15  
-                                                      AC11 
-                                                      RC11 
-                                                      RC12 
-                                                      GhostPermanent12 
-                                                      GhostPermanent13 
-                                                      GhostTransient12 
-                                                      GhostTransient13 
-                                                      reset 
-                                                      train 
-                                                      ready 
-                                                      available 
-                                                      deployed
-                                                      demobilization]]))
+            [marathon.data.protocols :as core :refer
+     ;States and policy constants
+     [Bogging 
+      Dwelling 
+      BogDeployable 
+      DwellDeployable 
+      Deployable 
+      Overlapping
+      ReturnToDeployable
+      NotDeployable
+      Spawning
+      Waiting
+      Deploying
+      AC12  
+      AC13  
+      RC14  
+      RC15  
+      AC11 
+      RC11 
+      RC12 
+      GhostPermanent12 
+      GhostPermanent13 
+      GhostTransient12 
+      GhostTransient13 
+      reset 
+      train 
+      ready 
+      available 
+      deployed
+      demobilization
+      ;;srm locs...
+      PB_C3    
+      PB_C4     
+      PT_C4     
+      PL_C4     
+      R_C1      
+      R_C2      
+      MP_DA_C1  
+      MP_NDA_C3 
+      MA_DA_C1  
+      MA_DA_C2  
+      MA_NDA_C3 
+      MD_DA_C1  
+      MD_DA_C2  
+      MD_NDA_C3]]))
 
 ;;The functions in this library focus on quickly deriving policies from existing templates.  There are a
 ;;multitude of hard-coded templates in here that describe canonical policies, which are used in
@@ -116,14 +133,6 @@
                (vector from to)))
         rts))        
 
-;; (defn ac12-defaults [overlap]
-;;   {reset, 182, 
-;;    train, 183, 
-;;    ready, 365, 
-;;    available, 365, 
-;;    deployed, (- 365 overlap),
-;;    Overlapping, overlap})
-
 (defn compute-cycle-length [p]
   (let [{:keys [startstate endstate positiongraph]} p
         res  (graph/depth-first-search positiongraph startstate endstate {:weightf graph/arc-weight})
@@ -161,10 +170,79 @@
    ready :dwelling 
    available :dwelling 
    deployed :bogging
-   Overlapping :overlapping})
+   Overlapping :overlapping
+   ;;SRM Stuff...may change.  I hate SRM.  SRM introduces
+   ;;a couple of new states....
+   PB_C3     :dwelling
+   PB_C4     :dwelling
+   PT_C4     :dwelling
+   PL_C4     :dwelling
+   R_C1      :dwelling
+   R_C2      :dwelling
+   MP_DA_C1  :mission  ;;mission state is interpeted by behavior, may bog, may not.
+   MP_NDA_C3 :mission   
+   MA_DA_C1  :mission
+   MA_DA_C2  :mission
+   MA_NDA_C3 :mission   
+   MD_DA_C1  :mission
+   MD_DA_C2  :mission
+   MD_NDA_C3 :mission
+   })
 
+;;Note: these are all in the routing data; looking for a way
+;;to pull this in programatically, although this is pretty easy...
+;;we can always stick routing information in script files.
+;;SRM specific routing information.  Sustainable readiness is
+;;different from ARFORGEN....
+(def SRMAC-routes
+  (mapv vec
+    (partition 3
+             [PT_C4	PB_C3	90
+              PB_C3	R_C2	55
+              R_C2      R_C1	550
+              R_C1	PB_C3	35
+              ;;these arcs create acyclical processes. 
+              MA_DA_C1	[:acyclic  PB_C3]	90
+              MA_DA_C2	[:acyclic  PB_C3]	90
+              MP_DA_C1	[:acyclic  R_C1]	999999
+              ])))
 
+(def SRMRC-routes
+  (mapv vec
+    (partition 3
+             [PT_C4	PB_C4	730
+              PB_C4	PB_C3	365
+              PB_C3	R_C2	365
+              R_C2	PT_C4	365
+              MA_DA_C1	PT_C4	90
+              MA_DA_C2	PT_C4	90
+              MA_NDA_C3	PT_C4	90
+              MD_NDA_C3	PT_C4	90
+              MP_NDA_C3	PT_C4	90
+              ;;these arcs create acyclical processes. 
+              [:acyclic  PB_C3]	 MA_NDA_C3	90
+              [:acyclic  PB_C3]	 MD_NDA_C3	90
+              [:acyclic  PB_C3]	 MP_NDA_C3	90
+              ])))
 
+;;special for "some" unit types...
+(def SRMRC13-routes
+  (mapv vec
+    (partition 3
+            [PB_C4	PB_C3	730
+             PB_C3	R_C2	365
+             R_C2	PB_C4	365
+             MA_DA_C1	PB_C4	90
+             MA_DA_C2	PB_C4	90
+             MA_NDA_C3	PT_C4	90
+             MD_NDA_C3	PT_C4	90
+             MP_NDA_C3	PT_C4	90
+             ;;these arcs create acyclical processes. 
+             [:acyclic  PB_C3]	 MA_NDA_C3	90
+             [:acyclic  PB_C3]	 MD_NDA_C3	90
+             [:acyclic  PB_C3]	 MP_NDA_C3	90
+             ])))
+  
 ;;this is really ac12 routes.
 (def default-routes 
   [[reset train           182]
@@ -190,6 +268,10 @@
 
 (def max-util-routing [[reset Deployable available] 
                        [deployed Overlapping NotDeployable reset]])
+
+;;SRM doesn't use the above....we define the policy a bit more directly (for the
+;;time being)
+
 
 (defn max-util-waits [{:keys [overlap maxbog mindwell]}]
   {reset mindwell
@@ -226,17 +308,6 @@
    deployed    (- 365 overlap) 
    Overlapping overlap})
 
-
-;;see if we can roll all these guys up....there's no need to 
-;;really have them explicit like that...
-
-;; (defn ac-waits [{:keys [overlap maxbog]}]
-;;     {reset       182 
-;;      train       183 
-;;      ready       maxbog
-;;      available   maxbog
-;;      deployed    (- maxbog overlap) 
-;;      Overlapping overlap})
 
 (defn ac12-waits [{:keys [overlap]}]
   {reset       182 
@@ -314,17 +385,6 @@
 
 (defn unzip [xs]  (reduce (fn [acc [x y]]  (-> acc (conj x) (conj y))) [] xs))
 
-;; (def ^:dynamic *stats* 
-;;   {:startstate reset
-;;    :endstate   available
-;;    :overlap    45 
-;;    :recovery   90
-;;    :bogbudget  365
-;;    :maxbog     365
-;;    :maxdwell   +inf+
-;;    :maxMob     365                   
-;;    :mindwell   0})
-
 (defn and-stats [base-stats & kvps] 
   (reduce (fn [m [k v]] (assoc m k v)) base-stats (partition 2 kvps)))
 
@@ -369,6 +429,9 @@
          (swap! templates assoc ~(str name) ~name)
          (quote ~name))))
 
+
+
+  
 ;;It may be easier to just push a base policy through multiple
 ;;transforms, that constitutes a "template"...
 
@@ -387,6 +450,42 @@
       (let [[name doc routes & optional-stats] x]
         (eval-template (eval `(simple-template ~name ~doc ~routes ~base-stats ~@optional-stats))))
       (eval-template x))))
+
+(deftemplate SRMAC
+  :routes SRMAC-routes
+  :stats   {:startstate PB_C3
+            :endstate   R_C1
+            :overlap    0 ;determined by demand
+            :recovery   90
+            :bogbudget  365
+            :maxbog     365
+            :maxdwell   730
+            :maxMob     365                   
+            :mindwell   55})
+
+(deftemplate  SRMRC
+  :routes SRMRC-routes
+  :stats   {:startstate PT_C4
+            :endstate   R_C2
+            :overlap    0 ;determined by demand
+            :recovery   90
+            :bogbudget  365
+            :maxbog     365
+            :maxdwell   1825
+            :maxMob     365                   
+            :mindwell   1460})
+
+(deftemplate  SRMRC13
+  :routes SRMRC13-routes
+  :stats   {:startstate PB_C4
+            :endstate   R_C2
+            :overlap    0  ;determined by demand
+            :recovery   90
+            :bogbudget  365
+            :maxbog     365
+            :maxdwell   1460
+            :maxMob     365                   
+            :mindwell   1095})
 
 ;;these are basic policies that we can easily derive other policies
 ;;from.
@@ -456,6 +555,11 @@
   [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :bogbudget 270]
   [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :overlap 30 :bogbudget 270])
 
+
+;;__SRM Policies__
+(def srm-routes 
+
+
 ;;Constructor for building policy instances ...
 ;;We want to flexibly create Marathon policies .....
 ;;A policy:
@@ -500,7 +604,12 @@
         (catch Exception e
           (throw (Exception. (str  [:trying   [name maxdwell mindwell maxbog startdeployable stopdeployable]
                                    
-                                   :e e]))))))
+                                    :e e]))))))
+
+
+
+
+
 
 ;;Possible vestigial design cruft....we may be able to unify this and
 ;;remove excess....

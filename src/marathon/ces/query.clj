@@ -231,6 +231,88 @@
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
   ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src)))
 
+
+;;__New definition of feasibility__
+;;Since we have more dimensions of compatibility and preference to consider,
+;;we extend the definition of feasibility...
+;;Feasibility now implies:
+
+;;Missionable:
+;;  Globally Deployable or
+;;  (Remissionable relative to Theater and Priority) or
+;;  (Fenced to Theater)
+;;  (Fenced to Location)
+;;And
+;;Substitutable (already doing this....)
+;;And
+;;Compatible with the Category (i.e. AC-Only, RC-Only, etc.)
+
+;;Current setup goes:
+;;  Find all supply, in order, by deployable bucket, by SRC substitution
+;;  length.  Allows us to look for supply in the right places...
+;;  For each bucket, filter the supply using any filters defined
+;;  by the rules, then sort the bucket according to suitability
+;;  function provided by the supplied preferences.
+;;  The resulting sequence of supply is a lazily ordered set of
+;;  units that could fill the demand.
+
+;;We typically prosecute that strategy by looking at a different
+;;set of "buckets" first:
+;;  Namely, if we have any followon-supply left, we have a set of
+;;followon buckets, keyed by followon code, that we can apply the
+;;aforementioned strategy on.
+;;  So, fill is a higher-order process that happens in stages...
+;;  Concretely, fill using followons first.
+;;  Then fill using globally available supply.
+;;  Done.
+;;  What we'd like to do is reuse as much of this infrastructure
+;;  as possible.  So, if we can't fill, we want to provide
+;;  remissionable supply as another solution.
+;;  If possible, we'd like to weave followon into remissionable,
+;;  and eliminate the discrete stages if possible.
+;;  For now, I'll take concrete...
+;;  Remissionable supply is supply that's deployed at the time
+;;  of the attempted fill.  It's like followon, except instead of
+;;  being in a holding state, it's in a deployed state.
+;;  While the unit is deployed, we can always tap it for supply.
+;;  Remissionability is determined - for now - by a deployed
+;;  unit's relation to the demand we're considering remissioning.
+;;  If there are units in the same theater, at a lower priority
+;;  demand, then the unit may be remissioned to support the
+;;  higher priority demand (while the unit has BOG).
+;;  Remissioning results in a followon deployment.  Note:
+;;  if the higher-priority demand is short enough, it should
+;;  hold that the unit that was remissioned could go back
+;;  to its lower-priority mission if the mission is still
+;;  active.
+
+;;  We should be able to use find-feasible-supply
+;;  applied against a population of deployed entities, rather
+;;  than deployers...Basically, the underlying population function
+;;  is ->deployed instead of just ->deployers,
+;;  where ->deployed probably takes theater as an argument...
+
+
+
+
+;;We now want to include remissionability into the mix.
+;;Remissionability means that we have supply in deployable
+
+
+
+;;  FollowOn-deployable (not necessarily remissionable....)  We fully
+;;  intend to use this supply if possible, rather than sending it
+;;  back home to reentry (and wasting time).
+;;  
+
+
+;;Suitability is based on:
+;;
+;;Sourcing preference (SourceFirst rules, already implemented....)
+
+
+
+
 ;;might it not be easier to just define rules loosley?  We've got a lot o infrastructure built up here
 ;;that we might be able to just pass via functions....
 
@@ -646,6 +728,11 @@
 ;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
 (def not-ac   #(not= (:component %) "AC"))
 (def title32 [#(= (:component %) "NG") min-proportional-dwell])
+
+
+;;new rules....should be able to compose these...
+;;By default, we get substituable, globally-available supply using our
+;;existing query.  
 
 
 ;;Example rules:

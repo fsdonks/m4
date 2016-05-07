@@ -16,7 +16,7 @@
 ;category of demand we're trying to fill. To restrict filling of demands that 
 ;can take advantage of existing followon supply, we add the followon-keys to the 
 ;category.  This ensures that find-eligible-demands will interpret the 
-;[category followon-keys] to mean that only demands a demand-group contained by 
+;[category followon-keys] to mean that only demands in a demand-group contained by 
 ;followon-keys will work.  Note: we should extend this to arbitrary tags, since 
 ;demandgroup is a hardcoded property of the demand data.  Not a big deal now, 
 ;and easy to extend later.
@@ -65,19 +65,20 @@
 ;;#High Level Demand Fill
 
 ;;Higher-order function for filling demands.
-(defn fill-demands-with [ctx f]
+(defn fill-demands-with [f ctx]
   (reduce (fn [acc c] (f (core/get-demandstore acc) c acc))
       ctx (dem/unfilled-categories (core/get-demandstore ctx))))
 
 ;;Implements the default hierarchal, stop-early fill scheme.
-(defn fill-hierarchically [ctx] (fill-demands-with ctx fill-category))
+(defn fill-hierarchically [ctx] (fill-demands-with fill-category ctx))
 
 ;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 (defn fill-followons [ctx]
   (if-let [groups (core/get-followon-keys ctx)] 
-    (->> (fn [store category ctx] 
-           (fill-category store [category groups] ctx :stop-early false))
-      (fill-demands-with ctx))))
+    (fill-demands-with
+     (fn [store category ctx] 
+       (fill-category store [category groups] ctx :stop-early false)) ctx)
+    ctx))
 
 ;Note -> we're just passing around a big fat map, we'll use destructuring in the 
 ;signatures to pull the args out from it...the signature of each func is 
@@ -97,6 +98,6 @@
    the supply."
   [t ctx]
   (->> ctx
-    (fill-followons ctx)
+    (fill-followons)
     (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
     (fill-hierarchically)))

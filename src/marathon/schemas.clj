@@ -1,4 +1,6 @@
 ;;Collection of common schemas for Marathon data.
+;;Also a place to document the canonical fields and
+;;convey the semantics of the data.
 (ns marathon.schemas
   (:require [spork.util [parsing :as p]
                         [table :as tbl]]))
@@ -15,7 +17,6 @@
   (reduce merge (for [[n fields] xs] 
                   (schema n fields))))
             
-
 ;;Various schemas for representing marathon related input data.
 ;;We'll add output here as well.
 ;;Where field types are not annotated, the inferred type is :text .
@@ -77,7 +78,13 @@
      [:SpawnTime :int]
      :Location
      :Position
-     [:Original :boolean]]
+     [:Original :boolean]
+      ;;Added 4 new fields to accomodate requirements for SRM
+     :Command ;;command relationship, if any...
+     :Origin     ;;supply relationship, if any...
+     :StartState ;;Starting state for policy (typically SRM-specific....)
+     [:Duration :int] ;;Duration remaining in StartState...
+     ]
    :SRCTagRecords  
     [:Type :SRC :Tag]
    :DemandRecords  
@@ -95,7 +102,16 @@
      :Vignette
      :Operation
      :Category
-     [:Priority :int]]
+     [:Priority :int]
+     ;;Added for SRM
+     :Command
+     :Location
+     :DemandType
+     :Theater
+     [:BOG :boolean]
+     :StartState
+     :EndState
+     [:MissionLength :int]]
    :PeriodRecords
     [:Type 
      :Name 

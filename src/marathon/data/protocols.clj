@@ -83,7 +83,24 @@
    :deployed "Deployed"
    :demobilization "DeMobilization"
    :SubSymbol  "{>"
-   :EquivSymbol "="})
+   :EquivSymbol "="
+   ;;SRM constants...
+   :PB_C3  "PB_C3"
+   :PB_C4  "PB_C4"
+   :PT_C4  "PT_C4"
+   :PL_C4  "PL_C4"
+   :R_C1   "R_C1"
+   :R_C2   "R_C2"
+   :MP_DA_C1   "MP_DA_C1"
+   :MP_NDA_C3  "MP_NDA_C3"
+   :MA_DA_C1   "MA_DA_C1"
+   :MA_DA_C2   "MA_DA_C2"
+   :MA_NDA_C3  "MA_NDA_C3"
+   :MD_DA_C1   "MD_DA_C1"
+   :MD_DA_C2   "MD_DA_C2"
+   :MD_NDA_C3  "MD_NDA_C3"
+
+   })
 
 (keyvals->constants policyconstants) ;make the constants first class symbols.
 ;inherited from substitution rules, may be vestigial.
