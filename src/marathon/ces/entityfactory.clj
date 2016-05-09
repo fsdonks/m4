@@ -392,10 +392,11 @@
 ;;but now we don't have to worry about that.  We'll probably just 
 ;;have a map of functions, or types that can fulfill the unit behavior
 ;;protocol.
-(defn get-default-behavior
+(defn find-behavior
   ([]  @base/default-behavior)
-  ([supply]
-   @base/default-behavior))
+  ([b] (case b
+         "SRM"  (throw (Exception. "Wire in SRM Behavior!"))
+         @base/default-behavior)))
 
 ;;create-unit provides a baseline, unattached unit derived from a set of data.
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
@@ -436,7 +437,7 @@
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
                                 ]}]  
-    (create-unit  Name SRC OITitle Component CycleTime Policy  @base/default-behavior))
+    (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior)))
 
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
@@ -521,7 +522,7 @@
   (let [unit-count (atom (-> supply :unitmap (count)))
         ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
         ;;TODO fix this...our defaults aren't that great.  
-        normal-beh @base/default-behavior ;(-> supply :behaviors :defaultACBehavior)
+;        normal-beh @base/default-behavior ;(-> supply :behaviors :defaultACBehavior)
         conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
                                     (reduce conj! acc xs)))
         conj-unit  (fn [acc x] (do (swap! unit-count inc)
@@ -537,7 +538,7 @@
                                      (:Component r)  
                                      (plcy/find-policy  (:Policy r) pstore)
                                      @unit-count 
-                                     normal-beh))
+                                     (find-behavior (:Behavior r))))
                      (->> (generate-name @unit-count (:SRC r) (:Component r))
                           (assoc r :Name)
                           (record->unitdata)
