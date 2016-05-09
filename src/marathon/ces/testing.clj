@@ -539,8 +539,8 @@
          (filld/fill-demands day)      ;Try to fill unfilled demands in priority order.         
          (supply/manage-followons day)  ;Resets unused units from follow-on status. 
          (engine/end-day day)           ;End of day logic and notifications.
-         (demand/manage-changed-demands day)));Clear set of changed demands in demandstore.
-)
+         (demand/manage-changed-demands day))));Clear set of changed demands in demandstore.
+
 ;               (engine/sim-step 1)))
 
 

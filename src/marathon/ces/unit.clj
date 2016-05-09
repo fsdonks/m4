@@ -411,16 +411,17 @@
 ;;then invoke the change-state function on the unit.  We'll try to tell the entity
 ;;what to do more often, and let the behavior be decoupled via messaging.
 ;;we may no longer need the deltat arg...
-(defn change-state [entity newstate deltat duration ctx] 
+(defn change-state [entity newstate deltat duration ctx]
+  (binding [spork.ai.core/*debug* (= (:name entity) "24_SRC3_NG")]
   ;;how about handle-message? 
-  (core/handle-message! ctx entity
-      (core/->msg (:name entity) (:name entity)
-                  (core/get-time ctx)
-                  :change-state
-                  {:newstate newstate
-                   :deltat deltat
-                   :duration duration
-                   })))
+            (core/handle-message! ctx entity
+                                  (core/->msg (:name entity) (:name entity)
+                                              (core/get-time ctx)
+                                              :change-state
+                                              {:newstate newstate
+                                               :deltat deltat
+                                               :duration duration
+                                               }))))
 
 ;;wrapper around our spawning functionality.
 (defn spawn [ent ctx]
@@ -580,7 +581,7 @@
 ;;someone interrupts you.
 
 (defn keep-bogging-until-depleted [u ctx]
-  (change-state u :bogging 0 (boggable-time u) ctx))
+  (change-state u "Deployed" 0 (boggable-time u) ctx))
 
 ;'Assumes a unit has not yet bogged, at least not as a follow on
 ;'Bogs the unit for its remaining bog budget.  Accounts for the passage of time before computing

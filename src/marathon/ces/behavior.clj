@@ -192,6 +192,7 @@
 ;;might ditch these....
 (declare change-state-beh update-state-beh update-state 
          roll-forward-beh
+         lite-update-state-beh
          check-overlap
          check-deployable
          finish-cycle
@@ -430,7 +431,7 @@
         (if-y 
          (if (<= dt timeleft)
            (do (debug [:dt<=timeleft :updating-for dt])               
-               (beval update-state-beh (assoc benv :deltat dt)))
+               (beval lite-update-state-beh (assoc benv :deltat dt)))
            (let [residual   (max (- dt timeleft) 0)
                  res        (beval update-state-beh (assoc benv  :deltat timeleft))]
              (if (success? res) 
@@ -486,7 +487,8 @@
           (do (debug [:no-movement frompos nextpos (type benv)])
               (success (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
           (let [_            (debug [:moving frompos nextpos])
-                newstate     (get-state u nextpos)
+                newstate      (get-state u nextpos)
+                _ (when (nil? newstate) (throw (Exception. (str [:undefined-transition newstate u frompos nextpos wt]))))
                 state-change {:newstate       newstate
                               :duration       wt
                               :followingstate nil
@@ -704,6 +706,7 @@
             (swap! entity  #(u/add-bog % deltat))
             (success benv))))
 
+(declare abrupt-withdraw-beh)
 (befn special-state {:keys [entity statedata] :as benv}
       (let [s (:state entity)
             ;_ (debug [:specialstate s])
@@ -923,6 +926,18 @@
                          check-messages
                          handle-messages])
                  (echo :no-messages)])
+          (->or [special-state
+                 (->seq [(echo :<do-current-state>)
+                         do-current-state
+                         (echo :global-state)
+                         (fn [ctx]
+                           (if-y 
+                            global-state
+                            (fail ctx)))])
+                 (echo :up-to-date)])]))
+
+(def lite-update-state-beh
+  (->seq [(echo :<lite-state-beh>)
           (->or [special-state
                  (->seq [(echo :<do-current-state>)
                          do-current-state

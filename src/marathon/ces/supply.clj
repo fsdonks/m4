@@ -251,11 +251,12 @@
             (do (println [:update unitname t :disabled])
                 ctx)
       (let [unit (get-unit ctx unitname)
-           ; _ (println [:updating unitname])
+            _ (println [:updating unitname])
             ]
-        (->> ctx       
-          (u/unit-update unit) ;(updates/elapsed t (or (sim/last-update unitname ctx) 0)))
-          (supply-update! supplystore unit (unit-msg unit))))))
+        (binding [spork.ai.core/*debug* (= unitname "24_SRC3_NG")]
+          (->> ctx       
+               (u/unit-update unit) ;(updates/elapsed t (or (sim/last-update unitname ctx) 0)))
+               (supply-update! supplystore unit (unit-msg unit)))))))
 
 (defn update-units
   "Given a sequence of unit keys, xs, brings each unit up to date according to 
