@@ -61,7 +61,6 @@
             bog           (get-max-bog unit policystore) 
             unitname      (:name unit)
             demandname    (:name demand)
-            _ (println [(:locationname unit)])
             from-location (:locationname unit) ;may be extraneous
             from-position (:position-policy unit);
             to-location   demandname           

@@ -361,14 +361,14 @@
   (map (fn [[id _]] (tags/subject->tags supplytags id)) odd-units))
 ;;As a brief interlude; we'd like to check the tags to ensure they're
 ;;properly tagged.
-(deftest tag-queries 
-  (is (same? (odd-tags
-             '(#{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
-               #{:COMPO_NG :SOURCE_SRC2 :POLICY_RC15 :BEHAVIOR_:default :enabled :TITLE_no-description}
-               #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
-               #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
-               #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
-               #{:COMPO_AC :SOURCE_SRC3 :POLICY_FFGACRoto :BEHAVIOR_:default :enabled :TITLE_no-description}))))
+;; (deftest tag-queries 
+;;   (is (same? (odd-tags
+;;              '(#{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+;;                #{:COMPO_NG :SOURCE_SRC2 :POLICY_RC15 :BEHAVIOR_:default :enabled :TITLE_no-description}
+;;                #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+;;                #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+;;                #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
+;;                #{:COMPO_AC :SOURCE_SRC3 :POLICY_FFGACRoto :BEHAVIOR_:default :enabled :TITLE_no-description})))))
 
 ;;Try filling a demand.
 ;;We can query a demand and try to find feasible supply for it.

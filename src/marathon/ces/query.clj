@@ -113,22 +113,26 @@
    we have a coordinate that maps to a specific unit of supply.
    The coordinate is defined by [category src name], where name 
    is the name of the unit."
-  [supply & {:keys [cat src unit weight]
+  [supply & {:keys [cat src unit weight nm->unit]
              :or {cat  identity 
                   src  identity 
                   unit identity
-                  weight (fn [_ _] 1.0)}}]
+                  weight (fn [_ _] 1.0)
+                  nm->unit identity}}]
   (let [catfilter cat
         srcfilter src 
         unitfilter unit]
     (reify            
       clojure.lang.Seqable 
-      (seq [this]  
-        (for [[cat srcs]    (:deployable-buckets supply)
-              [src units]   srcs
-              [nm u]        units
-              :when (and (catfilter cat) (srcfilter src) (unitfilter u))]
-          [[cat src (weight cat src)] u]))
+      (seq [this]
+        (filter identity
+                (for [[cat srcs]    (:deployable-buckets supply)
+                      [src units]   srcs
+                      [nm u]        units
+                      :when (and (catfilter cat) (srcfilter src))]
+                  (let [u (nm->unit u)]
+                    (when (unitfilter u)
+                      [[cat src (weight cat src)] u])))))
       clojure.core.protocols/CollReduce
       (coll-reduce [this f1]        
         (reduce-kv (fn [acc cat srcs]
@@ -136,8 +140,9 @@
                                 (reduce-kv (fn [acc src units]
                                              (change-if acc (srcfilter src)
                                                         (reduce-kv (fn [acc nm unit]
-                                                                     (change-if units (unitfilter unit)
-                                                                                (f1 acc [[cat src (weight cat src)] unit]))) acc units)))
+                                                                     (let [unit (nm->unit nm)]
+                                                                       (change-if units (unitfilter unit)
+                                                                                  (f1 acc [[cat src (weight cat src)] unit])))) acc units)))
                                            acc srcs))) (f1) (:deployable-buckets supply)))
       (coll-reduce [_ f1 init]      
         (reduce-kv (fn [acc cat srcs]
@@ -145,8 +150,9 @@
                                 (reduce-kv (fn [acc src units]
                                              (change-if acc (srcfilter src)
                                                         (reduce-kv (fn [acc nm unit]
-                                                                     (change-if units (unitfilter unit)
-                                                                                (f1 acc [[cat src (weight cat src)] unit]))) acc units)))
+                                                                     (let [unit (nm->unit nm)]
+                                                                       (change-if units (unitfilter unit)
+                                                                                  (f1 acc [[cat src (weight cat src)] unit])))) acc units)))
                                            acc srcs))) init (:deployable-buckets supply))))))
 (defn is? 
   ([x y] (or (identical? x y) (= x y)))
@@ -207,7 +213,7 @@
 ;;ordered by preference.  We may want to do this lazily, since we
 ;;may not need all the supply.  Possible performance optimization.
 (defn find-feasible-supply 
-  ([supply srcmap category src]
+  ([supply srcmap category src nm->unit]
    (let [any-src?      (or (identical? src :any) (identical? src  :*))
          any-category? (or (identical? category :any) (identical? category  :*))
          src-selector  (cond any-src?  identity 
@@ -217,19 +223,21 @@
                                  (fn? cat)      cat
                                  :else          (is? cat))]
        (if (and any-category?  any-src?) ;if both category and src are unconstrained, we  can pull any unit. 
-           (->deployers supply :src src-selector)
+           (->deployers supply :src src-selector :nm->unit nm->unit )
              ;;if category is constrained, but src is not, then we can pull any unit within the category.
            (let [prefs (src->prefs  srcmap src)
                  src-selector (if any-src? identity ;;ensure we enable filtering if indicated.
                                   #(contains? prefs %))]
-           (->>  (->deployers supply :src src-selector :cat category-selector :weight (fn [_ src] (get prefs src Long/MAX_VALUE)))
+             (->>  (->deployers supply :src src-selector :cat category-selector :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
+                                :nm->unit nm->unit)
                  (r/map (fn [[k v]]
                           [(conj k (get prefs (second k) Long/MAX_VALUE)) v])) ;sort by a score.
                  (into [])
                  (sort-by  (fn [[k v]]  (nth k 2))) ;;note, this is just a way of assigning distance.
                  )))))
   ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
-  ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src)))
+  ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src
+                                     (fn [nm] (store/get-entity ctx nm) ))))
 
 
 ;;__New definition of feasibility__
@@ -659,7 +667,7 @@
     (let [order-by (eval-order order-by)
           where    (eval-filter where)] 
       (with-query-env env
-        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
+        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src  (fn [nm] (store/get-entity ctx nm) ))
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
                             :order-by (when order-by
                                         (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]

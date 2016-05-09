@@ -542,7 +542,7 @@
   (core/with-simstate [[fillstore supplystore policystore parameters] ctx]
     (let [unit        (or (:unit filldata) filldata)
           ou          (spork.entitysystem.store/get-entity ctx (:name unit))
-          _ (println [:apply-fill (:locationname unit) (:locationname ou)])
+;          _ (println [:apply-fill (:locationname unit) (:locationname ou)])
           t           (sim/get-time ctx)]
       (deployment/deploy-unit ctx unit t demand
                               ;filldata
@@ -574,7 +574,7 @@
   (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill.
         ;_ (println fd)
         unit     (or (:unit fd) fd)
-        _ (println [:fill-demand (:locationname unit)])
+       ; _ (println [:fill-demand (:locationname unit)])
         ] 
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))

@@ -440,7 +440,9 @@
          nil)))
     (spawning? statedata)
     spawning-beh
-    :else nil))
+    :else
+    update-state-beh))
+    
 
 ;;So, at the high level, we have a simple behavior that checks to see
 ;;if it can move, finds where to move to, starts the process of
@@ -836,7 +838,7 @@
   (let [entity           (.entity benv)
         current-messages (.current-messages benv)
         ctx              (.ctx benv)]
-    (do ;(ai/debug (str [(:name (deref! entity)) :handling msg]))
+    (do (ai/debug (str [(:name (deref! entity)) :handling msg]))
       (beval 
        (case (:msg msg)
          ;;allow the entity to invoke a state-change-behavior
