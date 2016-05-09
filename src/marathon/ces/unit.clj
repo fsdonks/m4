@@ -395,6 +395,8 @@
         msg (str nm " Started moving from " loc " to " newlocation " on day " (sim/get-time ctx))]
    (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
+(def ^:dynamic *uic* nil)
+
 ;;TODO# implement change-state, so that it actually modifies the
 ;;entity.  In this case, it's tbased off of unit behavior.
 ;;Typically resides in unit/change-state, but we probably 
@@ -412,7 +414,8 @@
 ;;what to do more often, and let the behavior be decoupled via messaging.
 ;;we may no longer need the deltat arg...
 (defn change-state [entity newstate deltat duration ctx]
-  (binding [spork.ai.core/*debug* (= (:name entity) "24_SRC3_NG")]
+  (if (or *uic* (= newstate :abrupt-withdraw))
+    (binding [spork.ai.core/*debug* (or (= (:name entity) *uic*) (= newstate :abruptwithdraw))]
   ;;how about handle-message? 
             (core/handle-message! ctx entity
                                   (core/->msg (:name entity) (:name entity)
@@ -421,7 +424,15 @@
                                               {:newstate newstate
                                                :deltat deltat
                                                :duration duration
-                                               }))))
+                                               })))
+    (core/handle-message! ctx entity
+                          (core/->msg (:name entity) (:name entity)
+                                      (core/get-time ctx)
+                                      :change-state
+                                      {:newstate newstate
+                                       :deltat deltat
+                                       :duration duration
+                                       }))))
 
 ;;wrapper around our spawning functionality.
 (defn spawn [ent ctx]

@@ -846,7 +846,10 @@
   (let [demandstore (core/get-demandstore ctx)]
     (reduce (fn [ctx dname] 
               (let [store (core/get-demandstore ctx)]
-                (deactivate-demand store t (get-demand store dname) ctx))) 
+                (deactivate-demand store t
+                                   (store/get-entity ctx dname)
+                                   ;(core/get-demand store dname)
+                                   ctx))) 
             ctx 
             (get-deactivations demandstore t))))
 

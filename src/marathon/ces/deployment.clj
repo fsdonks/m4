@@ -68,17 +68,20 @@
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
             unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
-                                     unit-delta)
-            demand        (d/assign demand unit) ;need to update this in ctx..          
+                                 unit-delta)
+
+            newdem        (d/assign demand unit) ;need to update this in ctx..
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))
             ]  
         (->> (sim/merge-entity {unitname unit-delta
-                                :DemandStore (dem/add-demand demandstore demand)
+                                :DemandStore (dem/add-demand demandstore newdem)
                                 ;:SupplyStore (supply/add-unit supplystore unit)
                                 } ctx)
-             (u/change-location unit (:name demand)) 
-             (deploy! followon?  unit demand t)  ;;apply state changes.             
+             ((fn [ctx] (println (for [u (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname))]
+                                   (:name u)))                 ctx))
+             (u/change-location unit (:name newdem)) 
+             (deploy! followon?  unit newdem t)  ;;apply state changes.             
              ))))  
   ([ctx unit t demand ]
     (deploy-unit  ctx unit t demand  (core/followon? unit))))
