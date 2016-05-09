@@ -43,22 +43,25 @@
       (let [demand      (val (first pending))                    
             demandname  (:name demand)           ;try to fill the topmost demand
             ctx         (dem/request-fill! demandstore category demand ctx)           
-            [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)            
-            can-fill?   (= fill-status :filled) 
+            [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
+            _           (println [fill-status demandname])
+            can-fill?   (= fill-status :filled)
             next-ctx    (if (= fill-status :unfilled) fill-ctx 
                           (->> fill-ctx 
                                (dem/demand-fill-changed! demandstore demand) ;2)
                                (core/merge-entity               ;UGLY 
                                  {:DemandStore 
-                                  (dem/register-change demandstore demandname)})))
+                                  (dem/register-change  (core/get-demandstore fill-ctx) demandname)})))
+            newstore (core/get-demandstore next-ctx)
              ]
         (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
           next-ctx                                                           ;3)
           ;otherwise, continue filling!
-          (recur (dem/pop-priority-map pending) ;advance to the next unfilled demand
-                 (->> (dem/sourced-demand! demandstore demand next-ctx);notification 
-                   (dem/update-fill      demandstore demandname)  ;update unfilledQ.
-                   (dem/can-fill-demand! demandstore demandname))))))));notification
+          (recur
+           (dem/pop-priority-map pending) ;advance to the next unfilled demand
+           (->> (dem/sourced-demand! newstore demand next-ctx);notification 
+                (dem/update-fill      newstore demandname)  ;update unfilledQ.
+                (dem/can-fill-demand! newstore demandname))))))));notification
 
 ;NOTE...since categories are independent, we could use a parallel reducer here..
 ;filling all unfilled demands can be phrased in terms of fill-category...

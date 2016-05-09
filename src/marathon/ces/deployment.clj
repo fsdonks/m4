@@ -61,7 +61,7 @@
             bog           (get-max-bog unit policystore) 
             unitname      (:name unit)
             demandname    (:name demand)
-            from-location (:locationname unit) ;may be extraneous
+            from-location (:locationname    unit) ;may be extraneous
             from-position (:position-policy unit);
             to-location   demandname           
             to-position   :deployed
@@ -78,13 +78,14 @@
                                 :DemandStore (dem/add-demand demandstore newdem)
                                 ;:SupplyStore (supply/add-unit supplystore unit)
                                 } ctx)
-             ((fn [ctx] (println (for [u (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname))]
-                                   (:name u)))                 ctx))
+             ((fn [ctx] (println [demandname (keys  (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname)))])
+                                        
+                ctx))
              (u/change-location unit (:name newdem)) 
              (deploy! followon?  unit newdem t)  ;;apply state changes.             
              ))))  
-  ([ctx unit t demand ]
-    (deploy-unit  ctx unit t demand  (core/followon? unit))))
+  ([ctx unit t demand]
+    (deploy-unit  ctx unit t demand (core/followon? unit))))
 
 (defn deploy-units [ctx us d]
   (let [t (core/get-time ctx)

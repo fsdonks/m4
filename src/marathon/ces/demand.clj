@@ -159,7 +159,7 @@
 
 (defn can-fill-demand! [demandstore demandname ctx]
   (sim/trigger-event :CanFillDemand (:name demandstore) 
-       demandname (str "Filled " demandname) nil ctx))
+       demandname (str "Completely Filled " demandname) nil ctx))
 
 (defn demand-fill-changed! [demandstore demand ctx]
   (sim/trigger-event :DemandFillChanged (:name demandstore) (:name demand) 

@@ -420,30 +420,29 @@
 ;;deltat = 0 in the context.  Note, this is predicated on the
 ;;assumption that we can eventually pass time in some behavior....
 (befn roll-forward-beh {:keys [deltat statedata] :as benv}
-  (cond (pos? deltat)
-    (loop [dt   deltat
-           benv benv]
-      (let [sd (:statedata    benv)            
-            timeleft    (fsm/remaining sd)
-            _  (debug [:sd sd])
-            _  (debug [:rolling :dt dt :remaining timeleft])
-            ]
-        (if-y 
-         (if (<= dt timeleft)
-           (do (debug [:dt<=timeleft :updating-for dt])               
-               (beval lite-update-state-beh (assoc benv :deltat dt)))
-           (let [residual   (max (- dt timeleft) 0)
-                 res        (beval update-state-beh (assoc benv  :deltat timeleft))]
-             (if (success? res) 
-               (recur  residual ;advance time be decreasing delta
-                       (val! res))
-               res)))
-         nil)))
-    (spawning? statedata)
-    spawning-beh
-    :else
-    update-state-beh))
-    
+      (cond (pos? deltat)
+            (loop [dt   deltat
+                   benv benv]
+              (let [sd (:statedata    benv)            
+                    timeleft    (fsm/remaining sd)
+                    _  (debug [:sd sd])
+                    _  (debug [:rolling :dt dt :remaining timeleft])
+                    ]
+                (if-y 
+                 (if (<= dt timeleft)
+                   (do (debug [:dt<=timeleft :updating-for dt])               
+                       (beval update-state-beh (assoc benv :deltat dt)))
+                   (let [residual   (max (- dt timeleft) 0)
+                         res        (beval update-state-beh (assoc benv  :deltat timeleft))]
+                     (if (success? res) 
+                       (recur  residual ;advance time be decreasing delta
+                               (val! res))
+                       res)))
+                 nil)))
+            (spawning? statedata)
+            spawning-beh
+            :else
+            update-state-beh))
 
 ;;So, at the high level, we have a simple behavior that checks to see
 ;;if it can move, finds where to move to, starts the process of
