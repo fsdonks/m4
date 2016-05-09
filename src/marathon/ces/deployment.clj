@@ -72,7 +72,8 @@
                                      unit-delta)
             demand        (d/assign demand unit) ;need to update this in ctx..          
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
-                                                                       (:name unit)))]  
+                                                                       (:name unit)))
+            ]  
         (->> (sim/merge-entity {unitname unit-delta
                                 :DemandStore (dem/add-demand demandstore demand)
                                 ;:SupplyStore (supply/add-unit supplystore unit)

@@ -536,7 +536,7 @@
                 nextunfilled (if (zero? (count demandq)) 
                                  (dissoc unfilled src) 
                                  (assoc unfilled src demandq))]
-            (-> (removing-unfilled! demandstore demandname ctx)
+            (->> (removing-unfilled! demandstore demandname ctx)
                 (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
           (deactivating-unfilled! demandstore demandname ctx))     ;notification
         ;demand is unfilled, make sure it's added
