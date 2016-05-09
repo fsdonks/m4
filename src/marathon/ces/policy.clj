@@ -326,7 +326,8 @@
 ;;Acquisition means we have to find a value, or else we throw an
 ;;exception. We expect there to be a period associated. 
 (defn acquire-period [policystore toname]
-  (if-let [res (get-period policystore toname)]
+  (if-let [res (or (get-period policystore toname)
+                   (get-period policystore (:name toname)))]
     res
     (throw (Exception. (str "Period " toname " does not exist in the policystore!")))))
 
@@ -375,7 +376,7 @@
 (defn get-subscribers [policy policystore] 
   (-> policystore 
       :subscriptions
-      (policy-name policy)))
+      (get (policy-name policy))))
 
 (defn update-subscribers 
   "Applies f to the subscriptions associated with policy in policystore, then

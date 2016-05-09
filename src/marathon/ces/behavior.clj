@@ -766,7 +766,7 @@
 ;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
 ;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
 (befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
-      (let [_    (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
+      (let [_ (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
             unit @entity
             ;1)
             bogremaining (- (:bogbudget (:currentcycle unit))  

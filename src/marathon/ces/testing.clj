@@ -501,21 +501,31 @@
 (def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
 (def deployed-units (store/get-entities deployedctx selected))
 
+(defn simple-step [day ctx]
+  (->> ctx
+      (engine/begin-day day)
+      (supply/manage-supply day)
+      (demand/manage-demands day)
+      (policy/manage-policies day)
+      (engine/end-day day)))
+
 ;;A basic supply/demand context, initialized for the first day
 ;;of simulation.
 (def zero-ctx
   (->> defaultctx
-       (engine/begin-day 0)
-       (supply/manage-supply 0)
-       (demand/manage-demands 0)
-       (engine/end-day 0)
+       (simple-step 0)
        ;;We should have several demands activated,
        ;;as well as some supply to fill with.
        (engine/begin-day 1)
        (supply/manage-supply 1)
-       (demand/manage-demands 1)))
+       (demand/manage-demands 1)
+       (policy/manage-policies 1)))
 
 (def filled  (filld/fill-demands 1 zero-ctx))
+
+
+
+(def simctx 
 
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
