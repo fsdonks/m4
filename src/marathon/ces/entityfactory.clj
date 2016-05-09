@@ -20,9 +20,10 @@
             [marathon.ces.demand :as demand]
             [marathon.ces.unit :as unitsim]
             [marathon.ces.behavior :as b]
+            [marathon.ces.basebehavior :as base]
             [marathon.supply [unitdata :as u]]
             [marathon.ces.supply :as supply]
-            [marathon.ces.policy :as plcy]
+            [marathon.ces.policy :as plcy]            
 ;;            [marathon.sim.engine :as engine]
             [spork.sim.simcontext :as sim]
             [marathon.ces.core :as core]
@@ -385,31 +386,20 @@
            []
            units)))
 
+;;This is just a stub.  We currently hardwire behaviors, 
+;;but will allow more extension in the future.  The legacy 
+;;behavior system required an inherited object model implementation, 
+;;but now we don't have to worry about that.  We'll probably just 
+;;have a map of functions, or types that can fulfill the unit behavior
+;;protocol.
+(defn get-default-behavior
+  ([]  @base/default-behavior)
+  ([supply]
+   @base/default-behavior))
+
 ;;create-unit provides a baseline, unattached unit derived from a set of data.
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
 ;;nothing. parametrically create a new unit.
-
-;; (defn create-unit [name src oititle component cycletime policy behavior]
-;;   (u/->unitdata
-;;    name ;unit entity's unique name. corresponds to a UIC 
-;;    src ;unit entity's type, or capability it can supply.
-;;    component ;unit entity's membership in supply.
-;;    policy  ;the policy the entity is currently following.
-;;    [] ;a stack of any pending policy changes.
-;;    behavior ;the behavior the unit uses to interpret policy and messages.
-;;    fsm/blank-data ;generic state data for the unit's finite state machine.
-;;    cycletime ;the unit's current coordinate in lifecycle space.
-;;    nil       ;description of the categories this unit serve as a followon to.
-;;    :spawning ;the current physical location of the unit.
-;;    :spawning ;the current position of the unit in its policy space.
-;;    nil ;the current cycle data structure for the unit.
-;;    [] ;an ordered collection of the cycles that the unit has completed.
-;;    -1 ;the time in which the unit spawned.
-;;    oititle ;the description of the unit.
-;;    [] ;list of all the locations visited.
-;;    0  ;dwell time before deployment
-;;    ))
-
 (defn create-unit [name src oititle component cycletime policy behavior & {:keys [home speed]}]
   (into 
    (store/unit
@@ -444,8 +434,9 @@
 ;;Vestigial policy objects and behavior fields are not defined.  We
 ;;may allow different behaviors in the future, but for now they are
 ;;determined at runtime via the legacy processes (by component).
-(defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy]}]  
-    (create-unit  Name SRC OITitle Component CycleTime Policy :default))
+(defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
+                                ]}]  
+    (create-unit  Name SRC OITitle Component CycleTime Policy  @base/default-behavior))
 
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
@@ -485,16 +476,7 @@
         
 
 ;;Note -  register-unit is the other primary thing here.  It currently 
-;;resides in marathon.sim.supply/register-unit 
-
-;;This is just a stub.  We currently hardwire behaviors, 
-;;but will allow more extension in the future.  The legacy 
-;;behavior system required an inherited object model implementation, 
-;;but now we don't have to worry about that.  We'll probably just 
-;;have a map of functions, or types that can fulfill the unit behavior
-;;protocol.
-(defn get-default-behavior [supply]
-  :default)
+;;resides in marathon.sim.su
 
 ;;Adds multiple units according to a template.
 ;;Associates each unit with a
@@ -538,7 +520,8 @@
 (defn units-from-records [recs supply pstore]
   (let [unit-count (atom (-> supply :unitmap (count)))
         ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
-        normal-beh (-> supply :behaviors :defaultACBehavior)
+        ;;TODO fix this...our defaults aren't that great.  
+        normal-beh @base/default-behavior ;(-> supply :behaviors :defaultACBehavior)
         conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
                                     (reduce conj! acc xs)))
         conj-unit  (fn [acc x] (do (swap! unit-count inc)
@@ -659,7 +642,7 @@
                         (assign-policy policystore parameters)      
                         (prep-cycle ctx))
           newstore (plcy/subscribe-unit prepped (:policy prepped) policystore)         
-          newctx  (core/set-policystore ctx newstore)]
+          newctx   (core/set-policystore ctx newstore)]
       (->> newctx
            (supply/register-unit supplystore behaviors prepped nil extra-tags)
            ;CHECK added this guy, lifted out from initialize-cycle,
@@ -809,7 +792,7 @@
 ;;Start state is another one that we can possibly alter.   
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
-    (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :spawning 0 nil ctx) ;;all this does is an instant update in spawning
+    (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :spawning 0 0 ctx) ;;all this does is an instant update in spawning
                  )
                (core/set-parameter ctx :TotalUnits (count (:unitmap supply)))
                (:unitmap supply))))

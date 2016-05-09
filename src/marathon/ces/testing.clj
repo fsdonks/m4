@@ -235,6 +235,8 @@
     (demand/manage-changed-demands day)));Clear set of changed demands
                                         ;in demandstore.
 
+
+  
 (defn ->simreducer [stepf init]  
   (r/take-while identity (r/iterate (fn [ctx] 
                                       (when  (engine/keep-simulating? ctx)
@@ -258,6 +260,27 @@
       (coll-reduce [_ f1 init] (reduce f1 init simred)))))
 
 (def demand-sim (->simulator demand-step defaultctx))
+
+
+
+(defn supply-step
+    [day ctx]
+  (->> ctx 
+    (engine/begin-day day)         ;Trigger beginning-of-day logic and notifications.
+    (supply/manage-supply day)     ;Update unit positions and policies.
+;    (manage-policies day)   ;Apply policy changes, possibly affecting supply.
+;    (demand/manage-demands day)    ;Activate/DeActiveate demands, handle affected units.      
+;    (fill-demands day)      ;Try to fill unfilled demands in priority order. 
+;    (manage-followons day)  ;Resets unused units from follow-on status. 
+    (engine/end-day day)           ;End of day logic and notifications.
+;    (demand/manage-changed-demands day)));Clear set of changed demands
+                                        ;in demandstore.
+    ))
+
+
+(def supply-sim (->simulator supply-step defaultctx))
+
+
 
 (defn actives [rctx]
   (into [] (r/map (fn [ctx] [(sim/get-time ctx) (:activedemands (core/get-demandstore ctx))])  rctx)))
@@ -472,8 +495,12 @@
 (def the-deployers    (for [nm selected]
                         (store/get-entity defaultctx nm)))
 
+;;pending tests
+(comment 
 (def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
 (def deployed-units (store/get-entities deployedctx selected))
+)
+
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
 ;;The trick now is to indicate that the entities should be updating.

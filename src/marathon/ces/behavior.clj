@@ -418,8 +418,8 @@
 ;;having a positive deltat, others are instantaneous and thus expect 
 ;;deltat = 0 in the context.  Note, this is predicated on the
 ;;assumption that we can eventually pass time in some behavior....
-(befn roll-forward-beh {:keys [deltat] :as benv}
-  (when (pos? deltat)
+(befn roll-forward-beh {:keys [deltat statedata] :as benv}
+  (cond (pos? deltat)
     (loop [dt   deltat
            benv benv]
       (let [sd (:statedata    benv)            
@@ -437,7 +437,10 @@
                (recur  residual ;advance time be decreasing delta
                        (val! res))
                res)))
-         nil)))))
+         nil)))
+    (spawning? statedata)
+    spawning-beh
+    :else nil))
 
 ;;So, at the high level, we have a simple behavior that checks to see
 ;;if it can move, finds where to move to, starts the process of
@@ -841,8 +844,7 @@
            ;;generic update function.  Temporally dependent.
          ;;we're already stepping the entity.  Can we just invoke the change-state behavior?
          (let [state-change (:data msg)
-               _            (debug [:state-change-message state-change msg])
-               ]
+               _            (debug [:state-change-message state-change msg])]
            (beval change-state-beh (assoc benv :state-change state-change
                                                :next-position (or (:next-position state-change)
                                                                   (:newstate state-change)))))
@@ -1032,7 +1034,7 @@
 
 ;;This is kind of weak, but I don't have a better solution at the moment...
 (do (println [:setting-defaults])
-    (reset! base/default-behavior +nothing-state+))
+    (reset! base/default-behavior roll-forward-beh))
 
 (comment ;OBE
 

@@ -594,11 +594,13 @@
    updates at time t, they are brought up to date and have their changes 
    incorporated into the context.  The entity behaviors will typically 
    use some of the supply system functions defined above to alter the context."
-  [t ctx]
-  (let [supply (gete ctx :SupplyStore)]
-    (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
-      (update-units t supply ctx today-updates)
-      ctx)))
+  ([t ctx]
+   (let [supply (get-entity ctx :SupplyStore)
+         _ (println [:supply t])]
+     (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
+       (update-units t supply ctx today-updates)
+       ctx)))
+  ([ctx] (manage-supply (core/get-time ctx) ctx)))
 
 
 ;; (defn manage-supply
