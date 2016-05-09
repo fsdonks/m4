@@ -21,7 +21,7 @@
 (defn can-simulate? [supply]
   (-> supply
       (:tags) 
-      (tag/get-subjects :enabled)
+      (tag/get-tags :enabled)
       (empty?)
       (not)))
 ;;no change for estore.
@@ -570,7 +570,9 @@
          updates {:supplystore (untag-units supplystore :MaxUtilizer 
                                             (concat followons normal))}]   
     (reduce release-followon-unit (sim/merge-entity updates ctx)
-            followons)))         
+            followons))
+  )
+
 
 ;;#Deployment Related
 
@@ -627,5 +629,5 @@
   "Ensures that entities held in a temporary follow-on status are released and
    circulated back into supply.  Typically used after we try to fill demands."
   [day ctx] 
-  (release-followons (gete ctx :SupplyStore) ctx))
+  (release-followons (gete ctx :SupplyStore :followons) ctx))
 

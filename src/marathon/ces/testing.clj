@@ -521,11 +521,13 @@
        (demand/manage-demands 1)
        (policy/manage-policies 1)))
 
+(def zero-ctx (engine/sim-step 0 defaultctx))
+
 (def filled  (filld/fill-demands 1 zero-ctx))
 
 
 
-(def simctx 
+;(def simctx 
 
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.

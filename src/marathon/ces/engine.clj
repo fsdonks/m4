@@ -99,7 +99,7 @@
 (defn set-time
   "Initialize the start and stop time of the simulation context, based on 
    last-day."
-  [ctx last-day]  
+  [last-day ctx]  
  (sim/set-time-horizon 1 (guess-last-day ctx last-day) ctx))
 
 ;This is just a handler that gets added, it was "placed" in the engine object
@@ -145,13 +145,15 @@
    prepared for processing, with default time horizons and any standard 
    preconditions applied."
   [ctx & [lastday]]
-    (-> ctx
-        (start-state)
-        (assoc-in  [:state :time-start] (now))
-        (assoc-in  [:state :parameters :work-state] :simulating)
+    (->> ctx
+        ;(start-state)
+;        (assoc-in  [:state :time-start] (now))
+;        (assoc-in  [:state :parameters :work-state] :simulating)
         (set-time lastday)
-        (notify-watches) 
-        (initialize-control)))
+        ;(notify-watches) 
+        (initialize-control)
+        (supply/manage-supply 0)
+        (policy/manage-policies 0)))
 
 (defn initialize-output 
   "Sets the output path for output streams in the outputstore.
@@ -161,7 +163,7 @@
    prior to a run."
   [ctx]
   (do (println "initialize-output is currently a stub.")
-      (sim/trigger-event :initialize-output :Engine :Engine nil nil ctx)))
+      (sim/trigger-event :initialize-output :Engine :Engine "Initialized output" nil ctx)))
 
 ;##Simulation Termination Logic
 ;When we exit the simulation, we typically want to perform some final tasks.
@@ -214,7 +216,8 @@
   (->> ctx
     (sim/trigger-event :begin-day :Engine :Engine
                        (day-msg "Begin" day) [day (sim/get-next-time ctx)])
-    (check-pause)))  
+    ;(check-pause)
+    ))  
 
 (defn check-truncation
   "Legacy function that checks to see if the simulation can be truncated, i.e. 
@@ -392,8 +395,9 @@
            ctx    init-ctx]
       (if (not (keep-simulating? ctx))
           (finalize day ctx) ;base case, return the final state and clean up.
-          (let [next-day   (sim/advance-time ctx) ;WRONG
-                next-ctx (sim-step next-day ctx)] ;Transition to next state.
+          (let [next-ctx   (sim/advance-time ctx) ;WRONG
+                next-day   (core/get-time next-ctx)
+                next-ctx   (sim-step next-day next-ctx)] ;Transition to next state.
             (recur next-day next-ctx))))))
 
 

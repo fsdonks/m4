@@ -21,7 +21,7 @@
 ;;##Primitive Demand and DemandStore Operations
 
 (defn can-simulate? [demandstore]
-  (> (count (tag/get-subjects (:tags demandstore) :enabled)) 0))
+  (> (count (tag/get-tags (:tags demandstore) :enabled)) 0))
 
 (defn add-fillable [fillrule demandstore]
   (assert (not (contains? (-> demandstore :fillables) fillrule))  

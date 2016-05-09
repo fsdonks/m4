@@ -680,8 +680,11 @@
       (let [dt (or deltat 0)]
         (if (zero? dt)
             (success benv) ;done aging.
-            (let [_  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
-                  _  (debug [:aging-unit deltat :cycletime (:cycletime @entity)]) 
+            (let [e  @entity
+                  _ (println (:currentcycle e))
+                  _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
+                  _  (debug [:aging-unit deltat
+                             :cycletime (:cycletime @entity)]) 
                   ]
               (bind!! {:deltat 0 ;is this the sole consumer of time?
                        :last-update (unchecked-inc deltat)

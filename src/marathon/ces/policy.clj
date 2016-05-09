@@ -326,10 +326,13 @@
 ;;Acquisition means we have to find a value, or else we throw an
 ;;exception. We expect there to be a period associated. 
 (defn acquire-period [policystore toname]
-  (if-let [res (or (get-period policystore toname)
-                   (get-period policystore (:name toname)))]
-    res
-    (throw (Exception. (str "Period " toname " does not exist in the policystore!")))))
+  (do ;(println [:acquiring toname])
+      (if-let [
+               res (or (get-period policystore toname)
+                       (get-period policystore (:name toname))
+                       (get-period policystore (name (:name toname))))]
+        res
+        (throw (Exception. (str "Period " toname " does not exist in the policystore!"))))))
 
 ;;Swaps out the active period.  If the new period is the final period, then caps
 ;;the final period to the current day.
