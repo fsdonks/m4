@@ -477,7 +477,8 @@
 
 ;Generic tag-related....These apply equally to supplystore, demandstore, etc.
 ;The interface is identical.  Only the interpretation of the tags is different.
-(defn enabled? [store item]  (tag/has-tag? (:tags store) :enabled item))
+(defn enabled? [store item]
+  (tag/has-tag? (:tags store) :enabled item))
 (defn disabled? [store item] (not (enabled? store item)))
 (defn enable [store item]
   (update-in store [:tags] tag/tag-subject :enabled item))
@@ -601,8 +602,9 @@
 (defn request-update [tupdate requested-by request-type ctx]
   (->> ctx
        (sim/request-update tupdate requested-by request-type)
-       (sim/trigger-event request-type requested-by :update-manager 
-              (msg requested-by " requested an " request-type " at " tupdate) nil)))
+       ;(sim/trigger-event request-type requested-by :update-manager 
+       ;                   (msg requested-by " requested an " request-type " at " tupdate) nil)
+       ))
 
 ;;##Developer Notes
 

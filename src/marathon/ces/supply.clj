@@ -230,7 +230,10 @@
 ;;we wrap this accessor behind a entity called updates.
 (defn get-supply-updates "Get all units with pending supply updates." 
   [t ctx]
-  (get-ine ctx [:updates t :supply-update]))
+  ;;transition this out...
+                                        ;  (get-ine ctx [:updates t :supply-update]
+  (sim/get-updates :supply-update t ctx
+           ))
 
 (defn request-unit-update! "Schedule an update for unit at time t." 
   [t unit ctx] 
@@ -243,10 +246,15 @@
   "Ages an individual unit, based on how much time has elapsed - for the unit -
    between time t and its last update."
   [t supplystore unitname ctx]
-  (if (core/disabled? supplystore unitname) ctx 
-      (let [unit (get-unit supplystore unitname)]
+  (if ;(core/disabled? supplystore unitname)
+       (gete ctx unitname :disabled) ;lame hack
+            (do (println [:update unitname t :disabled])
+                ctx)
+      (let [unit (get-unit ctx unitname)
+           ; _ (println [:updating unitname])
+            ]
         (->> ctx       
-          (u/update unit (updates/elapsed t (sim/last-update unitname ctx)))
+          (u/unit-update unit) ;(updates/elapsed t (or (sim/last-update unitname ctx) 0)))
           (supply-update! supplystore unit (unit-msg unit))))))
 
 (defn update-units
@@ -427,15 +435,13 @@
 ;added on-top-of the default tags derived from the unit data.
 (defn register-unit [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-        newctx    (-> supply
-                   (tag-unit unit extra-tags)
-                   (add-src   (get unit :src))
-                   (add-unit  ctx unit)
-                   (store/assoce (:name unit) :supply true) ;starting to shift to component tagging.
-                   ) ;this happens in a
-                                        ;pure context,
-                                                 ;cellular need not do
-                                        ;anything here.
+        newctx    (->> (-> supply
+                           (tag-unit unit extra-tags)
+                           (add-src   (get unit :src))
+                           (add-unit  ctx unit)
+                           (store/assoce (:name unit) :supply true) ;starting to shift to component tagging.                           
+                           )
+                       (request-unit-update!  (max (:spawntime unit) 0) unit ))        
         ]
     (if ghost 
       (->> (spawning-ghost! unit newctx)
@@ -596,8 +602,9 @@
    use some of the supply system functions defined above to alter the context."
   ([t ctx]
    (let [supply (get-entity ctx :SupplyStore)
-         _ (println [:supply t])]
-     (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
+         ;_ (println [:supply t])
+         ]
+     (if-let [today-updates (keys  (get-supply-updates t ctx))]
        (update-units t supply ctx today-updates)
        ctx)))
   ([ctx] (manage-supply (core/get-time ctx) ctx)))

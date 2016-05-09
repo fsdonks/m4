@@ -30,8 +30,12 @@
 ;;environment, and handle it all...
 ;;So, we could pass the unit, the message, and context into the behavior
 ;;function.  Wrap the crap here...
-(defn unit-update [u msg ctx]
-  (core/handle-message! ctx u msg))
+(defn unit-update [e ctx]  
+  (core/handle-message! ctx e
+                        (core/->msg (:name e) (:name e)
+                                    (core/get-time ctx)
+                                    :update
+                                    nil)))
 
 ;;Pending.  When we move to the component entity system, we'll pull this back
 ;;in.
@@ -202,7 +206,10 @@
 ;  (unit-update 
   )
 ;;A simple update based on a change in time.
-(defn update      [u dt ctx] (unit-update u {:dt dt} ctx))
+(defn update      [u dt ctx]
+  (unit-update u {:dt dt} ctx)
+  
+  )
 
 ;Public Function CanDeploy() As Boolean
 
@@ -413,6 +420,11 @@
                    :deltat deltat
                    :duration duration
                    })))
+
+;;wrapper around our spawning functionality.
+(defn spawn [ent ctx]
+  (core/handle-message! ctx  ent
+                        (core/->msg (:name ent) (:name ent) 0 :spawn)))
 
 ;;Think about changing this to use the context.
 (defn push-location [unit newlocation]

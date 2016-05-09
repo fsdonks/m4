@@ -308,7 +308,7 @@
          (swap! ctx (fn [ctx] 
                       (core/request-update tfut
                                            e
-                                           :supplyupdate
+                                           :supply-update
                                            ctx)))
          (dissoc % :wait-time) ;remove the wait-time from further consideration...
          ))))
@@ -681,7 +681,8 @@
             (let [_  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
                   _  (debug [:aging-unit deltat :cycletime (:cycletime @entity)]) 
                   ]
-              (bind!! {:deltat 0 ;is this the sole consumer of time? 
+              (bind!! {:deltat 0 ;is this the sole consumer of time?
+                       :last-update (unchecked-inc deltat)
                        :statedata (fsm/add-duration statedata dt)})))))
  
 ;;Dwelling just increments statistics..
@@ -851,8 +852,7 @@
          :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
                    (do (success benv)) ;entity is current
                    (->and [(echo :update)
-                           (fn [^clojure.lang.Associative ctx]
-                             (success (.assoc ctx :current-message msg)))]))
+                           roll-forward-beh]))
          :spawn  (->and [(echo :spawn)
                          (push! entity :state :spawning)                        
                          spawning-beh]

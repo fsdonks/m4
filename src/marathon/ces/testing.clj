@@ -260,9 +260,18 @@
       (coll-reduce [_ f1 init] (reduce f1 init simred)))))
 
 (def demand-sim (->simulator demand-step defaultctx))
+(def the-unit "4_SRC1_AC")
 
+(defn disable-except [u ctx]
+  (reduce (fn [c x]
+            (if (not= (:name x) u)
+              (store/assoce c (:name x) :disabled true)
+              c))
+              
+          ctx  (core/units ctx)))
 
-
+(def disabled (disable-except the-unit defaultctx))
+    
 (defn supply-step
     [day ctx]
   (->> ctx 
@@ -277,10 +286,8 @@
                                         ;in demandstore.
     ))
 
-
 (def supply-sim (->simulator supply-step defaultctx))
-
-
+(def ss (->simulator supply-step (disable-except the-unit defaultctx)))
 
 (defn actives [rctx]
   (into [] (r/map (fn [ctx] [(sim/get-time ctx) (:activedemands (core/get-demandstore ctx))])  rctx)))
