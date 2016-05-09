@@ -96,7 +96,7 @@
        ~expr))
 
 (defmacro log! [msg ctx]
-  `(do (println ~msg)
+  `(do (debug ~msg)
        ~ctx))
 
 (defn echo [msg]
