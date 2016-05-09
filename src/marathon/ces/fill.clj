@@ -543,7 +543,8 @@
     (let [unit        (or (:unit filldata) filldata)
           ou          (spork.entitysystem.store/get-entity ctx (:name unit))
 ;          _ (println [:apply-fill (:locationname unit) (:locationname ou)])
-          t           (sim/get-time ctx)]
+          t           (sim/get-time ctx)
+          ]
       (deployment/deploy-unit ctx unit t demand
                               ;filldata
                               ;(core/interval->date t ctx)
@@ -574,7 +575,8 @@
   (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill.
         ;_ (println fd)
         unit     (or (:unit fd) fd)
-       ; _ (println [:fill-demand (:locationname unit)])
+        
+        ;_ (println [:fill-demand (:locationname unit)])
         ] 
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))
@@ -621,7 +623,8 @@
           (cond (zero? remaining)      [:filled     current-ctx]
                 (empty? xs)            [fill-status current-ctx]
                 :else  
-                (let [nextctx (fill-demand d current-ctx (first xs))   ;;first/next recursion slow.
+                (let [
+                      nextctx (fill-demand d current-ctx (first xs))   ;;first/next recursion slow.
                       nextd (-> (core/get-demandstore nextctx)
                                 (dem/get-demand demand-name))]
                   (recur nextd (rest xs) :added-fill (unchecked-dec remaining) nextctx)))))))

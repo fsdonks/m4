@@ -65,7 +65,6 @@
             from-position (:position-policy unit);
             to-location   demandname           
             to-position   :deployed
-            
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
             unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 

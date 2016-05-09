@@ -513,7 +513,7 @@
 ;;of simulation.
 (def zero-ctx
   (->> defaultctx
-       (simple-step 0)
+       (engine/sim-step 0)
        ;;We should have several demands activated,
        ;;as well as some supply to fill with.
        (engine/begin-day 1)
@@ -521,10 +521,27 @@
        (demand/manage-demands 1)
        (policy/manage-policies 1)))
 
-(def zero-ctx (engine/sim-step 0 defaultctx))
+;(def zero-ctx (engine/sim-step 0 defaultctx))
 
 (def filled  (filld/fill-demands 1 zero-ctx))
 
+(def zctx (->> defaultctx
+               (engine/sim-step 0)
+               (sim/advance-time)))
+
+(def zctx2
+  (let [day (sim/get-time zctx)]
+    (->> zctx
+         (engine/begin-day day)         ;Trigger beginning-of-day logic and notifications.
+         (supply/manage-supply day)     ;Update unit positions and policies.
+         (policy/manage-policies day)   ;Apply policy changes, possibly affecting supply.
+         (demand/manage-demands day)    ;Activate/DeActiveate demands, handle affected units.
+         (filld/fill-demands day)      ;Try to fill unfilled demands in priority order.         
+         (supply/manage-followons day)  ;Resets unused units from follow-on status. 
+         (engine/end-day day)           ;End of day logic and notifications.
+         (demand/manage-changed-demands day)));Clear set of changed demands in demandstore.
+)
+;               (engine/sim-step 1)))
 
 
 ;(def simctx 

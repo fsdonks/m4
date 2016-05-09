@@ -99,7 +99,8 @@
 ;CurrentCycle.duration = CurrentCycle.duration + dt
 ;End Sub
 
-(defn add-duration [u t] 
+(defn add-duration [u t]
+  
   (merge u {:currentcycle (-> (:currentcycle u) 
                               (inc-field :duration t))
             :cycletime (+ (:cycletime u) t)}))
@@ -112,9 +113,9 @@
 
 (defn AddBOG [u t]  
   (let [cyclerecord (-> (:currentcycle u) 
-                (inc-field :bog t) 
-                (dec-field :bogbudget t))]   
-    (merge u {:currentcycle cyclerecord}) t))
+                        (inc-field :bog t) 
+                        (dec-field :bogbudget t))]   
+    (merge u {:currentcycle cyclerecord})))
 
 (def add-bog AddBOG)
   
@@ -638,7 +639,9 @@
         deps (:deployments c)
         new-unit           (-> unit
                                (increment-deployments)
-                               )]
+                               )
+        ;_            (println [:deploy-unit new-unit])
+        ]
     (->> ctx
          (core/set-unit new-unit)
          (keep-bogging-until-depleted new-unit))))

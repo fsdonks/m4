@@ -395,8 +395,8 @@
            ctx    init-ctx]
       (if (not (keep-simulating? ctx))
           (finalize day ctx) ;base case, return the final state and clean up.
-          (let [next-ctx   (sim/advance-time ctx) ;WRONG
-                next-day   (core/get-time next-ctx)
+          (let [next-ctx   (sim/advance-time  ctx) ;WRONG
+                next-day   (core/get-time     next-ctx)
                 next-ctx   (sim-step next-day next-ctx)] ;Transition to next state.
             (recur next-day next-ctx))))))
 

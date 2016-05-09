@@ -42,15 +42,16 @@
     (if (empty? pending) ctx ;no demands to fill!      
       (let [demand      (val (first pending))                    
             demandname  (:name demand)           ;try to fill the topmost demand
-            ctx         (dem/request-fill! demandstore category demand ctx)
-            [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)                         
+            ctx         (dem/request-fill! demandstore category demand ctx)           
+            [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)            
             can-fill?   (= fill-status :filled) 
             next-ctx    (if (= fill-status :unfilled) fill-ctx 
                           (->> fill-ctx 
                                (dem/demand-fill-changed! demandstore demand) ;2)
                                (core/merge-entity               ;UGLY 
                                  {:DemandStore 
-                                  (dem/register-change demandstore demandname)})))]
+                                  (dem/register-change demandstore demandname)})))
+             ]
         (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
           next-ctx                                                           ;3)
           ;otherwise, continue filling!
@@ -66,7 +67,9 @@
 
 ;;Higher-order function for filling demands.
 (defn fill-demands-with [f ctx]
-  (reduce (fn [acc c] (f (core/get-demandstore acc) c acc))
+  (reduce (fn [acc c]
+            (do ;(println [:filling (type acc) c])
+                (f (core/get-demandstore acc) c acc)))
       ctx (dem/unfilled-categories (core/get-demandstore ctx))))
 
 ;;Implements the default hierarchal, stop-early fill scheme.

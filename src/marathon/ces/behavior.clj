@@ -681,7 +681,7 @@
         (if (zero? dt)
             (success benv) ;done aging.
             (let [e  @entity
-                  _ (println (:currentcycle e))
+                  ;_ (println [:currentcycle (:currentcycle e)])
                   _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
                   _  (debug [:aging-unit deltat
                              :cycletime (:cycletime @entity)]) 
