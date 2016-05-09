@@ -458,6 +458,15 @@
 ;;otherwise, it's a default fill, we just do what's necessary to
 ;;deploy the unit.
 
+
+;;Do we need unit->filldata?  Maybe for future supply....i.e.
+;;intended fills.  Dunno.  It's okay to go greedy atm...
+;;Note: we can retroactively go back in time (using imm data)
+;;and update the unit's status (i.e. require it to go to mob/demob,
+;;ctc training, change it's state, etc....this makes us rewind
+;;the simulation though, invalidating any currently rendered
+;;state.  Generalizes into searching though...which may be useful.
+
 (defn find-supply
   "Returns an ordered sequence of actions that can result in supply.
    This effectively applies the suitability function related to fillfunc to the 
@@ -471,6 +480,7 @@
      (map (fn [[[cat src length] u]] 
             (unit->filldata cat src length u))
           (query/match-supply rule supplystore))))
+
 
 ;;TODO# fillPath in our supply query is currently pretty rudimentary.
 ;;It may be nice, for feature parity, to have then entire fillpath
@@ -502,8 +512,6 @@
      (actions ctx) ;;perform any actions necessary 
      ctx)])
     
-
-
 ;#Second: Allocate a candidate fill against a demand.
 ;Assuming we have a candidate fill, and a demand that needs filling, we define
 ;the consequences of using the candidate (via some filldata) to logically "fill"
@@ -561,7 +569,7 @@
    demand."
   [demand ctx promised-fill]
   (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill. 
-        unit (:unit fd)] 
+        unit     (:unit fd)] 
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))
          (check-ghost unit)
@@ -580,9 +588,7 @@
 ;   amount of fill may impact the order of candidates.  For now, we assume that 
 ;   the ordering of candidates is independent of the demand fill.
 
-
 ;; think category is akin to rule here...
-  
 (defn satisfy-demand  "Attempts to satisfy the demand by finding supply and applying promised 
    fills to the demand.  Returns a result pair of 
    [:filled|:unfilled updated-context], where :filled indicates the demand is 
@@ -603,7 +609,7 @@
       (cond (zero? remaining)      [:filled     current-ctx]
             (empty? xs)            [fill-status current-ctx]
             :else  
-              (let [nextctx (fill-demand d current-ctx (first xs))
+              (let [nextctx (fill-demand d current-ctx (first xs))   ;;first/next recursion slow.
                     nextd (-> (core/get-demandstore nextctx)
                               (dem/get-demand demand-name))]
                 (recur nextd (rest xs) :added-fill remaining nextctx))))))

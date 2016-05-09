@@ -165,29 +165,31 @@
 ;;It'd be nice to be able to define basic templates 
 
 (def default-positions 
-  {reset :dwelling 
-   train :dwelling 
-   ready :dwelling 
-   available :dwelling 
+  {reset #{:dwelling :c5} 
+   train #{:dwelling :c4}
+   ready #{:dwelling :c2} 
+   available #{:dwelling :c1}
    deployed :bogging
    Overlapping :overlapping
-   ;;SRM Stuff...may change.  I hate SRM.  SRM introduces
-   ;;a couple of new states....
-   PB_C3     :dwelling
-   PB_C4     :dwelling
-   PT_C4     :dwelling
-   PL_C4     :dwelling
-   R_C1      :dwelling
-   R_C2      :dwelling
-   MP_DA_C1  :mission  ;;mission state is interpeted by behavior, may bog, may not.
-   MP_NDA_C3 :mission   
-   MA_DA_C1  :mission
-   MA_DA_C2  :mission
-   MA_NDA_C3 :mission   
-   MD_DA_C1  :mission
-   MD_DA_C2  :mission
-   MD_NDA_C3 :mission
    })
+
+(def srm-positions
+     ;;SRM Stuff...may change.  I hate SRM.  SRM introduces
+  ;;a couple of new states....
+  {PB_C3     #{:dwelling :c3 :deployable}
+   PB_C4     #{:dwelling :c4}
+   PT_C4     #{:dwelling :c4}
+   PL_C4     #{:dwelling :c4}
+   R_C1      #{:dwelling :c1 :deployable}
+   R_C2      #{:dwelling :c2 :deployable}
+   MP_DA_C1  #{:mission :c1}  ;;mission state is interpeted by behavior, may bog, may not.
+   MP_NDA_C3 #{:mission :c3}  
+   MA_DA_C1  #{:mission :c1}
+   MA_DA_C2  #{:mission :c2}
+   MA_NDA_C3 #{:mission :c3}
+   MD_DA_C1  #{:mission :c1}
+   MD_DA_C2  #{:mission :c2}
+   MD_NDA_C3 #{:mission :c3}})
 
 ;;Note: these are all in the routing data; looking for a way
 ;;to pull this in programatically, although this is pretty easy...
@@ -286,17 +288,6 @@
   (vec (mapcat (fn [xs] (map (fn [[from to]] 
                           [from to (get wait-times from)])
                         (partition 2 1 (filter #(get wait-times %) xs))))   routing)))
-  
-
-;;wait-times are parametric, and usually dependent on the policy...
-;;we can embed this information in the policy, and have the wait times 
-;;constructed as a function of the policy....
-
-;; (defmacro defwaits [name args & body]
-;;   (let [stats (gensym "stats")]
-;;     `(defn ~name 
-;;        (~args ~@body)
-;;        ([~stats] (~name ~@(map (fn [arg] `(get ~stats ~(keyword arg))) args))))))
 
  
 ;;These are wait times based on state transition graphs.
@@ -410,8 +401,8 @@
 (defmacro deftemplate 
   "Defines a named policy constructor useful for deriving new policies."
   [name & {:keys [routes positions doc stats] :or 
-           {routes     default-routes 
-            positions  default-positions
+           {routes     'marathon.ces.policyops/default-routes 
+            positions  'marathon.ces.policyops/default-positions
             stats      '*stats*}}]
   (let [doc (or doc (str "Policy constructor for " name " takes options [:name :deltas :startstate :endstate :overlap]"))]
     `(do 
@@ -429,30 +420,32 @@
          (swap! templates assoc ~(str name) ~name)
          (quote ~name))))
 
-
-
   
 ;;It may be easier to just push a base policy through multiple
 ;;transforms, that constitutes a "template"...
 
 (defmacro simple-template 
-  ([name doc routes base-stats & optional-stats]
-     `{:name (quote ~name) :doc ~doc :routes (quote ~routes) :stats (and-stats ~base-stats ~@optional-stats)})
-  ([[name doc routes base-stats & optional-stats]]  
-     `{:name (quote ~name) :doc ~doc :routes (quote ~routes) :stats (and-stats ~base-stats ~@optional-stats)}))
+  ([name doc routes positions base-stats & optional-stats]
+     `{:name (quote ~name) :doc ~doc :routes (quote ~routes) :positions ~positions :stats (and-stats ~base-stats ~@optional-stats)})
+  ([[name doc routes positions base-stats & optional-stats]]  
+     `{:name (quote ~name) :doc ~doc :routes (quote ~routes)  :positions ~positions :stats (and-stats ~base-stats ~@optional-stats)}))
 
 (defn eval-template [td]
   (eval `(deftemplate ~(:name td) ~@(unzip (dissoc td :name)))))
 
 (defmacro deftemplates [base-stats & xs]
-  (doseq [x xs]
-    (if (vector? x) 
-      (let [[name doc routes & optional-stats] x]
-        (eval-template (eval `(simple-template ~name ~doc ~routes ~base-stats ~@optional-stats))))
-      (eval-template x))))
+  (let [positions (or (:positions base-stats) default-positions)]
+    (doseq [x xs]
+      (if (vector? x) 
+        (let [[name doc routes & optional-stats] x]
+          (eval-template (eval `(simple-template ~name ~doc ~routes ~positions ~base-stats ~@optional-stats))))
+        (eval-template x)))))
 
+;;__SRM Policies__
 (deftemplate SRMAC
+  :doc "Default template for Sustainable Readiness Model AC units."
   :routes SRMAC-routes
+  :positions srm-positions
   :stats   {:startstate PB_C3
             :endstate   R_C1
             :overlap    0 ;determined by demand
@@ -464,7 +457,9 @@
             :mindwell   55})
 
 (deftemplate  SRMRC
+  :doc "Default template for Sustainable Readiness Model RC units."
   :routes SRMRC-routes
+  :positions srm-positions
   :stats   {:startstate PT_C4
             :endstate   R_C2
             :overlap    0 ;determined by demand
@@ -476,7 +471,9 @@
             :mindwell   1460})
 
 (deftemplate  SRMRC13
+  :doc "template for Sustainable Readiness Model RC units that have a 1:3 cycle."
   :routes SRMRC13-routes
+  :positions srm-positions
   :stats   {:startstate PB_C4
             :endstate   R_C2
             :overlap    0  ;determined by demand
@@ -512,7 +509,7 @@
                  :maxbog     270
                  :maxdwell   +inf+
                  :maxMob     270                   
-                 :mindwell   0 }
+                 :mindwell   0}
   [rc11           "RC 1:1 template for MCU"       (route-by rc11-waits  rc-routing)  :overlap 45]
   [rc11-enabler   "RC 1:1 template for enablers"  (route-by rc11-waits  rc-routing)  :overlap 30]   
   [rc12           "RC 1:2 template for MCU"       (route-by rc12-waits  rc-routing)  :overlap 45]
@@ -534,7 +531,7 @@
                :maxbog     365
                :maxdwell   +inf+
                :maxMob     270                   
-               :mindwell   0 }
+               :mindwell   0}
   [ghost           "Ghost template"              (route-by ghost-waits  ghost-routing) :overlap 45]
   [ghost-enabler   "Ghost template for enablers" (route-by ghost-waits  ghost-routing) :overlap 30])
 
@@ -549,16 +546,14 @@
    :startdeployable 0
    :stopdeployable  +inf+
    :startstate      reset 
-   :endstate        available}
-  [max-utilization              "Max Utilization policy for AC 45" (route-by max-util-waits  default-routing)]
-  [max-utilization-enabler      "Max Utilization policy for AC 30" (route-by max-util-waits  default-routing) :overlap   30]
-  [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :bogbudget 270]
-  [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  default-routing) :overlap 30 :bogbudget 270])
-
-
-;;__SRM Policies__
-(def srm-routes 
-
+   :endstate        available
+   :positions      (-> default-positions
+                       (dissoc train ready)
+                       (merge {available #{:dwelling :deployable}}))}
+    [max-utilization              "Max Utilization policy for AC 45" (route-by max-util-waits  max-util-routing)]
+    [max-utilization-enabler      "Max Utilization policy for AC 30" (route-by max-util-waits  max-util-routing) :overlap   30]
+    [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  max-util-routing) :bogbudget 270]
+    [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  max-util-routing) :overlap 30 :bogbudget 270])
 
 ;;Constructor for building policy instances ...
 ;;We want to flexibly create Marathon policies .....
@@ -590,8 +585,7 @@
 
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
   (try  (if-let [ctor (get @templates name (get @templates (keyword name)))]
-          (let [
-                stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
+          (let [stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
                 stats      (if overlap (assoc stats :overlap overlap) stats)
                 stats      (clamp-stats name stats)
                 base       (ctor :deltas deltas :stats stats)
@@ -605,11 +599,6 @@
           (throw (Exception. (str  [:trying   [name maxdwell mindwell maxbog startdeployable stopdeployable]
                                    
                                     :e e]))))))
-
-
-
-
-
 
 ;;Possible vestigial design cruft....we may be able to unify this and
 ;;remove excess....

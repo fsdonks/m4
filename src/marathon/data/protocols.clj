@@ -168,7 +168,10 @@
 ;;Basically sets the state associated with a policy position.
 (defn add-positions [p xs]
   (if (map? xs)
-      (reduce-kv (fn [acc pos state] (add-position acc pos #{state})) 
+    (reduce-kv (fn [acc pos state]
+                 (add-position acc pos (cond (set? state) state
+                                             (coll? state) (set state)
+                                             :else #{state}))) 
                  p xs)
       (reduce (fn [acc pos] (add-position acc pos {})))))
 

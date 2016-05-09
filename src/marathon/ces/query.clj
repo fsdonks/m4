@@ -293,8 +293,6 @@
 ;;  where ->deployed probably takes theater as an argument...
 
 
-
-
 ;;We now want to include remissionability into the mix.
 ;;Remissionability means that we have supply in deployable
 
@@ -675,6 +673,8 @@
              (if collect-by (core/collect collect-by (map second res)) 
                  res)))))
 
+
+;;What is this doing here?
 (defn find-supply! [{:keys [src cat order-by where collect-by] :or 
                     {src :any cat :default} :as env} ctx] 
     (let [order-by (eval-order   order-by)

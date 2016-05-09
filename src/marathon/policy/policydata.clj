@@ -60,7 +60,7 @@
                                               (throw (Exception. (str ["Cycletime exceeds policy, looped! " t name])))
                                               (recur nxt tnxt))))
                                       (throw (Exception. "Cycletime exceeds policy!")))))                                    
-  (get-state        [p position]   (graph/get-node positiongraph position)
+  (get-state        [p position]   (graph/get-node positiongraph position))
   (max-bog          [p]            maxbog)
   (max-dwell        [p]            maxdwell)
   (max-mob          [p]            maxMOB)
@@ -74,7 +74,13 @@
   (set-deployable-start [p cycletime]  (core/insert-modifier p cycletime :name :deployable))
   (set-deployable-stop  [p cycletime]  (core/insert-modifier p cycletime :name :non-deployable))
   (set-position-graph   [p g]          (assoc p :positiongraph g)) 
-  (add-position         [p name state] (assoc p :positiongraph (graph/conj-node positiongraph name state)))
+  (add-position         [p name state]
+      (let [stateset (or (graph/get-node positiongraph name) #{})]
+        (->> (if (set? state)
+               (into stateset state)
+               (conj stateset state))
+             (graph/conj-node positiongraph name)
+             (assoc p :positiongraph))))
   (add-route            [p start destination transfer-time] 
       (assoc p :positiongraph (graph/conj-arc positiongraph start destination transfer-time)))
   (merge-policy-stats   [p stats] (merge p stats)))
