@@ -98,8 +98,8 @@
    the supply."
   [t ctx]
   (->> ctx
-;    (fill-followons)
- ;   (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
+    (fill-followons)
+    (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
     (fill-hierarchically)))
 
 ;;Well, we can go the dbag route on this....

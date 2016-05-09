@@ -129,7 +129,7 @@
 
 ;helper function for dropping a tag from multiple units at once.
 (defn untag-units [supplystore tag units]
-  (reduce #(tag/untag-subject (:tags %1) %2 tag)) supplystore units)
+  (reduce #(tag/untag-subject (:tags %1) %2 tag) supplystore units))
 
 ;;#Supply Population Operations
 ;this might be suitable to keep in the supplymanager...

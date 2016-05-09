@@ -1098,10 +1098,6 @@
 
 )
 
-
-
-
-
 ;; 'A state to handle reentry into the available pool....
 ;; Private Function ReEntry_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
 
