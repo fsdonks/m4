@@ -707,7 +707,7 @@
             ]
         (case s
           :spawning spawning-beh
-          :abrupt-withdraw (echo :abrupt-withdraw) ;abrupt-withdraw-beh
+          :abrupt-withdraw abrupt-withdraw-beh
           (fail benv))))
 
 ;;Follow-on state is an absorbing state, where the unit waits until a changestate sends it elsewhere.
@@ -742,8 +742,24 @@
 ;;TOM note 18 july 2012 -> this is erroneous.  We were check overlap....that's not the definition of
 ;;a unit's capacity to re-enter the available pool.
 
-(befn recovery-beh []
-      (echo :recovery-beh))
+(def +recovery-time+ 90)
+(defn can-recover? [unit]
+  (let [cyc (:currentcycle unit)]
+  (and (pos? (:bogbodget cyc))
+       (< (+ (:cycletime unit) +recovery-time+) (:duration-expected cyc)))))
+
+
+(befn recovery-beh {:keys [entity deltat ctx] :as benv}
+      (let [unit @entity]
+        (if (can-recover? unit)
+          (do (swap! entity #(u/add-dwell % deltat))
+              (success benv))
+          (do (swap! ctx
+                     #(sim/trigger-event :supplyUpdate (:name unit) (:name unit) (core/msg "Unit " (:name unit) " Skipping Recovery with "
+                                                                                           (:bogbudget (:currentcycle unit)) " BOGBudget") %))
+              (reset! entity (assoc-in unit [:currentcycle :bogbudget] 0))
+              moving-beh))))
+
 ;;On second thought, this is sound.  If the unit is already in overlap, it's in a terminal state..
 ;;For followon eligibility, it means another unit would immediately be overlapping this one anyway,
 ;;and the demand would not be considered filled....It does nothing to alleviate the demand pressure,
@@ -1227,6 +1243,7 @@
 
 ;; End Function
 
+;;hack atm...
 
 ;;__Recovering__
 
