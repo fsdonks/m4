@@ -3,7 +3,8 @@
 ;;convey the semantics of the data.
 (ns marathon.schemas
   (:require [spork.util [parsing :as p]
-                        [table :as tbl]]))
+                        [table :as tbl]
+                        [general :as g]]))
 
 (defn schema [name field-defs]
   {(keyword name)
@@ -77,13 +78,12 @@
      [:Tags :clojure]
      [:SpawnTime :int]
      :Location
-     :Position
+     :Position ;;Starting state for policy (typically SRM-specific....)
      [:Original :boolean]
       ;;Added 4 new fields to accomodate requirements for SRM
      :Command ;;command relationship, if any...
      :Origin     ;;supply relationship, if any...
-     :StartState ;;Starting state for policy (typically SRM-specific....)
-     [:Duration :int] ;;Duration remaining in StartState...
+     [:Duration :int?] ;;Duration remaining in StartState...
      ]
    :SRCTagRecords  
     [:Type :SRC :Tag]
@@ -103,7 +103,7 @@
      :Operation
      :Category
      [:Priority :int]
-     ;;Added for SRM
+     ;;Added for SRM ;;need to allow these to parse loosely...
      :Command
      :Location
      :DemandType
@@ -111,7 +111,7 @@
      [:BOG :boolean]
      :StartState
      :EndState
-     [:MissionLength :int]]
+     [:MissionLength :int?]]
    :PeriodRecords
     [:Type 
      :Name 
@@ -162,8 +162,9 @@
              {}
              marathon-schemas))
 
-(defn get-schema [nm] 
-  (get known-schemas nm))
+(defn get-schema [nm] (get known-schemas nm))
+;;look for like-named columns, if not found, returns nil
+;;for columns in the schema.  Basically pad empty values...
 
 ;;Allows us to quickly read tab-delimited txt files 
 ;;using a named schema.

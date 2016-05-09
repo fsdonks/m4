@@ -130,7 +130,8 @@
   "Defines a specification for entities that correspond to force structure demands."
   [id name type priority startday duration overlap category source-first quantity title
    vignette operation demandgroup 
-   & {:keys [location behavior fills  source-first ]}]
+   & {:keys [location behavior fills  source-first theater
+             bog startstate endstate missionlength]}]
   {
    :components
    [:name name ;unique name associated with the demand entity.
@@ -151,7 +152,12 @@
     :units-overlapping {};map of the units currently associated with this demand, 
                            ;that are not actively contributing toward filling the 
                                         ;demand, due to a relief-in-place state.
-    :location (or location name) ;;physical location of the demand.
+    :location   (or location name) ;;physical location of the demand.
+    :theater     theater ;;newly added for SRM. Describes the geolocal theater of the demand
+    :bog           bog  ;;newly added for SRM. Describes the geolocal theater of the demand
+    :startstate    startstate ;;Defines a possible starting state for the demand, if any.
+    :endstate      endstate ;;Defines the implication of leaving the demand on any associated entity.
+    :missionlength missionlength ;;Defines the length of duration of a local assignment to the demand.
     ]})
 
 ;;not sure how much of this needs to stick around...

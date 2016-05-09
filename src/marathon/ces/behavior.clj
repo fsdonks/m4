@@ -736,6 +736,8 @@
 ;;TOM note 18 july 2012 -> this is erroneous.  We were check overlap....that's not the definition of
 ;;a unit's capacity to re-enter the available pool.
 
+(befn recovery-beh []
+      (echo :recovery-beh))
 ;;On second thought, this is sound.  If the unit is already in overlap, it's in a terminal state..
 ;;For followon eligibility, it means another unit would immediately be overlapping this one anyway,
 ;;and the demand would not be considered filled....It does nothing to alleviate the demand pressure,
@@ -1052,7 +1054,6 @@
            (commit-entity!)
 ;           (clear-bb)
            )))
-
 
 ;;We'll replace these; for now the units will automatically
 ;;try to update themselves if possible.

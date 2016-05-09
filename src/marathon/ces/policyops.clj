@@ -268,7 +268,7 @@
 (def ghost-routing [[Spawning Deployable Waiting Deploying NotDeployable 
                      deployed Overlapping ReturnToDeployable Deployable]])
 
-(def max-util-routing [[reset Deployable available] 
+(def max-util-routing [[reset Deployable available reset] 
                        [deployed Overlapping NotDeployable reset]])
 
 ;;SRM doesn't use the above....we define the policy a bit more directly (for the
@@ -549,7 +549,8 @@
    :endstate        available
    :positions      (-> default-positions
                        (dissoc train ready)
-                       (merge {available #{:dwelling :deployable}}))}
+                       (merge {available #{:dwelling :deployable :c1}}))
+   }
     [max-utilization              "Max Utilization policy for AC 45" (route-by max-util-waits  max-util-routing)]
     [max-utilization-enabler      "Max Utilization policy for AC 30" (route-by max-util-waits  max-util-routing) :overlap   30]
     [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  max-util-routing) :bogbudget 270]

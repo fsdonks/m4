@@ -469,9 +469,8 @@
 ;;  Continue filling until the highest priority demand
 ;;  cannot be filled.
 
-(def the-deployers  
-  (for [nm selected]
-    (store/get-entity defaultctx nm)))
+(def the-deployers    (for [nm selected]
+                        (store/get-entity defaultctx nm)))
 
 (def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
 (def deployed-units (store/get-entities deployedctx selected))

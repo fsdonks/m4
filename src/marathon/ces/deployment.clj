@@ -35,8 +35,8 @@
       (if followon?
           (->> ctx
                (supply/record-followon supply unit demand)
-               (u/re-deploy-unit unit t (:deployment-index unit)))
-          (u/deploy-unit unit t (:deployment-index unit) ctx))))
+               (u/re-deploy-unit unit t (or (:deployment-index unit) 0)))
+          (u/deploy-unit unit t (or (:deployment-index unit) 0) ctx))))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
@@ -44,8 +44,6 @@
       (->> (core/set-supplystore ctx (supply/tag-as-deployed unit store))
            (supply/first-deployment! store unit)
            (supply/adjust-max-utilization! store unit)))))
-
-;Critical function.
 
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
@@ -59,18 +57,19 @@
              "Unit is not a valid deployer! Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment")
     (core/with-simstate [[supplystore parameters policystore demandstore fillstore] ctx]
-      (let [fillcount     (count (:fills fillstore))
+      (let [
+            fillcount     (count (:fills fillstore))
             bog           (get-max-bog unit policystore) 
             unitname      (:name unit)
             demandname    (:name demand)
             from-location (:locationname unit) ;may be extraneous
             from-position (:position-policy unit);
-            to-location   demandname
+            to-location   demandname           
             to-position   :deployed
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
             unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
-                                 unit-delta)
+                                     unit-delta)
             demand        (d/assign demand unit) ;need to update this in ctx..          
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))]  
@@ -85,9 +84,10 @@
     (deploy-unit  ctx unit t demand  (core/followon? unit))))
 
 (defn deploy-units [ctx us d]
-  (let [t (core/get-time ctx)]
+  (let [t (core/get-time ctx)
+        ]
     (reduce (fn [acc u]
-              (deploy-unit acc u t d)) ctx us)))
+                (deploy-unit acc u t d)) ctx us)))
 (comment   
            
            
