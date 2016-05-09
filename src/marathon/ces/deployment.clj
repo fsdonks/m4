@@ -57,8 +57,7 @@
              "Unit is not a valid deployer! Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment")
     (core/with-simstate [[supplystore parameters policystore demandstore fillstore] ctx]
-      (let [
-            fillcount     (count (:fills fillstore))
+      (let [fillcount     (count (:fills fillstore))
             bog           (get-max-bog unit policystore) 
             unitname      (:name unit)
             demandname    (:name demand)

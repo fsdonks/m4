@@ -12,7 +12,8 @@
                           [entityfactory :as ent]
                           [setup :as setup]
                           [query :as query]
-                          [deployment :as deployment]]                        
+                          [deployment :as deployment]]
+            [marathon.ces.fill [demand :as filld]]
             [marathon.data [simstate :as simstate]
                            [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
@@ -338,23 +339,22 @@
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
   (is (same? deploynames 
-             '("29_SRC3_NG" "36_SRC3_AC" "23_SRC3_NG" "11_SRC2_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG" "40_SRC3_AC"
-               "34_SRC3_AC" "37_SRC3_AC" "8_SRC2_NG" "35_SRC3_AC"))
+             '("29_SRC3_NG" "23_SRC3_NG" "11_SRC2_AC" "38_SRC3_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG"
+               "37_SRC3_AC" "8_SRC2_NG" "41_SRC3_AC"))
       "Should have 12 units deployable")
   (is (same? odd-units
       '(["24_SRC3_NG" 1601]
         ["8_SRC2_NG" 1825]
         ["23_SRC3_NG" 1399]
         ["29_SRC3_NG" 1385]
-        ["22_SRC3_NG" 1217]
-        ["40_SRC3_AC" 365])))
+        ["22_SRC3_NG" 1217])
+      ))
   (is (same? even-units
-      '(["2_SRC1_NG" 1520]
+      '(["38_SRC3_AC" 616]
+        ["2_SRC1_NG" 1520]
         ["11_SRC2_AC" 912]
-        ["37_SRC3_AC" 704]
-        ["36_SRC3_AC" 522]
-        ["35_SRC3_AC" 366]
-        ["34_SRC3_AC" 230]))))
+        ["41_SRC3_AC" 608]
+        ["37_SRC3_AC" 470]))))
 
 (def supplytags (store/gete defaultctx :SupplyStore :tags))
 (def odd-tags
@@ -362,7 +362,7 @@
 ;;As a brief interlude; we'd like to check the tags to ensure they're
 ;;properly tagged.
 (deftest tag-queries 
-  (is (same? odd-tags
+  (is (same? (odd-tags
              '(#{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
                #{:COMPO_NG :SOURCE_SRC2 :POLICY_RC15 :BEHAVIOR_:default :enabled :TITLE_no-description}
                #{:SOURCE_SRC3 :COMPO_NG :BEHAVIOR_:default :POLICY_RCOpSus :enabled :TITLE_no-description}
@@ -408,8 +408,6 @@
 (def needed    (dem/required   d))
 (def selected  (take 2 suitables))
 
-
-
 (defn ascending?  [xs] (reduce (fn [l r] (if (<= l r) r (reduced nil))) xs))
 (defn descending? [xs] (reduce (fn [l r] (if (>= l r) r (reduced nil))) xs))
 
@@ -446,9 +444,8 @@
        sort-names))
 
 (deftest demandmatching 
-  (is (same? '("2_SRC1_NG" "8_SRC2_NG" "11_SRC2_AC" "22_SRC3_NG"
-               "23_SRC3_NG" "24_SRC3_NG" "29_SRC3_NG" "34_SRC3_AC" "35_SRC3_AC"
-               "36_SRC3_AC" "37_SRC3_AC" "40_SRC3_AC")
+  (is (same? '("2_SRC1_NG" "8_SRC2_NG" "11_SRC2_AC" "22_SRC3_NG" "23_SRC3_NG"
+               "24_SRC3_NG" "29_SRC3_NG" "37_SRC3_AC" "38_SRC3_AC" "41_SRC3_AC")             
              any-supply)
       "The relaxed fills actually have two more elements of supply - SRC 2 - since the 
        default preference for SRC 3 only allows substitution for SRC 1.  Thus, we 
@@ -457,8 +454,8 @@
   (is (ascending? (map :priority (vals unfilled)))
       "Priorities of unfilled demand should be sorted in ascending order, i.e. low to hi")
   (is (same? suitables 
-             '("24_SRC3_NG" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" "37_SRC3_AC"
-               "36_SRC3_AC" "35_SRC3_AC" "40_SRC3_AC" "34_SRC3_AC" "2_SRC1_NG"))
+             '("24_SRC3_NG" "38_SRC3_AC" "41_SRC3_AC" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" "37_SRC3_AC" "2_SRC1_NG")
+             )
       "The feasible supply names that match the first demand should be consistent.  Since SRC1 is a lower
        order of supply via its substitution weight, it should end up last, even though the unit's cycle 
        time is actually pretty good.")
@@ -467,7 +464,7 @@
       "fill/find-supply should be synonymous with match-supply")
   (is (== needed 2)
       "First demand should require 2 units")
-  (is (same? selected  '("24_SRC3_NG" "23_SRC3_NG"))
+  (is (same? selected  '("24_SRC3_NG" "38_SRC3_AC"))
       "Suitability of units is dictated by the ordering.  Best first. In this case, we expect 
        the units with the greatest cycle times [most deployable] and of like type to be most 
        suited for deployment."))
@@ -501,10 +498,24 @@
                         (store/get-entity defaultctx nm)))
 
 ;;pending tests
-(comment 
 (def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
 (def deployed-units (store/get-entities deployedctx selected))
-)
+
+;;A basic supply/demand context, initialized for the first day
+;;of simulation.
+(def zero-ctx
+  (->> defaultctx
+       (engine/begin-day 0)
+       (supply/manage-supply 0)
+       (demand/manage-demands 0)
+       (engine/end-day 0)
+       ;;We should have several demands activated,
+       ;;as well as some supply to fill with.
+       (engine/begin-day 1)
+       (supply/manage-supply 1)
+       (demand/manage-demands 1)))
+
+(def filled  (filld/fill-demands 1 zero-ctx))
 
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.

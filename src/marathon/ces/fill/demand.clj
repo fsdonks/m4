@@ -98,6 +98,12 @@
    the supply."
   [t ctx]
   (->> ctx
-    (fill-followons)
-    (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
+;    (fill-followons)
+ ;   (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
     (fill-hierarchically)))
+
+;;Well, we can go the dbag route on this....
+;;Fill-demands could be executed much more poorly than it is.
+;;Specifically, every time we have a change in supply, we try
+;;to fill demand brute-force like.
+;;Go through all the deployers, find 

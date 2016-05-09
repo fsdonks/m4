@@ -591,7 +591,7 @@
 ;End Sub
 (defn wake-and-bog-until-depleted [u t ctx]
   (change-state u :bogging
-      (- t (sim/last-update (get u :name) ctx))
+      (- t  (get u :last-update 0))
       (max-boggable-time u) ctx))
 
 ;'Increment the unit's deployment count for the current cycle.

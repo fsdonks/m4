@@ -54,10 +54,11 @@
 ;;Auxillary function to broadcast information about just-in-time, or "ghost" 
 ;;unit utilization.  May be replaced with something more general in the future.
 (defn check-ghost [unit ctx]
-  (if (not (core/ghost? unit)) ctx
-      (if (core/followon? unit) 
-        (ghost-followed! unit ctx) 
-        (ghost-deployed! unit ctx))))
+  (do ;(println unit)
+      (if (not (core/ghost? unit)) ctx
+          (if (core/followon? unit) 
+            (ghost-followed! unit ctx) 
+            (ghost-deployed! unit ctx)))))
 
 ;##Decomposing the Fill Process....
 ;Sourcing a demand is really the composition of three simpler tasks: 
@@ -257,7 +258,6 @@
     (reduce-kv (fn [acc nm r]
                  (assoc acc (keyword nm) r))
                m m)))
-
 
 (defn resolve-source-first [sf]
   (if-let [r  ( get stock-queries sf)]
@@ -481,7 +481,6 @@
             (unit->filldata cat src length u))
           (query/match-supply rule supplystore))))
 
-
 ;;TODO# fillPath in our supply query is currently pretty rudimentary.
 ;;It may be nice, for feature parity, to have then entire fillpath
 ;;relayed rather than the endpoint.
@@ -541,10 +540,12 @@
   "Deploys the unit identified in filldata to demand via the supply system."
   [filldata demand ctx]
   (core/with-simstate [[fillstore supplystore policystore parameters] ctx]
-    (let [unit        (:unit filldata)
+    (let [unit        (or (:unit filldata) filldata)
           t           (sim/get-time ctx)]
-      (deployment/deploy-unit ctx unit t demand filldata 
-                              (core/interval->date t ctx) (core/followon? unit)))))
+      (deployment/deploy-unit ctx unit t demand
+                              ;filldata
+                              ;(core/interval->date t ctx)
+                              (core/followon? unit)))))
 
 
 ;;#Incremental Demand Filling
@@ -568,8 +569,10 @@
    result of one promised fill to the demand, which may or may not satisfy the 
    demand."
   [demand ctx promised-fill]
-  (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill. 
-        unit     (:unit fd)] 
+  (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill.
+        ;_ (println fd)
+        unit     (or (:unit fd) fd)
+        ] 
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))
          (check-ghost unit)
@@ -594,25 +597,31 @@
    [:filled|:unfilled updated-context], where :filled indicates the demand is 
    satisifed, and updated-context is the resulting simulation context."
   [demand category ctx]
-  (let [fillstore   (core/get-fillstore     ctx)
-        fillfunc    (core/get-fill-function ctx)
-        supplystore (core/get-supplystore   ctx)
+  (let [;fillstore   ;(core/get-fillstore     ctx)
+        ;fillfunc    ;(core/get-fill-function ctx)
+        ;supplystore (core/get-supplystore   ctx)
         rule        (demand->rule demand)
         demand-name (:name demand)
+        _ (println [:satisfying-demand demand (d/required demand)])
         ;1)
-        candidates  (find-supply fillfunc supplystore rule)]
+        candidates  (find-supply ;fillfunc
+                                        ;supplystore
+
+                                ctx
+                                 rule)]
     (loop [d           demand           
            xs          candidates 
            fill-status :unfilled
            remaining   (d/required d)
            current-ctx ctx]
-      (cond (zero? remaining)      [:filled     current-ctx]
-            (empty? xs)            [fill-status current-ctx]
-            :else  
-              (let [nextctx (fill-demand d current-ctx (first xs))   ;;first/next recursion slow.
-                    nextd (-> (core/get-demandstore nextctx)
-                              (dem/get-demand demand-name))]
-                (recur nextd (rest xs) :added-fill remaining nextctx))))))
+      (do ;(println remaining)
+          (cond (zero? remaining)      [:filled     current-ctx]
+                (empty? xs)            [fill-status current-ctx]
+                :else  
+                (let [nextctx (fill-demand d current-ctx (first xs))   ;;first/next recursion slow.
+                      nextd (-> (core/get-demandstore nextctx)
+                                (dem/get-demand demand-name))]
+                  (recur nextd (rest xs) :added-fill (unchecked-dec remaining) nextctx)))))))
 
 ;;#Pending
 ;;Port fill store generation functions and IO functions/constructors from legacy 

@@ -960,7 +960,7 @@ SupplyRecord	TRUE	3	SRC1	AC	Generated_SRC1	Auto	Auto	0	AC12	Auto	0	Auto	Auto	FAL
 SupplyRecord	TRUE	3	SRC2	NG	Generated_SRC2	Auto	Auto	0	RC15	Auto	0	Auto	Auto	FALSE	nil	nil	nil
 SupplyRecord	TRUE	3	SRC2	AC	Generated_SRC2	Auto	Auto	0	AC13	Auto	0	Auto	Auto	FALSE	nil	nil	nil
 SupplyRecord	TRUE	20	SRC3	NG	Generated_SRC3	Auto	Auto	0	RCOpSus	Auto	0	Auto	Auto	FALSE	nil	nil	nil
-SupplyRecord	TRUE	10	SRC3	AC	Generated_SRC3	Auto	Auto	0	FFGACRoto	Auto	0	Auto	Auto	FALSE	nil	nil	nil
+SupplyRecord	TRUE	10	SRC3	AC	Generated_SRC3	Auto	Auto	0	AC11	Auto	0	Auto	Auto	FALSE	nil	nil	nil
 ")
 
 (def src-tag-records 
