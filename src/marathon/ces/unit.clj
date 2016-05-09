@@ -638,7 +638,8 @@
         deps (:deployments c)
         new-unit           (-> unit
                                (increment-deployments)
-                               )]
+                               )
+        _ (println [:deploying (:name unit) :from (:locationname unit)])]
     (->> ctx
          (core/set-unit new-unit)
          (keep-bogging-until-depleted new-unit))))

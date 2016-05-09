@@ -61,10 +61,12 @@
             bog           (get-max-bog unit policystore) 
             unitname      (:name unit)
             demandname    (:name demand)
+            _ (println [(:locationname unit)])
             from-location (:locationname unit) ;may be extraneous
             from-position (:position-policy unit);
             to-location   demandname           
             to-position   :deployed
+            
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
             unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
