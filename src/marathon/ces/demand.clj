@@ -744,11 +744,13 @@
   (let [demandgroup (:demandgroup demand)
         unitname    (:name unit)]
 	  (cond 
-	    (ungrouped? demandgroup) 
-	      (->> (core/update-unit (set-followon unit demandgroup) ctx)          
-	           (u/change-state unitname :abrupt-withdraw 0 nil))                      
-	    (not (ghost? unit))
-	      (u/change-state unitname :abrupt-withdraw 0 nil ctx)                   
+	    (or (= "" demandgroup) (ungrouped? demandgroup))
+            (do  (println :abw1)
+                 (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)] 
+                        (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 nil ctx)))
+              (not (ghost? unit))
+              (do  (println :abw)
+                   (u/change-state unitname :abrupt-withdraw 0 nil ctx))
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
 	            (u/change-state unitname :Reset 0 nil)))))                     
 
@@ -761,10 +763,13 @@
   [t demand unit ctx] 
   (let [unitname  (:name unit)
         startloc  (:locationname unit)
-        unit      (u/update unit (- t (sim/last-update unitname ctx))) ;WRONG?
-        demandgroup (:demandgroup demand)]
-    (->> (sim/trigger-event :supply-update :DemandStore unitname ;WRONG
-              (str "Send Home Caused SupplyUpdate for " unitname) ctx) ;WRONG
+        demandgroup (:demandgroup demand)
+        ctx         (u/unit-update unit ctx)
+        ;unit         (store/get-entity ctx unitname)
+        ]        
+    (->> ;(core/trigger-event :supply-update :DemandStore unitname ;WRONG
+         ;     (str "Send Home Caused SupplyUpdate for " unitname) unit ctx) ;WRONG
+         ctx
          (withdraw-unit unit demand) 
          (disengaging! demand unitname)))) 
 
@@ -818,13 +823,13 @@
    units."
   [demand t ctx]
   (if (empty-demand? demand)
-    (deactivating-empty-demand! demand t ctx)
-    (-> (->> (:units-assigned demand) ;otherwise send every unit home.
-             (reduce (fn [ctx u] (send-home t demand u ctx)) ctx)
-      (update-entity
-       :DemandStore       
-        #(gen/deep-assoc % [:demandmap (:name demand)]
-                         (assoc demand :units-assigned {})))))))
+      (deactivating-empty-demand! demand t ctx)
+      (-> (->> (keys   (:units-assigned demand)) ;otherwise send every unit home.
+               (reduce (fn [ctx u] (send-home t demand (store/get-entity ctx u) ctx)) ctx))
+          (update-entity
+           :DemandStore       
+           #(gen/deep-assoc % [:demandmap (:name demand)]
+                            (assoc demand :units-assigned {}))))))
 
 ;;#Demand DeActivation
 (defn deactivate-demand
@@ -834,7 +839,9 @@
   (assert (active-demand? demandstore (:name d))
     (throw (Exception. (str "DeActivating an inactive demand: " (:name d))))) 
   (let [store (-> (gen/deep-update demandstore [:activedemands] dissoc (:name d))
-                  (register-change (:name d)))]
+                  (register-change (:name d)))
+;        _ ;(println [:demand d])
+        _ (println [(:name d) :assigned  (keys (:units-assigned d))])]
     (->> (deactivating-demand! store d t ctx)
          (send-home-units d t)
          (update-fill store (:name d)))))    
@@ -845,10 +852,12 @@
   [t ctx]
   (let [demandstore (core/get-demandstore ctx)]
     (reduce (fn [ctx dname] 
-              (let [store (core/get-demandstore ctx)]
+              (let [store (core/get-demandstore ctx)
+                    _ (println [:deactivating dname])
+                    d     (get-demand store dname)]
                 (deactivate-demand store t
-                                   (store/get-entity ctx dname)
-                                   ;(core/get-demand store dname)
+                                   ;(store/get-entity ctx dname)
+                                   d
                                    ctx))) 
             ctx 
             (get-deactivations demandstore t))))

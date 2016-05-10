@@ -37,6 +37,8 @@
                                     :update
                                     nil)))
 
+(def update unit-update)
+
 ;;Pending.  When we move to the component entity system, we'll pull this back
 ;;in.
 ;;allow units to be entities 
@@ -201,16 +203,6 @@
 ;Public Sub ChangeState(newstate As String, deltat As Single, Optional duration As Single)
 ;Call behavior.ChangeState(Me, newstate, deltat, duration)
 ;End Sub
-
-;;These both need to be evaluated in a behavior context.
-(defn changestate [u newstate dt duration ctx] ((:behavior u) u newstate dt duration)
-;  (unit-update 
-  )
-;;A simple update based on a change in time.
-(defn update      [u dt ctx]
-  (unit-update u {:dt dt} ctx)
-  
-  )
 
 ;Public Function CanDeploy() As Boolean
 
