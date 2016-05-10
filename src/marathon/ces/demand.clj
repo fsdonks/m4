@@ -747,7 +747,7 @@
 	    (or (= "" demandgroup) (ungrouped? demandgroup))
             (do  (println :abw1)
                  (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)] 
-                        (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 nil ctx)))
+                        (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
               (not (ghost? unit))
               (do  (println :abw)
                    (u/change-state unitname :abrupt-withdraw 0 nil ctx))

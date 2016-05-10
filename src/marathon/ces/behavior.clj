@@ -152,9 +152,11 @@
 ;;either don't want this or we want to have it mean something.
 ;;Note: these are specific to unit, so could probably go into the unit
 ;;namespace; save on real estate.
-(defn get-state [unit position] 
-  (let [s (protocols/get-state (:policy unit) position)]
-    (if (number? s)  :dwelling s)))
+(defn get-state [unit position]
+  (case position
+    :abrupt-withdraw :abrupt-withdraw
+    (let [s (protocols/get-state (:policy unit) position)]
+      (if (number? s)  :dwelling s))))
 (defn get-next-position [unit position]
   (protocols/next-position (:policy unit) position))
 
@@ -323,9 +325,11 @@
 ;;This is where the transition from FSM to behavior tree
 ;;comes in....
 (befn change-state-beh!  {:keys [entity ctx statedata state-change deltat] 
-                         :or   {deltat 0} :as benv}
+                          :or   {deltat 0} :as benv}
      (when state-change
-       (let [{:keys [newstate duration followingstate timeinstate] :or {timeinstate 0}} state-change
+       (let [_ (println :state-change)
+             {:keys [newstate duration followingstate timeinstate] :or {timeinstate 0}} state-change
+             _ (when (not duration) (throw (Exception.  (str "nil value for duration in state change behavior!"))))
              followingstate (or followingstate newstate)
              ;;we change statedata here...
              wt (- duration timeinstate)
@@ -771,7 +775,8 @@
 ;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
 ;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
 (befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
-      (let [_ (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
+      (let [_ (println [:abw-beh])
+            _ (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
             unit @entity
             ;1)
             bogremaining (- (:bogbudget (:currentcycle unit))  
