@@ -746,7 +746,8 @@
 	  (cond 
 	    (or (= "" demandgroup) (ungrouped? demandgroup))
             (do  (println :abw1)
-                 (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)] 
+                 (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
+                       _ (println [:pre-abw])] 
                         (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
               (not (ghost? unit))
               (do  (println :abw)
@@ -824,7 +825,8 @@
   [demand t ctx]
   (if (empty-demand? demand)
       (deactivating-empty-demand! demand t ctx)
-      (-> (->> (keys   (:units-assigned demand)) ;otherwise send every unit home.
+      (-> (->> (concat (keys   (:units-assigned    demand))
+                       (keys   (:units-overlapping demand))) ;otherwise send every unit home.
                (reduce (fn [ctx u] (send-home t demand (store/get-entity ctx u) ctx)) ctx))
           (update-entity
            :DemandStore       

@@ -327,7 +327,7 @@
 (befn change-state-beh!  {:keys [entity ctx statedata state-change deltat] 
                           :or   {deltat 0} :as benv}
      (when state-change
-       (let [_ (println :state-change)
+       (let [_ (echo [:state-change (:name @entity)])
              {:keys [newstate duration followingstate timeinstate] :or {timeinstate 0}} state-change
              _ (when (not duration) (throw (Exception.  (str "nil value for duration in state change behavior!"))))
              followingstate (or followingstate newstate)
@@ -527,10 +527,10 @@
   (let [e  @entity
         currentpos (:positionpolicy e)
         p  (or next-position
-               (do (debug [:computing-position])
+               (do (debug [:computing-position currentpos])
                    (get-next-position e  currentpos)))
         wt (if (and next-position wait-time) wait-time
-               (do (debug [:computing-wait])
+               (do (debug [:computing-wait (:positionpolicy e)])
                    (get-wait-time @entity (:positionpolicy e) benv)))
         _ (debug [:found-move {:next-position p :wait-time wt}])]
     (bind!! {:next-position  p
@@ -727,7 +727,9 @@
       (when (:followoncode @entity) ;if the unit has a followon code
         (do ;register the unit as a possible followOn 
           (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
-          age-unit)))
+                                        ;age-unit
+          (success (merge benv {:wait-time nil :next-position nil})) ;?
+          )))
 
 ;;way to get the unit back to reset.  We set up a move to the policy's start state,
 ;;and rip off the followon code.
@@ -775,7 +777,7 @@
 ;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
 ;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
 (befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
-      (let [_ (println [:abw-beh])
+      (let [_ (echo [:abw-beh {:deltat deltat}])
             _ (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
             unit @entity
             ;1)
@@ -783,15 +785,18 @@
                             (protocols/overlap (:policy unit)))]
         (if (not (pos? bogremaining))
           ;makes no sense for the unit to continue BOGGING, send it home.
-          reset-beh
+          (->and [(echo [:abw->reset {:bogremaining bogremaining}])
+                  reset-beh])
           (->or 
              ;unit has some feasible bogtime left, we can possibly have it followon or extend its bog...
              ;A follow-on is when a unit can immediately move to fill an unfilled demand from the same
              ;group of demands.  In otherwords, its able to locally fill in.
              ;This allows us to refer to forcelists as discrete chunks of data, group them together,
              ;and allow forces to flow from one to the next naturally.         
-           [followon-beh
-            recovery-beh]))))
+           [(->and [(echo [:abw->followon])
+                    followon-beh])
+            (->and [(echo [:abw->recovery])
+                    recovery-beh])]))))
 
 ;;entities have actions that can be taken in a state...
 (def default-statemap

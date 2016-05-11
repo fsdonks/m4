@@ -260,6 +260,14 @@
       (coll-reduce [this f1]   (reduce f1 simred))
       (coll-reduce [_ f1 init] (reduce f1 init simred)))))
 
+(defn ->history [tfinal stepf init-ctx]
+  (->> init-ctx
+       (->simulator stepf)
+       (map (fn [ctx] [(core/get-time ctx) ctx]))
+       (take-while #(<= (first %) tfinal))
+       (into {})))
+
+
 (def demand-sim (->simulator demand-step defaultctx))
 (def the-unit "4_SRC1_AC")
 
@@ -529,6 +537,7 @@
                (engine/sim-step 0)
                (sim/advance-time)))
 
+  
 (def zctx2
   (let [day (sim/get-time zctx)]
     (->> zctx
@@ -544,8 +553,27 @@
 ;               (engine/sim-step 1)))
 
 
-;(def simctx 
+(defn debugging-on
+  ([t f]
+   (let [debug? (cond (number? t)    #(= t (core/get-time %))
+                      (set?    t)    #(t   (core/get-time  %))
+                      (fn?     t)  #(t (core/get-time %))
+                      :else (throw (Exception. (str [:unknown-debug-param t]))))]
+     (fn [t ctx] (if (debug? ctx)
+                 (core/debugging
+                  (binding [spork.ai.core/*debug* true]
+                    (f t ctx)))
+                 (f t ctx)))))
+  ([t] (debugging-on t engine/sim-step)))
 
+;;I'd like to debug on a certain day, i.e. add information only at a certain point in time.
+;;Fortunately, we can do this pretty easily by defining a trace function for our pipeline,
+;;turning on debugging information for a narrow range of updates...
+(comment 
+(def h91
+  (->history 91  (debugging-on 91)
+             defaultctx))
+)
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
 ;;The trick now is to indicate that the entities should be updating.

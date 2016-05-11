@@ -407,7 +407,7 @@
 ;;we may no longer need the deltat arg...
 (defn change-state [entity newstate deltat duration ctx]
   (if (or *uic* (= newstate :abrupt-withdraw))
-    (binding [spork.ai.core/*debug* (or (= (:name entity) *uic*) (= newstate :abruptwithdraw))]
+    (binding [spork.ai.core/*debug* (or spork.ai.core/*debug* (= (:name entity) *uic*) (= newstate :abruptwithdraw))]
   ;;how about handle-message? 
             (core/handle-message! ctx entity
                                   (core/->msg (:name entity) (:name entity)

@@ -333,16 +333,17 @@
    high-level state transfers for supply, policy, demand, filling, and more. 
    Computes the resulting state - either the final state, or the initial state
    for the next step."
-  [day ctx]
-  (->> ctx 
-    (begin-day day)         ;Trigger beginning-of-day logic and notifications.
-    (manage-supply day)     ;Update unit positions and policies.
-    (manage-policies day)   ;Apply policy changes, possibly affecting supply.
-    (manage-demands day)    ;Activate/DeActiveate demands, handle affected units.      
-    (fill-demands day)      ;Try to fill unfilled demands in priority order. 
-    (manage-followons day)  ;Resets unused units from follow-on status. 
-    (end-day day)           ;End of day logic and notifications.
-    (manage-changed-demands day)));Clear set of changed demands in demandstore.
+  ([day ctx]
+   (->> ctx 
+        (begin-day day)         ;Trigger beginning-of-day logic and notifications.
+        (manage-supply day)     ;Update unit positions and policies.
+        (manage-policies day)   ;Apply policy changes, possibly affecting supply.
+        (manage-demands day)    ;Activate/DeActiveate demands, handle affected units.      
+        (fill-demands day)      ;Try to fill unfilled demands in priority order. 
+        (manage-followons day)  ;Resets unused units from follow-on status. 
+        (end-day day)           ;End of day logic and notifications.
+        (manage-changed-demands day)));Clear set of changed demands in demandstore.
+  ([ctx] (sim-step (sim/get-time ctx) ctx)))
 
 ;;in ECS parlance, the functions in sim-step are just systems.
 ;;Each of these systems operates on the ECS, or more specifically,
