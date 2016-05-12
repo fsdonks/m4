@@ -770,15 +770,23 @@
             (success benv))))
 
 (declare abrupt-withdraw-beh)
+
+;;This is a little weak; we're loosely hard coding
+;;these behaviors.  It's not terrible though.
 (befn special-state {:keys [entity statedata] :as benv}
-      (let [s (:state @entity)            
-            ]
-        (case s
-          :spawning spawning-beh
-          :abrupt-withdraw abrupt-withdraw-beh
-          :recovered     (->and [(echo :recovered-beh)
-                                 reset-beh])
-          (fail benv))))
+      (case (:state @entity)
+        :spawning spawning-beh
+        :abrupt-withdraw abrupt-withdraw-beh
+        :recovered     (->and [(echo :recovered-beh)
+                               re-entry-beh
+                               ;reset-beh
+                               ])
+        (fail benv)))
+
+;;rest-beh is kind of what we want to do.  We'd like to
+;;compute the unit's now position in its old policy.
+;;What about pending policy changes? [how'd marathon handle them in vba?]
+;;I think we deferred until reset actually.
 
 ;;Follow-on state is an absorbing state, where the unit waits until a changestate sends it elsewhere.
 ;;The only feasible state transfers are to a reentry state, where the unit re-enters the arforgen pool
@@ -805,6 +813,133 @@
         (beval moving-beh (assoc benv :next-position
                                  (protocols/start-state (:policy @entity))
                                  :wait-time wt))))
+
+
+
+;; 'A state to handle reentry into the available pool....
+;; Private Function ReEntry_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+
+;; Dim newpolicy As IRotationPolicy
+;; Dim wasDeployable As Boolean
+;; Dim isDeployable As Boolean
+;; Dim newduration As Single
+;; Dim offset As Single
+;; Dim timeinstate As Single
+;; Dim timeremaining As Single
+;; Dim nextstate As String
+;; Dim newcycletime As Single
+;; Dim cycletimeA As Single
+;; Dim policynameA As String
+;; Dim policynameB As String
+;; Dim CycleProportionA As Single
+;; Dim CycleTimeB As Single
+;; Dim PositionA As String
+;; Dim PositionB As String
+
+;; With unit
+    
+;;     'TOM Change 20 April 2012
+;;     'wasDeployable = .policy.isDeployable(.cycletime)
+;;     wasDeployable = .policy.isDeployable(.cycletime)
+
+(def invalid?  #{"Deployed" "Overlapping"})
+;;Kind of like reset, except it's not guaranteed we go to reset.
+(befn re-entry-beh {:keys [entity ctx tupdate] :as benv}
+      (let [unit   @entity
+            p      (:policy    unit)
+            current-pos (:positionpolicy unit)
+            _ (debug [:re-entry  :current-pos current-pos])
+            ct     (:cycletime unit)
+            _      (when (< ct 0) (throw (Exception. (str "Cycle Time should not be negative!"))))
+            _      (when (invalid? current-pos)
+                         (throw (Exception.  "Cannot handle during deployment or overlap")))
+            is-deployable  (protocols/deployable-by? p ct)
+            positionA  current-pos
+            positionB (protocols/get-position p ct)
+            _      (when (invalid? positionB)
+                         (throw (Exception.  (str "Cannot handle during deployment or overlap: " positionB))))
+            timeremaining  (protocols/transfer-time p positionB (protocols/next-position p positionB))
+            timeinstate    (- ct (protocols/get-cycle-time p positionB))
+            state-change {:newstate       (get-state unit positionB)
+                          :duration       (- timeremaining timeinstate)
+                          :followingstate nil
+                          :timeinstate  timeinstate
+                          }
+            _          (reset! ctx
+                         (->> @ctx
+                              (supply/log-position! tupdate positionA positionB  unit)
+                              (supply/supply-update! {:name "SupplyStore"} unit
+                                (core/msg "Unit " (:name unit)
+                                          "  ReEntering with "
+                                          (:bogbudget (:currentcycle unit))
+                                          " BOGBudget."))))]
+            (beval change-state-beh
+                   (assoc benv :state-change state-change
+                          :wait-time nil))))
+    
+;;     If .PositionPolicy <> "Deployed" And .PositionPolicy <> "Overlapping" Then  'we can safely change the unit's policy.
+       
+;;         isDeployable = .policy.isDeployable(.cycletime)
+;;         PositionA = .PositionPolicy
+;;         If .PositionPolicy <> "Deployed" Then
+;;             If .PositionPolicy = "Overlapping" Then Err.Raise 101, , "Forgot about overlap.."
+;;             PositionB = .policy.getPosition(.cycletime) 'dwelling units can change positions.
+;;         Else
+;;             Err.Raise 101, , "Cannot be deployed!"
+;;         End If
+        
+;;         'position policy is the SAME as positionB
+;;         .PositionPolicy = PositionB
+        
+;;         timeremaining = .policy.TransferTime(PositionB, .policy.nextposition(PositionB)) 'time remaining in this state
+        
+;;         'How long will the unit have been in this state?
+;;             'Since it's a policy change....do we zero it out?
+;;             'Or do we assume that the unit has been in the state the exact amount of time required?
+;;         'We assume that the unit has been in the state the exact amount of time required.
+;;         'We also assume that the unit is not entering another cycle, merely extending or truncating.
+;;             'Its current cycle is modified.
+;;             'Does not get a cycle completion out of it.
+            
+;;         If .cycletime >= 0 Then
+;;             If PositionB <> "Deployed" Then
+;;                 timeinstate = .cycletime - .policy.GetCycleTime(PositionB) 'derived time in state upon spawning.
+;;             Else
+;;                 Err.Raise 101, , "Error, should not be deployed"
+;;             End If
+;;         End If
+        
+;;         newduration = timeremaining - timeinstate
+;;         nextstate = getState(unit, PositionB)
+        
+;;         'TOM change 23 july 2011
+;;         'Decoupled*
+;;         'parent.LogPosition parent.getTime, PositionA, PositionB, unit
+;;         MarathonOpSupply.LogPosition SimLib.getTime(simstate.context), PositionA, PositionB, unit, , simstate.context
+        
+;;         If nextstate = "Dwelling" Or nextstate = "DeMobilizing" _
+;;                 Or nextstate = Recovering Or nextstate = Recovered Then
+;;             'parent.LogMove parent.getTime, .LocationName, .PositionPolicy, unit
+;;             .changeLocation .PositionPolicy, simstate.context
+;;             '.LocationName = .PositionPolicy
+;;         End If
+        
+;;         'Decoupled*
+;;         '.parent.UpdateDeployStatus unit
+;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
+
+;;         'Decouple*
+;;         'parent.parent.trigger supplyUpdate, .name, .name, "Unit ReEntering with " & .CurrentCycle.bogbudget & " BOGBudget & " & .name
+;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Unit ReEntering with " & .CurrentCycle.bogbudget & " BOGBudget & " & .name, , simstate.context
+;;         Set ReEntry_State = ChangeState(unit, nextstate, 0, newduration)
+;;     Else
+;;         Err.Raise 101, , "Cannot handle during deployment or overlap"
+;;     End If
+;; End With
+;; End Function
+
+
+
 
 ;;Function to handle the occurence of an early withdraw from a deployment.
 ;;when a demand deactivates, what happens to the unit?
@@ -1218,95 +1353,6 @@
 
 )
 
-;; 'A state to handle reentry into the available pool....
-;; Private Function ReEntry_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
-
-;; Dim newpolicy As IRotationPolicy
-;; Dim wasDeployable As Boolean
-;; Dim isDeployable As Boolean
-;; Dim newduration As Single
-;; Dim offset As Single
-;; Dim timeinstate As Single
-;; Dim timeremaining As Single
-;; Dim nextstate As String
-;; Dim newcycletime As Single
-;; Dim cycletimeA As Single
-;; Dim policynameA As String
-;; Dim policynameB As String
-;; Dim CycleProportionA As Single
-;; Dim CycleTimeB As Single
-;; Dim PositionA As String
-;; Dim PositionB As String
-
-;; With unit
-    
-;;     'TOM Change 20 April 2012
-;;     'wasDeployable = .policy.isDeployable(.cycletime)
-;;     wasDeployable = .policy.isDeployable(.cycletime)
-
-;;     'HACK to account for negative cycle times.
-;;     If .cycletime < 0 Then Err.Raise 101, , "Cycle Time Should not be negative!"
-    
-;;     If .PositionPolicy <> "Deployed" And .PositionPolicy <> "Overlapping" Then  'we can safely change the unit's policy.
-       
-;;         isDeployable = .policy.isDeployable(.cycletime)
-;;         PositionA = .PositionPolicy
-;;         If .PositionPolicy <> "Deployed" Then
-;;             If .PositionPolicy = "Overlapping" Then Err.Raise 101, , "Forgot about overlap.."
-;;             PositionB = .policy.getPosition(.cycletime) 'dwelling units can change positions.
-;;         Else
-;;             Err.Raise 101, , "Cannot be deployed!"
-;;         End If
-        
-;;         'position policy is the SAME as positionB
-;;         .PositionPolicy = PositionB
-        
-;;         timeremaining = .policy.TransferTime(PositionB, .policy.nextposition(PositionB)) 'time remaining in this state
-        
-;;         'How long will the unit have been in this state?
-;;             'Since it's a policy change....do we zero it out?
-;;             'Or do we assume that the unit has been in the state the exact amount of time required?
-;;         'We assume that the unit has been in the state the exact amount of time required.
-;;         'We also assume that the unit is not entering another cycle, merely extending or truncating.
-;;             'Its current cycle is modified.
-;;             'Does not get a cycle completion out of it.
-            
-;;         If .cycletime >= 0 Then
-;;             If PositionB <> "Deployed" Then
-;;                 timeinstate = .cycletime - .policy.GetCycleTime(PositionB) 'derived time in state upon spawning.
-;;             Else
-;;                 Err.Raise 101, , "Error, should not be deployed"
-;;             End If
-;;         End If
-        
-;;         newduration = timeremaining - timeinstate
-;;         nextstate = getState(unit, PositionB)
-        
-;;         'TOM change 23 july 2011
-;;         'Decoupled*
-;;         'parent.LogPosition parent.getTime, PositionA, PositionB, unit
-;;         MarathonOpSupply.LogPosition SimLib.getTime(simstate.context), PositionA, PositionB, unit, , simstate.context
-        
-;;         If nextstate = "Dwelling" Or nextstate = "DeMobilizing" _
-;;                 Or nextstate = Recovering Or nextstate = Recovered Then
-;;             'parent.LogMove parent.getTime, .LocationName, .PositionPolicy, unit
-;;             .changeLocation .PositionPolicy, simstate.context
-;;             '.LocationName = .PositionPolicy
-;;         End If
-        
-;;         'Decoupled*
-;;         '.parent.UpdateDeployStatus unit
-;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
-
-;;         'Decouple*
-;;         'parent.parent.trigger supplyUpdate, .name, .name, "Unit ReEntering with " & .CurrentCycle.bogbudget & " BOGBudget & " & .name
-;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Unit ReEntering with " & .CurrentCycle.bogbudget & " BOGBudget & " & .name, , simstate.context
-;;         Set ReEntry_State = ChangeState(unit, nextstate, 0, newduration)
-;;     Else
-;;         Err.Raise 101, , "Cannot handle during deployment or overlap"
-;;     End If
-;; End With
-;; End Function
 
 ;;__CanRecover__
 
