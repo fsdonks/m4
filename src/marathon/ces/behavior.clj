@@ -46,7 +46,7 @@
                           [supply :as supply]
                           [demand :as d]
              ]
-            
+            [spork.cljgraph.core :as graph]
             [spork.util.general     :as gen]        
             [spork.data.priorityq   :as pq]
             [clojure.core.reducers  :as r]
@@ -155,17 +155,40 @@
 (defn get-state [unit position]
   (case position
     :abrupt-withdraw :abrupt-withdraw
+    :recovery    :recovery
     (let [s (protocols/get-state (:policy unit) position)]
-      (if (number? s)  :dwelling s))))
-(defn get-next-position [unit position]
-  (protocols/next-position (:policy unit) position))
+      (if (number? s)  :dwelling s) ;;wierd...
+      )))
+
+;; TOM Hack 24 July 2012 -> again, to facilitate implicit recovery.  In the case of explicit recovery policy,
+;; we defer to the unit's policy to determine how long to wait.  In the case of implicit recovery, we use
+;; a global parameter for all units, to determine wait time if they are in a recovery state.
+;; Similarly, we account for units with policies that do not have an explicit recovered state.
+;; In this case, we inject the equivalent of a fake state, with 0 wait time, to allow for recovery
+;; processing to occur.
+
+;;this'll get called quite a bit...
+(defn recovery-time [ctx]
+  (or (store/gete ctx :parameters "DefaultRecoveryTime") 0))
+
+(defn get-next-position [policy position]
+    (case position
+      :recovery   :recovered
+      (if-let [res (protocols/next-position policy position)]
+          res
+          (throw (Exception. (str [:dont-know-position position]))))))
 
 (defn policy-wait-time [policy statedata position deltat]
-  (let [frompos  (protocols/next-position policy position)
-        topos    (protocols/next-position policy frompos)
-        t (protocols/transfer-time policy frompos topos)
-        ]
-    (- t (- deltat (fsm/remaining statedata)))))
+  (if (identical? position :recovery)
+       90  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.                
+       (let [frompos  (get-next-position policy position)
+             topos    (get-next-position policy frompos)]
+         (if-let [t (protocols/transfer-time policy frompos topos)]
+           (- t (- deltat (fsm/remaining statedata)))
+           (throw (Exception. (str [:undefined-transfer position]))) ;if it's not defined in policy...instant?
+      ))))
+
+;(def instants #{:abrupt-withdraw})
 
 ;;Could be a cleaner way to unpack our data, but this is it for now...
 ;;need to fix this...let's see where we use it.
@@ -282,6 +305,23 @@
 
 ;;Behaviors
 ;;=========
+
+;;this is a primitive action masked as a behavior.
+(defn move!
+  ([deltat destination wait-time]
+   (->and [(->alter (fn [benv] (merge benv {:deltat deltat
+                                            :next-position destination
+                                            :wait-time wait-time})))
+           moving-beh]))
+  ([destination wait-time]
+   (->and [(->alter (fn [benv] (merge benv {:next-position destination
+                                            :wait-time wait-time})))
+           moving-beh]))
+  ([destination]
+   (->and [(->alter (fn [benv] (merge benv {:next-position destination
+                                            })))
+           moving-beh])))
+  
 
 ;;A lot of these behaviors operate on the concept of a blackboard.
 ;;The behavior environment, defined in marathon.ces.basebehavior,
@@ -535,7 +575,7 @@
         currentpos (:positionpolicy e)
         p  (or next-position
                (do (debug [:computing-position currentpos])
-                   (get-next-position e  currentpos)))
+                   (get-next-position (:policy e)  currentpos)))
         wt (if (and next-position wait-time) wait-time
                (do (debug [:computing-wait (:positionpolicy e)])
                    (get-wait-time @entity (:positionpolicy e) benv)))
@@ -765,20 +805,18 @@
 (def +recovery-time+ 90)
 (defn can-recover? [unit]
   (let [cyc (:currentcycle unit)]
-  (and (pos? (:bogbodget cyc))
+  (and (pos? (:bogbudget cyc))
        (< (+ (:cycletime unit) +recovery-time+) (:duration-expected cyc)))))
 
-
 (befn recovery-beh {:keys [entity deltat ctx] :as benv}
-      (let [unit @entity]
-        (if (can-recover? unit)
-          (do (swap! entity #(u/add-dwell % deltat))
-              (success benv))
-          (do (swap! ctx
-                     #(sim/trigger-event :supplyUpdate (:name unit) (:name unit) (core/msg "Unit " (:name unit) " Skipping Recovery with "
-                                                                                           (:bogbudget (:currentcycle unit)) " BOGBudget") %))
-              (reset! entity (assoc-in unit [:currentcycle :bogbudget] 0))
-              moving-beh))))
+  (let [unit @entity]
+    (if (can-recover? unit)
+      (move! :recovery 90) ;;currently moving to recovery for 90 days.
+      (do (swap! ctx
+                 #(sim/trigger-event :supplyUpdate (:name unit) (:name unit) (core/msg "Unit " (:name unit) " Skipping Recovery with "
+                                                                                       (:bogbudget (:currentcycle unit)) " BOGBudget") %))
+          (reset! entity (assoc-in unit [:currentcycle :bogbudget] 0))
+          moving-beh))))
 
 ;;On second thought, this is sound.  If the unit is already in overlap, it's in a terminal state..
 ;;For followon eligibility, it means another unit would immediately be overlapping this one anyway,

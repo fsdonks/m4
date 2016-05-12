@@ -644,16 +644,8 @@
 ;;For instance, notice we update the deployments.
 
 (defn  deploy-unit [unit t deployment-idx ctx] 
-  (let [c    (:current-cycle unit)
-        deps (:deployments c)
-        new-unit           (-> unit
-                               (increment-deployments)
-                               )
-        ;_            (println [:deploy-unit new-unit])
-        ]
-    (->> (store/update-ine ctx [(:name unit) :current-cycle 
-          
-         (keep-bogging-until-depleted new-unit))))
+  (-> (increment-deployments unit)
+      (keep-bogging-until-depleted ctx)))
 
 
 ;'Probably pull unit's changelocation into here as well.
