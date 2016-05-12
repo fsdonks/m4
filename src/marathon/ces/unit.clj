@@ -433,14 +433,24 @@
 ;;instructs the entity to execute a logical move; possibly changing
 ;;the physical location, and changing the state.
 (defn move-to [entity location position duration ctx]
-  (core/handle-message! ctx entity
-                        (core/->msg (:name entity) (:name entity)
-                                    (core/get-time ctx)
-                                    :move
-                                    {:next-location location
-                                     :next-position position
-                                     :wait-time duration
-                                     })))
+  (if  *uic*
+    (binding [spork.ai.core/*debug* (or spork.ai.core/*debug* (= (:name entity) *uic*) )]
+      (core/handle-message! ctx entity
+                            (core/->msg (:name entity) (:name entity)
+                                        (core/get-time ctx)
+                                        :move
+                                        {:next-location location
+                                         :next-position position
+                                         :wait-time duration
+                                         })))
+      (core/handle-message! ctx entity
+                            (core/->msg (:name entity) (:name entity)
+                                        (core/get-time ctx)
+                                        :move
+                                        {:next-location location
+                                         :next-position position
+                                         :wait-time duration
+                                         }))))
                         
 
 ;;wrapper around our spawning functionality.

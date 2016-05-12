@@ -580,10 +580,14 @@
 (def h181
   (->history 181  (debugging-on 181)
              ctx91))
+
+;(binding [unit/*uic* "2_SRC1_NG"]
+(def h271 
+  (->history 271  (debugging-on (fn [_] true))
+             (get h181 181)))
+
+
 )
-
-
-
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
 ;;The trick now is to indicate that the entities should be updating.

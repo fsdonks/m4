@@ -536,10 +536,11 @@
   "The policy system checks to see if we entered a new period, and changes 
    the governing policies to fit the new period.  High level entry point, 
    typically called by the simulation engine."
-  ([day ctx toname]
+  ([day ctx newperiod]
      (let [policystore (core/get-policystore ctx)
+           toname      (:name newperiod)
            period      (:activeperiod policystore)
-           fromname (:name period)]
+           fromname    (:name period)]
        (if (= fromname toname) ctx
            (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
                 (core/merge-entity {:PolicyStore (update-period day toname policystore)})

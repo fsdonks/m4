@@ -174,13 +174,17 @@
 (defn get-next-position [policy position]
     (case position
       :recovery   :recovered
+      :recovered  :re-entry
       (if-let [res (protocols/next-position policy position)]
           res
-          (throw (Exception. (str [:dont-know-position position]))))))
+          (throw (Exception. (str [:dont-know-following-position position]))))))
 
 (defn policy-wait-time [policy statedata position deltat]
-  (if (identical? position :recovery)
-       90  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.                
+  (cond (identical? position :recovery)
+        0  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.
+        (identical? position :recovered)
+        0
+        :else
        (let [frompos  (get-next-position policy position)
              topos    (get-next-position policy frompos)]
          (if-let [t (protocols/transfer-time policy frompos topos)]
@@ -270,8 +274,8 @@
 ;;aging/advancing).  Where we had direct method calls to
 ;;other state handler functions, we can now just directly
 ;;encode the transition in the tree...
-(defn special-state? [s] (or (identical? s :spawning)
-                             (identical? s :abrupt-withdraw)))
+(defn special-state? [s]
+  #{:spawning :abrupt-withdraw :recovered} s)
 
 (defn just-spawned?
   "Determines if the entity recently spawned, indicated by a default
@@ -767,12 +771,13 @@
 
 (declare abrupt-withdraw-beh)
 (befn special-state {:keys [entity statedata] :as benv}
-      (let [s (:state entity)
-            ;_ (debug [:specialstate s])
+      (let [s (:state @entity)            
             ]
         (case s
           :spawning spawning-beh
           :abrupt-withdraw abrupt-withdraw-beh
+          :recovered     (->and [(echo :recovered-beh)
+                                 reset-beh])
           (fail benv))))
 
 ;;Follow-on state is an absorbing state, where the unit waits until a changestate sends it elsewhere.
@@ -793,9 +798,13 @@
 ;;way to get the unit back to reset.  We set up a move to the policy's start state,
 ;;and rip off the followon code.
 (befn reset-beh {:keys [entity] :as benv}
-      (do (swap! entity #(assoc % :followoncode nil))
-          (beval moving-beh (assoc benv :next-position
-                                   (protocols/start-state (:policy @entity))))))
+      (let [pos             (protocols/start-state (:policy @entity))
+            wt              (get-wait-time @entity pos benv)
+            _               (swap! entity #(assoc % :followoncode nil))
+            ]
+        (beval moving-beh (assoc benv :next-position
+                                 (protocols/start-state (:policy @entity))
+                                 :wait-time wt))))
 
 ;;Function to handle the occurence of an early withdraw from a deployment.
 ;;when a demand deactivates, what happens to the unit?
@@ -865,7 +874,7 @@
   {:reset            reset-beh
 ;   :global          
    :abrupt-withdraw  abrupt-withdraw-beh
-   :recovered        (echo :recovered-beh)
+;   :recovered        (echo :recovered-beh)
    ;:end-cycle
 ;   :spawning        spawning-beh   
    :demobilizing     dwelling-beh
