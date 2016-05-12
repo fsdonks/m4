@@ -523,22 +523,23 @@
    the unfilled queue.  Deactivating unfilled demands are detected as well.
    Propogates notifications for each special case."
   [demandstore demandname ctx]
-  (let [demand (get-in demandstore [:demandmap demandname])
+  (let [demand   (get-in demandstore [:demandmap demandname])   ;     (store/get-entity ctx demandname) 
         fill-key (priority-key demand)
         unfilled (:unfilledq demandstore)]
     (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
     (assert (not (nil? demandname)) "Empty demand name!")
     (let [required (d/required demand)
-          src      (:src demand)]
+          src      (:src demand)
+          _ (println [:updfill demandname :required required])]
       (if (or (zero? required) 
               (not (active-demand? demandstore demandname))) ;demand is filled, remove it
         (if (contains? unfilled src) ;either filled or deactivated
           (let [demandq (dissoc (get unfilled src) fill-key)
                 nextunfilled (if (zero? (count demandq)) 
                                  (dissoc unfilled src) 
-                                 (assoc unfilled src demandq))]
+                                 (assoc  unfilled src demandq))]
             (->> (removing-unfilled! demandstore demandname ctx)
-                (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
+                 (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
           (deactivating-unfilled! demandstore demandname ctx))     ;notification
         ;demand is unfilled, make sure it's added
         (let [demandq (get unfilled src (sorted-map))]  

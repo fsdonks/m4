@@ -6,7 +6,8 @@
                              [supply :as supply]
                              [demand :as dem]
                              [fill :as fill]]           
-            [spork.sim       [simcontext :as sim]]))
+            [spork.sim       [simcontext :as sim]]
+            [spork.entitysystem.store :as store]))
 
 ;Since we allowed descriptions of categories to be more robust, we now abstract
 ;out the - potentially complex - category entirely.  This should allow us to 
@@ -40,26 +41,33 @@
   (loop [pending   (dem/find-eligible-demands demandstore category)   
          ctx       (dem/trying-to-fill! demandstore category ctx)]
     (if (empty? pending) ctx ;no demands to fill!      
-      (let [demand      (val (first pending))                    
+      (let [demandstore (core/get-demandstore ctx)
+            demand      (val (first pending))                    
             demandname  (:name demand)           ;try to fill the topmost demand
             ctx         (dem/request-fill! demandstore category demand ctx)           
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
             ;_           (println [fill-status demandname])
             can-fill?   (= fill-status :filled)
+            _           (println [:fill-status fill-status])
             next-ctx    (if (= fill-status :unfilled) fill-ctx 
                           (->> fill-ctx 
                                (dem/demand-fill-changed! demandstore demand) ;2)
                                (core/merge-entity               ;UGLY 
                                  {:DemandStore 
                                   (dem/register-change  (core/get-demandstore fill-ctx) demandname)})))
-            newstore (core/get-demandstore next-ctx)
+            newstore    (core/get-demandstore next-ctx)
+            _ (println [:pre-fill  (keys (:units-assigned demand))
+                        :post-fill  (keys (:units-assigned (dem/get-demand newstore demandname)))
+                        ])
+                        
              ]
         (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
           next-ctx                                                           ;3)
           ;otherwise, continue filling!
           (recur
-           (dem/pop-priority-map pending) ;advance to the next unfilled demand
-           (->> (dem/sourced-demand! newstore demand next-ctx);notification 
+           (dem/pop-priority-map      pending) ;advance to the next unfilled demand
+           (->> (dem/sourced-demand!  newstore demand next-ctx);notification
+                ((fn [ctx] (println [:should-be-popping demandname]) ctx))
                 (dem/update-fill      newstore demandname)  ;update unfilledQ.
                 (dem/can-fill-demand! newstore demandname))))))));notification
 

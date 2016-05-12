@@ -583,9 +583,10 @@
 (befn find-move ^behaviorenv {:keys [entity next-position wait-time] :as benv}      
   (let [e  @entity
         currentpos (:positionpolicy e)
+        _ (when (= currentpos :re-entry)  (println (:tupdate benv)))
         p  (or next-position
                (do (debug [:computing-position currentpos])
-                   (get-next-position (:policy e)  currentpos)))
+                   (get-next-position (:policy e)  currentpos)))                   
         wt (if (and next-position wait-time) wait-time
                (do (debug [:computing-wait (:positionpolicy e)])
                    (get-wait-time @entity (:positionpolicy e) benv)))
@@ -697,6 +698,7 @@
      (do (reset! ctx (supply/log-position! tupdate
                                            (:from-position change)
                                            (:to-position change) @entity @ctx)) ;ugly, fire off a move event.check-overlap
+         (reset! entity (assoc @entity :positionpolicy (:to-position change)))
          (->seq [check-deployable
                  finish-cycle
                  (->alter  #(dissoc % :position-change))]))))
@@ -840,15 +842,18 @@
                           }
             _          (reset! ctx
                          (->> @ctx
-                              (supply/log-position! tupdate positionA positionB  unit)
+                             ; (supply/log-position! tupdate positionA positionB  unit)
                               (supply/supply-update! {:name "SupplyStore"} unit
                                 (core/msg "Unit " (:name unit)
                                           "  ReEntering with "
                                           (:bogbudget (:currentcycle unit))
                                           " BOGBudget."))))]
-            (beval change-state-beh
-                   (assoc benv :state-change state-change
-                          :wait-time nil))))
+        (beval  change-state-beh
+                (assoc benv :state-change state-change
+ ;                      :position-change {:from-position positionA
+ ;                                        :to-position positionB}
+                       :wait-time (- timeremaining timeinstate)
+                       :next-position positionB))))
 
 ;;Function to handle the occurence of an early withdraw from a deployment.
 ;;when a demand deactivates, what happens to the unit?
@@ -1049,6 +1054,10 @@
           (echo :aged)
           moving-beh]))
 
+(befn up-to-date {:keys [entity] :as benv}
+      (let [e @entity]
+        (echo [:up-to-date (:name e) :cycletime (:cycletime e)])))
+
 ;;The root behavior for updating the entity.
 (def update-state-beh
   (->seq [(echo :<update-state-beh>)
@@ -1064,7 +1073,7 @@
                            (if-y 
                             global-state
                             (fail ctx)))])
-                 (echo :up-to-date)])]))
+                   up-to-date])]))
 
 (def lite-update-state-beh
   (->seq [(echo :<lite-state-beh>)
@@ -1076,7 +1085,7 @@
                            (if-y 
                             global-state
                             (fail ctx)))])
-                 (echo :up-to-date)])]))
+                   up-to-date])]))
 
 ;;So, this precludes is from having shared behaviors
 ;;across states.  If we go the state-based route, we

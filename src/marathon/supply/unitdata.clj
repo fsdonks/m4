@@ -272,8 +272,7 @@
 ;getStats = "Policy:" & policy.AtomicName & " Cycletime: " & cycletime
 ;End Function
 
-(defn getStats [u] 
-  (str "Policy: " (-> u :policy :AtomicName) "Cycletime: " (:cycletime u)))
+
 
 
 ;'force the unit to broadcast a unitmoved event if it's the first time it moved.

@@ -295,6 +295,8 @@
                                         ;in demandstore.
     ))
 
+(def small-ctx (disable-except "2_SRC1_NG" defaultctx))
+
 (def supply-sim (->simulator supply-step defaultctx))
 (def ss (->simulator supply-step (disable-except the-unit defaultctx)))
 

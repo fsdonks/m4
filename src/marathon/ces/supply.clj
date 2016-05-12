@@ -7,7 +7,8 @@
             [marathon.supply [unitdata :as udata]]
             [marathon.ces [missing :as missing]
                           [core :as core] [policy :as policy] 
-                          [unit :as u]]
+             [unit :as u]]
+            [marathon.data.protocols :as protocols]
             [spork.entitysystem.store :as store
              :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
                      update-ine update-entity get-ine]]
@@ -25,9 +26,15 @@
       (tag/get-tags :enabled)
       (empty?)
       (not)))
+
+(defn get-stats
+  ([nm ctx]
+   (core/msg "Policy: "    (protocols/atomic-name (store/gete ctx nm :policy)) " "
+             "Cycletime: " (store/gete ctx nm :cycletime ))))
+
 ;;no change for estore.
-(defn unit-msg [unit]
-  (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
+(defn unit-msg [unit ctx]
+  (str "Updated Unit " (:name unit) " " (get-stats (:name unit) ctx)))
 
 (defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
 ;;estore version
@@ -249,14 +256,16 @@
   [t supplystore unitname ctx]
   (if ;(core/disabled? supplystore unitname)
        (gete ctx unitname :disabled) ;lame hack
-            (do (println [:update unitname t :disabled])
+            (do ;(println [:update unitname t :disabled])
                 ctx)
       (let [unit (get-unit ctx unitname)
             ;_ (println [:updating unitname])
             ]
           (->> ctx       
                (u/unit-update unit) ;(updates/elapsed t (or (sim/last-update unitname ctx) 0)))
-               (supply-update! supplystore unit (unit-msg unit))))))
+               ((fn [ctx]
+                  (let [msg  (unit-msg unit ctx)]
+                    (supply-update! supplystore unit msg ctx))))))))
 
 (defn update-units
   "Given a sequence of unit keys, xs, brings each unit up to date according to 

@@ -541,7 +541,7 @@
  "Deploys the unit identified in filldata to demand via the supply system."
   [t period demand deployment-count filldata  ctx]
   (let [unit (or (:unit filldata) filldata)]
-    (->> (deployment/deploy-unit  ctx unit  t demand                                
+    (->> (deployment/deploy-unit  ctx unit  t (:name demand)                                
                                  (core/followon? unit))
          (supply/log-deployment! t (:locationname unit) demand unit   
                                  deployment-count filldata nil  period))))
@@ -603,8 +603,7 @@
   (let [rule        (demand->rule demand)
         period      (:name (policy/get-active-period (core/get-policystore ctx)))
         t           (core/get-time ctx)
-        demand-name (:name demand)
-       ; _ (println [:satisfying-demand demand (d/required demand)])
+        demand-name (:name demand)  
                                         ;1)
         req      (d/required demand)
         selected (->> (find-supply ctx rule)

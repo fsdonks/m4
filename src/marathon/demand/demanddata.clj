@@ -30,7 +30,8 @@
 ;required = quantity - units-assigned.count
 ;End Function
 
-(defn required [d] (- (:quantity d) (-> d :units-assigned count)))
+(defn required [d] (- (:quantity d)
+                      (-> d :units-assigned count)))
 
 ;'TOM Change 14 Mar 2011
 ;'propose storing the quality of the fill using the fill path.  That way, we can dissect the fill path

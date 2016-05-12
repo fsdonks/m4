@@ -10,6 +10,7 @@
                              [policy :as policy] [supply :as supply] 
                              [unit :as u]]
             [marathon.data   [protocols :as protocols]]
+            [spork.entitysystem.store :as store]
             [spork.sim       [simcontext :as sim]]
             [spork.util      [tags :as tag]]))
 
@@ -49,11 +50,6 @@
                ))
           ))
 
-(defn fill!  [followon? unit demand  t period deployment-count filldata  ctx]
-  (->> ctx
-       (deploy! followon? unit demand t)
-       (supply/log-deployment! t (:locationname unit) demand unit   
-                               deployment-count filldata period)))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
@@ -69,7 +65,7 @@
    expected length of stay, bog, will determine when the next update is 
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
-  ([ctx unit t demand   followon?]
+  ([ctx unit t demandname   followon?]
     (assert  (u/valid-deployer? unit) 
              "Unit is not a valid deployer! Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment")
@@ -77,12 +73,11 @@
       (let [fillcount     (count (:fills fillstore))
             bog           (get-max-bog unit policystore) 
             unitname      (:name unit)
-            demandname    (:name demand)
+          ;  demandname    (:name demand)
             from-location (:locationname    unit) ;may be extraneous
             from-position (:position-policy unit);
             to-location   demandname           
             to-position   :deployed
-            newdem        (d/assign demand unit) ;need to update this in ctx..
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
             unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
@@ -90,9 +85,10 @@
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))
             ]  
-        (->> ctx
-             (sim/merge-entity {unitname unit
-                                :DemandStore (dem/add-demand demandstore newdem)
+        (->> (store/updatee ctx demandname :units-assigned assoc (:name unit) unit) ;need to update this in ctx..         
+             (sim/merge-entity {unitname     unit-delta
+;                                demandname  newdem                                           
+;                                :DemandStore (dem/add-demand demandstore newdem) ;inefficient...
                                 :SupplyStore {:tags (:tags supplystore)} ;(supply/add-unit supplystore unit)
                                 })              
 ;             ((fn [ctx] (println [demandname (keys  (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname)))])
@@ -105,14 +101,19 @@
 (defn deploy-units [ctx us d]
   (let [t (core/get-time ctx)
         period (:name (policy/get-active-period (core/get-policystore ctx)))
-        cnt (atom (store/gete ctx :SupplyStore :deployment-count 0))
+        ;cnt (atom (store/gete ctx :SupplyStore :deployment-count 0))
         ]
-    (->  (reduce (fn [acc u]
-                   (let [res (deploy-unit acc u t d period @cnt)
-                         _ (swap! cnt unchecked-inc)]
+    ;(->
+     (reduce (fn [acc u]
+                   (let [res (deploy-unit acc u t d ;period
+                                          ;@cnt
+                                          )]
+                         ;_ (swap! cnt unchecked-inc)]
                      res))
                  ctx us)
-         (store/assoce :SupplyStore :deployment-count @cnt))))
+         ;(store/assoce :SupplyStore :deployment-count @cnt)
+     ))
+;)
 (comment   
            
            
