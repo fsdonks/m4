@@ -511,13 +511,11 @@
                     (spawning? statedata))
             (success benv))))
 
-
 (defn position=location? [newstate]
   (case newstate    
     ("Dwelling"  "DeMobilizing" "Recovering"
      :dwelling :demobilizing :recovering :recovery)  true
      false))
-     
     
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 

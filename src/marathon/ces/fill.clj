@@ -21,6 +21,7 @@
             [marathon.ces.fill [fillgraph :as fg]]
             [spork.sim  [simcontext :as sim] [updates :as updates]]
             [spork.util [tags :as tag]]
+            [spork.entitysystem.store :as store]
             [spork.util.reducers]
             [clojure.core [reducers :as r]]))
 
@@ -546,10 +547,14 @@
           t           (sim/get-time ctx)
           ]
       (deployment/deploy-unit ctx unit t demand
-                              ;filldata
-                              ;(core/interval->date t ctx)
                               (core/followon? unit)))))
 
+(defn fill!  [t period demand deployment-count filldata  ctx]
+  (let [unit (or (:unit filldata) filldata)]
+    (->> (deployment/deploy-unit  ctx unit  t demand                                
+                                 (core/followon? unit))
+         (supply/log-deployment! t (:locationname unit) demand unit   
+                                 deployment-count filldata nil  period))))
 
 ;;#Incremental Demand Filling
 
@@ -581,7 +586,27 @@
     (->> ctx 
          (filled-demand! (:name demand) (:name unit))
          (check-ghost unit)
-         (apply-fill fd demand)))) 
+         (apply-fill fd demand))))
+
+(defn fill-demand*
+  "Enacts filling a demand, by realizing a vector of promised fills, logging if any ghosts 
+   were used to fill (may change this...) and updating the context.  Applies the
+   result of one promised fill to the demand, which may or may not satisfy the 
+   demand."
+  [t period demand  promised-fills ctx]
+  (let [deployment-count (atom (or (store/gete ctx :SupplyStore :deployment-count) 0))]
+    (->  (reduce (fn [ctx promised-fill]            
+                   (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
+                                        ;_ (println fd)
+                         unit     (or (:unit filldata) filldata)                         
+                         cnt      (swap! deployment-count unchecked-inc)
+                         ] 
+                     (->> ctx 
+                          (filled-demand! (:name demand) (:name unit))
+                          (check-ghost unit)
+                          (fill! t period demand cnt filldata))))
+                 ctx promised-fills)
+         (store/assoce :SupplyStore :deployment-count @deployment-count))))
 
 ;;#Trying to Completely Satisfy a Demand
 
@@ -597,7 +622,7 @@
 ;   the ordering of candidates is independent of the demand fill.
 
 ;; think category is akin to rule here...
-(defn satisfy-demand  "Attempts to satisfy the demand by finding supply and applying promised 
+(defn satisfy-demand-  "Attempts to satisfy the demand by finding supply and applying promised 
    fills to the demand.  Returns a result pair of 
    [:filled|:unfilled updated-context], where :filled indicates the demand is 
    satisifed, and updated-context is the resulting simulation context."
@@ -628,6 +653,26 @@
                       nextd (-> (core/get-demandstore nextctx)
                                 (dem/get-demand demand-name))]
                   (recur nextd (rest xs) :added-fill (unchecked-dec remaining) nextctx)))))))
+
+;;Filling in batch now.  Should be mo betta.
+(defn satisfy-demand  "Attempts to satisfy the demand by finding supply and applying promised 
+   fills to the demand.  Returns a result pair of 
+   [:filled|:unfilled updated-context], where :filled indicates the demand is 
+   satisifed, and updated-context is the resulting simulation context."
+  [demand category ctx]
+  (let [rule        (demand->rule demand)
+        period      (:name (policy/get-active-period (core/get-policystore ctx)))
+        t           (core/get-time ctx)
+        demand-name (:name demand)
+       ; _ (println [:satisfying-demand demand (d/required demand)])
+                                        ;1)
+        req      (d/required demand)
+        selected (->> (find-supply ctx rule)
+                      (into [] (take req)))
+        actual-fill (count selected)                
+        ]
+    [(if (== actual-fill req) :filled :unfilled) (fill-demand* t period demand selected ctx)]))
+
 
 ;;#Pending
 ;;Port fill store generation functions and IO functions/constructors from legacy 

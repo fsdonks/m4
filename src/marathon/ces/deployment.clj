@@ -36,14 +36,24 @@
       (if followon?
           (->> ctx
                (supply/record-followon supply unit demand)
+;               (supply/log-deployment! t (:locationname unit) demand unit 0  
+;                                       deployment-count period)
                (u/re-deploy-unit  unit newlocation t (or (:deployment-index unit) 0))
                ;(u/unit-moved-event! unit newlocation)
                )
           (->> ctx 
                (u/deploy-unit unit newlocation  t (or (:deployment-index unit) 0))
+               ;; (supply/log-deployment! t (:locationname unit) demand unit 0  
+               ;;                         deployment-count period))
                ;(u/unit-moved-event! unit newlocation)
-               )
-          )))
+               ))
+          ))
+
+(defn fill!  [followon? unit demand  t period deployment-count filldata  ctx]
+  (->> ctx
+       (deploy! followon? unit demand t)
+       (supply/log-deployment! t (:locationname unit) demand unit   
+                               deployment-count filldata period)))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
@@ -94,9 +104,15 @@
 
 (defn deploy-units [ctx us d]
   (let [t (core/get-time ctx)
+        period (:name (policy/get-active-period (core/get-policystore ctx)))
+        cnt (atom (store/gete ctx :SupplyStore :deployment-count 0))
         ]
-    (reduce (fn [acc u]
-                (deploy-unit acc u t d)) ctx us)))
+    (->  (reduce (fn [acc u]
+                   (let [res (deploy-unit acc u t d period @cnt)
+                         _ (swap! cnt unchecked-inc)]
+                     res))
+                 ctx us)
+         (store/assoce :SupplyStore :deployment-count @cnt))))
 (comment   
            
            

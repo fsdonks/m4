@@ -328,8 +328,8 @@
 
 ;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
-  [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
-  (sim/trigger-event :deploy "SupplyManager" (:name unit)               
+  [t fromname demand unit fillcount filldata deploydate  period ctx]
+  (sim/trigger-event :deploy "SupplyManager" (:name unit)              
      (core/msg "Deployed unit " (:name unit) 
           " from " fromname " to demand " (:name demand))
      {:fromloc   fromname  :unit unit :demand demand :fill filldata 

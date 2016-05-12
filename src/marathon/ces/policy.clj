@@ -215,7 +215,12 @@
 (defn find-period 
   "Finds the first arbitrary period in the policy store that intersects time t."
   [t policystore]
-  (first (find-periods t policystore))) 
+  (reduce-kv (fn [p pname per]
+               (if  (period/intersects-period? t per)
+                 (reduced per)
+                 p))
+             nil
+             (get-periods policystore)))
 
 ;Returns the the period currently active in the policy store.  This may change 
 ;when I introduce multiple timelines....
