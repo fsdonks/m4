@@ -515,7 +515,7 @@
 (defn position=location? [newstate]
   (case newstate    
     ("Dwelling"  "DeMobilizing" "Recovering"
-     :dwelling :demobilizing :recovering)  true
+     :dwelling :demobilizing :recovering :recovery)  true
      false))
      
     
@@ -544,7 +544,7 @@
           (do (debug [:no-movement frompos nextpos (type benv)])
               (success (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
           (let [_            (debug [:moving frompos nextpos])
-                newstate      (get-state u nextpos)
+                newstate     (or (get-state u nextpos) nextpos)
                 _ (when (nil? newstate) (throw (Exception. (str [:undefined-transition newstate u frompos nextpos wt]))))
                 state-change {:newstate       newstate
                               :duration       wt
@@ -782,11 +782,12 @@
 ;;in a dynamically determined position, or the unit goes to another demand compatible with the
 ;;followon code.
 (befn followon-beh {:keys [entity ctx] :as benv}
-      (when (:followoncode @entity) ;if the unit has a followon code
+      (when-let [fc (u/followon-code @entity)] ;if the unit has a followon code
         (do ;register the unit as a possible followOn
+          (println [(:name @entity) :added-followon :for [fc]])
           (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
                                         ;age-unit
-          (println [(:name @entity) :added-followon ])
+
           (success (merge benv {:wait-time nil
                                 :next-position nil})) ;?
           )))

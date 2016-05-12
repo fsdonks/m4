@@ -11,6 +11,7 @@
             [spork.entitysystem.store :as store
              :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
                      update-ine update-entity get-ine]]
+            [spork.ai.core :refer [debug]]
             [spork.sim    [simcontext :as sim] [updates :as updates]]
             [spork.util   [tags :as tag]
                           [general :as gen]]))
@@ -380,7 +381,8 @@
                      :deployable true}
          components (if (identical? bucket :default) components
                         (assoc components :followon bucket))
-         _ (println [(:name unit) components])]         
+         ;_ (println [(:name unit) components])
+         ]         
    (->> ctx
         (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)
                            (:name unit) components ;;tacking on component data to help with queries.
@@ -413,7 +415,7 @@
    unit's policy state."
   ([supply unit followon spawning ctx]
 ;     (assert (not (empty-position? unit)) (core/msg "invalid position!" (:positionpolicy unit)))
-   (let [position (:positionpolicy unit)
+   (let [position (:positionpolicy unit)         
          src      (get unit :src)
          can-deploy (u/can-deploy? unit spawning)]
        (if (or followon can-deploy)                         ;1)
@@ -650,8 +652,8 @@
   (let [fons (store/get-domain ctx :followon)
         fcount (count fons)]
     (if (pos? fcount)
-      (do  (println [:releasing! fcount :followon])
+      (do  (debug [:releasing! fcount :followon])
            (release-followons fons ctx))
-      (do (println [:No-followons-to-release!])
+      (do (debug [:No-followons-to-release!])
           ctx))))
 

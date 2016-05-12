@@ -16,6 +16,7 @@
               :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
                       update-ine update-entity get-ine] ]
              [spork.sim       [simcontext :as sim]]
+             [spork.ai.core :refer [debug]]
              [spork.util      [tags :as tag] [general :as gen] [temporal :as temporal]]))
 
 ;;##Primitive Demand and DemandStore Operations
@@ -745,12 +746,12 @@
         unitname    (:name unit)]
 	  (cond 
 	    (or (= "" demandgroup) (ungrouped? demandgroup))
-            (do  (println :abw1)
+            (do  (debug :abw1)
                  (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
                        _ (println [:pre-abw])] 
                         (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
               (not (ghost? unit))
-              (do  (println :abw2)
+              (do  (debug :abw2)
                    (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx))
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
 	            (u/change-state (store/get-entity ctx unitname) :Reset 0 nil)))))                     
@@ -831,7 +832,8 @@
           (update-entity
            :DemandStore       
            #(gen/deep-assoc % [:demandmap (:name demand)]
-                            (assoc demand :units-assigned {}))))))
+                            (assoc demand :units-assigned {}
+                                          :units-overlapping {}))))))
 
 ;;#Demand DeActivation
 (defn deactivate-demand
@@ -843,7 +845,8 @@
   (let [store (-> (gen/deep-update demandstore [:activedemands] dissoc (:name d))
                   (register-change (:name d)))
 ;        _ ;(println [:demand d])
-        _ (println [(:name d) :assigned  (keys (:units-assigned d))])]
+        _ (debug [:deactivating (:name d) :assigned  (keys (:units-assigned d))
+                  :overlapping            (keys (:units-overlapping d))])]
     (->> (deactivating-demand! store d t ctx)
          (send-home-units d t)
          (update-fill store (:name d)))))    
@@ -854,8 +857,7 @@
   [t ctx]
   (let [demandstore (core/get-demandstore ctx)]
     (reduce (fn [ctx dname] 
-              (let [store (core/get-demandstore ctx)
-                    _ (println [:deactivating dname])
+              (let [store (core/get-demandstore ctx)                    
                     d     (get-demand store dname)]
                 (deactivate-demand store t
                                    ;(store/get-entity ctx dname)

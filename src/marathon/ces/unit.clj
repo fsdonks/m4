@@ -38,6 +38,10 @@
                                     nil)))
 
 (def update unit-update)
+(defn followon-code [u]
+  (when-let [fc (:followoncode u)]
+    (when (not (= fc ""))
+      fc)))
 
 ;;Pending.  When we move to the component entity system, we'll pull this back
 ;;in.
@@ -490,7 +494,7 @@
 ;Indicates whether unit u is eligible for a follow on deployment.
 ;Units eligible for follow on deployments are units that have "any" followon code.
 ;The followon code indicates the context of the followon deployment.
-(defn can-followon? [u] (:followoncode u))
+(defn can-followon? [u] (followon-code u))
 
 ;Determine if a unit falls within the deployable window of a given policy.  If no
 ;policy is supplied, the unit's associated policy will be consulted.

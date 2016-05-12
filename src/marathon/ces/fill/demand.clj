@@ -44,7 +44,7 @@
             demandname  (:name demand)           ;try to fill the topmost demand
             ctx         (dem/request-fill! demandstore category demand ctx)           
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
-            _           (println [fill-status demandname])
+            ;_           (println [fill-status demandname])
             can-fill?   (= fill-status :filled)
             next-ctx    (if (= fill-status :unfilled) fill-ctx 
                           (->> fill-ctx 
