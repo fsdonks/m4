@@ -537,19 +537,9 @@
 
 (def ^:dynamic *fill-testing* true)
 
-(defn apply-fill
-  "Deploys the unit identified in filldata to demand via the supply system."
-  [filldata demand ctx]
-  (core/with-simstate [[fillstore supplystore policystore parameters] ctx]
-    (let [unit        (or (:unit filldata) filldata)
-          ou          (spork.entitysystem.store/get-entity ctx (:name unit))
-;          _ (println [:apply-fill (:locationname unit) (:locationname ou)])
-          t           (sim/get-time ctx)
-          ]
-      (deployment/deploy-unit ctx unit t demand
-                              (core/followon? unit)))))
-
-(defn fill!  [t period demand deployment-count filldata  ctx]
+(defn fill!
+ "Deploys the unit identified in filldata to demand via the supply system."
+  [t period demand deployment-count filldata  ctx]
   (let [unit (or (:unit filldata) filldata)]
     (->> (deployment/deploy-unit  ctx unit  t demand                                
                                  (core/followon? unit))
@@ -570,23 +560,6 @@
 ;;context through the process of deploying the unit associated with the realized 
 ;;filldata.  Since fill-promises are typically for single elements of supply,  
 ;;__fill-demand__ will typically only apply a single unit towards a demand.
-
-(defn fill-demand
-  "Enacts filling a demand, by realizing a promised fill, logging if any ghosts 
-   were used to fill (may change this...) and updating the context.  Applies the
-   result of one promised fill to the demand, which may or may not satisfy the 
-   demand."
-  [demand ctx promised-fill]
-  (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill.
-        ;_ (println fd)
-        unit     (or (:unit fd) fd)
-        
-        ;_ (println [:fill-demand (:locationname unit)])
-        ] 
-    (->> ctx 
-         (filled-demand! (:name demand) (:name unit))
-         (check-ghost unit)
-         (apply-fill fd demand))))
 
 (defn fill-demand*
   "Enacts filling a demand, by realizing a vector of promised fills, logging if any ghosts 
@@ -620,39 +593,6 @@
 ;   to re-evaluate the ordering of candidates while we're filling, i.e. the 
 ;   amount of fill may impact the order of candidates.  For now, we assume that 
 ;   the ordering of candidates is independent of the demand fill.
-
-;; think category is akin to rule here...
-(defn satisfy-demand-  "Attempts to satisfy the demand by finding supply and applying promised 
-   fills to the demand.  Returns a result pair of 
-   [:filled|:unfilled updated-context], where :filled indicates the demand is 
-   satisifed, and updated-context is the resulting simulation context."
-  [demand category ctx]
-  (let [;fillstore   ;(core/get-fillstore     ctx)
-        ;fillfunc    ;(core/get-fill-function ctx)
-        ;supplystore (core/get-supplystore   ctx)
-        rule        (demand->rule demand)
-        demand-name (:name demand)
-       ; _ (println [:satisfying-demand demand (d/required demand)])
-        ;1)
-        candidates  (find-supply ;fillfunc
-                                        ;supplystore
-
-                                ctx
-                                 rule)]
-    (loop [d           demand           
-           xs          candidates 
-           fill-status :unfilled
-           remaining   (d/required d)
-           current-ctx ctx]
-      (do ;(println remaining)
-          (cond (zero? remaining)      [:filled     current-ctx]
-                (empty? xs)            [fill-status current-ctx]
-                :else  
-                (let [
-                      nextctx (fill-demand d current-ctx (first xs))   ;;first/next recursion slow.
-                      nextd (-> (core/get-demandstore nextctx)
-                                (dem/get-demand demand-name))]
-                  (recur nextd (rest xs) :added-fill (unchecked-dec remaining) nextctx)))))))
 
 ;;Filling in batch now.  Should be mo betta.
 (defn satisfy-demand  "Attempts to satisfy the demand by finding supply and applying promised 
@@ -822,4 +762,64 @@
 ;;functions.  This requires cljgraph.
 
 
+;; (defn apply-fill
+;;   "Deploys the unit identified in filldata to demand via the supply system."
+;;   [filldata demand ctx]
+;;   (core/with-simstate [[fillstore supplystore policystore parameters] ctx]
+;;     (let [unit        (or (:unit filldata) filldata)
+;;           ou          (spork.entitysystem.store/get-entity ctx (:name unit))
+;; ;          _ (println [:apply-fill (:locationname unit) (:locationname ou)])
+;;           t           (sim/get-time ctx)
+;;           ]
+;;       (deployment/deploy-unit ctx unit t demand
+;;                               (core/followon? unit)))))
 
+;; (defn fill-demand
+;;   "Enacts filling a demand, by realizing a promised fill, logging if any ghosts 
+;;    were used to fill (may change this...) and updating the context.  Applies the
+;;    result of one promised fill to the demand, which may or may not satisfy the 
+;;    demand."
+;;   [demand ctx promised-fill]
+;;   (let [[fd ctx] (realize-fill promised-fill ctx) ;reify our fill.
+;;         ;_ (println fd)
+;;         unit     (or (:unit fd) fd)
+        
+;;         ;_ (println [:fill-demand (:locationname unit)])
+;;         ] 
+;;     (->> ctx 
+;;          (filled-demand! (:name demand) (:name unit))
+;;          (check-ghost unit)
+;;          (apply-fill fd demand))))
+
+;; ;; think category is akin to rule here...
+;; (defn satisfy-demand-  "Attempts to satisfy the demand by finding supply and applying promised 
+;;    fills to the demand.  Returns a result pair of 
+;;    [:filled|:unfilled updated-context], where :filled indicates the demand is 
+;;    satisifed, and updated-context is the resulting simulation context."
+;;   [demand category ctx]
+;;   (let [;fillstore   ;(core/get-fillstore     ctx)
+;;         ;fillfunc    ;(core/get-fill-function ctx)
+;;         ;supplystore (core/get-supplystore   ctx)
+;;         rule        (demand->rule demand)
+;;         demand-name (:name demand)
+;;        ; _ (println [:satisfying-demand demand (d/required demand)])
+;;         ;1)
+;;         candidates  (find-supply ;fillfunc
+;;                                         ;supplystore
+
+;;                                 ctx
+;;                                  rule)]
+;;     (loop [d           demand           
+;;            xs          candidates 
+;;            fill-status :unfilled
+;;            remaining   (d/required d)
+;;            current-ctx ctx]
+;;       (do ;(println remaining)
+;;           (cond (zero? remaining)      [:filled     current-ctx]
+;;                 (empty? xs)            [fill-status current-ctx]
+;;                 :else  
+;;                 (let [
+;;                       nextctx (fill-demand d current-ctx (first xs))   ;;first/next recursion slow.
+;;                       nextd (-> (core/get-demandstore nextctx)
+;;                                 (dem/get-demand demand-name))]
+;;                   (recur nextd (rest xs) :added-fill (unchecked-dec remaining) nextctx)))))))
