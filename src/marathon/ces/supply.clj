@@ -320,7 +320,7 @@
 ;Actually, unit behaviors aren't maintaining any state....
 ;So we can probably just plug them in as modules....they're all pure functions.
 ;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
-(defn log-position! [t frompos topos unit & [duration ctx]]
+(defn log-position! [t frompos topos unit  ctx]
   (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
      (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
      nil ctx))

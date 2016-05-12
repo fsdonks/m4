@@ -426,6 +426,19 @@
                                        :duration duration
                                        }))))
 
+;;instructs the entity to execute a logical move; possibly changing
+;;the physical location, and changing the state.
+(defn move-to [entity location position duration ctx]
+  (core/handle-message! ctx entity
+                        (core/->msg (:name entity) (:name entity)
+                                    (core/get-time ctx)
+                                    :move
+                                    {:next-location location
+                                     :next-position position
+                                     :wait-time duration
+                                     })))
+                        
+
 ;;wrapper around our spawning functionality.
 (defn spawn [ent ctx]
   (core/handle-message! ctx  ent
@@ -588,9 +601,11 @@
 ;;policy's bog budget.  Wait until the bog budget elapses, or
 ;;someone interrupts you.
 
-(defn keep-bogging-until-depleted [u ctx]
-  (change-state u "Deployed" 0 (boggable-time u) ctx))
+(defn keep-bogging-until-depleted [u new-location ctx]
+  (move-to u new-location "Deployed" (boggable-time u) ctx))
 
+
+;;THis is kind of obviated....
 ;'Assumes a unit has not yet bogged, at least not as a follow on
 ;'Bogs the unit for its remaining bog budget.  Accounts for the passage of time before computing
 ;'the unit's next update.
@@ -600,6 +615,7 @@
 ;End With
 ;End Sub
 (defn wake-and-bog-until-depleted [u t ctx]
+  (throw (Exception. (str [:wake-and-bog-until-depleted :not-in-use])))
   (change-state u :bogging
       (- t  (get u :last-update 0))
       (max-boggable-time u) ctx))
@@ -629,7 +645,7 @@
 
 ;;This updates the unit statistics, and alters (drops) the followon
 ;;code.  re-deployment indicates followon?
-(defn  re-deploy-unit [unit t deployment-idx ctx] 
+(defn  re-deploy-unit [unit newlocation t deployment-idx ctx] 
   (let [c    (:current-cycle unit)
         deps (:deployments c)
         new-unit      (-> unit
@@ -638,14 +654,13 @@
                          (assoc :followoncode nil))]
     (->>   ctx
           (core/set-unit new-unit)
-          (keep-bogging-until-depleted new-unit))))
+          (keep-bogging-until-depleted new-unit newlocation))))
 
 ;;We can probably combine these into a unit behavior.
 ;;For instance, notice we update the deployments.
 
-(defn  deploy-unit [unit t deployment-idx ctx] 
-  (-> (increment-deployments unit)
-      (keep-bogging-until-depleted ctx)))
+(defn  deploy-unit [unit newlocation t deployment-idx ctx] 
+  (keep-bogging-until-depleted (increment-deployments unit) newlocation ctx))
 
 
 ;'Probably pull unit's changelocation into here as well.

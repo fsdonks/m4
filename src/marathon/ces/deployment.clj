@@ -36,11 +36,13 @@
       (if followon?
           (->> ctx
                (supply/record-followon supply unit demand)
-               (u/re-deploy-unit unit t (or (:deployment-index unit) 0))
-               (u/unit-moved-event! unit newlocation))
+               (u/re-deploy-unit  unit newlocation t (or (:deployment-index unit) 0))
+               ;(u/unit-moved-event! unit newlocation)
+               )
           (->> ctx 
-               (u/deploy-unit unit t (or (:deployment-index unit) 0))
-               (u/unit-moved-event! unit newlocation))
+               (u/deploy-unit unit newlocation  t (or (:deployment-index unit) 0))
+               ;(u/unit-moved-event! unit newlocation)
+               )
           )))
 
 (defn check-first-deployer!   [store unitname ctx]
@@ -73,9 +75,8 @@
             newdem        (d/assign demand unit) ;need to update this in ctx..
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
-            unit          (-> (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
-                                 unit-delta)
-                              (u/change-location   (:name newdem)))           
+            unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
+                                 unit-delta) 
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))
             ]  

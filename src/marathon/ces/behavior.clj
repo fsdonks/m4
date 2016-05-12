@@ -308,6 +308,12 @@
 
 ;;this is a primitive action masked as a behavior.
 (defn move!
+  ([location deltat destination wait-time]
+   (->and [(->alter (fn [benv] (merge benv {:deltat deltat
+                                            :next-position destination
+                                            :next-location location
+                                            :wait-time wait-time})))
+           moving-beh]))
   ([deltat destination wait-time]
    (->and [(->alter (fn [benv] (merge benv {:deltat deltat
                                             :next-position destination
@@ -545,14 +551,15 @@
                               :followingstate nil
                               :timeinstate 0
                               }
-                _            (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
-                _            (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
+                _            (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom              
+                ;;if we already have a location change set, then we should respect it.
                 from-loc     (:locationname u)
-                to-loc       (if (position=location? newstate)                               
-                               nextpos
-                               from-loc)
-                                     
-                              
+                to-loc       (if-let [newloc  (:next-location benv)]
+                               (do (debug [:preset-location newloc :From from-loc])
+                                   newloc)
+                               (if (position=location? newstate)                               
+                                 nextpos
+                                 from-loc))
                 ;_            (println [from-loc to-loc])
                 ]
             (bind!!  ;update the context with information derived
@@ -564,7 +571,8 @@
                                           {:from-location  from-loc
                                            :to-location    to-loc})
               :wait-time     nil
-              :next-position nil}
+              :next-position nil
+              :next-location nil}
              ))
           ))))
 
@@ -682,18 +690,21 @@
              (success benv))))))
 
 ;;When there's a change in position, we want to do all these things.
-(def change-position
-  (->seq [check-overlap
-          check-deployable
-          finish-cycle
-          (->alter  #(dissoc % :position-change))]))
+(befn change-position [entity position-change tupdate ctx]
+   (when-let [change position-change]        
+     (do (reset! ctx (supply/log-position! tupdate
+                                           (:from-position change)
+                                           (:to-position change) @entity @ctx)) ;ugly, fire off a move event.check-overlap
+         (->seq [check-deployable
+                 finish-cycle
+                 (->alter  #(dissoc % :position-change))]))))
 
 ;;if there's a location change queued, we see it in the env.
-(befn change-location {:keys [entity location-change ctx] :as benv}
+(befn change-location {:keys [entity location-change tupdate ctx] :as benv}
    (when location-change
      (let [{:keys [from-location to-location]} location-change]
        (let [_ (debug [:location-change location-change])            
-             ;_  (swap! ctx    #(u/unit-moved-event! @entity to-location %))
+             _  (reset! ctx  (supply/log-move! tupdate from-location to-location @entity nil @ctx))
              _  (reset! entity (u/push-location @entity to-location))] 
          ;;we need to trigger a location change on the unit...
          (success (dissoc benv :location-change))))))
@@ -828,25 +839,27 @@
             unit @entity            
             ;1)
             bogremaining (- (:bogbudget (:currentcycle unit))  
-                            (protocols/overlap (:policy unit)))
+                            (protocols/overlap (:policy unit)) ;;note: this overlap assumption may not hold...
+                            )
             _ (debug [:abw-beh {:deltat deltat
                                 :bogremaining bogremaining
-                                :unit (dissoc unit :policy)}])
+                                :unt (:name unit)
+                                ;:unit (dissoc unit :policy)
+                                }])
             ]
         (if (not (pos? bogremaining))
           ;makes no sense for the unit to continue BOGGING, send it home.
-          (->and [(echo [:abw->reset {:bogremaining bogremaining}])
-                  reset-beh])
+;          (->and [(echo [:abw->reset {:bogremaining bogremaining}])
+          reset-beh
+          ;])
           (->or 
              ;unit has some feasible bogtime left, we can possibly have it followon or extend its bog...
              ;A follow-on is when a unit can immediately move to fill an unfilled demand from the same
              ;group of demands.  In otherwords, its able to locally fill in.
              ;This allows us to refer to forcelists as discrete chunks of data, group them together,
              ;and allow forces to flow from one to the next naturally.         
-           [(->and [(echo [:abw->followon])
-                    followon-beh])
-            (->and [(echo [:abw->recovery])
-                    recovery-beh])]))))
+           [followon-beh
+            recovery-beh]))))
 
 ;;entities have actions that can be taken in a state...
 (def default-statemap
@@ -922,6 +935,12 @@
     (do (ai/debug (str [(:name (deref! entity)) :handling msg]))
       (beval 
        (case (:msg msg)
+         :move
+         (let [move-info (:data msg)
+               {:keys [wait-time next-location next-position deltat] :or
+                {wait-time 0 deltat 0}} move-info
+               _ (debug [:executing-move move-info  msg])]
+           (beval (move! next-location deltat next-position wait-time) benv))
          ;;allow the entity to invoke a state-change-behavior
          ;;We can always vary this by modifying the message-handler         
          :change-state           
