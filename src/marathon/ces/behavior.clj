@@ -465,6 +465,14 @@
                     (spawning? statedata))
             (success benv))))
 
+
+(defn position=location? [newstate]
+  (case newstate    
+    ("Dwelling"  "DeMobilizing" "Recovering"
+     :dwelling :demobilizing :recovering)  true
+     false))
+     
+    
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
 ;;slow....we may want to define a mutable version, 
@@ -500,10 +508,9 @@
                 _            (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom
                 _            (reset! ctx (u/unit-moved-event! @entity nextpos @ctx)) ;ugly, fire off a move event.
                 from-loc     (:locationname u)
-                to-loc       nextpos  ;; (when (if (set? newstate)
-                             ;;         (clojure.set/intersection
-                             ;;          #{"Dwelling" "DeMobilizing" "Recovering"
-                             ;;            :deployable :dwelling} newstate)
+                to-loc       (if (position=location? newstate)                               
+                               nextpos
+                               from-loc)
                                      
                               
                 ;_            (println [from-loc to-loc])
@@ -725,10 +732,12 @@
 ;;followon code.
 (befn followon-beh {:keys [entity ctx] :as benv}
       (when (:followoncode @entity) ;if the unit has a followon code
-        (do ;register the unit as a possible followOn 
+        (do ;register the unit as a possible followOn
           (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
                                         ;age-unit
-          (success (merge benv {:wait-time nil :next-position nil})) ;?
+          (println [(:name @entity) :added-followon ])
+          (success (merge benv {:wait-time nil
+                                :next-position nil})) ;?
           )))
 
 ;;way to get the unit back to reset.  We set up a move to the policy's start state,
@@ -777,12 +786,15 @@
 ;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
 ;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
 (befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
-      (let [_ (echo [:abw-beh {:deltat deltat}])
-            _ (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
-            unit @entity
+      (let [_ (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
+            unit @entity            
             ;1)
             bogremaining (- (:bogbudget (:currentcycle unit))  
-                            (protocols/overlap (:policy unit)))]
+                            (protocols/overlap (:policy unit)))
+            _ (debug [:abw-beh {:deltat deltat
+                                :bogremaining bogremaining
+                                :unit (dissoc unit :policy)}])
+            ]
         (if (not (pos? bogremaining))
           ;makes no sense for the unit to continue BOGGING, send it home.
           (->and [(echo [:abw->reset {:bogremaining bogremaining}])

@@ -31,12 +31,17 @@
 ;;For instance, we can perform bulk updates with the same
 ;;or a simular behavior context.....this is more appealing.
 (defn deploy!  [followon? unit demand t ctx]
-  (let [supply (core/get-supplystore ctx)]
+  (let [supply (core/get-supplystore ctx)
+        newlocation (:name demand)]
       (if followon?
           (->> ctx
                (supply/record-followon supply unit demand)
-               (u/re-deploy-unit unit t (or (:deployment-index unit) 0)))
-          (u/deploy-unit unit t (or (:deployment-index unit) 0) ctx))))
+               (u/re-deploy-unit unit t (or (:deployment-index unit) 0))
+               (u/unit-moved-event! unit newlocation))
+          (->> ctx 
+               (u/deploy-unit unit t (or (:deployment-index unit) 0))
+               (u/unit-moved-event! unit newlocation))
+          )))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
@@ -65,24 +70,23 @@
             from-position (:position-policy unit);
             to-location   demandname           
             to-position   :deployed
+            newdem        (d/assign demand unit) ;need to update this in ctx..
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
-            unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
+            unit          (-> (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
                                  unit-delta)
-
-            newdem        (d/assign demand unit) ;need to update this in ctx..
+                              (u/change-location   (:name newdem)))           
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))
             ]  
-        (->> (sim/merge-entity {unitname unit-delta
+        (->> ctx
+             (sim/merge-entity {unitname unit
                                 :DemandStore (dem/add-demand demandstore newdem)
-                                ;:SupplyStore (supply/add-unit supplystore unit)
-                                } ctx)
-             ((fn [ctx] (println [demandname (keys  (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname)))])
-                                        
-                ctx))
-             (u/change-location unit (:name newdem)) 
-             (deploy! followon?  unit newdem t)  ;;apply state changes.             
+                                :SupplyStore {:tags (:tags supplystore)} ;(supply/add-unit supplystore unit)
+                                })              
+;             ((fn [ctx] (println [demandname (keys  (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname)))])
+;                ctx))             
+             (deploy! followon?  unit newdem t)  ;;apply state changes.
              ))))  
   ([ctx unit t demand]
     (deploy-unit  ctx unit t demand (core/followon? unit))))

@@ -438,18 +438,23 @@
       (assoc :locationhistory (conj (:locationhistory unit) 
                                     newlocation))))
 
-;;#TODO Figure out a way more effecient way to express this, 
-;;we're going to have lots of location changes.  I have a feeling 
-;;the associng is going to kill us when we have a lot of movement.
-(defn change-location [unit newlocation ctx]
+
+(defn change-location [unit newlocation]
   (if (= newlocation (:locationname unit))
-    ctx
+    unit
     (->> (-> (if (:moved unit)
                (assoc unit :moved true)
                unit)
-             (push-location newlocation))
-         (store/mergee ctx (:name unit))
-         (unit-moved-event! unit newlocation))))
+             (push-location newlocation)))))
+;;#TODO Figure out a way more effecient way to express this, 
+;;we're going to have lots of location changes.  I have a feeling 
+;;the associng is going to kill us when we have a lot of movement.
+(defn change-location! [unit newlocation ctx]
+  (if (= newlocation (:locationname unit))
+    ctx
+    (-> ctx
+    (store/mergee (:name unit) (change-location unit newlocation))
+    (unit-moved-event! unit newlocation))))
 
 ;;TODO -> bring this back in.
 ;        (unit-first-moved-event! unit newlocation ctx)))))
@@ -646,8 +651,8 @@
                                )
         ;_            (println [:deploy-unit new-unit])
         ]
-    (->> ctx
-         (core/set-unit new-unit)
+    (->> (store/update-ine ctx [(:name unit) :current-cycle 
+          
          (keep-bogging-until-depleted new-unit))))
 
 

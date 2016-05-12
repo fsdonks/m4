@@ -355,25 +355,40 @@
 ;;interactive debugging if we just see the names (note: I can write a
 ;;view that will accomplish the same thing; in some cases it might be 
 ;;preferable to retain the name->unit info....pending.
-
 (defn update-availability [unit supply ctx]
   (if (contains? (get-buckets supply) (get unit :src))
     (more-src-available! unit ctx)
     (->> (new-src-available! (get unit :src) ctx)
       (new-deployable! unit))))
 
-;Consolidated this from update-deployability, formalized into a function.
+(defn derive-bucket [unit]
+  (let [fc  (:followoncode unit)]
+    (if (and fc (not (or (= fc "") (= fc "UnGrouped"))))
+      fc
+      :default)))
+
+;;Rather than specifying followons manually, we let them be derived from
+;;the unit's followon code.  If it has one, it's inferred we have a
+;;followon supply.  We store this information in the unit's bucket component.
+;;Consolidated this from update-deployability, formalized into a function.
+;;We also indicate the presence of followon units at the component level,
+;;rather than storing in the supply.
 (defn add-deployable-supply 
   ([supply bucket src unit ctx]
+   (let [components {:deployable-bucket bucket
+                     :deployable-cat    src
+                     :deployable true}
+         components (if (identical? bucket :default) components
+                        (assoc components :followon bucket))
+         _ (println [(:name unit) components])]         
    (->> ctx
         (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)
-                           (:name unit) {:deployable-bucket bucket
-                                         :deployable-cat    src
-                                         :deployable true} ;;tacking on component data to help with queries.
+                           (:name unit) components ;;tacking on component data to help with queries.
                            })
-        (update-availability unit supply)))
-  ([supply src unit ctx] 
-     (add-deployable-supply supply :default src unit ctx)))
+        (update-availability unit supply))))
+  ([supply src unit ctx]                                                                  
+   (add-deployable-supply supply
+                          (derive-bucket unit) src unit ctx)))
 
 ;;follow on supply was treated as special, but now it's not.  We expected 
 ;;a function called get-followon-supply before...
@@ -517,8 +532,8 @@
 (defn add-followon
   "Registers the unit as eligible for follow on status."
   [supply unit ctx] 
-  (-> (assoc-in supply [:followons (get unit :name)] unit)
-      (update-deploy-status unit true nil ctx)))
+                                        ;(-> ;(assoc-in supply [:followons (get unit :name)] unit)      
+      (update-deploy-status unit true nil ctx))
 
 (defn remove-followon
   "Drops the supply entity from supply store's registry of units in follow-on 
@@ -528,7 +543,7 @@
         fcode    (:followoncode unit)
         src      (get unit :src)]
     (-> store 
-        (update-in [:followons] dissoc unitname)
+        (store/dissoce  unitname :followon)
         (core/prune-in  [:deployable-buckets fcode src] dissoc unitname)
         (assoc-in  [:unitmap unitname] 
           (assoc unit :followoncode nil)))))
@@ -546,18 +561,21 @@
    unit is released from holding and allowed to progress back into the global 
    supply."
   [ctx unitname]
-  (let [ctx   (->> (update-entity ctx :SupplyStore remove-followon unitname)
+  (let [_     (println [:releasing unitname :followon])        
+        ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
                    (u/change-state unitname 
                                    :AbruptWithdraw 0 nil))
-        store (core/get-supplystore ctx)]   
+        ;store 
+        ]   
     (update-deploy-status 
-     store
-     (get-unit store unitname) nil nil ctx)))
+     (core/get-supplystore ctx)
+     (store/gete ctx unitname)  nil nil ctx)))
 
 
 ;;Process the unused follow-on units, changing their policy to complete cycles.
-(defn release-followons [supplystore & [ctx]]
-  (reduce release-followon-unit ctx (keys (:followons supplystore))))         
+(defn release-followons [fons ctx]
+  (as->   (store/drop-domain ctx :followon) ctx
+    (reduce release-followon-unit ctx (keys fons))))
 
 ;;__TODO__ Deprecate release-max-utilizers
 ;;This is probably a deprecated function.  It was a corner case to ensure that 
@@ -567,7 +585,7 @@
   (let [{:keys [followons normal]} 
            (group-by #(if (followon-unit? supplystore %) :followon :normal)
                       (tag/get-subjects (:tags supplystore) :MaxUtilizer))
-         updates {:supplystore (untag-units supplystore :MaxUtilizer 
+         updates {:SupplyStore (untag-units supplystore :MaxUtilizer 
                                             (concat followons normal))}]   
     (reduce release-followon-unit (sim/merge-entity updates ctx)
             followons))
@@ -628,6 +646,12 @@
 (defn manage-followons
   "Ensures that entities held in a temporary follow-on status are released and
    circulated back into supply.  Typically used after we try to fill demands."
-  [day ctx] 
-  (release-followons (gete ctx :SupplyStore :followons) ctx))
+  [day ctx]
+  (let [fons (store/get-domain ctx :followon)
+        fcount (count fons)]
+    (if (pos? fcount)
+      (do  (println [:releasing! fcount :followon])
+           (release-followons fons ctx))
+      (do (println [:No-followons-to-release!])
+          ctx))))
 

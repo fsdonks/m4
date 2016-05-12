@@ -1005,7 +1005,7 @@ DemandRecord	TRUE	1	2	46	481	73	45	SRC2	AC	Small	A11	O11	Surge	nil	nil	nil	nil	n
 DemandRecord	TRUE	1	2	46	554	64	45	SRC2	AC	Small	A12	O12	Surge	nil	nil	nil	nil	nil	nil	nil	nil
 DemandRecord	TRUE	1	2	46	618	48	45	SRC2	AC	Small	A13	O13	Surge	nil	nil	nil	nil	nil	nil	nil	nil
 DemandRecord	TRUE	1	2	46	666	112	45	SRC2	AC	Small	A14	O14	Surge	nil	nil	nil	nil	nil	nil	nil	nil
-DemandRecord	TRUE	2	2	46	1	90	45	SRC3	AC		R1	O1	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	2	2	46	1	90	45	SRC3	AC	Singleton	R1	O1	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
 DemandRecord	TRUE	2	1	46	1	2520	45	SRC3	AC		R2	O2	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
 DemandRecord	TRUE	1	1	46	1	2520	45	SRC3	AC		R3	O3	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
 DemandRecord	TRUE	1	3	46	271	90	45	SRC3	AC		R4	O4	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
@@ -1042,6 +1042,7 @@ DemandRecord	TRUE	1	1	46	901	900	45	SRC3	AC	V3	R34	O34	Foundational	nil	nil	nil	
 DemandRecord	TRUE	1	7	46	811	90	45	SRC3	AC	V4	R35	O35	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
 DemandRecord	TRUE	1	8	46	901	1080	45	SRC3	AC	V4	R36	O36	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
 ")
+
 (def period-records 
 "Type	Name	FromDay	ToDay
 PeriodRecord	Initialization	0	0

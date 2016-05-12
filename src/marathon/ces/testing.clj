@@ -573,7 +573,13 @@
 (def h91
   (->history 91  (debugging-on 91)
              defaultctx))
+
+(def ctx91 (get h91 91))
+(def s91 (core/get-supplystore (get h91 91)))
 )
+
+
+
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
 ;;The trick now is to indicate that the entities should be updating.

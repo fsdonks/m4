@@ -750,10 +750,10 @@
                        _ (println [:pre-abw])] 
                         (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
               (not (ghost? unit))
-              (do  (println :abw)
-                   (u/change-state unitname :abrupt-withdraw 0 nil ctx))
+              (do  (println :abw2)
+                   (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx))
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
-	            (u/change-state unitname :Reset 0 nil)))))                     
+	            (u/change-state (store/get-entity ctx unitname) :Reset 0 nil)))))                     
 
 (defn send-home
   "Implements the state changes required to deactivate a demand, namely, to send
