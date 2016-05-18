@@ -34,6 +34,21 @@
           "Tried to remove non-existent fillrule")
   (gen/deep-update demandstore [:fillables] disj fillrule))
 
+;;I think we can alter this to push to the entitystore instead of
+;;the demandmap....
+;;All the calls to add-demand need to be changed though...
+;;the demandstore is now the ctx itself...
+;;it's actually okay if we can tree the entitystore as
+;;a demandstore - this works out okay with the existing api.
+;;Actually, get-demandstore is just identity then....
+;;Another option, which may seem wierd, is that we add a
+;;reference to the parent context (Although we may
+;;screw up gc)....
+;;So, if the demandstore's parent is the entitystore,
+;;if we get the demandstore, and the dstore has a ctx
+;;reference, we can just shim demandstore operations to
+;;that....
+
 ;TOM ADDED 30 MAy 2013 
 (defn add-demand [demandstore demand]
   (gen/deep-assoc demandstore [:demandmap (:name demand)] demand))
@@ -106,11 +121,19 @@
   (keys (:unfilledq demandstore)))
 (defn unfilled-demands [category demandstore] 
   (get-in demandstore [:unfilledq category]))
-(defn get-demand [demandstore name] (get-in demandstore [:demandmap name]))
+
+;;Right now, we're storing demands in their entirety in the demandmap...
+;;We really just want to store the entity's name...
+;;Optionally, we can elevate this to a core function, using the
+;;store, and from there, we have access to the demand from a sole source...
+;;I think that's the best thing to do...
+(defn get-demand [demandstore name]
+  (get-in demandstore [:demandmap name]))
+
+
 ;Simple api function to group active demands from the store by their src. 
 (defn demands-by-src [store src] (get-in store [:unfilledq src]))
  
-
 ;1) Tom Note 20 May 2013 -> It would be nice to have a function or macro for 
 ;   defining nested updates like this, as it will probably happen quite a bit.
 (defn remove-demand [demandstore demandname]

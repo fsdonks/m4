@@ -31,12 +31,13 @@
 ;;we can more efficiently handle the state updates...
 ;;For instance, we can perform bulk updates with the same
 ;;or a simular behavior context.....this is more appealing.
-(defn deploy!  [followon? unit demand t ctx]
+(defn deploy!  [followon? unit demandname t ctx]
   (let [supply (core/get-supplystore ctx)
-        newlocation (:name demand)]
+        newlocation demandname;(:name demand)
+        ]
       (if followon?
           (->> ctx
-               (supply/record-followon supply unit demand)
+               (supply/record-followon supply unit demandname)
 ;               (supply/log-deployment! t (:locationname unit) demand unit 0  
 ;                                       deployment-count period)
                (u/re-deploy-unit  unit newlocation t (or (:deployment-index unit) 0))
@@ -71,7 +72,7 @@
      cycletime in deployable window, or be eligible or a followon  deployment")
     (core/with-simstate [[supplystore parameters policystore demandstore fillstore] ctx]
       (let [fillcount     (count (:fills fillstore))
-            bog           (get-max-bog unit policystore) 
+            bog           (get-max-bog unit policystore) ;;ugh...don't need this... 
             unitname      (:name unit)
           ;  demandname    (:name demand)
             from-location (:locationname    unit) ;may be extraneous
@@ -85,7 +86,7 @@
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))
             ]  
-        (->> (store/updatee ctx demandname :units-assigned assoc (:name unit) unit) ;need to update this in ctx..         
+        (->> (store/updatee ctx demandname :units-assigned assoc (:name unit) unit) ;need to update this in ctx..  ;;estore version.       
              (sim/merge-entity {unitname     unit-delta
 ;                                demandname  newdem                                           
 ;                                :DemandStore (dem/add-demand demandstore newdem) ;inefficient...
@@ -93,10 +94,14 @@
                                 })              
 ;             ((fn [ctx] (println [demandname (keys  (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname)))])
 ;                ctx))             
-             (deploy! followon?  unit newdem t)  ;;apply state changes.
+             (deploy! followon?  unit demandname t)  ;;apply state changes.
              ))))  
   ([ctx unit t demand]
     (deploy-unit  ctx unit t demand (core/followon? unit))))
+
+;;another option here..is to use the system approach.  We look for entities that have a
+;;pending deployment component, and process them.  A pending deployment component could
+;;include the name of the target demand, so we can lookup information we need for it.
 
 (defn deploy-units [ctx us d]
   (let [t (core/get-time ctx)

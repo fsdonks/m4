@@ -508,7 +508,7 @@
                         (store/get-entity defaultctx nm)))
 
 ;;pending tests
-(def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
+(def deployedctx    (deployment/deploy-units defaultctx the-deployers (:name d)))
 (def deployed-units (store/get-entities deployedctx selected))
 
 (defn simple-step [day ctx]

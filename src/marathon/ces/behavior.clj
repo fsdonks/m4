@@ -771,7 +771,7 @@
             (swap! entity  #(u/add-bog % deltat))
             (success benv))))
 
-(declare abrupt-withdraw-beh)
+(declare abrupt-withdraw-beh re-entry-beh)
 
 ;;This is a little weak; we're loosely hard coding
 ;;these behaviors.  It's not terrible though.
