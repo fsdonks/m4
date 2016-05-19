@@ -99,8 +99,8 @@
   policystore   :PolicyStore
   fillstore     :FillStore
   fill-function [:FillStore :fillfunction]
-  fillmap       [:FillStore :fillmap]
-  )
+  fillmap       [:FillStore :fillmap])
+
 
 ;;probably not useful.
 (defn get-behaviors   [ctx] (get-entity ctx :behaviormanager))
@@ -384,6 +384,63 @@
 
 ;;#Useful Vizualizations of the simulation context
 ;;TODO port this over to the new scenegraph api.
+(defn entryvis [x]
+  (cond (instance? java.util.Map$Entry x)
+        (reify
+          Object
+          (toString [o] 
+            (str (key x) " :: " (or (.getName (type (val x))) "nil"))
+            )
+          clojure.lang.Seqable
+          (seq [o] 
+            (if (inspect/atom? (val x))
+              (list (val x))
+              (entryvis (seq (val x))))))
+        (instance? java.util.Map x)
+         (let [entries (sort-by key (seq x))]
+           (map entryvis entries))
+        :else x))
+  
+(defn mapvis [^java.util.Map m]
+  (reify
+    Object
+    (toString [o] (str "/"))
+    clojure.lang.Seqable
+    (seq [x] (map entryvis (seq m)))))
+    
+;;creates a treemodel, but 
+(defn map-model [data]
+  (proxy [javax.swing.tree.TreeModel] []
+    (getRoot [] (mapvis data))
+    (addTreeModelListener [treeModelListener])
+    (getChild [parent index]
+      (let [res      (inspect/get-child parent index)]
+        (case (inspect/collection-tag res)
+          :entry (entryvis res)
+          res)))
+    (getChildCount [parent]
+      (inspect/get-child-count parent))
+    (isLeaf [node]
+      (if (instance? clojure.lang.IDeref node)
+        (inspect/is-leaf node)
+        (inspect/is-leaf node)))
+    (valueForPathChanged [path newValue])
+    (getIndexOfChild [parent child] -1)
+    (removeTreeModelListener [treeModelListener])))
+
+(defn inspect-tree [data]
+  (doto (javax.swing.JFrame. "Clojure Inspector")
+    (.add (javax.swing.JScrollPane. (javax.swing.JTree. (map-model data)
+                                                        )))
+    (.setSize 400 600)
+    (.setVisible true)))
+
+;;we'd like to make the clojure inspector a bit more useful...
+;;specifically, if we're looking at nested maps, it'b nice to
+;;use the map's keys as values instead of the entire string
+;;reprsentation
+(defn tree-view [obj] (inspect/inspect-tree obj))
+
 (defn demands->track [xs] 
   ;(sketch/->track (map (fn [r] (merge r {:start (:startday r)})) xs) :track-name name)
   )
@@ -454,7 +511,28 @@
     (jung/view-graph fg jung/fr)
     (throw (Exception. "No fillgraph to visualize!"))))
 
-(defn tree-view [obj] (inspect/inspect-tree obj))
+(defn visualize-store [ctx]
+  (tree-view (store/domains ctx)))
+
+(defn demand-names [ctx] (keys (gete ctx :DemandStore :demandmap)))
+(defn unit-names [ctx] (keys (gete ctx :SupplyStore :unitmap)))
+
+;;This is fairly close....
+(defn visualize-entities [ctx]
+  (let [demandnames    (demand-names ctx)
+        unitnames      (unit-names ctx)
+        basic-entities (set  (concat demandnames unitnames))
+        stores         (clojure.set/difference
+                        (set  (keys (store/entities ctx)))
+                        basic-entities)
+        named-entry (fn [e]
+                      (if (instance? clojure.lang.MapEntry e) (entryvis e)
+                          (entryvis (clojure.lang.MapEntry. (:name e) e))))]         
+    (tree-view
+     (entryvis 
+       {:stores  (map (comp entryvis named-entry)  (store/get-entities ctx stores))
+        :demands (map (comp entryvis named-entry)  (store/get-entities ctx demandnames))
+        :units   (map (comp entryvis named-entry)  (store/get-entities ctx unitnames))}))))
 
 (defn visualize-subscriptions [ctx] 
   (tree-view (:subscriptions (get-policystore ctx))))
