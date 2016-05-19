@@ -30,7 +30,7 @@
                         [cellular :as cells]]
             [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
-            [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity]]
+            [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity] :as store]
             [spork.sim.simcontext :as sim]
             [spork.ai.core :as ai]
             [marathon.ces.basebehavior :as b]
@@ -74,29 +74,43 @@
 ;;    supply-tags   [:supplystore :tags]
 ;;    demand-tags   [:demandstore :tags]})
 
-(defn get-parameters [ctx]  (get-entity ctx :parameters))
-(defn set-parameters [ctx ps]  (add-entity ctx :parameters ps))
-(defn get-supplystore [ctx] (get-entity ctx :SupplyStore))
-(defn set-supplystore [ctx s] (add-entity ctx :SupplyStore s))
-(defn get-demandstore [ctx] (get-entity ctx :DemandStore))
-(defn set-demandstore [ctx s] (add-entity ctx :DemandStore s))
+(defmacro defpath [name path]
+  (if (coll? path)        
+    `(do (defn ~(symbol (str "get-" name)) [ctx#]
+           (store/get-ine  ctx# ~path))
+         (defn ~(symbol (str "set-" name)) [ctx# v#]
+           (store/assoc-ine  ctx# ~path v#)))
+    `(do (defn ~(symbol (str "get-" name)) [ctx#]
+           (with-meta (store/get-entity  ctx# ~path)
+             {:ctx ctx#}))
+         (defn ~(symbol (str "set-" name)) [ctx# v#]
+           (store/add-entity  ctx# ~path v#)))))
 
-(defn get-policystore [ctx]   (get-entity ctx :PolicyStore))
-(defn set-policystore [ctx p] (add-entity ctx :PolicyStore p))
+(defmacro defpaths [& name-paths]
+  (assert (even? (count name-paths)))
+  `(do ~@(for [[name path] (partition 2 name-paths)]
+           `(defpath ~name ~path))))
+                         
+;;generic get/set path functions.
+(defpaths
+  parameters    :parameters
+  supplystore   :SupplyStore
+  demandstore   :DemandStore
+  policystore   :PolicyStore
+  fillstore     :FillStore
+  fill-function [:FillStore :fillfunction]
+  fillmap       [:FillStore :fillmap]
+  )
 
-(defn get-fillstore [ctx]  (get-entity ctx :FillStore))
-(defn set-fillstore [ctx e]  (add-entity ctx :FillStore e))
-(defn get-fill-function [ctx] (get (get-fillstore ctx) :fillfunction))
-(defn get-fillmap    [ctx]   (get (get-fillstore ctx)  :fillmap))
 ;;probably not useful.
-(defn get-behaviors  [ctx] (get-entity ctx :behaviormanager))
+(defn get-behaviors   [ctx] (get-entity ctx :behaviormanager))
 (defn get-demand-tags [ctx] (get (get-demandstore ctx) :tags))
 (defn get-supply-tags [ctx] (get (get-supplystore ctx) :tags))
 
 (defn demands [ctx]
   (for [id  (keys (:demandmap (get-demandstore ctx)))]
     (get-entity ctx id)))
-              
+
 (defn units   [ctx]
     (for [id  (keys (:unitmap   (get-supplystore ctx)))]
       (get-entity ctx id)))

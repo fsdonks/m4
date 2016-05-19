@@ -38,11 +38,11 @@
 (defn fill-category [demandstore category ctx & {:keys [stop-early?] 
                                                  :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
-  (loop [pending   (dem/find-eligible-demands demandstore category)   
+  (loop [pending   (dem/find-eligible-demands demandstore category ctx)   
          ctx       (dem/trying-to-fill! demandstore category ctx)]
     (if (empty? pending) ctx ;no demands to fill!      
       (let [demandstore (core/get-demandstore ctx)
-            demand      (val (first pending))                    
+            demand      (second (first pending)) 
             demandname  (:name demand)           ;try to fill the topmost demand
             ctx         (dem/request-fill! demandstore category demand ctx)           
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
@@ -65,7 +65,7 @@
           next-ctx                                                           ;3)
           ;otherwise, continue filling!
           (recur
-           (dem/pop-priority-map      pending) ;advance to the next unfilled demand
+           (rest  pending)     ;(dem/pop-priority-map      pending) ;advance to the next unfilled demand
            (->> (dem/sourced-demand!  newstore demand next-ctx);notification
                 ((fn [ctx] (println [:should-be-popping demandname]) ctx))
                 (dem/update-fill      newstore demandname)  ;update unfilledQ.
@@ -79,7 +79,7 @@
 ;;Higher-order function for filling demands.
 (defn fill-demands-with [f ctx]
   (reduce (fn [acc c]
-            (do ;(println [:filling (type acc) c])
+            (do (println [:filling (type acc) c])
                 (f (core/get-demandstore acc) c acc)))
       ctx (dem/unfilled-categories (core/get-demandstore ctx))))
 
@@ -111,7 +111,7 @@
    hierarchically filling demands using followon supply, then using the rest of 
    the supply."
   [t ctx]
-  (->> ctx
+  (->> ctx    
     (fill-followons)
 ;    (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
     (fill-hierarchically)))

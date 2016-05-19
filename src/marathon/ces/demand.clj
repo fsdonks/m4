@@ -119,8 +119,20 @@
 
 (defn unfilled-categories [demandstore] 
   (keys (:unfilledq demandstore)))
-(defn unfilled-demands [category demandstore] 
+
+(defn unfilled-demandnames [category demandstore]
   (get-in demandstore [:unfilledq category]))
+
+(defn unfilled-demands
+  ([category demandstore ctx]
+    (into (sorted-map)
+          (for [[k nm] (unfilled-demandnames category demandstore)]
+            [k (store/get-entity ctx nm)])))
+  ([category demandstore]
+   (if-let [ctx (:ctx (meta demandstore))]
+     (unfilled-demands category demandstore ctx)   
+     (throw (Exception. (str [:no-context-in-meta]))))))
+
 
 ;;Right now, we're storing demands in their entirety in the demandmap...
 ;;We really just want to store the entity's name...
@@ -194,8 +206,9 @@
      (str "Sourced Demand " (:name demand)) nil ctx))
 
 (defn activating-demand! [demandstore demand t ctx]
-  (sim/trigger-event :ActivateDemand (:name demandstore) (:name demand)
-     (str "Activating demand " (:name demand) " on day " t) nil ctx)) 
+  (let [demandname (:name demand)]
+    (sim/trigger-event :ActivateDemand (:name demandstore)  demandname
+                       (str "Activating demand " demandname " on day " t) nil ctx)))
 
 (defn deactivating-demand! [demandstore demand t ctx]
   (let [dname (:name demand)]
@@ -514,6 +527,35 @@
   (if (empty? m) m (dissoc m (first (keys m)))))
 
 
+(defn drop-unfilled-demand [demandstore demand  ctx]
+  (let [unfilled (:unfilledq   demandstore)
+        src      (:src demand)
+        fill-key (priority-key demand)]
+        ;;basically - drop-unfilled-demand
+    (if (contains? unfilled src) ;either filled or deactivated
+      (let [demandq      (get unfilled src)
+            nextunfilled (if (== (count demandq) 1)
+                           (dissoc unfilled src) 
+                           (assoc  unfilled src (dissoc demandq fill-key)))]
+        (->> (removing-unfilled! demandstore (:name demand) ctx)
+             (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
+      (deactivating-unfilled! demandstore (:name demand) ctx))     ;notification
+    ))
+
+;;Register the unfilled demand entity and update the demandstore's unfilled.  We
+;;just track the name of the entity.
+(defn add-unfilled-demand [demandstore demand ctx]
+  (let [unfilled  (:unfilledq   demandstore)
+        src       (:src demand)
+        demandq   (or (get unfilled src) (sorted-map))
+        fill-key  (priority-key demand)]  
+    (if (contains? demandq fill-key) ctx ;pass-through
+        (->> (core/merge-entity ;add to unfilled 
+              {:DemandStore 
+               (gen/deep-assoc demandstore [:unfilledq src] 
+                               (assoc demandq fill-key (:name demand)))} ctx) ;WRONG?
+             (adding-unfilled! demandstore (:name demand))))))
+
 ;;#Managing the Fill Status of Changing Demands
 ;;Unfilled demands exist in a priority queue, UnfilledQ, ordered by the demand's 
 ;;priority field value - typically an absolute, static ordering, set at 
@@ -546,24 +588,48 @@
    the unfilled queue.  Deactivating unfilled demands are detected as well.
    Propogates notifications for each special case."
   [demandstore demandname ctx]
-  (let [demand   (get-in demandstore [:demandmap demandname])   ;     (store/get-entity ctx demandname) 
+  (let [demand   (store/get-entity ctx demandname)]
+    (cond  (nil? (:src demand)) (throw (Exception. (str "NO SRC for demand" demandname)))
+           (nil? demandname)    (throw (Exception. (str "Empty demand name! " demandname)))
+           :else
+           (let [ _ (println [:updfill demandname :required (d/required demand)])]
+             ;;The demand is inactive or has no fill, either way we should remove it from fill consideration.
+             (if (or (zero? (d/required demand))  ;;if we move to components, active-demand? doesn't need the store..
+                     (not (:active demand))) ;demand is filled, remove it
+               (drop-unfilled-demand demandstore demand ctx)        
+               ;;basically - add-unfilled-demand
+                                        ;demand is unfilled, make sure it's added
+               (add-unfilled-demand demandstore demand ctx))))))
+
+(comment ;;older version..
+(defn update-fill
+  "Derives a demand's fill status based on its current data.  Satisfied demands 
+   are removed from the unfilled queue, unsatisfied demands are kept or added to
+   the unfilled queue.  Deactivating unfilled demands are detected as well.
+   Propogates notifications for each special case."
+  [demandstore demandname ctx]
+  (let [demand   (get-in demandstore [:demandmap demandname])   ;     (store/get-entity ctx demandname) ;;this is get-demand...
         fill-key (priority-key demand)
-        unfilled (:unfilledq demandstore)]
+        unfilled (:unfilledq   demandstore)   ;;do we need the store for this?  Can the unfilledq be an entity?
+        ]
     (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
     (assert (not (nil? demandname)) "Empty demand name!")
     (let [required (d/required demand)
           src      (:src demand)
           _ (println [:updfill demandname :required required])]
-      (if (or (zero? required) 
-              (not (active-demand? demandstore demandname))) ;demand is filled, remove it
+      ;;basically - drop-unfilled-demand
+      (if (or (zero? required)  ;;if we move to components, active-demand? doesn't need the store..
+              (not (active-demand? demandstore demandname))) ;demand is filled, remove it  
         (if (contains? unfilled src) ;either filled or deactivated
-          (let [demandq (dissoc (get unfilled src) fill-key)
+          (let [demandq      (dissoc (get unfilled src) fill-key)
                 nextunfilled (if (zero? (count demandq)) 
                                  (dissoc unfilled src) 
                                  (assoc  unfilled src demandq))]
             (->> (removing-unfilled! demandstore demandname ctx)
                  (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
           (deactivating-unfilled! demandstore demandname ctx))     ;notification
+
+        ;;basically - add-unfilled-demand
         ;demand is unfilled, make sure it's added
         (let [demandq (get unfilled src (sorted-map))]  
           (if (contains? demandq fill-key) ctx ;pass-through
@@ -572,6 +638,7 @@
                     (gen/deep-assoc demandstore [:unfilledq src] 
                          (assoc demandq fill-key demand))} ctx) ;WRONG?
                  (adding-unfilled! demandstore demandname)))))))) 
+)
 
 ;;##Describing Categories of Demand To Inform Demand Fill Rules
 ;;Demands have typically been binned into gross categories, based on the type 
@@ -673,15 +740,15 @@
 ;;Note -> we should probably decouple the get-in part of the definition, and 
 ;;hide it behind a protocol function, like get-demands.  
 (defmethod category->demand-rule :simple [src]
-  (fn [store] (get-in store [:unfilledq src]))) ;priority queue of demands.
+  (fn [store ctx] (get-in store [:unfilledq src]))) ;priority queue of demands.
 
 ;;Interprets a category as a composite rule that matches demands based on an 
 ;;src, and filters based on a specified demand-group.
 ;;[src demandgroup|#{group1 group2 groupn}|{group1 _ group2 _ ... groupn _}]  
 (defmethod category->demand-rule :src-and-group [[src groups]]
   (let [eligible? (core/make-member-pred groups)] ;make a group filter
-    (fn [store]
-      (->> (seq (find-eligible-demands store src)) ;INEFFICIENT
+    (fn [store ctx]
+      (->> (seq (find-eligible-demands store src ctx)) ;INEFFICIENT
         (filter (fn [[pk d]] (eligible? (:demand-group d))))
         (into (sorted-map)))))) ;returns priority-queue of demands.
 
@@ -702,20 +769,23 @@
 ;;complex category.  Uses the category->demand-rule interpreter to parse the 
 ;;rule into a query function, then applies the query to the store.
 
+;;Tom update 19 May 2016 -> used to return [[pk demand]] map, but
+;;now it implictly returns [[pk demandname]] map, so we need to add a layer
+;;to get the actual demands...
 (defn find-eligible-demands 
   "Given a demand store, and a valid categorization of the demand, interprets
    the category into a into a demand selection function, then applies the query
    to the store."
-  [store category]
-  ((category->demand-rule category) store))
-
+  [store category ctx]
+  (->> ((category->demand-rule category) store ctx)
+         (map (fn [[pk demand]] ;;if we only have demand names, we coerce them to demands.
+                [pk (if (map? demand) demand (store/get-entity ctx demand))]))))
 
 ;;##Demand Scheduling
 ;;In addition to serving demands for filling, scheduling demands for activation 
 ;;and deactivation is a primary service of the demand system.  The following 
 ;;functions define operations that pertain to the timing and updating of 
 ;;demands. 
-
 
 ;;#Demand Activation
 ;;Over time, we maintain a set of active demands which will help us only fill 
@@ -733,25 +803,56 @@
 (defn  get-activations  [demandstore t] (get (:activations demandstore) t))
 (defn  get-deactivations [demandstore t] (get (:deactivations demandstore) t))
 
+;;activate-demand => add the demand to the active set.
+;;update the fill for the active demand
+;; more specifically - list the newly activated demand as unfilled.
+;;   --given the demand's category, update the unfilled queue...
+;;   --alternative, sort demands as needed when filling.
+
+;;note: we have some simple component-level queries that pop out here...
+;;active-demands == entities with a demand component, and an active component...
+;;inactive-demands == entities with a demand component, not in active component...
+;;most of the time, we only care about active...
+
+;;unfilled-demands == active demands with an unfilled component.
+
+;;Rather than mutating a structure in a nested object,
+;;we can see activating a demand as marking the demand active,
+;;and computing the requirement for the demand.
+;;Note: we can update the unfilledq at each step, after activating
+;;or deactivating demands...
+;;If we activate demands, the unfilledq is dirty.
+;;We need to reorder the queue(s).
+
+;;Really, we have one or more lists of fills based on the category of
+;;demand...
 (defn activate-demand
-  "Shifts demand d to the active set of demands, updates its fill status, and 
+  "Shifts demand named dname to the active set of demands, updates its fill status, and 
    notifies any interested parties."
   [demandstore t d ctx]
-  (let [store (-> (gen/deep-assoc demandstore [:activedemands (:name d)] d)
-                  (register-change (:name d)))]               
-    (->> (activating-demand! store d t ctx)
-         (update-fill store (:name d)))))    
+  (let [dname (:name d) 
+        store (-> (gen/deep-assoc demandstore [:activedemands dname] dname)
+                  (register-change dname))
+        d     (assoc d :active true)]               
+    (->> (store/add-entity ctx d)
+         (activating-demand! store d t)
+         (update-fill store dname)
+          )))
 
+;;We should make activate-demands a bulk operation...
+;;and phrase activate-demand in terms of a singleton.
 (defn activate-demands
   "For the set of demands registered with the context's demand store, relative 
    to time t, any demands scheduled to start at t are activated."
   [t ctx]
   (let [demandstore (core/get-demandstore ctx)]
-	  (reduce (fn [ctx dname] 
-	            (let [store (core/get-demandstore ctx)]
-	              (activate-demand store t (get-demand store dname) ctx))) 
-	          ctx 
-	          (get-activations demandstore t))))
+    (reduce (fn [ctx dname] 
+              (let [store (core/get-demandstore ctx)]
+                (activate-demand store t
+                                 (store/get-entity ctx dname) ;(get-demand store dname)
+                                 ctx))) 
+            ctx 
+            (get-activations demandstore t))))
 
 ;;#Shifting Elements of Supply To and From Demand
 ;;As supply is selected to fill demand, the supply is actively assigned to a 
@@ -882,9 +983,9 @@
   (let [demandstore (core/get-demandstore ctx)]
     (reduce (fn [ctx dname] 
               (let [store (core/get-demandstore ctx)                    
-                    d     (get-demand store dname)]
-                (deactivate-demand store t
-                                   ;(store/get-entity ctx dname)
+                    d     (store/get-entity ctx dname);(get-demand store dname)
+                    ]
+                (deactivate-demand store t                                  
                                    d
                                    ctx))) 
             ctx 

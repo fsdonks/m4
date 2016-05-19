@@ -538,16 +538,15 @@
 (def zctx (->> defaultctx
                (engine/sim-step 0)
                (sim/advance-time)))
-
   
 (def zctx2
   (let [day (sim/get-time zctx)]
     (->> zctx
-         (engine/begin-day day)         ;Trigger beginning-of-day logic and notifications.
-         (supply/manage-supply day)     ;Update unit positions and policies.
-         (policy/manage-policies day)   ;Apply policy changes, possibly affecting supply.
-         (demand/manage-demands day)    ;Activate/DeActiveate demands, handle affected units.
-         (filld/fill-demands day)      ;Try to fill unfilled demands in priority order.         
+         (engine/begin-day        day)  ;Trigger beginning-of-day logic and notifications.
+         (supply/manage-supply    day)  ;Update unit positions and policies.
+         (policy/manage-policies  day)  ;Apply policy changes, possibly affecting supply.
+         (demand/manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.
+         (filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.         
          (supply/manage-followons day)  ;Resets unused units from follow-on status. 
          (engine/end-day day)           ;End of day logic and notifications.
          (demand/manage-changed-demands day))));Clear set of changed demands in demandstore.
