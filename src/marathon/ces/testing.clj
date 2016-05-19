@@ -555,16 +555,12 @@
 (def ds1 (core/get-demandstore zctx1))
 (def activedemands1  (map (partial demand/get-demand ds1) (keys (:activedemands ds1))))
 
-  
-
+ 
 (deftest day1fill
   (is (empty? (demand/unfilled-demands "SRC3" (core/get-demandstore zctx1)))
       "Should have successfully filled all the demands on day 1")
   (is (empty? (demand/unfilled-categories (core/get-demandstore zctx1)))
       "There should be no unfilled categories..."))
-
-
-
 
 (defn debugging-on
   ([t f]

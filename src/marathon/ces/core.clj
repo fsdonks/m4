@@ -129,10 +129,23 @@
                      :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}))
        ))
 
+;;Wow...this is really really easy to do now....constructing queries on the
+;;entity store is nice...
+(defn locations [ctx]
+  (let [t (sim/get-time ctx)]
+    (->> (store/only-entities ctx [:name :locationname :location])
+         (into [] (map #(assoc % :t t))))))
+
+(defn location-table [ctx]
+  (let [t (sim/get-time ctx)]
+    (->> (store/only-entities ctx [:name :locationname :location])
+         (map #(assoc % :t t))
+         (tbl/records->table))))
+
 ;;We're starting to build stats and queries...muahaha...this is where clojure kicks ass.
-(defn deployed-population [ctx]
-  (for [{:keys [name assigned overlapping quantity]}]
-    (deployments ctx)))
+;; (defn deployed-population [ctx]
+;;   (for [{:keys [name assigned overlapping quantity]}]
+;;     (deployments ctx)))
 
 (defn periods [ctx] (:periods   (get-policystore ctx)))
 
