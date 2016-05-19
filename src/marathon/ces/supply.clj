@@ -389,8 +389,9 @@
                      :deployable-cat    src
                      :deployable true}
          components (if (identical? bucket :default) components
-                        (assoc components :followon bucket))
-         ;_ (println [(:name unit) components])
+                        (do (println [:followon bucket])
+                            (assoc components :followon bucket)))
+         _ (println [(:name unit) components :bucket bucket])
          ]         
    (->> ctx
         (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)
@@ -658,11 +659,12 @@
   "Ensures that entities held in a temporary follow-on status are released and
    circulated back into supply.  Typically used after we try to fill demands."
   [day ctx]
-  (let [fons (store/get-domain ctx :followon)
+  (let [fons   (into {} (filter second) (store/get-domain ctx :followon))
         fcount (count fons)]
     (if (pos? fcount)
       (do  (debug [:releasing! fcount :followon])
            (release-followons fons ctx))
       (do (debug [:No-followons-to-release!])
-          ctx))))
+          (store/drop-domain ctx :followon) ;;covering down on a weird issue with nil valued fons.
+          ))))
 

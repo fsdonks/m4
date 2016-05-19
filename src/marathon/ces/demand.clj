@@ -140,7 +140,8 @@
 ;;store, and from there, we have access to the demand from a sole source...
 ;;I think that's the best thing to do...
 (defn get-demand [demandstore name]
-  (get-in demandstore [:demandmap name]))
+  (store/get-entity (:ctx (meta demandstore)) name))
+;  (get-in demandstore [:demandmap name]))
 
 
 ;Simple api function to group active demands from the store by their src. 

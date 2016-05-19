@@ -527,19 +527,16 @@
        ;;We should have several demands activated,
        ;;as well as some supply to fill with.
        (engine/begin-day 1)
-       (supply/manage-supply 1)
-       (demand/manage-demands 1)
+       (supply/manage-supply   1)
+       (demand/manage-demands  1)
        (policy/manage-policies 1)))
 
 ;(def zero-ctx (engine/sim-step 0 defaultctx))
-
 (def filled  (filld/fill-demands 1 zero-ctx))
-
 (def zctx (->> defaultctx
                (engine/sim-step 0)
                (sim/advance-time)))
-  
-(def zctx2
+(def zctx1
   (let [day (sim/get-time zctx)]
     (->> zctx
          (engine/begin-day        day)  ;Trigger beginning-of-day logic and notifications.
@@ -552,6 +549,21 @@
          (demand/manage-changed-demands day))));Clear set of changed demands in demandstore.
 
 ;               (engine/sim-step 1)))
+
+;;we should have no unfilled demands at the end of day 1.
+
+(def ds1 (core/get-demandstore zctx1))
+(def activedemands1  (map (partial demand/get-demand ds1) (keys (:activedemands ds1))))
+
+  
+
+(deftest day1fill
+  (is (empty? (demand/unfilled-demands "SRC3" (core/get-demandstore zctx1)))
+      "Should have successfully filled all the demands on day 1")
+  (is (empty? (demand/unfilled-categories (core/get-demandstore zctx1)))
+      "There should be no unfilled categories..."))
+
+
 
 
 (defn debugging-on

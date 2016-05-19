@@ -115,6 +115,25 @@
     (for [id  (keys (:unitmap   (get-supplystore ctx)))]
       (get-entity ctx id)))
 
+;;This is a pretty useful deployment query....
+(defn deployments [ctx]
+  (->> (get-demandstore ctx)
+       (:activedemands)
+       (keys)
+       (map #(store/get-entity ctx %))
+       (map (fn [d] {:name        (:name d)
+                     :assigned    (keys (:units-assigned d))
+                     :overlapping (keys (:units-overlapping d))
+                     :quantity    (:quantity d)
+                     :filled      (count (:units-assigned d))
+                     :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}))
+       ))
+
+;;We're starting to build stats and queries...muahaha...this is where clojure kicks ass.
+(defn deployed-population [ctx]
+  (for [{:keys [name assigned overlapping quantity]}]
+    (deployments ctx)))
+
 (defn periods [ctx] (:periods   (get-policystore ctx)))
 
 (defmacro with-simstate 
