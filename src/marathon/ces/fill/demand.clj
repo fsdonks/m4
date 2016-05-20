@@ -7,6 +7,7 @@
                              [demand :as dem]
                              [fill :as fill]]           
             [spork.sim       [simcontext :as sim]]
+            [spork.ai.core   :refer [debug]]
             [spork.entitysystem.store :as store]))
 
 ;Since we allowed descriptions of categories to be more robust, we now abstract
@@ -48,7 +49,7 @@
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
             ;_           (println [fill-status demandname])
             can-fill?   (= fill-status :filled)
-            _           (println [:fill-status fill-status])
+            _           (debug [:fill-status fill-status])
             next-ctx    (if (= fill-status :unfilled) fill-ctx 
                           (->> fill-ctx 
                                (dem/demand-fill-changed! demandstore demand) ;2)
@@ -56,9 +57,9 @@
                                  {:DemandStore 
                                   (dem/register-change  (core/get-demandstore fill-ctx) demandname)})))
             newstore    (core/get-demandstore next-ctx)
-            _ (println [:demand    (:name demand)
-                        :pre-fill  (keys (:units-assigned demand))
-                        :post-fill  (keys (:units-assigned (dem/get-demand newstore demandname)))
+            _ (debug [:demand    (:name demand)
+                      :pre-fill  (keys (:units-assigned demand))
+                      :post-fill  (keys (:units-assigned (dem/get-demand newstore demandname)))
                         ])
                         
              ]
@@ -68,7 +69,7 @@
           (recur
            (rest  pending)     ;(dem/pop-priority-map      pending) ;advance to the next unfilled demand
            (->> (dem/sourced-demand!  newstore demand next-ctx);notification
-                ((fn [ctx] (println [:should-be-popping demandname]) ctx))
+                ((fn [ctx] (debug [:should-be-popping demandname]) ctx))
                 (dem/update-fill      newstore demandname)  ;update unfilledQ.
                 (dem/can-fill-demand! newstore demandname))))))));notification
 
@@ -80,7 +81,7 @@
 ;;Higher-order function for filling demands.
 (defn fill-demands-with [f ctx]
   (reduce (fn [acc c]
-            (do (println [:filling (type acc) c])
+            (do (debug [:filling (type acc) c])
                 (f (core/get-demandstore acc) c acc)))
       ctx (dem/unfilled-categories (core/get-demandstore ctx))))
 

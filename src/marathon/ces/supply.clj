@@ -391,7 +391,7 @@
          components (if (identical? bucket :default) components
                         (do (println [:followon bucket])
                             (assoc components :followon bucket)))
-         _ (println [(:name unit) components :bucket bucket])
+         _ (debug [(:name unit) components :bucket bucket])
          ]         
    (->> ctx
         (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)

@@ -603,7 +603,18 @@
 
 ;;testing followon demands...
 (def followonctx
-      (setup/simstate-from  sd/followon-tables core/debugsim))
+  (setup/simstate-from  sd/followon-tables core/debugsim))
+
+(def followontest
+  (->history 2521 (debugging-on #{451
+                                  467
+                                  523
+                                  563
+                                  595
+                                  963
+                                  1051})
+
+             followonctx))
 
 )
 ;;we have now deployed units and updated their state to a bare minimum

@@ -593,7 +593,7 @@
     (cond  (nil? (:src demand)) (throw (Exception. (str "NO SRC for demand" demandname)))
            (nil? demandname)    (throw (Exception. (str "Empty demand name! " demandname)))
            :else
-           (let [ _ (println [:updfill demandname :required (d/required demand)])]
+           (let [ _ (debug [:updfill demandname :required (d/required demand)])]
              ;;The demand is inactive or has no fill, either way we should remove it from fill consideration.
              (if (or (zero? (d/required demand))  ;;if we move to components, active-demand? doesn't need the store..
                      (not (:active demand))) ;demand is filled, remove it
@@ -617,7 +617,7 @@
     (assert (not (nil? demandname)) "Empty demand name!")
     (let [required (d/required demand)
           src      (:src demand)
-          _ (println [:updfill demandname :required required])]
+          _ (debug [:updfill demandname :required required])]
       ;;basically - drop-unfilled-demand
       (if (or (zero? required)  ;;if we move to components, active-demand? doesn't need the store..
               (not (active-demand? demandstore demandname))) ;demand is filled, remove it  
@@ -874,7 +874,7 @@
 	    (or (= "" demandgroup) (ungrouped? demandgroup))
             (do  (debug :abw1)
                  (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
-                       _ (println [:pre-abw])] 
+                       _ (debug [:pre-abw])] 
                         (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
               (not (ghost? unit))
               (do  (debug :abw2)

@@ -12,7 +12,8 @@
             [marathon.ces.fill [fillgraph :as fillgraph]
                                [scope :as scope]]
             [marathon.fill [fillstore :as fillstore]]
-            [spork.util.tags :as tags]))
+            [spork.util [tags :as tags]
+                        [table :as table]]))
 
 ;;A central resource for getting tables.  
 (def ^:dynamic *tables*  sd/sample-tables)
@@ -20,9 +21,14 @@
   (cond (keyword? x) (subs (str x) 1)
         (string? x)  (keyword x)))
 
+;;This is our central point for acquiring data...
 (defn get-table 
-  ([name]      (get *tables* name (get *tables* (alt-name name))))
-  ([name tbls] (get tbls name (get tbls (alt-name name)))))
+  ([name]      (get-table name *tables*))
+  ([name tbls] (or (get tbls name) (get tbls (alt-name name)))))
+
+(defn get-records
+  ([name]      (tbl/record-seq (get-table name)))
+  ([name tbls] (tbl/record-seq (get-table name tbls))))
 
 ;;Automates the building of a default behavior manager, linking it to a supply store.
 
@@ -77,9 +83,7 @@
   (-> (policyio/tables->policystore (get-table :RelationRecords)
                                     (get-table :PeriodRecords)
                                     (get-table :PolicyRecords)
-                                    (get-table :CompositePolicyRecords))
-      ;(policy/initialize-policystore ctx)
-      ))
+                                    (get-table :CompositePolicyRecords))))
 
 ;;Creates a fill store, which provides information for fill
 ;;preferences as well as scoping information.
@@ -100,16 +104,16 @@
 (defn default-scoped-state [ctx] (scope/apply-scope ctx))
 
 ;;Creates a default supply.  The default is to derive from Excel worksheets.
-(defn default-supply [ctx & {:keys  [records]
-                             :or {records (sd/get-sample-records :SupplyRecords)}}]
-  (let [sstore (core/get-supplystore ctx)
+(defn default-supply [ctx & {:keys  [records]}]
+  (let [records (or records (get-records :SupplyRecords))
+        sstore (core/get-supplystore ctx)
         pstore (core/get-policystore ctx)]
     (ent/process-units (ent/units-from-records records sstore pstore) ctx)))
 
 ;;Creates a default demand.  The default is to derive from Excel worksheets.
-(defn default-demand [ctx & {:keys  [records]
-                             :or {records (sd/get-sample-records :DemandRecords)}}]
-  (let [ds  (ent/demands-from-records records ctx)]
+(defn default-demand [ctx & {:keys  [records]}]                            
+  (let [records (or records (get-records :DemandRecords))
+        ds  (ent/demands-from-records records ctx)]
     ;(demand/register-demands! ds ctx) ;;outed for arch changes...
     (demand/register-demands ds ctx)
     ))  
