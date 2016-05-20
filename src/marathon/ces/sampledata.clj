@@ -2,6 +2,11 @@
   (:require [spork.util [table :as tbl]]
             [marathon [schemas :as s]]))
 
+;;Note: most of these tables are mirrored in a companion
+;;sampledata workbook.  We could link to the tables from
+;;Excel too, and just have it reload the csv file...
+;;hmm...
+
 (def policy-templates
   {"AC11"
  {"MinDwell" 0,
@@ -1043,6 +1048,19 @@ DemandRecord	TRUE	1	7	46	811	90	45	SRC3	AC	V4	R35	O35	Foundational	nil	nil	nil	n
 DemandRecord	TRUE	1	8	46	901	1080	45	SRC3	AC	V4	R36	O36	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
 ")
 
+
+(def followon-demand-records
+  "Type	Enabled	Priority 	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Command	Location	DemandType	Theater	BOG	StartState	EndState	MissionLength
+DemandRecord	TRUE	1	1	46	451	16	45	SRC1	AC	XL		OP8	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	3	46	467	56	45	SRC1	AC	XL		OP9	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	4	46	523	40	45	SRC1	AC	XL		OP10	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	4	46	563	32	45	SRC1	AC	XL		OP11	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	4	46	595	368	45	SRC1	AC	XL		OP12	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	3	46	963	88	45	SRC1	AC	XL		OP13	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	1	46	1051	279	45	SRC1	AC	XL		OP14	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+")
+
+
 (def period-records 
 "Type	Name	FromDay	ToDay
 PeriodRecord	Initialization	0	0
@@ -1123,6 +1141,13 @@ DefaultDemotionPolicy	Auto
                    (assoc acc name 
                           (s/read-schema name data))))
              {:PolicyTemplates policy-templates} raw-sample-project))
+
+;;A project with a small set of demand.
+(def followon-tables
+  (assoc sample-tables
+         :DemandRecords
+         (s/read-schema :DemandRecords followon-demand-records)))
+
 
 (defn get-sample-records [name]
   (if (non-tables name) 

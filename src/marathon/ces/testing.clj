@@ -601,6 +601,10 @@
   (->history 2521 engine/sim-step 
              defaultctx))
 
+;;testing followon demands...
+(def followonctx
+      (setup/simstate-from  sd/followon-tables core/debugsim))
+
 )
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.

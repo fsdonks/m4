@@ -127,6 +127,14 @@
           (default-demand)))
   ([] (default-simstate core/emptysim)))
 
+;;Create a simstate from a different set of tables than the default.
+(defn simstate-from
+  ([tables ctx]
+   (binding [*tables* tables]
+     (default-simstate ctx)))
+  ([tables] (simstate-from tables core/emptysim)))
+
+
 ;;---------------------------------------------------
 
 
