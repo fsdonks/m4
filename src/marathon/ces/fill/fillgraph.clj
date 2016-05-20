@@ -222,7 +222,7 @@
 (defn reduced-arcs [g] 
   (for [[path w] (filter identity 
                          (naive-all-pairs g (graph/sinks g :unfilled) 
-                                          (graph/sources g :filled)))]
+                                            (graph/sources g :filled)))]
     [(last path)  (first path) w]))
 
 ;;If the fillgraph is a dag, which it should be by construction
