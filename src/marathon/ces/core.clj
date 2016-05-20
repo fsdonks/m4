@@ -37,6 +37,20 @@
             [marathon.data.store :as simstate]
             [clojure.core.reducers :as r]))
 
+;;This is a lifesaver...
+(def noisy (atom true))
+(defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
+;;From Stuart Sierra's blog post, for catching otherwise "slient" exceptions
+;;Since we're using multithreading and the like, and we don't want
+;;exceptions to get silently swallowed
+(let [out *out*]
+  (Thread/setDefaultUncaughtExceptionHandler
+   (reify Thread$UncaughtExceptionHandler
+     (uncaughtException [_ thread ex]
+       (when @noisy 
+         (binding [*out* out]
+           (println ["Uncaught Exception on" (.getName thread) ex])))))))
+
 ;;#Providing Common Access to the State in the Simulation Context
 ;;The simulation context contains the simulation state - a large nested map of 
 ;;information that is 'typically' partitioned by a particular domain.  
@@ -389,17 +403,21 @@
         (reify
           Object
           (toString [o] 
-            (str (key x) " :: " (or (.getName (type (val x))) "nil"))
+            (str (key x) " :: " (or (and (val x) (.getName (type (val x))))
+                                    "nil"))
             )
           clojure.lang.Seqable
-          (seq [o] 
-            (if (inspect/atom? (val x))
-              (list (val x))
-              (entryvis (seq (val x))))))
+          (seq [o]
+            (when (val x)
+              (if (inspect/atom? (val x))
+                (list (val x))
+                (entryvis (val x))))))
         (instance? java.util.Map x)
          (let [entries (sort-by key (seq x))]
            (map entryvis entries))
-        :else x))
+        (inspect/atom? x) x
+        :else (map entryvis (seq x))
+        ))
   
 (defn mapvis [^java.util.Map m]
   (reify
@@ -512,7 +530,7 @@
     (throw (Exception. "No fillgraph to visualize!"))))
 
 (defn visualize-store [ctx]
-  (tree-view (store/domains ctx)))
+  (tree-view (entryvis (store/domains ctx))))
 
 (defn demand-names [ctx] (keys (gete ctx :DemandStore :demandmap)))
 (defn unit-names [ctx] (keys (gete ctx :SupplyStore :unitmap)))
