@@ -464,9 +464,12 @@
          (spork.util.table/visualize))
     (throw (Exception. "No fill map to visualize!"))))
 
+(defn visualize-graph [g]
+  (jung/view-graph g jung/fr))
+
 (defn visualize-fillgraph [ctx]
   (if-let [fg (:fillgraph (get-fillstore ctx))]
-    (jung/view-graph fg jung/fr)
+    (visualize-graph fg)
     (throw (Exception. "No fillgraph to visualize!"))))
 
 (defn visualize-store [ctx]

@@ -70,6 +70,8 @@
     (sim/trigger-event :ScopedDemand :Anonymous :Anonymous 
         (core/msg "FillManager found " (count recs) " Unfillable Demand Sinks") recs ctx)))
 
+(def lastgraph (atom nil))
+
 ;;Given  scopeing information, specifically a nested map of srcs that 
 ;;are in scope or out of scope, applies the implicit scoping rules to
 ;;the simulation context, removing entities are unnecessary.  
@@ -91,7 +93,8 @@
              ;;                  (update-in [:outofscope] merge out-of-scope))
                 })))))
   ([ctx] (if-let [g (get (core/get-fillstore ctx) :fillgraph)]
-           (apply-scope (derive-scope g) ctx)
+           (do (reset! lastgraph ctx)
+               (apply-scope (derive-scope g) ctx))
            (throw (Exception. (str "No fillgraph exists, cannot scope!"))))))
 
 ;;Although we have the capacity to divide a very large run into N independent runs,

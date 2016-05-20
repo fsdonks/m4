@@ -604,6 +604,8 @@
 ;;testing followon demands...
 (def followonctx
   (setup/simstate-from  sd/followon-tables core/debugsim))
+(def brokenctx 
+  (setup/simstate-from  sd/broken-supply-tables core/debugsim))
 
 (def followontest
   (->history 2521 (debugging-on #{451

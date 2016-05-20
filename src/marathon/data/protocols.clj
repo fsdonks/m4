@@ -316,7 +316,7 @@
 (defn compute-cycle-length [p]
   (let [pg (get-position-graph p)]
     (reduce + 
-            (let [[hd & tl] (first (graph/directed-cycles pg))
+            (let [[hd & tl] (first (graph/cyclical-components pg))
                   full (into [(last tl) hd] tl)] 
               (map (fn [[from to]]  
                      (graph/arc-weight pg from to)) (partition 2 1 full))))))

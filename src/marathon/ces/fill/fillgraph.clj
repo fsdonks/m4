@@ -236,7 +236,7 @@
 ;;net result should be much faster pathfinding when we go to query the
 ;;fillgraph.
 (defn reduced-graph [g]
-  (let [cycs (graph/directed-cycles g)]
+  (let [cycs (graph/cyclical-components g)]
     (assert (empty? cycs) (str "Your dependency graph should be a DAG, cycles are present along " cycs))
     (let [sources   (atom (transient #{}))
           sinks     (atom (transient #{}))]

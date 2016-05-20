@@ -968,6 +968,14 @@ SupplyRecord	TRUE	20	SRC3	NG	Generated_SRC3	Auto	Auto	0	RCOpSus	Auto	0	Auto	Auto
 SupplyRecord	TRUE	10	SRC3	AC	Generated_SRC3	Auto	Auto	0	AC11	Auto	0	Auto	Auto	FALSE	nil	nil	nil
 ")
 
+
+(def broken-supply-records
+  "Type	Enabled	Quantity	SRC	Component	OITitle	Name	Behavior	CycleTime	Policy	Tags	SpawnTime	Location	Position	Original	Command	Origin	Duration
+SupplyRecord	FALSE	1	Ghost	Ghost	Anything	Auto	Ghost365_45	0	Ghost365_45	Auto	0	Auto	Auto	FALSE	nil	nil	nil
+SupplyRecord	TRUE	20	SRC4	NG	Generated_SRC3	Auto	Auto	0	RCOpSus	Auto	0	Auto	Auto	FALSE	nil	nil	nil
+SupplyRecord	TRUE	10	SRC4	AC	Generated_SRC3	Auto	Auto	0	AC11	Auto	0	Auto	Auto	FALSE	nil	nil	nil
+")
+
 (def src-tag-records 
 "Type	SRC	Tag
 EnablerRecord	SRC1	Special
@@ -1048,16 +1056,15 @@ DemandRecord	TRUE	1	7	46	811	90	45	SRC3	AC	V4	R35	O35	Foundational	nil	nil	nil	n
 DemandRecord	TRUE	1	8	46	901	1080	45	SRC3	AC	V4	R36	O36	Foundational	nil	nil	nil	nil	nil	nil	nil	nil
 ")
 
-
 (def followon-demand-records
   "Type	Enabled	Priority 	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Command	Location	DemandType	Theater	BOG	StartState	EndState	MissionLength
-DemandRecord	TRUE	1	1	46	451	16	45	SRC1	AC	XL		OP8	Surge	nil	nil	nil	nil	nil	nil	nil	nil
-DemandRecord	TRUE	1	3	46	467	56	45	SRC1	AC	XL		OP9	Surge	nil	nil	nil	nil	nil	nil	nil	nil
-DemandRecord	TRUE	1	4	46	523	40	45	SRC1	AC	XL		OP10	Surge	nil	nil	nil	nil	nil	nil	nil	nil
-DemandRecord	TRUE	1	4	46	563	32	45	SRC1	AC	XL		OP11	Surge	nil	nil	nil	nil	nil	nil	nil	nil
-DemandRecord	TRUE	1	4	46	595	368	45	SRC1	AC	XL		OP12	Surge	nil	nil	nil	nil	nil	nil	nil	nil
-DemandRecord	TRUE	1	3	46	963	88	45	SRC1	AC	XL		OP13	Surge	nil	nil	nil	nil	nil	nil	nil	nil
-DemandRecord	TRUE	1	1	46	1051	279	45	SRC1	AC	XL		OP14	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	1	46	451	16	45	SRC1	AC	XL	OverlappingDemand	OP8	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	3	46	467	56	45	SRC1	AC	XL	OverlappingDemand	OP9	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	4	46	523	40	45	SRC1	AC	XL	OverlappingDemand	OP10	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	4	46	563	32	45	SRC1	AC	XL	OverlappingDemand	OP11	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	4	46	595	368	45	SRC1	AC	XL	OverlappingDemand	OP12	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	3	46	963	88	45	SRC1	AC	XL	OverlappingDemand	OP13	Surge	nil	nil	nil	nil	nil	nil	nil	nil
+DemandRecord	TRUE	1	1	46	1051	279	45	SRC1	AC	XL	OverlappingDemand	OP14	Surge	nil	nil	nil	nil	nil	nil	nil	nil
 ")
 
 
@@ -1148,6 +1155,10 @@ DefaultDemotionPolicy	Auto
          :DemandRecords
          (s/read-schema :DemandRecords followon-demand-records)))
 
+(def broken-supply-tables
+    (assoc sample-tables
+         :SupplyRecords
+         (s/read-schema :SupplyRecords broken-supply-records)))
 
 (defn get-sample-records [name]
   (if (non-tables name) 
