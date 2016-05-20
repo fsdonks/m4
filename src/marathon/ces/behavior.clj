@@ -383,6 +383,7 @@
              followingstate (or followingstate newstate)
              ;;we change statedata here...
              wt (- duration timeinstate)
+             _  (when (neg? wt) (throw (Exception. (str [:negative-wait-time])))) 
              _ (debug [:changing-state state-change :wait-time wt])
              newdata (assoc (fsm/change-statedata statedata newstate duration followingstate)
                             :timeinstate timeinstate)
@@ -823,7 +824,6 @@
       (let [unit   @entity
             p      (:policy    unit)
             current-pos (:positionpolicy unit)
-            _ (debug [:re-entry  :current-pos current-pos])
             ct     (:cycletime unit)
             _      (when (< ct 0) (throw (Exception. (str "Cycle Time should not be negative!"))))
             _      (when (invalid? current-pos)
@@ -831,6 +831,7 @@
             is-deployable  (protocols/deployable-by? p ct)
             positionA  current-pos
             positionB (protocols/get-position p ct)
+            _      (debug [:re-entry  :current-pos current-pos :next-pos positionB])
             _      (when (invalid? positionB)
                          (throw (Exception.  (str "Cannot handle during deployment or overlap: " positionB))))
             timeremaining  (protocols/transfer-time p positionB (protocols/next-position p positionB))

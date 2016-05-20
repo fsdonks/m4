@@ -833,9 +833,9 @@
   [demandstore t d ctx]
   (let [dname (:name d) 
         store (-> (gen/deep-assoc demandstore [:activedemands dname] dname)
-                  (register-change dname))
-        d     (assoc d :active true)]               
-    (->> (store/add-entity ctx d)
+                  (register-change dname))]               
+    (->> (assoc d :active true)
+         (store/add-entity ctx)
          (activating-demand! store d t)
          (update-fill store dname)
           )))
@@ -961,6 +961,9 @@
                             (assoc demand :units-assigned {}
                                           :units-overlapping {}))))))
 
+
+;;==todo== stop storing activedemand information in demandstore/activedemands
+;;lift it out to a component instead....causing some problems and inefficiencies.
 ;;#Demand DeActivation
 (defn deactivate-demand
   "Frees resources associated with a demand, sending home any units proximate 
@@ -972,8 +975,12 @@
                   (register-change (:name d)))
 ;        _ ;(println [:demand d])
         _ (debug [:deactivating (:name d) :assigned  (keys (:units-assigned d))
-                  :overlapping            (keys (:units-overlapping d))])]
-    (->> (deactivating-demand! store d t ctx)
+                  :overlapping            (keys (:units-overlapping d))])
+        d (dissoc d :active)]
+    (->> (-> ctx
+             (store/add-entity d)
+             (store/add-entity store))                      
+         (deactivating-demand! store d t)
          (send-home-units d t)
          (update-fill store (:name d)))))    
 

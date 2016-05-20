@@ -279,7 +279,8 @@
 ;;coordinates (in some coordinate system)
 (defentity locations [id & {:keys [location-map]
                             :or   {location-map {:reset [0 0]}}}]
-  {:components [:location-map location-map]})
+  {:components [:name :locations
+                :location-map location-map]})
 
 ;;__Location Operations__
 (defn add-location [ces locname coords]

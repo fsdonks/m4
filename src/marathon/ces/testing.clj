@@ -566,7 +566,7 @@
   ([t f]
    (let [debug? (cond (number? t)    #(= t (core/get-time %))
                       (set?    t)    #(t   (core/get-time  %))
-                      (fn?     t)  #(t (core/get-time %))
+                      (fn?     t)    #(t (core/get-time %))
                       :else (throw (Exception. (str [:unknown-debug-param t]))))]
      (fn [t ctx] (if (debug? ctx)
                  (core/debugging

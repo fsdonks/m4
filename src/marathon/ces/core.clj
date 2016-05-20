@@ -21,13 +21,14 @@
 ;;Even for intrepid readers, the section header __Developer Notes__ may be 
 ;;largely ignored.
 (ns marathon.ces.core
-  (:require [clojure    [inspector :as inspect]]
+  (:require 
             [spork.util [metaprogramming :as util]
                         [general  :as gen]
                         [tags     :as tag]
                         [table    :as tbl]
                         [reducers]
-                        [cellular :as cells]]
+                        [cellular :as cells]
+                        [inspection :as inspect]]
             [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity] :as store]
@@ -36,7 +37,7 @@
             [marathon.ces.basebehavior :as b]
             [marathon.data.store :as simstate]
             [clojure.core.reducers :as r]))
-
+    
 ;;This is a lifesaver...
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
@@ -114,7 +115,6 @@
   fillstore     :FillStore
   fill-function [:FillStore :fillfunction]
   fillmap       [:FillStore :fillmap])
-
 
 ;;probably not useful.
 (defn get-behaviors   [ctx] (get-entity ctx :behaviormanager))
@@ -196,7 +196,9 @@
 ;;structure.
 
 ;;Imports from spork.util.cellular and simcontext
-(util/import-vars 
+(util/import-vars
+ [spork.util.inspection
+  tree-view]
  [spork.util.cellular
   with-cells
   with-transient-cells
@@ -396,78 +398,6 @@
 ;;legacy api, just using CES now.
 ;(defmacro entities [ctx] `(entity-seq ~ctx))
 
-;;We could also be smarter about string comparers, to acccount for
-;;numbers...
-;;allows keywords and strings to be compared equally...
-(defn generic-comp [l r]
-  (cond (or (and (keyword? l) (string? r))
-            (and (string? l) (keyword? r)))                   (compare (name l) (name r))
-        (identical? (inspect/atom? l)  (inspect/atom? r))     (compare l r)
-        :else
-        (compare (str l) (str r))))
-
-;;#Useful Vizualizations of the simulation context
-;;TODO port this over to the new scenegraph api.
-(defn entryvis [x]
-  (cond (instance? java.util.Map$Entry x)
-        (reify
-          Object
-          (toString [o] 
-            (str (key x) " :: " (or (and (val x) (.getName (type (val x))))
-                                    "nil"))
-            )
-          clojure.lang.Seqable
-          (seq [o]
-            (when (val x)
-              (if (inspect/atom? (val x))
-                (list (val x))
-                (entryvis (val x))))))
-        (instance? java.util.Map x)
-         (let [entries (sort-by  key generic-comp (seq x))]
-           (map entryvis entries))
-        (inspect/atom? x) x
-        :else (map entryvis (seq x))
-        ))
-  
-(defn mapvis [^java.util.Map m]
-  (reify
-    Object
-    (toString [o] (str "/"))
-    clojure.lang.Seqable
-    (seq [x] (map entryvis (seq m)))))
-    
-;;creates a treemodel, but 
-(defn map-model [data]
-  (proxy [javax.swing.tree.TreeModel] []
-    (getRoot [] (mapvis data))
-    (addTreeModelListener [treeModelListener])
-    (getChild [parent index]
-      (let [res      (inspect/get-child parent index)]
-        (case (inspect/collection-tag res)
-          :entry (entryvis res)
-          res)))
-    (getChildCount [parent]
-      (inspect/get-child-count parent))
-    (isLeaf [node]
-      (if (instance? clojure.lang.IDeref node)
-        (inspect/is-leaf node)
-        (inspect/is-leaf node)))
-    (valueForPathChanged [path newValue])
-    (getIndexOfChild [parent child] -1)
-    (removeTreeModelListener [treeModelListener])))
-
-(defn inspect-tree [data]
-  (doto (javax.swing.JFrame. "Clojure Inspector")
-    (.add (javax.swing.JScrollPane. (javax.swing.JTree. (map-model data)
-                                                        )))
-    (.setSize 400 600)
-    (.setVisible true)))
-
-;;we'd like to make the clojure inspector a bit more useful...
-;;specifically, if we're looking at nested maps, it'b nice to
-;;use the map's keys as values instead of the entire string
-;;reprsentation
-(defn tree-view [obj] (inspect/inspect-tree obj))
 
 (defn demands->track [xs] 
   ;(sketch/->track (map (fn [r] (merge r {:start (:startday r)})) xs) :track-name name)
@@ -548,10 +478,6 @@
 (defn demand-names [ctx] (keys (gete ctx :DemandStore :demandmap)))
 (defn unit-names   [ctx] (keys (gete ctx :SupplyStore :unitmap)))
 
-
-
-    
-
 ;;This is fairly close....
 (defn visualize-entities [ctx]
   (let [demandnames    (demand-names ctx)
@@ -563,17 +489,16 @@
         named-entry (fn [e]
                       (if (instance? clojure.lang.MapEntry e) (entryvis e)
                           (entryvis (clojure.lang.MapEntry. (:name e) e))))]         
-    (tree-view
-     (entryvis 
-       {:stores  (map (comp entryvis named-entry)  (sort-by :name generic-comp (store/get-entities ctx stores)))
-        :demands (map (comp entryvis named-entry)  (sort-by :name generic-comp (store/get-entities ctx demandnames)))
-        :units   (map (comp entryvis named-entry)  (sort-by :name generic-comp (store/get-entities ctx unitnames)))}))))
+    (inspect/tree-view
+       {:stores  (map (comp entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx stores)))
+        :demands (map (comp entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx demandnames)))
+        :units   (map (comp entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx unitnames)))})))
 
 (defn visualize-subscriptions [ctx] 
-  (tree-view (:subscriptions (get-policystore ctx))))
+  (inspect/tree-view (:subscriptions (get-policystore ctx))))
 
 ;;TODO# define a visualization protocol, extend it to core datatypes...
-(defn visualize-unit [u]   (inspect/inspect-tree u))    
+(defn visualize-unit [u]   (inspect/tree-view u))    
 (defn visualize-policy [p] (jung/view-graph (:positiongraph p) jung/fr))
 
        
