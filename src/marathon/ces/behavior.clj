@@ -516,11 +516,22 @@
                     (spawning? statedata))
             (success benv))))
 
+(def locstates #{"Dwelling"  "DeMobilizing" "Recovering"
+                 :dwelling :demobilizing :recovering :recovery})
+
+(defn some-member [s1 s2]  
+  (let [[l r]  (if (< (count s1) (count s2)) [s1 s2]
+                   [s2 s1])]
+    (reduce (fn [acc x]
+              (if (r x)
+                (reduced x)
+                acc)) nil r)))
+
 (defn position=location? [newstate]
-  (case newstate    
-    ("Dwelling"  "DeMobilizing" "Recovering"
-     :dwelling :demobilizing :recovering :recovery)  true
-     false))
+  (if (not (set? newstate))
+    (locstates newstate)
+    (some-member newstate locstates)
+    ))
     
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
@@ -560,7 +571,7 @@
                 to-loc       (if-let [newloc  (:next-location benv)]
                                (do (debug [:preset-location newloc :From from-loc])
                                    newloc)
-                               (if (position=location? newstate)                               
+                               (if (position=location? newstate)                                       
                                  nextpos
                                  from-loc))
                 ;_            (println [from-loc to-loc])
@@ -831,29 +842,36 @@
             is-deployable  (protocols/deployable-by? p ct)
             positionA  current-pos
             positionB (protocols/get-position p ct)
-            _      (debug [:re-entry  :current-pos current-pos :next-pos positionB])
+
             _      (when (invalid? positionB)
                          (throw (Exception.  (str "Cannot handle during deployment or overlap: " positionB))))
             timeremaining  (protocols/transfer-time p positionB (protocols/next-position p positionB))
-            timeinstate    (- ct (protocols/get-cycle-time p positionB))
+            timeinstate    (- ct (protocols/get-cycle-time p positionB)) ;;this ends up being 0.
+            wt     (max (- timeremaining timeinstate) 0)
+            _      (debug [:re-entry  {:cycletime ct
+                                       :current-pos   current-pos
+                                       :next-pos      positionB
+                                       :timeinstate   timeinstate
+                                       :timeremaining timeremaining
+                                       :wt wt}])
             state-change {:newstate       (get-state unit positionB)
-                          :duration       (- timeremaining timeinstate)
+                          :duration       timeremaining
                           :followingstate nil
-                          :timeinstate  timeinstate
+                          :timeinstate    timeinstate
                           }
             _          (reset! ctx
                          (->> @ctx
                              ; (supply/log-position! tupdate positionA positionB  unit)
                               (supply/supply-update! {:name "SupplyStore"} unit
                                 (core/msg "Unit " (:name unit)
-                                          "  ReEntering with "
+                                          "  ReEntering at " positionB " with "
                                           (:bogbudget (:currentcycle unit))
                                           " BOGBudget."))))]
         (beval  change-state-beh
                 (assoc benv :state-change state-change
  ;                      :position-change {:from-position positionA
  ;                                        :to-position positionB}
-                       :wait-time (- timeremaining timeinstate)
+                       :wait-time wt
                        :next-position positionB))))
 
 ;;Function to handle the occurence of an early withdraw from a deployment.
