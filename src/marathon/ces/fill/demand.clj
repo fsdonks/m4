@@ -56,7 +56,8 @@
                                  {:DemandStore 
                                   (dem/register-change  (core/get-demandstore fill-ctx) demandname)})))
             newstore    (core/get-demandstore next-ctx)
-            _ (println [:pre-fill  (keys (:units-assigned demand))
+            _ (println [:demand    (:name demand)
+                        :pre-fill  (keys (:units-assigned demand))
                         :post-fill  (keys (:units-assigned (dem/get-demand newstore demandname)))
                         ])
                         

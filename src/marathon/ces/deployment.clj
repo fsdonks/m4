@@ -36,20 +36,10 @@
         newlocation demandname;(:name demand)
         ]
       (if followon?
-          (->> ctx
-               (supply/record-followon supply unit demandname)
-;               (supply/log-deployment! t (:locationname unit) demand unit 0  
-;                                       deployment-count period)
-               (u/re-deploy-unit  unit newlocation t (or (:deployment-index unit) 0))
-               ;(u/unit-moved-event! unit newlocation)
-               )
-          (->> ctx 
-               (u/deploy-unit unit newlocation  t (or (:deployment-index unit) 0))
-               ;; (supply/log-deployment! t (:locationname unit) demand unit 0  
-               ;;                         deployment-count period))
-               ;(u/unit-moved-event! unit newlocation)
-               ))
-          ))
+          (let [newctx  (supply/record-followon supply unit demandname ctx)
+                newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
+            (u/re-deploy-unit  newunit  newlocation t (or (:deployment-index unit) 0) newctx))            
+          (u/deploy-unit unit newlocation  t (or (:deployment-index unit) 0) ctx))))
 
 
 (defn check-first-deployer!   [store unitname ctx]

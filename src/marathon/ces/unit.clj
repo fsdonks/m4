@@ -666,8 +666,7 @@
                          (increment-followons)
                          (increment-deployments)
                          (assoc :followoncode nil))]
-    (->>   ctx
-          (core/set-unit new-unit)
+    (->>  (store/add-entity ctx new-unit)
           (keep-bogging-until-depleted new-unit newlocation))))
 
 ;;We can probably combine these into a unit behavior.

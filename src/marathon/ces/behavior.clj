@@ -866,7 +866,9 @@
                                 (core/msg "Unit " (:name unit)
                                           "  ReEntering at " positionB " with "
                                           (:bogbudget (:currentcycle unit))
-                                          " BOGBudget."))))]
+                                          " BOGBudget."))))
+            _          (reset! entity
+                               (assoc unit :followoncode nil))]
         (beval  change-state-beh
                 (assoc benv :state-change state-change
  ;                      :position-change {:from-position positionA
@@ -901,7 +903,7 @@
       (move! :recovery 90) ;;currently moving to recovery for 90 days.
       (do (swap! ctx
                  #(sim/trigger-event :supplyUpdate (:name unit) (:name unit) (core/msg "Unit " (:name unit) " Skipping Recovery with "
-                                                                                       (:bogbudget (:currentcycle unit)) " BOGBudget") %))
+                                                                                       (:bogbudget (:currentcycle unit)) " BOGBudget") nil %))
           (reset! entity (assoc-in unit [:currentcycle :bogbudget] 0))
           moving-beh))))
 

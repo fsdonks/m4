@@ -345,9 +345,9 @@
       :fillcount fillcount :period period :t t :deploydate deploydate}  ctx))
 
 ;When a unit engages in a followon deployment, we notify the context.
-(defn unit-followon-event! [unit demand ctx]
-  (sim/trigger-event :FollowingOn  (:name unit) (:name demand) 
-     (core/msg "Unit " (:name unit) " is following on to demand " (:name demand))
+(defn unit-followon-event! [unit demandname ctx]
+  (sim/trigger-event :FollowingOn  (:name unit) demandname 
+     (core/msg "Unit " (:name unit) " is following on to demand " demandname)
         nil ctx))
 
 (defn first-deployment! [supply unit ctx]
@@ -550,15 +550,25 @@
 (defn remove-followon
   "Drops the supply entity from supply store's registry of units in follow-on 
    status."
-  [store unitname]
-  (let [unit     (get-unit store unitname)
+  [unit ctx]
+  (let [unitname (:name unit) 
         fcode    (:followoncode unit)
-        src      (get unit :src)]
-    (-> store 
-        (store/dissoce  unitname :followon)
-        (core/prune-in  [:deployable-buckets fcode src] dissoc unitname)
-        (assoc-in  [:unitmap unitname] 
-          (assoc unit :followoncode nil)))))
+        src      (:src unit)
+        fbucket  (store/get-ine ctx [:SupplyStore :deployable-buckets fcode])
+        bucket   (get fbucket src)
+        fbucket  (if (== (count bucket) 1)
+                   (when (> (count fbucket) 1) (dissoc fbucket src))
+                   (assoc fbucket src (dissoc bucket (:name unit))))
+        unit    (dissoc :followon)
+        ]
+    (-> ctx
+        (store/update-ine  [:SupplyStore :deployable-buckets]
+                           (fn [fcodes]
+                             (if fbucket
+                               (assoc fcodes fcode fbucket)
+                               (dissoc fcodes fcode))))
+        (store/dissoce unitname :followon)
+        )))
 
 (defn followon-unit?
   "Determines if a particular unit is known to be eligible for follow-on use."
@@ -607,10 +617,10 @@
 ;;#Deployment Related
 
 ;;announce that the unit is in fact following on, remove it from followons.
-(defn record-followon [supply unit demand ctx]
-  (->> (sim/merge-entity 
-         {:supplystore (remove-followon supply (get unit :name))} ctx)
-       (unit-followon-event! unit demand)))
+(defn record-followon [supply unit demandname ctx]
+  (->> ctx
+       (remove-followon unit)
+       (unit-followon-event! unit demandname)))
 
 (defn get-next-deploymentid [s] (inc (:uniquedeployments s)))
 (defn tag-as-deployed [unit store] 

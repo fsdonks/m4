@@ -236,8 +236,7 @@
     (demand/manage-changed-demands day)));Clear set of changed demands
                                         ;in demandstore.
 
-
-  
+;;#Move these into core...#
 (defn ->simreducer [stepf init]  
   (r/take-while identity (r/iterate (fn [ctx] 
                                       (when  (engine/keep-simulating? ctx)
@@ -267,16 +266,14 @@
        (take-while #(<= (first %) tfinal))
        (into {})))
 
-
 (def demand-sim (->simulator demand-step defaultctx))
-(def the-unit "4_SRC1_AC")
+(def the-unit    "4_SRC1_AC")
 
 (defn disable-except [u ctx]
   (reduce (fn [c x]
             (if (not= (:name x) u)
               (store/assoce c (:name x) :disabled true)
-              c))
-              
+              c))              
           ctx  (core/units ctx)))
 
 (def disabled (disable-except the-unit defaultctx))
@@ -595,6 +592,9 @@
   (->history 271  (debugging-on (fn [_] true))
              (get h181 181)))
 
+(def h1000
+                        (->history 1000 engine/sim-step
+                                   defaultctx))
 
 )
 ;;we have now deployed units and updated their state to a bare minimum
