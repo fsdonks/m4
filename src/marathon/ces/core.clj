@@ -396,6 +396,16 @@
 ;;legacy api, just using CES now.
 ;(defmacro entities [ctx] `(entity-seq ~ctx))
 
+;;We could also be smarter about string comparers, to acccount for
+;;numbers...
+;;allows keywords and strings to be compared equally...
+(defn generic-comp [l r]
+  (cond (or (and (keyword? l) (string? r))
+            (and (string? l) (keyword? r)))                   (compare (name l) (name r))
+        (identical? (inspect/atom? l)  (inspect/atom? r))     (compare l r)
+        :else
+        (compare (str l) (str r))))
+
 ;;#Useful Vizualizations of the simulation context
 ;;TODO port this over to the new scenegraph api.
 (defn entryvis [x]
@@ -413,7 +423,7 @@
                 (list (val x))
                 (entryvis (val x))))))
         (instance? java.util.Map x)
-         (let [entries (sort-by key (seq x))]
+         (let [entries (sort-by  key generic-comp (seq x))]
            (map entryvis entries))
         (inspect/atom? x) x
         :else (map entryvis (seq x))
@@ -532,8 +542,15 @@
 (defn visualize-store [ctx]
   (tree-view (entryvis (store/domains ctx))))
 
+;;Short queries...we should move these away from being a map for
+;;entities, and into sets. Set access is actually faster than
+;;maps, so bonus.
 (defn demand-names [ctx] (keys (gete ctx :DemandStore :demandmap)))
-(defn unit-names [ctx] (keys (gete ctx :SupplyStore :unitmap)))
+(defn unit-names   [ctx] (keys (gete ctx :SupplyStore :unitmap)))
+
+
+
+    
 
 ;;This is fairly close....
 (defn visualize-entities [ctx]
@@ -548,9 +565,9 @@
                           (entryvis (clojure.lang.MapEntry. (:name e) e))))]         
     (tree-view
      (entryvis 
-       {:stores  (map (comp entryvis named-entry)  (store/get-entities ctx stores))
-        :demands (map (comp entryvis named-entry)  (store/get-entities ctx demandnames))
-        :units   (map (comp entryvis named-entry)  (store/get-entities ctx unitnames))}))))
+       {:stores  (map (comp entryvis named-entry)  (sort-by :name generic-comp (store/get-entities ctx stores)))
+        :demands (map (comp entryvis named-entry)  (sort-by :name generic-comp (store/get-entities ctx demandnames)))
+        :units   (map (comp entryvis named-entry)  (sort-by :name generic-comp (store/get-entities ctx unitnames)))}))))
 
 (defn visualize-subscriptions [ctx] 
   (tree-view (:subscriptions (get-policystore ctx))))
