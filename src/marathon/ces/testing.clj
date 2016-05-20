@@ -596,6 +596,11 @@
                         (->history 1000 engine/sim-step
                                    defaultctx))
 
+;;We get all the way to the end without any exceptions...
+(def h2521
+  (->history 2521 engine/sim-step 
+             defaultctx))
+
 )
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
