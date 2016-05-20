@@ -470,7 +470,7 @@
     (throw (Exception. "No fillgraph to visualize!"))))
 
 (defn visualize-store [ctx]
-  (tree-view (entryvis (store/domains ctx))))
+  (tree-view  (store/domains ctx)))
 
 ;;Short queries...we should move these away from being a map for
 ;;entities, and into sets. Set access is actually faster than
@@ -487,12 +487,12 @@
                         (set  (keys (store/entities ctx)))
                         basic-entities)
         named-entry (fn [e]
-                      (if (instance? clojure.lang.MapEntry e) (entryvis e)
-                          (entryvis (clojure.lang.MapEntry. (:name e) e))))]         
+                      (if (instance? clojure.lang.MapEntry e) (inspect/entryvis e)
+                          (inspect/entryvis (clojure.lang.MapEntry. (:name e) e))))]         
     (inspect/tree-view
-       {:stores  (map (comp entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx stores)))
-        :demands (map (comp entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx demandnames)))
-        :units   (map (comp entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx unitnames)))})))
+       {:stores  (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx stores)))
+        :demands (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx demandnames)))
+        :units   (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx unitnames)))})))
 
 (defn visualize-subscriptions [ctx] 
   (inspect/tree-view (:subscriptions (get-policystore ctx))))

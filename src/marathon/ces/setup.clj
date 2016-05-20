@@ -13,7 +13,7 @@
                                [scope :as scope]]
             [marathon.fill [fillstore :as fillstore]]
             [spork.util [tags :as tags]
-                        [table :as table]]))
+                        [table :as tbl]]))
 
 ;;A central resource for getting tables.  
 (def ^:dynamic *tables*  sd/sample-tables)
