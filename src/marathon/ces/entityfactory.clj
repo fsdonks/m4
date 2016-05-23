@@ -340,14 +340,17 @@
    any movement via event triggers, returning the 
    new unit and a new policystore."
   [unit policy ghost ctx]
-  (let [newpos (if (not ghost) 
-                 (generic/get-position policy (:cycletime unit))
-                 "Spawning")]
-    (-> unit 
-        (assoc :policy policy)
-        (assoc :positionpolicy newpos)
-        (assoc :locationname "Spawning")  
-        (assoc :currentcycle (policy->cycle-record policy (:cycletime unit) 0 (:name unit) (:src unit) (:component unit)))
+  (let [currentpos (let [p (:positionpolicy unit)]
+                      (when (not= p :spawn) p))
+        newpos (if (not ghost) 
+                 (or currentpos (generic/get-position policy (:cycletime unit)))
+                 "Spawning")
+        ]
+    (-> unit       
+        (merge {:policy policy
+                :positionpolicy newpos
+                :locationname  "Spawning"
+                :currentcycle (policy->cycle-record policy (:cycletime unit) 0 (:name unit) (:src unit) (:component unit))})
 ;        (unitsim/change-location newpos ctx)
         )))
 

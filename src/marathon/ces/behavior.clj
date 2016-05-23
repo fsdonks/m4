@@ -439,7 +439,7 @@
           cycletime (or cycletime (:cycletime ent))
           topos     (if  (not (or to-position positionpolicy))
                          (protocols/get-position (u/get-policy ent) cycletime)
-                         positionpolicy)
+                         positionpolicy)        
           timeinstate   (- cycletime 
                            (protocols/get-cycle-time policy
                                                      positionpolicy))
