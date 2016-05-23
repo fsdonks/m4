@@ -36,10 +36,11 @@
 ;3.  If we fail to fill a demand, we have no feasible supply, thus we leave it 
 ;    on the queue, and stop filling. Note, the demand is still on the queue, we
 ;    only "tried" to fill it. No state changed .
-(defn fill-category [demandstore category ctx & {:keys [stop-early?] 
+(defn fill-category [demandstore category ctx & {:keys [stop-early? pending] 
                                                  :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
-  (loop [pending   (dem/find-eligible-demands demandstore category ctx)   
+  (loop [pending   (or pending
+                       (dem/find-eligible-demands demandstore category ctx))
          ctx       (dem/trying-to-fill! demandstore category ctx)]
     (if (empty? pending) ctx ;no demands to fill!      
       (let [demandstore (core/get-demandstore ctx)
@@ -59,9 +60,8 @@
             newstore    (core/get-demandstore next-ctx)
             _ (debug [:demand    (:name demand)
                       :pre-fill  (keys (:units-assigned demand))
-                      :post-fill  (keys (:units-assigned (dem/get-demand newstore demandname)))
-                        ])
-                        
+                      :post-fill (keys (:units-assigned (dem/get-demand newstore demandname)))
+                        ])                        
              ]
         (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
           next-ctx                                                           ;3)
@@ -96,6 +96,34 @@
            (fill-category store [category groups] ctx :stop-early false)) ctx))
   ctx)
 
+;; (defn fill-srm [ctx]
+;;   (fill-demands-with
+;;    (fn [store category ctx] 
+;;      (fill-category store [category #{:SRM}] ctx)) ctx)
+;;   ctx)
+
+;; ;;This is a really quick hack to implement demand fill for SRM.
+;; ;;I don't care about tieing in to the original categorization stuff,
+;; ;;since right now we have enough differences between SRM and the old
+;; ;;to merit something utterly different.
+;; ;;We piggy-back off of the SRM demands 
+;; (defn fill-others [ctx]
+;;   (let [srm-demands
+;;         (->> (store/gete ctx :DemandStore :activedemands)
+;;              (filter #(srm-demand? ctx   %))
+;;              (map #(store/get-entity ctx %))
+;;              (group-by :SRC))        
+;;         sorted-groups   (for [[SRC ds] srm-demands]
+;;                           [SRC (sort-by :Priority ds)])]
+;;         (reduce (fn [acc [SRC pending]]
+;;                   (fill-category (core/get-demandstore acc)
+;;                                  [SRC :SRM]
+;;                                  acc
+;;                                  :pending pending))
+;;                  ctx sorted-groups)))
+        
+    
+
 ;Note -> we're just passing around a big fat map, we'll use destructuring in the 
 ;signatures to pull the args out from it...the signature of each func is 
 ;state->state
@@ -115,8 +143,10 @@
   [t ctx]
   (->> ctx    
     (fill-followons)
-;    (supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
-    (fill-hierarchically)))
+   ;(supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
+;    (fill-srm) ;new, only uses supply in the [:SRM category]
+    (fill-hierarchically)
+    ))
 
 ;;Well, we can go the dbag route on this....
 ;;Fill-demands could be executed much more poorly than it is.

@@ -1272,24 +1272,23 @@
 (befn location-based-beh {:keys [entity location-policy ctx] :as benv}
     (when-let [lp location-policy]
       (let [info (store/gete benv lp)
-            {:keys [Name MissionLength BOG StartState EndState Overlap
-                    ]} info
+            {:keys [Name MissionLength BOG StartState EndState Overlap]} info
             newstate (if BOG #{StartState :bogging} #{StartState})]
         ;;we need to schedule a state change.
         ;;and a location-change...
-        (do (swap! entity assoc :location-based-policy true)             
+        (do (swap! entity assoc :location-behavior true)             
             (beval  change-state-beh
                     (assoc benv
                            :state-change
-                           {:newstate newstate
-                            :duration       (- MissionLength overlap)
+                           {:newstate       newstate
+                            :duration       (- MissionLength  overlap)
                             :followingstate (if (pos? overlap)
                                               #{newstate :overlapping}
                                               EndState)
-                            :timeinstate (or (:timeinstate lp) 0)}
+                            :timeinstate    (or (:timeinstate lp) 0)}
                            :location-change
-                           {:from-location (:locationname @entity)
-                        :to-location   Name}
+                           {:from-location  (:locationname @entity)
+                            :to-location     Name}
                            :wait-time     (- MissionLength overlap)
                            :next-position StartState))))))
 
