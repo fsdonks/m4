@@ -178,7 +178,7 @@
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
   [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
-           SourceFirst Quantity  OITitle Vignette Operation  DemandGroup ] :as rec}]
+           SourceFirst Quantity  OITitle Vignette Operation  DemandGroup] :as rec}]
   (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
                  SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup))
 

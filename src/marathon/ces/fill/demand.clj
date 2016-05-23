@@ -35,7 +35,10 @@
 ;2.  Incorporate fill results.
 ;3.  If we fail to fill a demand, we have no feasible supply, thus we leave it 
 ;    on the queue, and stop filling. Note, the demand is still on the queue, we
-;    only "tried" to fill it. No state changed .
+                                        ;    only "tried" to fill it. No state changed .
+
+(def lastfill (atom nil))
+
 (defn fill-category [demandstore category ctx & {:keys [stop-early? pending] 
                                                  :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
@@ -43,10 +46,12 @@
                        (dem/find-eligible-demands demandstore category ctx))
          ctx       (dem/trying-to-fill! demandstore category ctx)]
     (if (empty? pending) ctx ;no demands to fill!      
-      (let [demandstore (core/get-demandstore ctx)
+      (let [
+            demandstore (core/get-demandstore ctx)
             demand      (second (first pending)) 
             demandname  (:name demand)           ;try to fill the topmost demand
-            ctx         (dem/request-fill! demandstore category demand ctx)           
+            ctx         (dem/request-fill! demandstore category demand ctx)
+            _ (reset! lastfill [demand ctx])
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
             ;_           (println [fill-status demandname])
             can-fill?   (= fill-status :filled)

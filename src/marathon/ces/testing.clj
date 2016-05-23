@@ -686,6 +686,17 @@
 (def srmctx
   (->> (setup/simstate-from  sd/srm-tables core/debugsim)
        (sim/add-time 1)))
+
+(def srmtest
+  (->history 100 ;(debugging-on #{451
+                  ;               467
+                   ;              523
+                   ;              563
+                   ;              595
+                   ;              963
+                   ;              1051})
+                 engine/sim-step
+                 srmctx))
 )
 
 ;;We should then be able to spawn all the entities.

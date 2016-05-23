@@ -551,7 +551,9 @@
         src       (:src demand)
         demandq   (or (get unfilled src) (sorted-map))
         fill-key  (priority-key demand)
-        _ (debug [:adding fill-key :to src :/ demandq])]  
+        _ (debug [:adding fill-key :to src ;:/ demandq
+                  ])
+        ]  
     (if (contains? demandq fill-key) ctx ;pass-through
         (->> (core/merge-entity ;add to unfilled 
               {:DemandStore 
