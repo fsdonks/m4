@@ -259,16 +259,17 @@
                                  [source :filled 0])
                                (for [sink unused-sinks]
                                  [:unfilled sink 0]))
+          newgraph     (graph/add-arcs graph/empty-graph unused-arcs)
           basegraph    (reduce (fn [acc [src snk w]]                         
                                  (graph/conj-arc acc snk src w))
-                               graph/empty-graph (concat fill-arcs unused-arcs))
+                               newgraph fill-arcs)
           sinkgraph    (reduce (fn [acc src]
                                  (graph/conj-arc acc src :filled 0))
                                basegraph sources)
           sourcegraph  (reduce (fn [acc snk]
                                  (graph/conj-arc acc :unfilled snk 0))
                                sinkgraph sinks)]
-      (graph/add-arcs sourcegraph unused-arcs))))
+      sourcegraph)))
 
 (defn fill-paths [g from]
   (vec (sort-by second (seq (graph/sink-map g from)))))

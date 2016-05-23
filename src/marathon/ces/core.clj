@@ -524,7 +524,9 @@
   "Returns a sequence of followon codes that are currently present in the 
    supply.  Used for constraining or preferring supply during the followon 
    fill phase."
-  [supplystore] (keys (:followon-buckets supplystore)))
+  [ctx]
+  (let [m (dissoc (store/gete ctx :SupplyStore :deployable-buckets) :default)]
+    (when (pos? (count m)) m)))
 
 ;;Check the validity here...
 ;;Do we need so much redundancy now?
@@ -551,8 +553,12 @@
 (defn interval->date  [t ctx]  t)
 
 (defn in-scope? [params src]
-  (and (not (get-in params [:SRCs-Out-of-Scope src]))
+  (and (not (get-in params [:SRCs-Out-Of-Scope src]))
        (get-in params [:SRCs-In-Scope src])))
+
+(defn scope-info [ctx]
+  {:in-scope     (get (get-parameters ctx) :SRCs-In-Scope)
+   :out-of-scope (get (get-parameters ctx) :SRCs-Out-Of-Scope)})
 
 ;;#Tag Related Functions#
 ;;Another useful bit of higher order, or meta data, is the notion of simple 

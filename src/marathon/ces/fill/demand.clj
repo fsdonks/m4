@@ -90,10 +90,11 @@
 
 ;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 (defn fill-followons [ctx]
-  (if-let [groups (core/get-followon-keys ctx)] 
-    (fill-demands-with
-     (fn [store category ctx] 
-       (fill-category store [category groups] ctx :stop-early false)) ctx)
+  (if-let [groups (core/get-followon-keys ctx)]
+    (do (println [:trying-to-fill :using :followon-supply])
+        (fill-demands-with
+         (fn [store category ctx] 
+           (fill-category store [category groups] ctx :stop-early false)) ctx))
     ctx))
 
 ;Note -> we're just passing around a big fat map, we'll use destructuring in the 

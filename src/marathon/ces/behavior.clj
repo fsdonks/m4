@@ -57,6 +57,7 @@
   (:import [marathon.ces.basebehavior behaviorenv]))
 
 ;;__utils__
+(def ^:constant +inf+ Long/MAX_VALUE)
 
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
@@ -349,22 +350,26 @@
      (->do (fn [_] (log! (str (:name @entity) " is doing nothing for " deltat) ctx)
              )))
 
+
 ;;note-we have a wait time in the context, under :wait-time
 ;;updates an entity after a specified duration, relative to the 
 ;;current simulation time + duration.
 (befn update-after  ^behaviorenv [entity wait-time tupdate ctx]
    (when wait-time
      (->alter
-      #(let [tfut (+ tupdate wait-time) 
-             e                       (:name @entity)
-             _    (debug [e :requesting-update :at tfut])]
-         (swap! ctx (fn [ctx] 
-                      (core/request-update tfut
-                                           e
-                                           :supply-update
-                                           ctx)))
-         (dissoc % :wait-time) ;remove the wait-time from further consideration...
-         ))))
+      #(if (== wait-time +inf+ )
+         (do (debug [(:name @entity) :waiting :infinitely])
+             (dissoc % :wait-time)) 
+         (let [tfut (+ tupdate wait-time) 
+               e                       (:name @entity)
+               _    (debug [e :requesting-update :at tfut])]
+           (swap! ctx (fn [ctx] 
+                         (core/request-update tfut
+                                              e
+                                              :supply-update
+                                              ctx)))
+           (dissoc % :wait-time) ;remove the wait-time from further consideration...
+           )))))
 
 ;;our idioms for defining behaviors will be to unpack 
 ;;vars we're expecting from the context.  typically we'll 
@@ -474,30 +479,31 @@
 ;;having a positive deltat, others are instantaneous and thus expect 
 ;;deltat = 0 in the context.  Note, this is predicated on the
 ;;assumption that we can eventually pass time in some behavior....
-(befn roll-forward-beh {:keys [deltat statedata] :as benv}
-      (cond (pos? deltat)
-            (loop [dt   deltat
-                   benv benv]
-              (let [sd (:statedata    benv)            
-                    timeleft    (fsm/remaining sd)
-                    _  (debug [:sd sd])
-                    _  (debug [:rolling :dt dt :remaining timeleft])
-                    ]
-                (if-y 
-                 (if (<= dt timeleft)
-                   (do (debug [:dt<=timeleft :updating-for dt])               
-                       (beval update-state-beh (assoc benv :deltat dt)))
-                   (let [residual   (max (- dt timeleft) 0)
-                         res        (beval update-state-beh (assoc benv  :deltat timeleft))]
-                     (if (success? res) 
-                       (recur  residual ;advance time be decreasing delta
-                               (val! res))
-                       res)))
-                 nil)))
-            (spawning? statedata)
-            spawning-beh
-            :else
-            update-state-beh))
+(befn roll-forward-beh {:keys [entity deltat statedata] :as benv}
+      (do (debug [:>>>>>begin-roll-forward (:name @entity) :last-update (:last-update @entity)])
+          (cond (pos? deltat)
+                (loop [dt   deltat
+                       benv benv]
+                  (let [sd (:statedata    benv)            
+                        timeleft    (fsm/remaining sd)
+                        _  (debug [:sd sd])
+                        _  (debug [:rolling :dt dt :remaining timeleft])
+                        ]
+                    (if-y 
+                     (if (<= dt timeleft)
+                       (do (debug [:dt<=timeleft :updating-for dt])               
+                           (beval update-state-beh (assoc benv :deltat dt)))
+                       (let [residual   (max (- dt timeleft) 0)
+                             res        (beval update-state-beh (assoc benv  :deltat timeleft))]
+                         (if (success? res) 
+                           (recur  residual ;advance time be decreasing delta
+                                   (val! res))
+                           res)))
+                     nil)))
+                (spawning? statedata)
+                spawning-beh
+                :else
+                update-state-beh)))
 
 ;;So, at the high level, we have a simple behavior that checks to see
 ;;if it can move, finds where to move to, starts the process of
@@ -790,7 +796,8 @@
 (befn special-state {:keys [entity statedata] :as benv}
       (case (:state @entity)
         :spawning spawning-beh
-        :abrupt-withdraw abrupt-withdraw-beh
+        :abrupt-withdraw (do (debug [:<special-state-abw>])
+                             abrupt-withdraw-beh)
         :recovered     (->and [(echo :recovered-beh)
                                re-entry-beh
                                ;reset-beh
@@ -807,16 +814,19 @@
 ;;in a dynamically determined position, or the unit goes to another demand compatible with the
 ;;followon code.
 (befn followon-beh {:keys [entity ctx] :as benv}
-      (when-let [fc (u/followon-code @entity)] ;if the unit has a followon code
-        (do ;register the unit as a possible followOn
-          (println [(:name @entity) :added-followon :for [fc]])
-          (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
+      (let [fc (u/followon-code @entity)
+            _  (debug [:trying-followon (:name @entity) fc])]
+        (when-let [fc (u/followon-code @entity)] ;if the unit has a followon code
+          (do ;register the unit as a possible followOn
+            (println [(:name @entity) :added-followon :for [fc]])
+            (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
+            (swap! entity #(assoc % :state :followon))
                                         ;age-unit
-
-          (success (merge benv {:wait-time nil
-                                :next-position nil})) ;?
-          )))
-
+            (println [:successfully-followoing-on])
+            (success (merge benv {:wait-time +inf+
+                                  :next-position :followon})) ;?
+            ))))
+      
 ;;way to get the unit back to reset.  We set up a move to the policy's start state,
 ;;and rip off the followon code.
 (befn reset-beh {:keys [entity] :as benv}

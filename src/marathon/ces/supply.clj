@@ -583,15 +583,16 @@
    unit is released from holding and allowed to progress back into the global 
    supply."
   [ctx unitname]
-  (let [_     (println [:releasing unitname :followon])        
+  (let [_     (println [:releasing unitname :followon])
+        ctx   (store/assoce ctx unitname :followoncode nil)
         ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
-                   (u/change-state unitname 
-                                   :AbruptWithdraw 0 nil))
+                   (u/change-state (store/get-entity ctx unitname)
+                                   :abrupt-withdraw 0 0))
         ;store 
         ]   
     (update-deploy-status 
      (core/get-supplystore ctx)
-     (store/gete ctx unitname)  nil nil ctx)))
+     (store/get-entity ctx unitname)  nil nil ctx)))
 
 
 ;;Process the unused follow-on units, changing their policy to complete cycles.

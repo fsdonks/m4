@@ -535,9 +535,10 @@
         ;;basically - drop-unfilled-demand
     (if (contains? unfilled src) ;either filled or deactivated
       (let [demandq      (get unfilled src)
-            nextunfilled (if (== (count demandq) 1)
+            nextq        (dissoc demandq fill-key)
+            nextunfilled (if (zero? (count nextq))
                            (dissoc unfilled src) 
-                           (assoc  unfilled src (dissoc demandq fill-key)))]
+                           (assoc  unfilled src nextq))]
         (->> (removing-unfilled! demandstore (:name demand) ctx)
              (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
       (deactivating-unfilled! demandstore (:name demand) ctx))     ;notification
@@ -549,7 +550,8 @@
   (let [unfilled  (:unfilledq   demandstore)
         src       (:src demand)
         demandq   (or (get unfilled src) (sorted-map))
-        fill-key  (priority-key demand)]  
+        fill-key  (priority-key demand)
+        _ (debug [:adding fill-key :to src :/ demandq])]  
     (if (contains? demandq fill-key) ctx ;pass-through
         (->> (core/merge-entity ;add to unfilled 
               {:DemandStore 
@@ -750,7 +752,7 @@
   (let [eligible? (core/make-member-pred groups)] ;make a group filter
     (fn [store ctx]
       (->> (seq (find-eligible-demands store src ctx)) ;INEFFICIENT
-        (filter (fn [[pk d]] (eligible? (:demand-group d))))
+        (filter (fn [[pk d]] (eligible? (:demandgroup d))))
         (into (sorted-map)))))) ;returns priority-queue of demands.
 
 ;;matches {:keys [src group]}, will likely extend to allow tags...
@@ -855,6 +857,8 @@
             ctx 
             (get-activations demandstore t))))
 
+
+
 ;;#Shifting Elements of Supply To and From Demand
 ;;As supply is selected to fill demand, the supply is actively assigned to a 
 ;;specific demand.  From this status, we may see supply stay there indefinitely,
@@ -869,18 +873,20 @@
    and notifies systems of the entity's abrupt withdraw."
   [unit demand ctx]
   (let [demandgroup (:demandgroup demand)
-        unitname    (:name unit)]
+        unitname    (:name unit)
+        _ (debug [:withdraw-unit unitname])
+        ]
 	  (cond 
-	    (or (= "" demandgroup) (ungrouped? demandgroup))
+	    (and demandgroup (not= "" demandgroup) (not (ungrouped? demandgroup)))
             (do  (debug :abw1)
                  (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
-                       _ (debug [:pre-abw])] 
+                       _ (debug [:pre-abw unitname (store/gete ctx unitname :last-update)])] 
                         (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
-              (not (ghost? unit))
-              (do  (debug :abw2)
-                   (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx))
+            (not (ghost? unit))
+            (do  (debug :abw2)
+                 (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx))
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
-	            (u/change-state (store/get-entity ctx unitname) :Reset 0 nil)))))                     
+                       (u/change-state (store/get-entity ctx unitname) :Reset 0 nil)))))                     
 
 (defn send-home
   "Implements the state changes required to deactivate a demand, namely, to send
@@ -892,6 +898,7 @@
   (let [unitname  (:name unit)
         startloc  (:locationname unit)
         demandgroup (:demandgroup demand)
+        _ (debug [:demand/send-home (:name unit) :t t])
         ctx         (u/unit-update unit ctx)
         ;unit         (store/get-entity ctx unitname)
         ]        
@@ -951,15 +958,24 @@
    units."
   [demand t ctx]
   (if (empty-demand? demand)
-      (deactivating-empty-demand! demand t ctx)
-      (-> (->> (concat (keys   (:units-assigned    demand))
-                       (keys   (:units-overlapping demand))) ;otherwise send every unit home.
-               (reduce (fn [ctx u] (send-home t demand (store/get-entity ctx u) ctx)) ctx))
+    (do (debug [:empty-demand! (:name demand)])
+        (deactivating-empty-demand! demand t ctx))
+    (let [us      (vec (concat (keys   (:units-assigned    demand))
+                               (keys   (:units-overlapping demand))))
+          _       (debug [:sending-home us :from (:name demand) :t t])
+          sent    (atom #{})
+          nextctx (reduce (fn [acc nm]
+                           (do (if (contains? @sent nm)
+                                 (throw (Exception. (str [:already-sent-home nm])))
+                                 (do (swap! sent conj nm)
+                                     (send-home t demand (store/get-entity acc nm) acc)))))
+                         ctx us)]         
+      (-> nextctx
           (update-entity
            :DemandStore       
            #(gen/deep-assoc % [:demandmap (:name demand)]
                             (assoc demand :units-assigned {}
-                                          :units-overlapping {}))))))
+                                          :units-overlapping {})))))))
 
 
 ;;==todo== stop storing activedemand information in demandstore/activedemands

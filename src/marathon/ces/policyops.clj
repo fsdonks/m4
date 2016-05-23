@@ -580,7 +580,7 @@
                                (<= n +inf+))
                         n
                         (if (neg? n) (throw (Exception. (str [:negative-value name m k n])))
-                            (do (println [:interpreting-as-infinite name k n])
+                            (do ;(println [:interpreting-as-infinite name k n])
                                 +inf+)))))
              m m))
 

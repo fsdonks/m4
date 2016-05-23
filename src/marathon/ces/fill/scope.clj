@@ -23,7 +23,7 @@
                                      (demands nd) :demand
                                      :else (throw (Exception.
                                                    (str "Neither supply nor demand, err. " [nd g])))))]
-    (reduce (fn [acc nd] (update-in acc [(isle-type)] conj nd))
+    (reduce (fn [acc nd] (update-in acc [(isle-type nd)] conj nd))
             {:demand nil :supply nil} (graph/islands stripped))))
 
 ;;Given a fill graph  g, finds the islands (components of size 1 when :filled
@@ -70,7 +70,7 @@
     (sim/trigger-event :ScopedDemand :Anonymous :Anonymous 
         (core/msg "FillManager found " (count recs) " Unfillable Demand Sinks") recs ctx)))
 
-(def lastgraph (atom nil))
+;(def lastgraph (atom nil))
 
 ;;Given  scopeing information, specifically a nested map of srcs that 
 ;;are in scope or out of scope, applies the implicit scoping rules to
@@ -93,7 +93,7 @@
              ;;                  (update-in [:outofscope] merge out-of-scope))
                 })))))
   ([ctx] (if-let [g (get (core/get-fillstore ctx) :fillgraph)]
-           (do (reset! lastgraph ctx)
+           (do ;(reset! lastgraph ctx)
                (apply-scope (derive-scope g) ctx))
            (throw (Exception. (str "No fillgraph exists, cannot scope!"))))))
 

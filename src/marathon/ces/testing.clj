@@ -601,24 +601,54 @@
   (->history 2521 engine/sim-step 
              defaultctx))
 
-;;testing followon demands...
-(def followonctx
-  (setup/simstate-from  sd/followon-tables core/debugsim))
+
+
+)
+
+
+;;__Scoping tests__
+;;This set of data has no demand for SRC4, and no supply for
+;;SRC1,2, or 3.  Further, there are no substitutions.  We
+;;should detect this when we scope.
 (def brokenctx 
   (setup/simstate-from  sd/broken-supply-tables core/debugsim))
 
-(def followontest
-  (->history 2521 (debugging-on #{451
-                                  467
-                                  523
-                                  563
-                                  595
-                                  963
-                                  1051})
+(deftest scoping
+  (is (= {"SRC4" "No Demand", "SRC3" "No Supply", "SRC1" "No Supply", "SRC2" "No Supply"}
+         (:SRCs-Out-Of-Scope (core/get-parameters brokenctx)))
+      "We should have nothing at all in scope for the broken supply."))
 
+;;testing followon demands...
+(def followonctx
+  (setup/simstate-from  sd/followon-tables core/debugsim))
+
+(def followonfill
+  (let [f467 
+        (get (->history 467 engine/sim-step             
+                        followonctx) 467)
+        day (sim/get-time f467)]
+    (->> f467
+         (engine/begin-day        day)  ;Trigger beginning-of-day logic and notifications.
+         (supply/manage-supply    day)  ;Update unit positions and policies.
+         (policy/manage-policies  day)  ;Apply policy changes, possibly affecting supply.
+         (demand/manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.         
+         ;(filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.
+         )))
+;         (supply/manage-followons day)  ;Resets unused units from follow-on status. 
+;         (engine/end-day day)           ;End of day logic and notifications.
+;         (demand/manage-changed-demands day))))
+
+(def followontest
+  (->history 451 (debugging-on #{451
+                                 467
+                                 523
+                                 563
+                                 595
+                                 963
+                                 1051})
+             
              followonctx))
 
-)
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.
 ;;The trick now is to indicate that the entities should be updating.
