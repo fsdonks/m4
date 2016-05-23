@@ -218,12 +218,24 @@
     (let [res (graph/dijkstra g from to)]
       (when-let [d (get-in res [:distance to])]
         [(graph/first-path res) d]))))
-  
-(defn reduced-arcs [g] 
-  (for [[path w] (filter identity 
-                         (naive-all-pairs g (graph/sinks g :unfilled) 
-                                            (graph/sources g :filled)))]
-    [(last path)  (first path) w]))
+
+;;Note: these are the arcs we care about.  If there are no defined
+;;paths between unfilled and filled, then we will end up with no arcs.
+;;We can be smart about this.  In some cases, there will be no path found
+;;for either sink nodes or source nodes.  We'd like to encode these
+;;as arcs with self-loops....
+(defn reduced-arcs [g]
+  (let [sinks   (graph/sinks   g :unfilled)
+        sources (graph/sources g :filled)
+        sink-islands   (atom #{})
+        source-islands (atom #{})]                             
+    (for [[path w]
+          (filter identity 
+                  (naive-all-pairs g sinks
+                                   sources))]
+      (let [source (last path)
+            sink   (first path)]
+        [source  sink w]))))
 
 ;;If the fillgraph is a dag, which it should be by construction
 ;;(absent any funky data), then we can reduce it by finding the paths
@@ -236,26 +248,40 @@
 ;;net result should be much faster pathfinding when we go to query the
 ;;fillgraph.
 (defn reduced-graph [g]
-  (let [cycs (graph/cyclical-components g)]
+  (let [cycs  (graph/cyclical-components g)]
     (assert (empty? cycs) (str "Your dependency graph should be a DAG, cycles are present along " cycs))
-    (let [sources   (atom (transient #{}))
-          sinks     (atom (transient #{}))]
-      (as-> (reduce (fn [acc [src snk w]]
-                      (do (swap! sources conj! src)
-                          (swap! sinks conj!   snk)
-                          (graph/conj-arc acc snk src w)))
-                    graph/empty-graph (reduced-arcs g)) 
-            basegraph
-            (as-> (reduce (fn [acc src]
-                            (graph/conj-arc acc src :filled 0))
-                          basegraph
-                          (persistent! @sources))
-                  sinkgraph
-                  (reduce (fn [acc snk]
-                            (graph/conj-arc acc :unfilled snk 0)) sinkgraph (persistent! @sinks)))))))
+    (let [fill-arcs (reduced-arcs g)
+          sources   (into #{} (map first) fill-arcs)
+          sinks     (into #{} (map second) fill-arcs)
+          unused-sinks   (clojure.set/difference (set (graph/sinks   g :unfilled)) sinks)
+          unused-sources (clojure.set/difference (set (graph/sources g :filled)) sources)
+          unused-arcs  (concat (for [source unused-sources]
+                                 [source :filled 0])
+                               (for [sink unused-sinks]
+                                 [:unfilled sink 0]))
+          basegraph    (reduce (fn [acc [src snk w]]                         
+                                 (graph/conj-arc acc snk src w))
+                               graph/empty-graph (concat fill-arcs unused-arcs))
+          sinkgraph    (reduce (fn [acc src]
+                                 (graph/conj-arc acc src :filled 0))
+                               basegraph sources)
+          sourcegraph  (reduce (fn [acc snk]
+                                 (graph/conj-arc acc :unfilled snk 0))
+                               sinkgraph sinks)]
+      (graph/add-arcs sourcegraph unused-arcs))))
 
 (defn fill-paths [g from]
   (vec (sort-by second (seq (graph/sink-map g from)))))
+
+;;In the case where we have no paths between supply and demand,
+;;we still have islands.  Our naive all-pairs ssp will not
+;;find anything, so we don't get any arcs.  We can still
+;;find islands though, and build a reduced fillgraph
+;;with only the children of unfilled and the parents of
+;;filled as nodes.
+;(defn degenerate-reduction [g]
+  
+
 
 ;;Collapses us down to a simple map of rule->candidates, where
 ;;candidates are [rule, cost] pairs, stored in ascending order of 
