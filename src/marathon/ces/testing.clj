@@ -665,118 +665,33 @@
                                        (core/locations t ctx))))))))
           (core/locations (last ks) (get h (last ks))))))
 
-(defn ->fills [h]
-    (let [ks    (sort (keys h))
-        pairs (partition 2 1 ks)]
-    (into (vec (apply concat
-                    (->> pairs
-                         (mapcat (fn [[l r]]
-                                   (let [ctx (get h l)
-                                         demands (store/gete ctx :DemandStore :activedemands)
-                                         ]                                     
-                                     ;;sample in between...
-                                     (for [t (range l r)]
-                                       (core/locations t ctx))))))))
-          (core/locations (last ks) (get h (last ks))))))
+;; (defn ->fills [h]
+;;     (let [ks    (sort (keys h))
+;;         pairs (partition 2 1 ks)]
+;;     (into (vec (apply concat
+;;                     (->> pairs
+;;                          (mapcat (fn [[l r]]
+;;                                    (let [ctx (get h l)
+;;                                          demands (store/gete ctx :DemandStore :activedemands)
+;;                                          ]                                     
+;;                                      ;;sample in between...
+;;                                      (for [t (range l r)]
+;;                                        (core/locations t ctx))))))))
+;;           (core/locations (last ks) (get h (last ks))))))
   
-(defn ->state [h]
-  )
-                         
+;;srm-specific demand and supply.
+;;We should be able to load up our srm tables and get a context.
 
-;;we have now deployed units and updated their state to a bare minimum
-;;to indicate they should be deploying.
-;;The trick now is to indicate that the entities should be updating.
-;;In other words, we want to send them messages, albeit without
-;;causing a side-effect (for this implementation).  So, we can
-;;accomplish the same effect if we leave a message in a place
-;;the entity is sure to find it, and have some assurance that
-;;the message will be processed according to the entity's logic
-;;at an appropriate point in the pending computation.
-;;Under the mutable VBA implementation, we'd normally just
-;;immediately dispatch the event and trigger a state change.
-;;In this case, the process is spread out.  The initial
-;;deployment triggers additional data (a notification is
-;;appended to the entity's messages).  We need to guarantee
-;;that the entity will have an opportunity to process the
-;;message (at least abstractly) before the day is out.
+(comment
+(def srmctx
+  (->> (setup/simstate-from  sd/srm-tables core/debugsim)
+       (sim/add-time 1)))
+)
 
-;;Easiest way to do this is to just handle the message synchronously
-;;entity by entity.  Invoke the deployment function (to apply the
-;;fill), and update the entity.
+;;We should then be able to spawn all the entities.
+;;Entities should schedule supply updates and move as normal.
 
 
 
 
-
-
-;;how do we turn suitable supply into a set of fills? 
-;;Suitable supply is represented as a sequence of names of units...
-;;Hmmm...can these imply promises? 
-;;What if we don't have enough supply?
-;;[For now, if we don't have enough supply, we have to define ways to find
-;; more supply, name supply generators]
-
-;;At some point, we have a name of units that actually exist.
-;;Maybe we partition off our jit supply into other areas...
-;;In the original marathon, we encoded the ghost as a special case.
-;;Whenever we ran out of units, we'd make it.  It was always last.
-
-;;In fmca, we have to be able to generate units, sometimes we prefer
-;;to generate units over using existing units actually. 
-
-;;Another way to do this is to create a proxy unit....
-;;the proxy is something like "JIT_SRCTYPE"
-;;Rather than simply a unit name, i.e. a single unit, we have a unit 
-;;generator that can provide multiple units of the same
-;;characteristic...
-
-;;So if we have 
-;;["A", "B", "C"], those are equivalent to 
-;;[["A" 1], ["B" 1], ["C" 1]], i.e. a single entity that exists in the
-;;supply.
-
-;;if we have ["A", ["JIT_B", 20], "C"], then we have the ability to
-;;generate/fill up to 21 units before we use C.
-
-;;Just like we did before, the ghost was a proxy unit.
-;;This time, we have proxies in th supply for our jittable stuff.
-
-;;That allows us to keep them present in the supply.
-
-;;The implication is that there are 2 different paths for filling
-;;using a regular unit and a JIT unit.
-
-;;No matter what, we go down the line, asking the supplier to 
-;;fill the quantity asked for.
-
-;;If we follow that abstraction, then single units will 
-;;merely return a promised fill and the amount.
-;;So singletons work...
-;;JIT units, or units representing populations, also work 
-;;to fill supply; they return a promised fill and the amount 
-;;remaining.
-
-;;We just keep going until all the fills are done, or we 
-;;have no supply left.
-
-;;This lets us arbitrarily order where the JITers come in 
-;;based on the attributes of the unit, i.e. tags, src, etc.
-
-;;So, we think of each unit as an individual supplier.
-
-;;On a really grand scale...
-;;We can think of each unit as a supplystore.
-;;In some cases, we may want that....so we can break apart units.
-;;The supplystore is responsible for tracking units....
-
-;;A generator is a facade around one or more class of units.
-;;The supplystore is effectively a generator that 
-;;produces units based on the existing supply.
-
-;;Note: going this route, we can also treat demands as generators..
-;;specifically, they "can" show up as suppliers.  This is good....
-
-
-;;Right now....let's just get names of units, and then figure out
-;;how to fill using the unit....
 

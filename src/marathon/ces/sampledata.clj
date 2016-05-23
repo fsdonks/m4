@@ -1,6 +1,7 @@
 (ns marathon.ces.sampledata
   (:require [spork.util [table :as tbl]]
-            [marathon [schemas :as s]]))
+            [marathon [schemas :as s]]
+            [marathon.sampledata [srm :as srmdata]]))
 
 ;;Note: most of these tables are mirrored in a companion
 ;;sampledata workbook.  We could link to the tables from
@@ -1154,6 +1155,13 @@ DefaultDemotionPolicy	Auto
   (assoc sample-tables
          :DemandRecords
          (s/read-schema :DemandRecords followon-demand-records)))
+
+(def srm-tables
+  (assoc sample-tables
+         :DemandRecords
+         (s/read-schema :DemandRecords srmdata/srm-demand-records)
+         :SupplyRecords
+         (s/read-schema :SupplyRecords srmdata/srm-supply-records)))
 
 (def broken-supply-tables
     (assoc sample-tables

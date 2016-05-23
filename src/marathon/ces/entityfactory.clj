@@ -280,7 +280,8 @@
                              (not (core/special-src? (:tags parameters) src)))
                        :default
                        :special)]
-    (if-let [p (get-in policystore [:policies policyname])]
+    (if-let [p (or (get-in policystore [:policies policyname])
+                   (plcy/find-policy policyname policystore))]
       p 
       (if-let [res (get-in +policy-defaults+ [component policy-type])]
         res
@@ -292,8 +293,9 @@
 
 (defn assign-policy [unit policystore params]
   (if (has-policy? unit) unit
-      (assoc unit :policy 
-             (choose-policy (:policy unit) (:component unit) policystore params (:src unit)))))
+      (let [p (choose-policy (:policy unit) (:component unit) policystore params (:src unit))]
+        (assoc unit :policy p))))
+             
 
 ;;Given a unit, initialize it's currentcycle based on policy information
 
@@ -394,8 +396,7 @@
 ;;protocol.
 (defn find-behavior
   ([]  @base/default-behavior)
-  ([b] (case b
-         "SRM"  (throw (Exception. "Wire in SRM Behavior!"))
+  ([b] (or (get @base/behaviors b)
          @base/default-behavior)))
 
 ;;create-unit provides a baseline, unattached unit derived from a set of data.
@@ -431,14 +432,34 @@
            :dwell-time-when-deployed 0}  ;dwell time before deployment  
           )))
 
+(declare srm-record->unitdata)
 ;;Derives a default unit from a record that describes unitdata.
 ;;Vestigial policy objects and behavior fields are not defined.  We
 ;;may allow different behaviors in the future, but for now they are
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-                                ]}]  
-    (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior)))
+                                ] :as r}]
+  (if (= Behavior "SRM")    ;;hackish way to go about things...
+   (srm-record->unitdata r)
+   (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin)))
 
+;;Ideally, we'll unify this in the near future, for now it's srm specific.
+;;we can have the unit behavior handle assigning policy.  From the start, we know
+;;at least the start location, state, and duration.  We need policy to figure out
+;;where to go next though.
+;;Special extension to handle the spawn-time requirements of the SRM
+(defn srm-record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
+                                    Location Position Command Duration]}]  
+  (->> (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior))
+   ;SRM specific spawning information.
+       (merge {:home                  Origin
+               :locationname          Location
+               :positionpolicy        Position
+               :command               Command
+               :spawn-info {:location Location  ;;we have starting information, but not the next state...
+                            :position Position
+                            :duration Duration 
+                            }})))
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
   ([idx unit]
@@ -541,7 +562,7 @@
                                      (find-behavior (:Behavior r))))
                      (->> (generate-name @unit-count (:SRC r) (:Component r))
                           (assoc r :Name)
-                          (record->unitdata)
+                          (record->unitdata) ;;assign-policy handles policy wrangling.
                           (conj-unit  acc)))) (transient []))
          (persistent!))))
         
@@ -674,7 +695,7 @@
 
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters behaviors] ctx]
-    (reduce (fn [acc unit]              
+    (reduce (fn [acc unit]
               (process-unit unit nil parameters behaviors acc))
             ctx                 raw-units)))
 

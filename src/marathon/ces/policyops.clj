@@ -634,6 +634,9 @@
    "RCFFG" rc14
    "FFGMission" ghost
    "RCOpSus" rc14
+   "SRMAC" SRMAC
+   "SRMRC" SRMRC
+   "SRMRC13" SRMRC13
    })
 
 

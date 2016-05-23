@@ -17,9 +17,10 @@
 (ns marathon.ces.policy
   (:require [marathon.data   [protocols :as protocols] 
                              [period :as period]]
-            [marathon.policy [policydata :as p] [policystore :as pstore]]
+            [marathon.policy [policydata :as p] [policystore :as pstore] ]
             [marathon.ces    [missing :as missing]    
-                             [core :as core]    
+                             [core :as core]
+                             [policyops :as pops]
                              [unit :as u]]            
             [spork.util [tags :as tag]
                         [general :as gen]]
@@ -666,9 +667,12 @@
 (defn get-policies [policystore] (:policies policystore))
 ;Get a list of the names of policies in the policy store.
 (defn policy-names [policystore] (keys (get-policies policystore)))
+
 ;Get a policy associated with Pname, relative to the policystore.
 (defn find-policy [pname policystore] 
-  (if-let [p (get (get-policies policystore) pname)]
+  (if-let [p (or (get (get-policies policystore) pname)
+                 (if-let [pol (get pops/aliases pname)]
+                   (pol)))]
     p
     (throw (Exception. (str "Unknown policy! " pname)))))
 

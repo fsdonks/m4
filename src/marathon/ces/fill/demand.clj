@@ -145,7 +145,7 @@
     (fill-followons)
    ;(supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
 ;    (fill-srm) ;new, only uses supply in the [:SRM category]
-    (fill-hierarchically)
+    (fill-hierarchically) ;;goes by categories.
     ))
 
 ;;Well, we can go the dbag route on this....

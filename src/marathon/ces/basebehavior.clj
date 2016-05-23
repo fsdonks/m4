@@ -46,6 +46,7 @@
 
 ;;global var...
 (def default-behavior (atom nil))
+(def behaviors (atom nil))
 
 ;;note: if we change over to a set of coroutines running the ECS,
 ;;we can just put the message on their channel and let the coro

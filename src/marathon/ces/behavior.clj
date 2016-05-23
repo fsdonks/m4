@@ -1281,16 +1281,25 @@
                     (assoc benv
                            :state-change
                            {:newstate       newstate
-                            :duration       (- MissionLength  overlap)
-                            :followingstate (if (pos? overlap)
+                            :duration       (- MissionLength  Overlap)
+                            :followingstate (if (pos? Overlap)
                                               #{newstate :overlapping}
                                               EndState)
                             :timeinstate    (or (:timeinstate lp) 0)}
                            :location-change
                            {:from-location  (:locationname @entity)
                             :to-location     Name}
-                           :wait-time     (- MissionLength overlap)
+                           :wait-time     (- MissionLength Overlap)
                            :next-position StartState))))))
+
+(befn srm-spawning-beh {:keys [entity ctx] :as benv}      
+      (echo [:srm-spawning]))
+
+(befn srm-beh []
+   (echo [:srm-beh]))
+
+(do (println [:setting-srm])
+    (swap! base/behaviors assoc "SRM" srm-beh))
 
 (comment ;OBE
 
