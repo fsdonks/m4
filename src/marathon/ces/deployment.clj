@@ -49,6 +49,7 @@
            (supply/first-deployment! store unit)
            (supply/adjust-max-utilization! store unit)))))
 
+(def last-deploy (atom nil))
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
 (defn deploy-unit
@@ -57,9 +58,11 @@
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
   ([ctx unit t demandname   followon?]
-    (assert  (u/valid-deployer? unit) 
-             "Unit is not a valid deployer! Must have bogbudget > 0, 
-     cycletime in deployable window, or be eligible or a followon  deployment")
+   (if (not  (u/valid-deployer? unit))
+     (do (reset! last-deploy [unit ctx])
+         (throw (Exception. (str [:unit (:name unit) :invalid-deployer "Must have bogbudget > 0, 
+     cycletime in deployable window, or be eligible or a followon  deployment"]))))
+      
     (core/with-simstate [[supplystore parameters policystore demandstore fillstore] ctx]
       (let [fillcount     (count (:fills fillstore))
             bog           (get-max-bog unit policystore) ;;ugh...don't need this... 
@@ -85,7 +88,7 @@
 ;             ((fn [ctx] (println [demandname (keys  (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname)))])
 ;                ctx))             
              (deploy! followon?  unit demandname t)  ;;apply state changes.
-             ))))  
+             )))))
   ([ctx unit t demand]
     (deploy-unit  ctx unit t demand (core/followon? unit))))
 

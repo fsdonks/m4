@@ -525,7 +525,7 @@
    supply.  Used for constraining or preferring supply during the followon 
    fill phase."
   [ctx]
-  (let [m (dissoc (store/gete ctx :SupplyStore :deployable-buckets) :default)]
+  (let [m (into #{} (filter #(not= % :default)) (keys (store/gete ctx :SupplyStore :deployable-buckets)))]
     (when (pos? (count m)) m)))
 
 ;;Check the validity here...

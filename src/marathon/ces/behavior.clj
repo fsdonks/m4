@@ -818,11 +818,11 @@
             _  (debug [:trying-followon (:name @entity) fc])]
         (when-let [fc (u/followon-code @entity)] ;if the unit has a followon code
           (do ;register the unit as a possible followOn
-            (println [(:name @entity) :added-followon :for [fc]])
+            ;(println [(:name @entity) :added-followon :for [fc]])
             (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
             (swap! entity #(assoc % :state :followon))
                                         ;age-unit
-            (println [:successfully-followoing-on])
+            ;(println [:successfully-followoing-on])
             (success (merge benv {:wait-time +inf+
                                   :next-position :followon})) ;?
             ))))

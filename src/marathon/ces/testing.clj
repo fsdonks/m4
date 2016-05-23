@@ -622,6 +622,7 @@
 (def followonctx
   (setup/simstate-from  sd/followon-tables core/debugsim))
 
+(comment 
 (def followonfill
   (let [f467 
         (get (->history 467 engine/sim-step             
@@ -632,11 +633,11 @@
          (supply/manage-supply    day)  ;Update unit positions and policies.
          (policy/manage-policies  day)  ;Apply policy changes, possibly affecting supply.
          (demand/manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.         
-         ;(filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.
-         )))
-;         (supply/manage-followons day)  ;Resets unused units from follow-on status. 
-;         (engine/end-day day)           ;End of day logic and notifications.
-;         (demand/manage-changed-demands day))))
+         (filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.
+         (supply/manage-followons day)  ;Resets unused units from follow-on status. 
+         (engine/end-day day)           ;End of day logic and notifications.
+         (demand/manage-changed-demands day))))
+)
 
 (def followontest
   (->history 451 (debugging-on #{451

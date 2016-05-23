@@ -389,7 +389,7 @@
                      :deployable-cat    src
                      :deployable true}
          components (if (identical? bucket :default) components
-                        (do (println [:followon bucket])
+                        (do ;(println [:followon bucket])
                             (assoc components :followon bucket)))
          _ (debug [(:name unit) components :bucket bucket])
          ]         
@@ -576,6 +576,9 @@
 
 ;;__TODO__Detangle release-followon-unit.
 
+;;I think we're missing something here; it doesn't look like we
+;;are unloading our followon supply from the deployable
+;;buckets...
 ;;Relook this, I think we can manage the same effects much simpler.
 (defn release-followon-unit
   "Convoluted.  Need to detangle this guy. 
@@ -583,7 +586,7 @@
    unit is released from holding and allowed to progress back into the global 
    supply."
   [ctx unitname]
-  (let [_     (println [:releasing unitname :followon])
+  (let [;_     (println [:releasing unitname :followon])
         ctx   (store/assoce ctx unitname :followoncode nil)
         ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
                    (u/change-state (store/get-entity ctx unitname)
@@ -595,10 +598,18 @@
      (store/get-entity ctx unitname)  nil nil ctx)))
 
 
+;;__Currently, we just wipe out any categories of supply that are not
+;;consistent with our default bucket, :default;  This may change in the
+;;future, especially if we just stick the :followon supply in their
+;;own nested category.  We'll need to do this for SRM and other
+;;more general remissionable supplies.
 ;;Process the unused follow-on units, changing their policy to complete cycles.
 (defn release-followons [fons ctx]
-  (as->   (store/drop-domain ctx :followon) ctx
-    (reduce release-followon-unit ctx (keys fons))))
+  (->  (reduce release-followon-unit  (store/drop-domain ctx :followon) (keys fons))
+       (store/updatee :SupplyStore :deployable-buckets (fn [m]
+                                                         (if-let [def (:default m)]
+                                                           {:default def}
+                                                           {})))))
 
 ;;__TODO__ Deprecate release-max-utilizers
 ;;This is probably a deprecated function.  It was a corner case to ensure that 
