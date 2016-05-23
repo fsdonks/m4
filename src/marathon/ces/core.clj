@@ -142,13 +142,22 @@
                      :filled      (count (:units-assigned d))
                      :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}))
        ))
-
 ;;Wow...this is really really easy to do now....constructing queries on the
 ;;entity store is nice...
-(defn locations [ctx]
-  (let [t (sim/get-time ctx)]
-    (->> (store/only-entities ctx [:name :locationname :location])
-         (into [] (map #(assoc % :t t))))))
+(defn locations
+  ([t ctx]
+   (->> (store/only-entities ctx [:name :locationname :location])
+        (into [] (map #(assoc % :t t)))))
+  ([ctx] (locations  (sim/get-time ctx) ctx)))
+
+(defn fills
+  ([t ctx]
+   (let [ds (store/gete ctx :DemandStore :activedemands)]
+         (->> (store/only-entities ctx [:name :locationname :location])              
+              (into [] (comp (filter (fn [r] (get ds (:locationname r))))
+                             (map #(assoc % :t t))
+                             )))))
+  ([ctx] (fills  (sim/get-time ctx) ctx)))
 
 (defn location-table [ctx]
   (let [t (sim/get-time ctx)]

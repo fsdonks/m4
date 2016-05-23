@@ -620,7 +620,8 @@
 
 ;;testing followon demands...
 (def followonctx
-  (setup/simstate-from  sd/followon-tables core/debugsim))
+  (->> (setup/simstate-from  sd/followon-tables core/debugsim)
+       (sim/add-time 1)))
 
 (comment 
 (def followonfill
@@ -640,15 +641,47 @@
 )
 
 (def followontest
-  (->history 451 (debugging-on #{451
-                                 467
-                                 523
-                                 563
-                                 595
-                                 963
-                                 1051})
-             
+  (->history 1100 ;(debugging-on #{451
+                  ;               467
+                   ;              523
+                   ;              563
+                   ;              595
+                   ;              963
+                   ;              1051})
+                 engine/sim-step
              followonctx))
+
+;;dumb sampler...probably migrate this to
+;;use spork.trends sampling.
+(defn ->location-samples [h]
+  (let [ks    (sort (keys h))
+        pairs (partition 2 1 ks)]
+    (into (vec (apply concat
+                    (->> pairs
+                         (mapcat (fn [[l r]]
+                                   (let [ctx (get h l)]
+                                     ;;sample in between...
+                                     (for [t (range l r)]
+                                       (core/locations t ctx))))))))
+          (core/locations (last ks) (get h (last ks))))))
+
+(defn ->fills [h]
+    (let [ks    (sort (keys h))
+        pairs (partition 2 1 ks)]
+    (into (vec (apply concat
+                    (->> pairs
+                         (mapcat (fn [[l r]]
+                                   (let [ctx (get h l)
+                                         demands (store/gete ctx :DemandStore :activedemands)
+                                         ]                                     
+                                     ;;sample in between...
+                                     (for [t (range l r)]
+                                       (core/locations t ctx))))))))
+          (core/locations (last ks) (get h (last ks))))))
+  
+(defn ->state [h]
+  )
+                         
 
 ;;we have now deployed units and updated their state to a bare minimum
 ;;to indicate they should be deploying.

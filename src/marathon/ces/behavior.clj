@@ -882,7 +882,7 @@
         (beval  change-state-beh
                 (assoc benv :state-change state-change
  ;                      :position-change {:from-position positionA
- ;                                        :to-position positionB}
+ ;                                        :to-position   positionB}
                        :wait-time wt
                        :next-position positionB))))
 
@@ -923,18 +923,17 @@
 ;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
 ;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
 (befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
-      (let [_ (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
+      (let [_    (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
             unit @entity            
             ;1)
             bogremaining (- (:bogbudget (:currentcycle unit))  
                             (protocols/overlap (:policy unit)) ;;note: this overlap assumption may not hold...
                             )
-            _ (debug [:abw-beh {:deltat deltat
-                                :bogremaining bogremaining
-                                :unt (:name unit)
-                                ;:unit (dissoc unit :policy)
-                                }])
-            ]
+            _    (debug [:abw-beh {:deltat deltat
+                                   :bogremaining bogremaining
+                                   :unt (:name unit)
+                                        ;:unit (dissoc unit :policy)
+                                   }])]
         (if (not (pos? bogremaining))
           ;makes no sense for the unit to continue BOGGING, send it home.
 ;          (->and [(echo [:abw->reset {:bogremaining bogremaining}])
