@@ -299,31 +299,31 @@ DemandRecord	TRUE	1	1	1	731	365	0	Plastic	Uniform	B	Meredith	35	SRM	32	Plastic C
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MD_DA_C1	MD_DA_C1	TRUE	1		Goalie	KO	9999999
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MD_DA_C1	MD_DA_C1	TRUE	1		Goalie	HI	9999999
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	TX	510
-SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	TX	Ready_C2	TRUE	1		Referee	TX	0
-SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	KS	Ready_C2	TRUE	1		Referee	KS	0
-SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	GA	Ready_C2	TRUE	1		Referee	GA	0
+SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
+SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	KS	R_C2	TRUE	1		Referee	KS	0
+SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	GA	R_C2	TRUE	1		Referee	GA	0
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	CA	9999999
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	NY	150
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	NC	PT_C4	TRUE	1		Referee	NC	0
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	KY	210
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	PA	PB_C3	TRUE	1		Referee	PA	0
-SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	VA	Ready_C2	TRUE	1		Referee	VA	0
+SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	VA	R_C2	TRUE	1		Referee	VA	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	MN	PB_C3	TRUE	1		Referee	MN	0
-SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	KS	Ready_C2	TRUE	1		Referee	KS	0
-SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	ID	Ready_C2	TRUE	1		Referee	ID	0
+SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	KS	R_C2	TRUE	1		Referee	KS	0
+SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	ID	R_C2	TRUE	1		Referee	ID	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	IN	60
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	CA	PB_C3	TRUE	1		Referee	CA	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	NY	PB_C3	TRUE	1		Referee	NY	0
-SupplyRecord	TRUE	2	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	WA	Ready_C2	TRUE	1		Goalie	WA	0
+SupplyRecord	TRUE	2	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	WA	R_C2	TRUE	1		Goalie	WA	0
 SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	AK	PB_C3	TRUE	1		Goalie	AK	0
 SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Coach	GER	120
-SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	TX	Ready_C2	TRUE	1		Referee	TX	0
-SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	TX	Ready_C2	TRUE	1		Referee	TX	0
+SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
+SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
 SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	CO	270
 SupplyRecord	TRUE	1	Rubber	NG	Rubber Cup	Auto	SRM	1	SRMRC	Auto	0	PA	PB_C3	TRUE	1		Referee	PA	0
 SupplyRecord	TRUE	1	Rubber	NG	Rubber Cup	Auto	SRM	1	SRMRC	Auto	0	WA	PB_C3	TRUE	1		Referee	WA	0
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	HI	PT_C4	TRUE	1		Goalie	HI	0
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	HI	Ready_C2	TRUE	1		Goalie	HI	0
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	HI	R_C2	TRUE	1		Goalie	HI	0
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	CO	210
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_DA_C1	MA_DA_C1	TRUE	1		Referee	GA	150
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	NY	30
@@ -332,12 +332,12 @@ SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	KY	PT_C4	TRUE	1		Referee	KY	0
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	KY	270
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	KY	PB_C3	TRUE	1		Referee	KY	0
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	ITAL	Ready_C2	TRUE	1	Hybrid	Coach	ITAL	0
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NC	Ready_C2	TRUE	1	Hybrid	Referee	NC	240
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NC	Ready_C2	TRUE	1	Hybrid	Referee	NC	0
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NC	Ready_C2	TRUE	1	Hybrid	Referee	NC	0
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	ITAL	R_C2	TRUE	1	Hybrid	Coach	ITAL	0
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NC	R_C2	TRUE	1	Hybrid	Referee	NC	240
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NC	R_C2	TRUE	1	Hybrid	Referee	NC	0
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NC	R_C2	TRUE	1	Hybrid	Referee	NC	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	AR	PB_C3	TRUE	1		Referee	AR	0
-SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	NY	Ready_C2	TRUE	1		Referee	NY	0
+SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	NY	R_C2	TRUE	1		Referee	NY	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	OH	PB_C3	TRUE	1		Referee	OH	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	OK	PB_C3	TRUE	1		Referee	OK	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	IN	PB_C3	TRUE	1		Referee	IN	0
@@ -352,21 +352,22 @@ SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	LA	PT_C4	TRUE
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	OR	PT_C4	TRUE	1		Referee	OR	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	VT	PT_C4	TRUE	1		Referee	VT	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	FL	60
-SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	IA	Ready_C2	TRUE	1		Referee	IA	0
+SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	IA	R_C2	TRUE	1		Referee	IA	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	PA	240
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	VA	0
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	PB_C3	TRUE	1		Referee	TX	0
-SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	Ready_C2	TRUE	1		Referee	TX	0
+SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	MA_DA_C1	MA_DA_C1	TRUE	1		Referee	TX	150
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	PT_C4	TRUE	1		Referee	TX	0
-SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	Ready_C2	TRUE	1		Referee	TX	0
-SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	KS	Ready_C2	TRUE	1		Referee	KS	0
+SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
+SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	KS	R_C2	TRUE	1		Referee	KS	0
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	MA_DA_C1	MA_DA_C1	TRUE	1		Referee	KS	90
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	CO	PB_C3	TRUE	1		Referee	CO	0
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	MA_DA_C1	MA_DA_C1	TRUE	1		Referee	GA	240
-SupplyRecord	TRUE	1	Steel	NG	Steel Cup	Auto	SRM	1	SRMRC	Auto	0	ID	Ready_C2	TRUE	1		Referee	ID	0
+SupplyRecord	TRUE	1	Steel	NG	Steel Cup	Auto	SRM	1	SRMRC	Auto	0	ID	R_C2	TRUE	1		Referee	ID	0
 SupplyRecord	TRUE	1	Steel	NG	Steel Cup	Auto	SRM	1	SRMRC	Auto	0	IA	PB_C3	TRUE	1		Referee	IA	0
 SupplyRecord	TRUE	1	Steel	NG	Steel Cup	Auto	SRM	1	SRMRC	Auto	0	MS	PB_C3	TRUE	1		Referee	MS	0
 SupplyRecord	TRUE	1	Steel	NG	Steel Cup	Auto	SRM	1	SRMRC	Auto	0	TN	PB_C3	TRUE	1		Referee	TN	0
 SupplyRecord	TRUE	1	Steel	NG	Steel Cup	Auto	SRM	1	SRMRC	Auto	0	NC	PT_C4	TRUE	1		Referee	NC	0
-")
+"
+  )

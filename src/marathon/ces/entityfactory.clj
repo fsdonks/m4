@@ -340,7 +340,8 @@
    any movement via event triggers, returning the 
    new unit and a new policystore."
   [unit policy ghost ctx]
-  (let [currentpos (let [p (:positionpolicy unit)]
+  (let [;_ (println :raw-position (:name unit) (:positionpolicy unit))
+        currentpos (let [p (:positionpolicy unit)]
                       (when (not= p :spawn) p))
         newpos (if (not ghost) 
                  (or currentpos (generic/get-position policy (:cycletime unit)))
@@ -452,17 +453,18 @@
 ;;where to go next though.
 ;;Special extension to handle the spawn-time requirements of the SRM
 (defn srm-record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-                                    Location Position Command Duration]}]  
-  (->> (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior))
-   ;SRM specific spawning information.
-       (merge {:home                  Origin
-               :locationname          Location
-               :positionpolicy        Position
-               :command               Command
-               :spawn-info {:location Location  ;;we have starting information, but not the next state...
-                            :position Position
-                            :duration Duration 
-                            }})))
+                                    Location Position Command Duration]}]
+  (do ;(println [:loading-srm-unit Name Position Location])
+      (-> (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior))
+                                        ;SRM specific spawning information.
+           (merge {:home                  Origin
+                   :locationname          Location
+                   :positionpolicy        Position
+                   :command               Command
+                   :spawn-info {:location Location  ;;we have starting information, but not the next state...
+                                :position Position
+                                :duration Duration 
+                                }}))))
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
   ([idx unit]
