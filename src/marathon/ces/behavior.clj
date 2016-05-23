@@ -983,6 +983,7 @@
           (let [stats (r/filter identity (r/map (fn [s] (get state-map s)) state))]
             (->seq stats))
           (get state-map state))))
+
 ;;the entity will see if a message has been sent
 ;;externally, and then compare this with its current internal
 ;;knowledge of messages that are happening concurrently.
@@ -1240,6 +1241,57 @@
 ;;This is kind of weak, but I don't have a better solution at the moment...
 (do (println [:setting-defaults])
     (reset! base/default-behavior roll-forward-beh))
+
+
+;;SRM bs...
+;;SRM takes a different view of unit behavior.
+;;Most importantly, for AC units (and deploying RC units),
+;;the behavior looks at demand to determine position
+;;changes, state-changes, duration, etc., rather than look
+;;at the policy.
+
+;;When not in a mission state, the default behavior does
+;;provide a cyclical routing, even for AC (At the moment,
+;;but that crap will probably change like everything else).
+;;We should be able to inject a supply of units that
+;;follow the baseline SRM policy, with no demand, and
+;;Just have them spawn and run through policy changes.
+;;The SRM behavior only really varies upon deployment...
+;;so we can create special SRM-specific behaviors that
+;;read information about the demand and use it
+;;to schedule changes.  For now, there is no
+;;notion of recovery...
+
+;;These differences mean we need to handle
+;;local-demand effects if deployed....
+
+;;For any movement, we need to check to see if
+;;there are effects or guidance associated with the
+;;place we're moving to.  Some places tell us what
+;;to do, outside of our policy.  
+(befn location-based-beh {:keys [entity location-policy ctx] :as benv}
+    (when-let [lp location-policy]
+      (let [info (store/gete benv lp)
+            {:keys [Name MissionLength BOG StartState EndState Overlap
+                    ]} info
+            newstate (if BOG #{StartState :bogging} #{StartState})]
+        ;;we need to schedule a state change.
+        ;;and a location-change...
+        (do (swap! entity assoc :location-based-policy true)             
+            (beval  change-state-beh
+                    (assoc benv
+                           :state-change
+                           {:newstate newstate
+                            :duration       (- MissionLength overlap)
+                            :followingstate (if (pos? overlap)
+                                              #{newstate :overlapping}
+                                              EndState)
+                            :timeinstate (or (:timeinstate lp) 0)}
+                           :location-change
+                           {:from-location (:locationname @entity)
+                        :to-location   Name}
+                           :wait-time     (- MissionLength overlap)
+                           :next-position StartState))))))
 
 (comment ;OBE
 
