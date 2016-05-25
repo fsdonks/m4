@@ -608,9 +608,12 @@
         req      (d/required demand)
         selected (->> (find-supply ctx rule)
                       (into [] (take req)))
-        actual-fill (count selected)                
+        actual-fill (count selected)
+        status (if (== actual-fill req) :filled :unfilled)
+        _ (when (seq selected)
+            (println [:filling rule (map :name selected)]))
         ]
-    [(if (== actual-fill req) :filled :unfilled) (fill-demand* t period demand selected ctx)]))
+    [status (fill-demand* t period demand selected ctx)]))
 
 
 ;;#Pending

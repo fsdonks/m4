@@ -489,6 +489,9 @@
 (defn visualize-store [ctx]
   (tree-view  (store/domains ctx)))
 
+(defn visualize-data [ctx]
+  (tree-view ctx))
+
 ;;Short queries...we should move these away from being a map for
 ;;entities, and into sets. Set access is actually faster than
 ;;maps, so bonus.

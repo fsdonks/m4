@@ -154,9 +154,26 @@
                                                                        (change-if units (unitfilter unit)
                                                                                   (f1 acc [[cat src (weight cat src)] unit])))) acc units)))
                                            acc srcs))) init (:deployable-buckets supply))))))
+
+
+;; (deftype filterfunc [itm _meta]
+;;   clojure.lang.IFn
+;;   (invoke [x y]   (or (identical? y itm) (= y itm)))
+;;   clojure.lang.IObj
+;;   (toString [o] (str itm))
+;;   (meta [o] _meta)
+;;   (withMeta [o m] (filterfunc. itm m)))  
+
+;(defn ->filterfunc [expr]
+;  (if (list? expr)
+;    (
+
 (defn is? 
   ([x y] (or (identical? x y) (= x y)))
-  ([x] (fn [y] (is? x y))))
+                                        ;([x] (fn [y] (is? x y)))
+  ([x]  ;(filterfunc. x nil)
+        (fn [y] (is? x y)))
+   )
 
 
 ;;#TODO expose a sql-like query interface for the simstate/simcontext.
@@ -214,20 +231,27 @@
 ;;may not need all the supply.  Possible performance optimization.
 (defn find-feasible-supply 
   ([supply srcmap category src nm->unit]
-   (let [any-src?      (or (identical? src :any) (identical? src  :*))
+   (let [;_   (println [:query/find-feasible5 srcmap category src])
+         any-src?      (or (identical? src :any) (identical? src  :*))
          any-category? (or (identical? category :any) (identical? category  :*))
          src-selector  (cond any-src?  identity 
                              (fn? src) src
-                             :else    (is? src))
+                             :else     (is? src))
          category-selector (cond any-category?  identity 
-                                 (fn? cat)      cat
-                                 :else          (is? cat))]
-       (if (and any-category?  any-src?) ;if both category and src are unconstrained, we  can pull any unit. 
-           (->deployers supply :src src-selector :nm->unit nm->unit )
+                                 (fn? category) category
+                                 :else          (is? category))
+         ;_ (println [:finding-supply src category])
+         ]
+     (if (and any-category?  any-src?) ;if both category and src are unconstrained, we  can pull any unit.
+           (do ;(println [:any :any])
+               (->deployers supply :src src-selector :nm->unit nm->unit ))
              ;;if category is constrained, but src is not, then we can pull any unit within the category.
-           (let [prefs (src->prefs  srcmap src)
+           (let [
+                 prefs (src->prefs  srcmap src)
                  src-selector (if any-src? identity ;;ensure we enable filtering if indicated.
-                                  #(contains? prefs %))]
+                                  #(contains? prefs %))
+                 ;- (println category-selector)
+                 ]
              (->>  (->deployers supply :src src-selector :cat category-selector :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
                                 :nm->unit nm->unit)
                  (r/map (fn [[k v]]
@@ -235,9 +259,13 @@
                  (into [])
                  (sort-by  (fn [[k v]]  (nth k 2))) ;;note, this is just a way of assigning distance.
                  )))))
-  ([supply srcmap src] (find-feasible-supply supply srcmap :default src))
-  ([ctx src] (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src
-                                     (fn [nm] (store/get-entity ctx nm) ))))
+  ([supply srcmap src]
+      (do ;(println [:query/find-feasible3])
+          (find-feasible-supply supply srcmap :default src)))
+  ([ctx src]
+   (do ;(println [:query/find-feasible2])
+       (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src
+                             (fn [nm] (store/get-entity ctx nm) )))))
 
 
 ;;__New definition of feasibility__
