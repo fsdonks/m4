@@ -465,7 +465,7 @@
                                 :position Position
                                 :duration Duration 
                                 }
-                   :default-bucket :SRM}))))
+                   :default-bucket "SRM"}))))
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
   ([idx unit]
@@ -526,20 +526,6 @@
 
 ;;We can extract the supply dependencies, and the ghost arg, 
 ;;if we provide the behavior to be used.
-;; (defn create-units
-;;   [amount src oititle compo policy idx behavior]
-;;   (let [bound     (+ idx (quot amount 1))]
-;;     (if (pos? amount)
-;;         (loop [idx idx
-;;                acc []]
-;;           (if (== idx bound)  
-;;             (distribute-cycle-times acc policy)
-;;             (let [nm       (generate-name idx  src  compo)
-;;                   new-unit (create-unit nm src oititle compo 0 
-;;                                         policy behavior)]                
-;;               (recur (unchecked-inc idx)
-;;                      (conj acc new-unit))))))))
-
 (defn create-units
   [idx amount pstore base-record]
   (let [bound     (+ idx (quot amount 1))
@@ -582,79 +568,10 @@
                           (assoc r :Name)
                           (record->unitdata) ;;assign-policy handles policy wrangling.
                           (conj-unit  acc)))) (transient []))
-         (persistent!))))
-        
+         (persistent!))))       
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
  
-
- ;; 435:   Public Function AddUnits(amount As Long, src As String, OITitle As String, _
- ;; 436:                               compo As String, policy As IRotationPolicy, _
- ;; 437:                                       supply As TimeStep_ManagerOfSupply, _
- ;; 438:                                               Optional extratags As Dictionary, _
- ;; 439:                                                   Optional ghost As Boolean) As Dictionary
- ;; 440:   Dim i As Long
- ;; 441:   Dim NewUnit As TimeStep_UnitData
- ;; 442:   Dim generated As Dictionary
- ;; 443:   Dim defbehavior As IUnitBehavior
- ;; 444:   Dim DeployableBuckets As Dictionary
- ;; 445:   Dim count As Long
- ;; 446:   Dim nm
- ;; 447:  
- ;; 448:  'TOM Note -> these need to be decoupled, they're dependent on supply...
- ;; 449:   If Not ghost Then
- ;; 450:       Set defbehavior = supply.behaviors.defaultACBehavior
- ;; 451:   Else
- ;; 452:       Set defbehavior = supply.behaviors.defaultGhostBehavior
- ;; 453:   End If
-
- ;; 457:   Set AddUnits = supply.unitmap 'Note this is in here for legacy reasons.  Return value is used.
- ;; 458:  
- ;; 459:   If amount > 0 Then
- ;; 460:       Set generated = New Dictionary
- ;; 461:       count = supply.unitmap.count + 1
- ;; 462:       For i = 1 To Fix(amount)
- ;; 463:           Set NewUnit = New TimeStep_UnitData
- ;; 464:           With NewUnit
- ;; 465:               Set .behavior = defbehavior
- ;; 466:              'Decouple
- ;; 467:               Set .parent = supply
- ;; 468:               .src = src
- ;; 469:               .OITitle = OITitle
- ;; 470:               .component = compo
- ;; 471:               .name = count & "_" & .src & "_" & .component
- ;; 472:               .index = count
- ;; 475:               
- ;; 476:              'I don't think we need this.
- ;; 477:              'TOM Change 18 Sep 2012
- ;; 478:              'initialize_cycle NewUnit, policy, ghost
- ;; 479:               If ghost Then
- ;; 480:                   .PositionPolicy = .policy.getPosition(.cycletime)'Tom Change 20 May 2011
- ;; 481:                   .changeLocation .PositionPolicy, state.context
- ;; 482:                  '.LocationName = .PositionPolicy 'Tom Change 20 May 2011
- ;; 483:                  'Decouple
- ;; 484:                   .location = state.policystore.locationID(.LocationName)
- ;; 485:               End If
- ;; 486:           End With
- ;; 487:           
- ;; 488:           
- ;; 489:           generated.add NewUnit.name, NewUnit
- ;; 490:  
- ;; 491:           Set NewUnit = Nothing
- ;; 492:           count = count + 1
- ;; 493:  
- ;; 494:       Next i
- ;; 495:       
- ;; 496:       If Not ghost Then distributeCycleTimeLocations generated, policy, supply
- ;; 497:       
- ;; 498:       For Each nm In generated
- ;; 499:  '        supply.registerUnit generated(nm)  'this handles all the registration items, refactoring.
- ;; 500:           MarathonOpSupply.registerUnit state.supplystore, state.behaviormanager, generated(nm), ghost, state.context
- ;; 501:       Next nm
- ;; 502:   End If
- ;; 503:  
- ;; 504:   End Function
-
 ;;TODO - this returns a ctx, we're using it like we have a unit.
 ;;Alter the signature to [newunit, newctx]
 (defn prep-cycle [unit ctx]
@@ -669,7 +586,6 @@
       (associate-unit supplystore true)  ;;may move this into supply/register-unit...
       (assign-policy policystore parameters)      
       (prep-cycle ctx)))
-
 
 ;;Persistent version for testing...OBE when the mutable version works.
 

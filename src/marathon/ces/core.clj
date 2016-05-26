@@ -533,6 +533,13 @@
   [] 
   (System/currentTimeMillis))
 
+;;Tom hack 26 MAy 2016
+;;We discriminate between known or canonical buckets, and
+;;ad-hoc buckets (buckets that are created as ephemeral supply
+;;for followon-demands.  In contrast, we will likely always have
+;;:default and :SRM categories of supply, i.e. they never go away.
+(def known-buckets #{:default :SRM "SRM"})
+
 ;;The name here is a bit generic.  We're really trying to acquire the keys of 
 ;;a map that contains information about followon-eligible supply.  In this 
 ;;context, the keys are actually the followon-code of the unit, (typically a
@@ -542,7 +549,7 @@
    supply.  Used for constraining or preferring supply during the followon 
    fill phase."
   [ctx]
-  (let [m (into #{} (filter #(not= % :default)) (keys (store/gete ctx :SupplyStore :deployable-buckets)))]
+  (let [m (into #{} (filter (complement known-buckets) (keys (store/gete ctx :SupplyStore :deployable-buckets))))]
     (when (pos? (count m)) m)))
 
 ;;Check the validity here...

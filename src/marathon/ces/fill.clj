@@ -604,6 +604,8 @@
 ;   amount of fill may impact the order of candidates.  For now, we assume that 
 ;   the ordering of candidates is independent of the demand fill.
 
+(def last-sel (atom nil))
+
 ;;Filling in batch now.  Should be mo betta.
 (defn satisfy-demand  "Attempts to satisfy the demand by finding supply and applying promised 
    fills to the demand.  Returns a result pair of 
@@ -618,11 +620,13 @@
         req      (d/required demand)
         selected (->> (find-supply ctx rule)
                       (into []    (take req)))
+        _ (reset! last-sel selected)
         actual-fill (count selected)
         status (if (== actual-fill req) :filled :unfilled)
-        ;_ (when (seq selected)
-        ;    (println [:filling rule (map :name selected)
-        ;              ]))
+        _ (when (seq selected)
+            (println [:filling rule (map (comp :name :source) selected)
+                                        ;(first selected)
+                     ]))
         ]
     [status (fill-demand* t period demand selected ctx)]))
 

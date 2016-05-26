@@ -15,10 +15,13 @@
             [spork.util      [tags :as tag]]))
 
 ;;#Functions for Deploying Supply
-(defn get-max-bog [unit policystore]
-  (let [bog-remaining (udata/unit-bog-budget unit)
-        p             (policy/get-policy    (-> unit :policy :name) policystore)]
-    (- bog-remaining  (protocols/overlap p))))
+;; (defn get-max-bog [unit policystore]
+;;   (let [bog-remaining (udata/unit-bog-budget unit)
+;;         p             (:policy unit)
+;;         p             (if (protocols/policy? p) p
+;;                           (policy/get-policy    (-> unit :policy :name) policystore))
+;;         ]
+;;     (- bog-remaining  (protocols/overlap p))))
 
 ;;These seem like lower level concerns.....
 ;;Can we push this down to the unit entity behavior?
@@ -65,7 +68,7 @@
       
     (core/with-simstate [[supplystore parameters policystore demandstore fillstore] ctx]
       (let [fillcount     (count (:fills fillstore))
-            bog           (get-max-bog unit policystore) ;;ugh...don't need this... 
+          ;  bog           (get-max-bog unit policystore) ;;ugh...don't need this... 
             unitname      (:name unit)
           ;  demandname    (:name demand)
             from-location (:locationname    unit) ;may be extraneous

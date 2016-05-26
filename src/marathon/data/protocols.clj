@@ -272,7 +272,8 @@
         res (f nd)
         ;_ (println [:updating label :from nd :to res])
         ]
-  (graph/set-node g label res)))
+    (graph/set-node g label res)))
+
 ;;also should be in cljgraph...should define path reducers too...
 (defn update-nodes [g nodes f] 
   (reduce (fn [acc nd] (update-node acc nd f)) g nodes))
@@ -339,6 +340,9 @@
   (change-state [b unit to-state deltat duration following-state] 
       "Return the result of changing the unit's finite state machine to a 
        new state using behavior b."))
+
+(defn policy? [obj]
+  (extends? IRotationPolicy (class obj)))
 
 
 ;;#TODO# add inspection services to visualize the entity state.

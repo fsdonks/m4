@@ -376,7 +376,7 @@
 ;;ad-hoc buckets (buckets that are created as ephemeral supply
 ;;for followon-demands.  In contrast, we will likely always have
 ;;:default and :SRM categories of supply, i.e. they never go away.
-(def known-buckets #{:default :SRM})
+(def known-buckets #{:default :SRM "SRM"})
 
 (defn derive-bucket [unit]
   (let [fc  (:followoncode unit)]
