@@ -605,7 +605,6 @@
      (core/get-supplystore ctx)
      (store/get-entity ctx unitname)  nil nil ctx)))
 
-
 ;;__Currently, we just wipe out any categories of supply that are not
 ;;consistent with our default bucket, :default;  This may change in the
 ;;future, especially if we just stick the :followon supply in their

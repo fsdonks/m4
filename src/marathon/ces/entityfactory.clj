@@ -521,18 +521,36 @@
 ;; ;                            (-> supply :behaviors
 ;; ;                            :defaultACBehavior))
 
+;;need to define extensible ways to create batches of units,
+;;possibly using multimethods..
+
 ;;We can extract the supply dependencies, and the ghost arg, 
 ;;if we provide the behavior to be used.
-(defn create-units [amount src oititle compo policy idx behavior]
-  (let [bound     (+ idx (quot amount 1))]
+;; (defn create-units
+;;   [amount src oititle compo policy idx behavior]
+;;   (let [bound     (+ idx (quot amount 1))]
+;;     (if (pos? amount)
+;;         (loop [idx idx
+;;                acc []]
+;;           (if (== idx bound)  
+;;             (distribute-cycle-times acc policy)
+;;             (let [nm       (generate-name idx  src  compo)
+;;                   new-unit (create-unit nm src oititle compo 0 
+;;                                         policy behavior)]                
+;;               (recur (unchecked-inc idx)
+;;                      (conj acc new-unit))))))))
+
+(defn create-units
+  [idx amount pstore base-record]
+  (let [bound     (+ idx (quot amount 1))
+        policy    (plcy/find-policy  (:Policy base-record) pstore)]
     (if (pos? amount)
         (loop [idx idx
                acc []]
           (if (== idx bound)  
             (distribute-cycle-times acc policy)
-            (let [nm       (generate-name idx  src  compo)
-                  new-unit (create-unit nm src oititle compo 0 
-                                        policy behavior)]                
+            (let [nm       (generate-name idx (:SRC base-record) (:Component base-record))
+                  new-unit (record->unitdata (assoc base-record :Name nm))]                
               (recur (unchecked-inc idx)
                      (conj acc new-unit))))))))
 
@@ -558,14 +576,8 @@
          (r/filter #(and (:Enabled %) (pos? (:Quantity %)))) ;;We need to add data validation, we'll do that later....
          (reduce (fn [acc r]                    
                    (if (> (:Quantity r) 1) 
-                     (conj-units acc 
-                       (create-units (:Quantity r) 
-                                     (:SRC r) 
-                                     (:OITitle r) 
-                                     (:Component r)  
-                                     (plcy/find-policy  (:Policy r) pstore)
-                                     @unit-count 
-                                     (find-behavior (:Behavior r))))
+                     (conj-units acc
+                         (create-units @unit-count  (:Quantity r) pstore r))
                      (->> (generate-name @unit-count (:SRC r) (:Component r))
                           (assoc r :Name)
                           (record->unitdata) ;;assign-policy handles policy wrangling.
