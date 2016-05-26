@@ -283,34 +283,6 @@
    :order-by (resolve-source-first (get d :source-first "uniform"))
    :required (d/required d)})
 
-;;testing
-(comment 
-
-(require '[marathon.sim.testing :as test])
-(require '[clojure.test :refer [deftest is run-tests]])
-
-(defn count-by [keyf xs] 
-  (reduce-kv (fn [acc k v] 
-               (assoc acc k (count v))) {} (group-by keyf xs)))
-
-(def fillstore (core/get-fillstore test/testctx))
-(def ds (vals (:demandmap test/test-dstore)))
-(def rules (map #(derive-supply-rule % fillstore) ds))
-(def complex-rule (derive-supply-rule (first ds) fillstore :category ["Alpha" "SomeGroup"]))
-
-(deftest supply-rules 
-  (is (= (count-by second rules)
-         {"SRC1" 21, "SRC2" 14, "SRC3" 36})
-      "Should have consistent number of srcs in supply rules.")
-  (is (= complex-rule 
-         [[:fillrule "Alpha"] "SomeGroup"])
-      "Should have a simple pair of [fillrule group] as a result."))
-        
-
-;some dumb demands 
-;(def demands 
-)
-
 ;;##Finding and Ordering Supply  
 
 ;#Legacy Means For Generating A Stream of Deployable Supply
@@ -623,13 +595,41 @@
         _ (reset! last-sel selected)
         actual-fill (count selected)
         status (if (== actual-fill req) :filled :unfilled)
-        _ (when (seq selected)
-            (println [:filling rule (map (comp :name :source) selected)
-                                        ;(first selected)
-                     ]))
+        ;; _ (when (seq selected)
+        ;;     (println [:filling rule (map (comp :name :source) selected)
+        ;;                                 ;(first selected)
+        ;;              ]))
         ]
     [status (fill-demand* t period demand selected ctx)]))
 
+
+;;testing
+(comment 
+
+(require '[marathon.sim.testing :as test])
+(require '[clojure.test :refer [deftest is run-tests]])
+
+(defn count-by [keyf xs] 
+  (reduce-kv (fn [acc k v] 
+               (assoc acc k (count v))) {} (group-by keyf xs)))
+
+(def fillstore (core/get-fillstore test/testctx))
+(def ds (vals (:demandmap test/test-dstore)))
+(def rules (map #(derive-supply-rule % fillstore) ds))
+(def complex-rule (derive-supply-rule (first ds) fillstore :category ["Alpha" "SomeGroup"]))
+
+(deftest supply-rules 
+  (is (= (count-by second rules)
+         {"SRC1" 21, "SRC2" 14, "SRC3" 36})
+      "Should have consistent number of srcs in supply rules.")
+  (is (= complex-rule 
+         [[:fillrule "Alpha"] "SomeGroup"])
+      "Should have a simple pair of [fillrule group] as a result."))
+        
+
+;some dumb demands 
+;(def demands 
+)
 
 ;;#Pending
 ;;Port fill store generation functions and IO functions/constructors from legacy 

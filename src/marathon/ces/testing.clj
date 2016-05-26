@@ -685,6 +685,17 @@
 (def srmctx
   (->> (setup/simstate-from  sd/srm-tables core/debugsim)
        (sim/add-time 1)))
+(def srm1
+  (->  (->history 1 ;(debugging-on #{451
+                  ;               467
+                   ;              523
+                   ;              563
+                   ;              595
+                   ;              963
+                   ;              1051})
+                 engine/sim-step
+                 srmctx)
+       (get 1)))
 
 (def srmtest
   (->history 100 ;(debugging-on #{451
@@ -707,6 +718,13 @@
 ;;if no category is defined, they go with default (as is current).
 ;;that way, the behavior can alter the visibility of supply for
 ;;certain demands..
+
+;;Solution to this problem was to denote srm-behavior as
+;;foisting upon unit entities a component that makes their
+;;default-bucket "SRM"
+
+(def srm93 (get srmtest 93))
+
 )
 
 ;;We should then be able to spawn all the entities.

@@ -59,6 +59,12 @@
 ;;__utils__
 (def ^:constant +inf+ Long/MAX_VALUE)
 
+(defn non-neg!
+  ([lbl x]
+   (if (not (neg? x)) x
+       (throw (Exception. (str lbl " " x " cannot be negative!")))))
+  ([x] (non-neg! "" x)))
+
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
      res# 
@@ -404,6 +410,7 @@
                               change-state-beh!]))
 
 
+
 ;;Our default spawning behavior is to use cycle to indicate.
 ;;There will be times we alter the methods in which a unit 
 ;;spawns (initializes itself in the simulation).  It'd be nice
@@ -436,19 +443,26 @@
           {:keys [curstate prevstate nextstate timeinstate 
                   timeinstateprior duration durationprior 
                   statestart statehistory]} statedata
-          cycletime (or cycletime (:cycletime ent))
+          cycletime (or cycletime (:cycletime ent) 0)
           topos     (if  (not (or to-position positionpolicy))
                          (protocols/get-position (u/get-policy ent) cycletime)
-                         positionpolicy)        
-          timeinstate   (- cycletime 
-                           (protocols/get-cycle-time policy
-                                                     positionpolicy))
+                         positionpolicy)
+          position-time (protocols/get-cycle-time policy
+                                                  positionpolicy)
+          cycletime     (if (< cycletime position-time)
+                          position-time
+                          cycletime)
+          timeinstate   (non-neg! "timeinstate" (- cycletime position-time))
           timeremaining (protocols/transfer-time policy
                                                  positionpolicy 
                                                  (protocols/next-position policy positionpolicy))
           newduration   (- timeremaining timeinstate)
           nextstate     (protocols/get-state policy positionpolicy)
-          spawned-unit  (-> ent (u/initCycles tupdate) (u/add-dwell cycletime) (assoc :last-update tupdate)) ;;may not want to do this..
+          spawned-unit  (-> ent
+                            (assoc :cycletime cycletime)
+                            (u/initCycles tupdate)
+                            (u/add-dwell cycletime)
+                            (assoc :last-update tupdate)) ;;may not want to do this..
           _             (reset! entity spawned-unit)
           state-change {:newstate       nextstate
                         :duration       timeremaining
@@ -1104,8 +1118,9 @@
                            (if-y 
                             global-state
                             (fail ctx)))])
-                   up-to-date])]))
+                 up-to-date])]))
 
+;;#revisit the need for this....
 (def lite-update-state-beh
   (->seq [(echo :<lite-state-beh>)
           (->or [special-state
@@ -1117,70 +1132,7 @@
                             global-state
                             (fail ctx)))])
                    up-to-date])]))
-
-;;So, this precludes is from having shared behaviors
-;;across states.  If we go the state-based route, we
-;;end up partitioning our behavior and having
-;;to duplicate it internally. 
-
-;;states are identical to leaf behaviors, with 
-;;the possibility for some states to invoke transitions.
-;;we'll continue to port them.
-(comment
-
-  ;;these are state masks, effectively....
-  
-(def default-states 
-  {:global          age-unit
-   :reset            #(pass :spawning %)  
-   :bogging          bogging-beh   ;simple updates f(t)
-   :dwelling         dwelling-beh  ;simple updates f(t)
-   ;Currently, we encode multiple states in the policy graph.  We may
-   ;want to re-evaluate that...right now, we have multiple
-   ;combinations of states to handle...that all correspond to dwelling.
-   #{:dwelling}      dwelling-beh
-   #{:deployable}    dwelling-beh
-   #{:deployable :dwelling}  dwelling-beh
-   :moving           moving-beh
-   :start-cycle      #(pass :start-cycle     %)
-   :end-cycle        #(pass :end-cycle       %)
-   :overlapping      #(pass :overlapping     %)
-   :demobilizing     #(pass :demobilizing    %)
-   :policy-change    #(pass :policy-change   %)
-   :recovering       #(pass :recovering      %)
-   :recovered        #(pass :recovered       %) 
-   :nothing          #(pass :nothing         %)
-   :spawning         spawning-beh
-   :abrupt-withdraw  #(pass :abrupt-withdraw %)
-;   #{:deployable :dwelling} #(pass :deployable-dwelling)
-   })
-
-)
-
-(comment
-;;this is significantly different than the fsm approach we used before...
-;;now, we handle each case as a specific branch of the tree...
-;;note: we can parameterize this and build the tree dynamically to
-;;define higher-order behaviors.
-
-;;perform a simple update via the entity's FSM.
-(defn update-current-state 
-  ([states ctx] 
-     (let [st (get (statedata ctx) :curstate)
-           _ (log! st ctx)]
-       (if-let [f (try-get states st +nothing-state+)]
-         (do (log! [:updating-in st] ctx)
-             (f ctx))
-         (do (log! [:unknown-state st] ctx)
-             (fail ctx)))))
-  ([ctx] (update-current-state default-states ctx)))
-
-;;this is another btree node:
-;;(->case) or (->states ) 
-
-)
-                   
-
+                  
 ;;if we have a message, and the message indicates
 ;;a time delta, we should wait the amount of time
 ;;the delta indicates.  Waiting induces a change in the
@@ -1295,8 +1247,11 @@
 (befn srm-spawning-beh {:keys [entity ctx] :as benv}      
       (echo [:srm-spawning]))
 
+;;SRM behavior overrides some functionality for the base behavior.
 (befn srm-beh []
-   (echo [:srm-beh]))
+      spawning-beh
+      ;(throw (Exception. (str "SRM Behavior doesn't do anything!")))
+      )
 
 (do (println [:setting-srm])
     (swap! base/behaviors assoc "SRM" srm-beh))

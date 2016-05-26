@@ -44,7 +44,6 @@
             (u/re-deploy-unit  newunit  newlocation t (or (:deployment-index unit) 0) newctx))            
           (u/deploy-unit unit newlocation  t (or (:deployment-index unit) 0) ctx))))
 
-
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
     (if (supply/first-deployment? unit store)

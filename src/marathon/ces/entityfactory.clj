@@ -60,7 +60,6 @@
 ;;in the simulation, where entity creation may involve an arbitrarily 
 ;;complex sequence of updates.
 
-
 ;;*Basic Functions
 ;;Many of our functions are concerned with IO, that is, reading 
 ;;tab-delimited text records, and creating entity orders from them.
@@ -74,14 +73,12 @@
 ;;logging purposes.  Maybe we we only check if the context is 
 ;;actually bound, and then do something.
 
-
 ;;The original procedure actually mutated the context 
 ;;as demand records were parsed.  We can decouple this step by 
 ;;creating a sequence of entity creation actions, i.e. entity 
 ;;orders, that can be processed into state changes.
 
 ;;For instance: 
-
 
 ;;This is technically a bottleneck at the moment; Not terrible, but 
 ;;we may look at more efficient ways of doing it.  It's the check for 
@@ -143,37 +140,6 @@
      op ;Fine-grained, unique description of the demand.
      DemandGroup ;Ket that associates a demand with other linked demands.  
      )))
-
-;; (defn create-demand   
-;;   "Produces a validated demand from the inputs.  We enforce invariants about 
-;;    demanddata here to ensure that invalid values are caught and excepted."
-;;   [DemandKey SRC  Priority StartDay Duration Overlap Category 
-;;    SourceFirst Quantity  OITitle Vignette Operation  DemandGroup]  
-;;   (let [empty-op  (core/empty-string? Operation)
-;;         empty-vig (core/empty-string? Vignette)
-;;         idx       (if (or empty-op empty-vig) (core/next-idx) 0)
-;;         vig       (if empty-vig (core/msg "Vig-ANON-" idx) Vignette)
-;;         op        (if empty-op  (core/msg "Op-ANON-" idx) Operation)]
-;;     (d/->demanddata    ;unique name associated with the demand entity.
-;;      (or DemandKey (demand-key SRC vig op Priority StartDay Duration)) 
-;;      SRC ;demand-type, or other identifier of the capability demanded.
-;;      Priority ;numerical value representing the relative fill priority.
-;;      StartDay ;the day upon which the demand is activated and requiring fill.
-;;      Duration ;the total time the demand is activated.
-;;      Overlap  ;the demand-specific overlap requirement, if any
-;;      Category ;descriptor for deployed unit behavior over-rides.
-;;      SourceFirst  ;descriptor for supply preference. 
-;;      Quantity  ;the total amount of entities required to fill the demand.
-;;      OITitle   ;formerly OITitle.  Long-form description of the src capability.
-;;      vig  ;Descriptor of the force list that generated this demand entity.
-;;      op ;Fine-grained, unique description of the demand.
-;;      DemandGroup ;Ket that associates a demand with other linked demands.  
-;;      {} ;an ordered collection of all the fills recieved over time.                   
-;;      {} ;map of the units currently associated with the demand.
-;;      {} ;map of the units currently associated with this demand,
-;;                                         ;that are not actively contributing toward filling the
-;;                                         ;demand, due to a relief-in-place state.
-;;       )))
 
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
@@ -318,7 +284,6 @@
 ;;Returns a policystore update and a unit update.
 ;;#TODO Implement policy->cycle-record 
 ;;#TODO Populate unit's first cycle.
-
 (defn policy->cycle-record [p cycletime t  name src compo]
   (cyc/make-cyclerecord :uic-name name :src src :component compo 
                         :policyname        (generic/policy-name p)
@@ -441,8 +406,9 @@
 ;;Vestigial policy objects and behavior fields are not defined.  We
 ;;may allow different behaviors in the future, but for now they are
 ;;determined at runtime via the legacy processes (by component).
-(defn record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-                                ] :as r}]
+(defn record->unitdata
+  [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
+           ] :as r}]
   (if (= Behavior "SRM")    ;;hackish way to go about things...
    (srm-record->unitdata r)
    (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin)))
@@ -473,7 +439,6 @@
   ([idx src compo]
      (core/msg idx "_" src "_" compo)))
       
-
 (defn check-name 
   "Ensures the unit is uniquely named, unless non-strictness rules are 
    applied."
@@ -502,7 +467,6 @@
   [unit supply strictname]
   (assoc unit :name (check-name (:name unit) supply strictname)))
         
-
 ;;Note -  register-unit is the other primary thing here.  It currently 
 ;;resides in marathon.sim.su
 
@@ -599,33 +563,7 @@
                         (prep-cycle ctx))
           newstore (plcy/subscribe-unit prepped (:policy prepped) policystore)         
           newctx   (core/set-policystore ctx newstore)]
-      (->> newctx
-           (supply/register-unit supplystore behaviors prepped nil extra-tags)
-           ;CHECK added this guy, lifted out from initialize-cycle,
-           ;since it operates on a context, not a unit directly.
-;           (unitsim/change-location prepped (:positionpolicy prepped))
-           ))))
-
-;;(def res (atom nil))
-;; (defn process-unit2 [raw-unit extra-tags parameters behaviors ctx]
-;;   (core/with-simstate [[supplystore policystore] ctx] ;could get expensive 
-;;     (let [prepped   (-> raw-unit       
-;;                         (associate-unit supplystore true)
-;;                         (assign-policy policystore parameters)      
-;;                         (prep-cycle ctx))
-;;           newstore  (plcy/subscribe-unit prepped (:policy prepped) policystore)
-;;           _ (do (reset! res {:store newstore :ctx ctx}))
-;;           newctx  (core/set-policystore ctx newstore)]
-;;       newctx
-;;       (comment 
-;;       (->> newctx
-;;            (supply/register-unit supplystore behaviors prepped nil extra-tags)
-;;            ;CHECK added this guy, lifted out from initialize-cycle,
-;;            ;since it operates on a context, not a unit directly.
-;; ;           (unitsim/change-location prepped (:positionpolicy prepped))
-;;            )
-;;       )
-;;       )))
+      (supply/register-unit supplystore behaviors prepped nil extra-tags newctx))))
 
 (defn process-units [raw-units ctx]
   (core/with-simstate [[parameters behaviors] ctx]
