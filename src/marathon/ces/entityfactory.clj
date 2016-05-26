@@ -464,7 +464,8 @@
                    :spawn-info {:location Location  ;;we have starting information, but not the next state...
                                 :position Position
                                 :duration Duration 
-                                }}))))
+                                }
+                   :default-bucket :SRM}))))
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
   ([idx unit]

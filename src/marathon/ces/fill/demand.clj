@@ -39,6 +39,11 @@
 
 (def lastfill (atom nil))
 
+;;Tom Hack 26 May 2016
+;;We're going to wire in the fact that SRM demands are special, and that
+;;any other category is okay to fill...
+;;fill/satisfy-demand will make accomodations for special categories,
+;;namely SRM...
 (defn fill-category [demandstore category ctx & {:keys [stop-early? pending] 
                                                  :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
@@ -51,7 +56,7 @@
             demand      (second (first pending)) 
             demandname  (:name demand)           ;try to fill the topmost demand
             ctx         (dem/request-fill! demandstore category demand ctx)
-            _ (reset! lastfill [demand ctx])
+            _           (reset! lastfill [demand ctx])
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
             ;_           (println [fill-status demandname])
             can-fill?   (= fill-status :filled)
@@ -91,7 +96,8 @@
       ctx (dem/unfilled-categories (core/get-demandstore ctx))))
 
 ;;Implements the default hierarchal, stop-early fill scheme.
-(defn fill-hierarchically [ctx] (fill-demands-with fill-category ctx))
+(defn fill-hierarchically [ctx]
+  (fill-demands-with fill-category ctx))
 
 ;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 (defn fill-followons [ctx]

@@ -551,7 +551,6 @@
 
 (def ds1 (core/get-demandstore zctx1))
 (def activedemands1  (map (partial demand/get-demand ds1) (keys (:activedemands ds1))))
-
  
 (deftest day1fill
   (is (empty? (demand/unfilled-demands "SRC3" (core/get-demandstore zctx1)))
@@ -697,6 +696,17 @@
                    ;              1051})
                  engine/sim-step
                  srmctx))
+
+;;Our problem now is getting units registered as deployable in srm...
+;;Rather than registering themselves as merely deployable,
+;;they can register as srm-deployable.
+;;Since they use a different behavior, we can override
+;;the deployable behavior, or we can account for the fact that
+;;units in general register their deployability with
+;;a category in a registry...
+;;if no category is defined, they go with default (as is current).
+;;that way, the behavior can alter the visibility of supply for
+;;certain demands..
 )
 
 ;;We should then be able to spawn all the entities.

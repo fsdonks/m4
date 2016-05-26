@@ -265,10 +265,20 @@
     r
     (throw (Exception. (str "unknown source-first rule: " sf)))))
 
+
+
+;;Tom Hack 26 May 2016
+;;If we're not SRM demand, i.e. the category is something other than
+;;SRM, we use the default category so as to not restrict our fill.
+
+(def restricted-categories #{"SRM" :SRM})
+
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
 (defn demand->rule [d] 
   {:src  (get d :src)
-   :cat  (get d :category :default)
+   :cat  (let [c (get d :category :default)]
+           (if (restricted-categories c) c
+               :default))
    :name (get d :name)
    :order-by (resolve-source-first (get d :source-first "uniform"))
    :required (d/required d)})
@@ -607,11 +617,12 @@
                                         ;1)
         req      (d/required demand)
         selected (->> (find-supply ctx rule)
-                      (into [] (take req)))
+                      (into []    (take req)))
         actual-fill (count selected)
         status (if (== actual-fill req) :filled :unfilled)
-        _ (when (seq selected)
-            (println [:filling rule (map :name selected)]))
+        ;_ (when (seq selected)
+        ;    (println [:filling rule (map :name selected)
+        ;              ]))
         ]
     [status (fill-demand* t period demand selected ctx)]))
 

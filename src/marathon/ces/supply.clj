@@ -371,11 +371,19 @@
     (->> (new-src-available! (get unit :src) ctx)
       (new-deployable! unit))))
 
+;;Tom hack 26 MAy 2016
+;;We discriminate between known or canonical buckets, and
+;;ad-hoc buckets (buckets that are created as ephemeral supply
+;;for followon-demands.  In contrast, we will likely always have
+;;:default and :SRM categories of supply, i.e. they never go away.
+(def known-buckets #{:default :SRM})
+
 (defn derive-bucket [unit]
   (let [fc  (:followoncode unit)]
     (if (and fc (not (or (= fc "") (= fc "UnGrouped"))))
       fc
-      :default)))
+      (or (:default-bucket unit)                  
+          :default))))
 
 ;;Rather than specifying followons manually, we let them be derived from
 ;;the unit's followon code.  If it has one, it's inferred we have a
@@ -388,7 +396,7 @@
    (let [components {:deployable-bucket bucket
                      :deployable-cat    src
                      :deployable true}
-         components (if (identical? bucket :default) components
+         components (if (known-buckets bucket) components
                         (do ;(println [:followon bucket])
                             (assoc components :followon bucket)))
          _ (debug [(:name unit) components :bucket bucket])
@@ -606,10 +614,11 @@
 ;;Process the unused follow-on units, changing their policy to complete cycles.
 (defn release-followons [fons ctx]
   (->  (reduce release-followon-unit  (store/drop-domain ctx :followon) (keys fons))
-       (store/updatee :SupplyStore :deployable-buckets (fn [m]
-                                                         (if-let [def (:default m)]
-                                                           {:default def}
-                                                           {})))))
+       (store/updatee :SupplyStore :deployable-buckets
+                      (fn [m]
+                        (reduce (fn [acc k]
+                                  (assoc acc k (get m k))) {} known-buckets)
+                        ))))
 
 ;;__TODO__ Deprecate release-max-utilizers
 ;;This is probably a deprecated function.  It was a corner case to ensure that 
