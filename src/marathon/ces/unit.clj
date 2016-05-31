@@ -620,9 +620,34 @@
 ;;policy's bog budget.  Wait until the bog budget elapses, or
 ;;someone interrupts you.
 
-(defn keep-bogging-until-depleted [u new-location ctx]
+
+;;This is a choke point for the differences between SRM and
+;;the original rotational policies.
+;;When we deploy units now, we actually have a hook to determine
+;;if they should assume the demand's behavior, duration, etc.
+
+(defn keep-bogging-until-depleted
+  [u new-location ctx]
   (move-to u new-location "Deployed" (boggable-time u) ctx))
 
+;;A deployment in which the details of the location tell
+;;us how to proceed.  The entity must have special support
+;;for this built in.  The cool thing here is that we can
+;;implement all this on the behavioral side, and the
+;;entity's complexity, or lacktherof, can dictate
+;;how we handle things.
+(defn location-based-deployment
+  [entity location-details ctx]
+  (core/handle-message! ctx entity
+     (core/->msg (:name entity) (:name entity)
+                 (core/get-time ctx)
+                 :location-based-move
+                 location-details)))
+
+
+;;We need to expand this notion...
+;;If the demand has a local policy, or other local attributes,
+;;we should provide it to the interpreter.
 
 ;;THis is kind of obviated....
 ;'Assumes a unit has not yet bogged, at least not as a follow on
@@ -664,9 +689,10 @@
 
 ;;This updates the unit statistics, and alters (drops) the followon
 ;;code.  re-deployment indicates followon?
-(defn  re-deploy-unit [unit newlocation t deployment-idx ctx] 
+(defn  re-deploy-unit [unit demand t deployment-idx ctx] 
   (let [c    (:current-cycle unit)
         deps (:deployments c)
+        newlocation (:name demand)
         new-unit      (-> unit
                          (increment-followons)
                          (increment-deployments)
@@ -676,8 +702,9 @@
 
 ;;We can probably combine these into a unit behavior.
 ;;For instance, notice we update the deployments.
-(defn  deploy-unit [unit newlocation t deployment-idx ctx] 
-  (keep-bogging-until-depleted (increment-deployments unit) newlocation ctx))
+(defn  deploy-unit [unit demand t deployment-idx ctx]
+  (let [newlocation (:name demand)]
+    (keep-bogging-until-depleted (increment-deployments unit) newlocation ctx)))
 
 
 ;'Probably pull unit's changelocation into here as well.

@@ -184,7 +184,7 @@
       :recovered  :re-entry
       (if-let [res (protocols/next-position policy position)]
           res
-          (throw (Exception. (str [:dont-know-following-position position]))))))
+          (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))
 
 (defn policy-wait-time
   ([policy statedata position deltat]
@@ -1129,6 +1129,11 @@
                          (push! entity :state :spawning)                        
                          spawning-beh]
                         )
+         ;;Allow the entity to apply location-based information to its movement, specifically
+         ;;altering behavior due to demands.
+         :location-based-move
+         (beval location-based-beh 
+           (assoc benv  :location-based-info        (:data msg)))
          ;;allow the entity to change its behavior.
          :become (push! entity :behavior (:data msg))
          :do     (->do (:data msg))
@@ -1290,28 +1295,29 @@
 ;;to do, outside of our policy.
 ;;The only way we can get here is if there is a location-policy
 ;;in the environment.  How does it get there?
-(befn location-based-beh {:keys [entity location-policy ctx] :as benv}
-    (when-let [lp location-policy]
-      (let [info (store/gete benv lp)
-            {:keys [Name MissionLength BOG StartState EndState Overlap]} info
-            newstate (if BOG #{StartState :bogging} #{StartState})]
-        ;;we need to schedule a state change.
-        ;;and a location-change...
-        (do (swap! entity assoc :location-behavior true)             
-            (beval  change-state-beh
-                    (assoc benv
-                           :state-change
-                           {:newstate       newstate
-                            :duration       (- MissionLength  Overlap)
-                            :followingstate (if (pos? Overlap)
-                                              #{newstate :overlapping}
-                                              EndState)
-                            :timeinstate    (or (:timeinstate lp) 0)}
-                           :location-change
-                           {:from-location  (:locationname @entity)
-                            :to-location     Name}
-                           :wait-time     (- MissionLength Overlap)
-                           :next-position StartState))))))
+(befn location-based-beh {:keys [entity location-based-info ctx] :as benv}
+  (when  location-based-info
+    (let [{:keys [Name MissionLength BOG StartState EndState Overlap
+                  timeinstate]}
+                   location-based-info
+          newstate (if BOG #{StartState :bogging} #{StartState})]
+      ;;we need to schedule a state change.
+      ;;and a location-change...
+      (do (swap! entity assoc :location-behavior true)             
+          (beval  change-state-beh
+                  (assoc benv
+                         :state-change
+                         {:newstate       newstate
+                          :duration       (- MissionLength  Overlap)
+                          :followingstate (if (pos? Overlap)
+                                            #{newstate :overlapping}
+                                            EndState)
+                          :timeinstate    (or timeinstate 0)}
+                         :location-change
+                         {:from-location  (:locationname @entity)
+                          :to-location     Name}
+                         :wait-time     (- MissionLength Overlap)
+                         :next-position StartState))))))
 
 ;;All our behavior does right now is spawn...
 ;;The only other changes we need to make are to alter how we deploy entities...

@@ -210,6 +210,9 @@
               MA_DA_C1	 PB_C3	90
               MA_DA_C2	 PB_C3	90
               MP_DA_C1	 R_C1	999999
+              MA_NDA_C3	PT_C4	90
+              MD_NDA_C3	PT_C4	90
+              MP_NDA_C3	PT_C4	90
               ])))
 
 (def SRMRC-routes
@@ -234,12 +237,13 @@
 (def SRMRC13-routes
   (mapv vec
     (partition 3
-            [PB_C4	PB_C3	730
+            [PT_C4	PB_C4	90 ;;added....should we skip it?
+             PB_C4	PB_C3	730
              PB_C3	R_C2	365
              R_C2	PB_C4	365
-             MA_DA_C1	PB_C4	90
+             MA_DA_C1	PB_C4	90    
              MA_DA_C2	PB_C4	90
-             MA_NDA_C3	PT_C4	90
+             MA_NDA_C3	PT_C4	90 ;;should these be PB_C4?
              MD_NDA_C3	PT_C4	90
              MP_NDA_C3	PT_C4	90
              ;;these arcs create acyclical processes. 

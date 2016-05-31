@@ -146,7 +146,7 @@
 ;;entity store is nice...
 (defn locations
   ([t ctx]
-   (->> (store/only-entities ctx [:name :locationname :location])
+   (->> (store/only-entities ctx [:name :locationname :location :positionpolicy])
         (into [] (map #(assoc % :t t)))))
   ([ctx] (locations  (sim/get-time ctx) ctx)))
 
@@ -177,6 +177,9 @@
 
 (defn periods [ctx] (:periods   (get-policystore ctx)))
 
+;;THis is less useful now that we're in an entitystore...
+;;might migrate away from this, treat it as a code smell
+;;possibly.
 (defmacro with-simstate 
   "Given a destructuring of [[path1 path2...] the-simstate], paired
    with an expression, evaluates the expression under a lexical context

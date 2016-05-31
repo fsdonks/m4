@@ -34,15 +34,15 @@
 ;;we can more efficiently handle the state updates...
 ;;For instance, we can perform bulk updates with the same
 ;;or a simular behavior context.....this is more appealing.
-(defn deploy!  [followon? unit demandname t ctx]
+(defn deploy!  [followon? unit demand t ctx]
   (let [supply (core/get-supplystore ctx)
-        newlocation demandname;(:name demand)
+        newlocation (:name demand)        
         ]
       (if followon?
-          (let [newctx  (supply/record-followon supply unit demandname ctx)
+          (let [newctx  (supply/record-followon supply unit newlocation ctx)
                 newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
-            (u/re-deploy-unit  newunit  newlocation t (or (:deployment-index unit) 0) newctx))            
-          (u/deploy-unit unit newlocation  t (or (:deployment-index unit) 0) ctx))))
+            (u/re-deploy-unit  newunit  demand t (or (:deployment-index unit) 0) newctx))            
+          (u/deploy-unit unit demand  t (or (:deployment-index unit) 0) ctx))))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
@@ -59,37 +59,36 @@
    expected length of stay, bog, will determine when the next update is 
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
-  ([ctx unit t demandname   followon?]
+  ([ctx unit t demand   followon?]
    (if (not  (u/valid-deployer? unit))
      (do (reset! last-deploy [unit ctx])
          (throw (Exception. (str [:unit (:name unit) :invalid-deployer "Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment"]))))
       
     (core/with-simstate [[supplystore parameters policystore demandstore fillstore] ctx]
-      (let [fillcount     (count (:fills fillstore))
-          ;  bog           (get-max-bog unit policystore) ;;ugh...don't need this... 
+      (let [fillcount     (count (:fills fillstore))         
             unitname      (:name unit)
-          ;  demandname    (:name demand)
+            ;;This may be a little problematic.  We're pre-loading the move.
+            ;;It may be more idiomatic to delegate the move to the entity behavior system.
             from-location (:locationname    unit) ;may be extraneous
             from-position (:position-policy unit);
-            to-location   demandname           
+            to-location   (:name demand)
+            ;;Some demands have a special position associated with them...
             to-position   :deployed
             unit-delta    {:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
             unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
-                                 unit-delta) 
+                                 unit-delta)
+            ;;TODO - rip out all stuff relate to fencing....no longer necessary.
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
                                                                        (:name unit)))
             ]  
-        (->> (store/updatee ctx demandname :units-assigned assoc (:name unit) unit) ;need to update this in ctx..  ;;estore version.       
+        (->> (store/updatee ctx to-location :units-assigned assoc (:name unit) unit) ;need to update this in ctx..  ;;estore version.       
              (sim/merge-entity {unitname     unit-delta
-;                                demandname  newdem                                           
-;                                :DemandStore (dem/add-demand demandstore newdem) ;inefficient...
+                                ;;TODO - rip out all stuff relate to fencing....no longer necessary.
                                 :SupplyStore {:tags (:tags supplystore)} ;(supply/add-unit supplystore unit)
-                                })              
-;             ((fn [ctx] (println [demandname (keys  (:units-assigned (dem/get-demand (core/get-demandstore ctx) demandname)))])
-;                ctx))             
-             (deploy! followon?  unit demandname t)  ;;apply state changes.
+                                })                       
+             (deploy! followon?  unit demand t)  ;;apply state changes.
              )))))
   ([ctx unit t demand]
     (deploy-unit  ctx unit t demand (core/followon? unit))))

@@ -540,16 +540,17 @@
                         (store/get-entity defaultctx nm)))
 
 ;;pending tests
-(def deployedctx    (deployment/deploy-units defaultctx the-deployers (:name d)))
+(def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
 (def deployed-units (store/get-entities deployedctx selected))
 
 (defn simple-step [day ctx]
   (->> ctx
-      (engine/begin-day day)
-      (supply/manage-supply day)
-      (demand/manage-demands day)
+      (engine/begin-day       day)
+      (supply/manage-supply   day)
+      (demand/manage-demands  day)
       (policy/manage-policies day)
       (engine/end-day day)))
+
 
 ;;A basic supply/demand context, initialized for the first day
 ;;of simulation.
@@ -748,6 +749,17 @@
          (supply/manage-supply    1)  ;Update unit positions and policies.
          (demand/manage-demands   1)  ;Activate/DeActiveate demands, handle affected units.         
          ))
+
+(def simple-srm
+  (->history 100 ;(debugging-on #{451
+                  ;               467
+                   ;              523
+                   ;              563
+                   ;              595
+                   ;              963
+                   ;              1051})
+                 simple-step
+                 srmctx))
 
 (def srm1
   (->  (->history 1 ;(debugging-on #{451

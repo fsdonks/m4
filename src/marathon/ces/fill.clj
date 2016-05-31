@@ -523,7 +523,7 @@
  "Deploys the unit identified in filldata to demand via the supply system."
   [t period demand deployment-count filldata  ctx]
   (let [unit (or (:unit filldata) filldata)]
-    (->> (deployment/deploy-unit  ctx unit  t (:name demand)                                
+    (->> (deployment/deploy-unit  ctx unit  t demand                                
                                  (core/followon? unit))
          (supply/log-deployment! t (:locationname unit) demand unit   
                                  deployment-count filldata nil  period))))
@@ -542,7 +542,7 @@
 ;;context through the process of deploying the unit associated with the realized 
 ;;filldata.  Since fill-promises are typically for single elements of supply,  
 ;;__fill-demand__ will typically only apply a single unit towards a demand.
-
+;;Note: we have the demand here...so, we can pass along the details..
 (defn fill-demand*
   "Enacts filling a demand, by realizing a vector of promised fills, logging if any ghosts 
    were used to fill (may change this...) and updating the context.  Applies the
