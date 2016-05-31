@@ -1,3 +1,6 @@
+;;#TODO#
+;;Drop this ns.  Likely Vestigial, only thing that's useful is
+;;the possible output file formats.
 (ns marathon.output.outputstore
   (use [spork.util.record :only [defrecord+ with-record]]))
 

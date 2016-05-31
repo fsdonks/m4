@@ -102,9 +102,9 @@
 ;;include the name of the target demand, so we can lookup information we need for it.
 
 (defn deploy-units [ctx us d]
-  (let [t (core/get-time ctx)
+  (let [t      (core/get-time ctx)
         period (:name (policy/get-active-period (core/get-policystore ctx)))
-        ;cnt (atom (store/gete ctx :SupplyStore :deployment-count 0))
+        ;cnt   (atom (store/gete ctx :SupplyStore :deployment-count 0))
         ]
     ;(->
      (reduce (fn [acc u]

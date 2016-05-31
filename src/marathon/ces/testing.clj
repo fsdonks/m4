@@ -788,7 +788,7 @@
        (get 1)))
 
 (def srmtest
-  (->history 100 ;(debugging-on #{451
+  (->history 5001 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563

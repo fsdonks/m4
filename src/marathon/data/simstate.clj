@@ -5,7 +5,7 @@
         [marathon.demand.demandstore] 
         [marathon.policy.policystore]
         [marathon.output.outputstore]
-        [marathon.events.eventstore]
+        ;[marathon.events.eventstore]
         [marathon.fill.fillstore])
   (:require  [spork.sim [simcontext :as sim]]))
 

@@ -151,6 +151,18 @@
      DemandGroup ;Ket that associates a demand with other linked demands.  
      )))
 
+;;This is hacky, should clean on parsing...
+(defn clean-nils [drec flds]
+  (reduce (fn [acc k]
+            (if-let [v (get acc k)]              
+              (if (and (string? v)
+                       (or (= v "nil")
+                           (= (clojure.string/trim v) "")))
+                (assoc acc k nil)
+                acc)
+              acc))
+          drec flds))
+                
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
   [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
@@ -166,7 +178,9 @@
                                :BOG
                                :StartState
                                :EndState
-                               :MissionLength]))))
+                               :MissionLength]))
+      (clean-nils [:StartState :EndState])
+      ))
 
 
 ;;#Optimization: we can use reducers here instead of seqs.
