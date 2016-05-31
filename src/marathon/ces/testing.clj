@@ -750,6 +750,20 @@
          (demand/manage-demands   1)  ;Activate/DeActiveate demands, handle affected units.         
          ))
 
+(def srmd (store/get-entity srm1nofill "1_Al's Game_Binder[1...5001]"))
+
+(def srm-deployed
+  (deployment/deploy-units srm1nofill
+     (store/get-entity srm1nofill "3_Binder_AC")  srmd))
+
+(deftest srm-deployments
+  (is (not (get (store/get-ine srm-deployed [:SupplyStore :deployable-buckets "SRM" "Binder"]) "3_Binder_AC"))
+      "Should no longer be deployable"))
+
+(core/debugging!
+ (def srm-deployed
+   (deployment/deploy-unit srm1nofill (store/get-entity srm1nofill "3_Binder_AC") 1  srmd)))
+
 (def simple-srm
   (->history 100 ;(debugging-on #{451
                   ;               467

@@ -388,6 +388,12 @@
      (->do (fn [_] (log! (str (:name @entity) " is doing nothing for " deltat) ctx)
              )))
 
+;;Determines if our entities are going to wait beyond the feasible
+;;time horizon.  It's not that much of a stretch to consider anything longer
+;;than a decent human lifetime effectively infinite...
+(defn effectively-infinite? [^long x]
+  (or (== x +inf+ )
+      (>= x (* 365 100))))
 
 ;;note-we have a wait time in the context, under :wait-time
 ;;updates an entity after a specified duration, relative to the 
@@ -395,8 +401,8 @@
 (befn update-after  ^behaviorenv [entity wait-time tupdate ctx]
    (when wait-time
      (->alter
-      #(if (== wait-time +inf+ )
-         (do (debug [(:name @entity) :waiting :infinitely])
+      #(if (effectively-infinite? wait-time)
+         (do (debug [(:name @entity) :waiting :infinitely]) ;skip requesting update.
              (dissoc % :wait-time)) 
          (let [tfut (+ tupdate wait-time) 
                e                       (:name @entity)
@@ -1295,29 +1301,42 @@
 ;;to do, outside of our policy.
 ;;The only way we can get here is if there is a location-policy
 ;;in the environment.  How does it get there?
+;;TODO_Have the location push behaviors onto some kind of
+;;stack.  This could be very powerful (and common), in that
+;;the behavior would evaluate its top-most behavior first
+;;(i.e. do-current-state), and pop the behavior once
+;;the time expired.
 (befn location-based-beh {:keys [entity location-based-info ctx] :as benv}
   (when  location-based-info
-    (let [{:keys [Name MissionLength BOG StartState EndState Overlap
+    (let [{:keys [name MissionLength BOG StartState EndState overlap
                   timeinstate]}
-                   location-based-info
-          newstate (if BOG #{StartState :bogging} #{StartState})]
-      ;;we need to schedule a state change.
-      ;;and a location-change...
-      (do (swap! entity assoc :location-behavior true)             
+                                  location-based-info
+          newstate (if BOG #{StartState :bogging} #{StartState})
+         ;;we need to schedule a state change.
+          ;;and a location-change...
+          _ (swap! entity assoc :location-behavior true)
+          state-change {:newstate       newstate
+                        :duration       (- MissionLength  overlap)
+                        :followingstate (if (pos? overlap)
+                                          (conj newstate :overlapping)
+                                          EndState)
+                        :timeinstate    (or timeinstate 0)}          
+          location-change  {:from-location  (:locationname @entity)
+                            :to-location     name}
+          wt           (- MissionLength overlap)
+          _ (println [:location-based
+                      {:name (:name @entity)
+                       :state-change state-change
+                       :location-change location-change
+                       :wait-time wt
+                       :next-position StartState}])
+          ]
           (beval  change-state-beh
-                  (assoc benv
-                         :state-change
-                         {:newstate       newstate
-                          :duration       (- MissionLength  Overlap)
-                          :followingstate (if (pos? Overlap)
-                                            #{newstate :overlapping}
-                                            EndState)
-                          :timeinstate    (or timeinstate 0)}
-                         :location-change
-                         {:from-location  (:locationname @entity)
-                          :to-location     Name}
-                         :wait-time     (- MissionLength Overlap)
-                         :next-position StartState))))))
+            (assoc benv
+                   :state-change state-change                          
+                   :location-change location-change                   
+                   :wait-time     wt
+                   :next-position StartState)))))
 
 ;;All our behavior does right now is spawn...
 ;;The only other changes we need to make are to alter how we deploy entities...

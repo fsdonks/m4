@@ -168,7 +168,7 @@
 ;;Terrible, short-sighted hack just to get things working.
 (defn srm-demand? [ctx nm]
   (when-let [c (gete ctx nm :Category)]
-    (= c "S")))
+    (= c "SRM")))
 
 ;;We're starting to build stats and queries...muahaha...this is where clojure kicks ass.
 ;; (defn deployed-population [ctx]

@@ -426,7 +426,8 @@
        (sim/merge-entity  {:SupplyStore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
        (->>  (sim/merge-entity  {:SupplyStore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx) ;we can phase this out maybe
              (out-of-stock! (get unit :src))))))
-  ([supply src unit ctx] (remove-deployable-supply supply :default src unit ctx)))
+  ([supply src unit ctx]
+   (remove-deployable-supply supply (derive-bucket unit) src unit ctx)))
 
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
