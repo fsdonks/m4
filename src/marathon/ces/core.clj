@@ -266,6 +266,11 @@
   `(binding [~'marathon.ces.core/*debug* true]
      ~@expr))
 
+(defmacro debugging! [& expr]
+  `(binding [~'marathon.ces.core/*debug* true
+             ~'spork.ai.core/*debug* true]
+     ~@expr))
+
 (defmacro ignoring [es & expr]
   `(binding [~'marathon.ces.core/*ignored*  (into ~'marathon.ces.core/*ignored* ~es)]
      ~@expr))

@@ -204,9 +204,12 @@
               R_C2      R_C1	550
               R_C1	PB_C3	35
               ;;these arcs create acyclical processes. 
-              MA_DA_C1	[:acyclic  PB_C3]	90
-              MA_DA_C2	[:acyclic  PB_C3]	90
-              MP_DA_C1	[:acyclic  R_C1]	999999
+              ;; MA_DA_C1	[:acyclic  PB_C3]	90
+              ;; MA_DA_C2	[:acyclic  PB_C3]	90
+              ;; MP_DA_C1	[:acyclic  R_C1]	999999
+              MA_DA_C1	 PB_C3	90
+              MA_DA_C2	 PB_C3	90
+              MP_DA_C1	 R_C1	999999
               ])))
 
 (def SRMRC-routes

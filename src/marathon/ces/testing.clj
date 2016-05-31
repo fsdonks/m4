@@ -1,3 +1,17 @@
+;;This is the main source for marathon simulation testing.
+;;Basically, all of the functionality, from loading a
+;;project, instantiating the simulation, and
+;;computing various stages of the simulation, are
+;;provided here.
+;;It also serves as an experimentation platform,
+;;since a lot of the repl-based design-in-the-small
+;;surfaces becomes formalized as regression tests
+;;here.  We basically build up marathon, get it to
+;;compute runs, inspect properties of the runs, and
+;;from there derive invariables that must hold.
+;;Some tests are defined apriori, but up to now,
+;;the vast majority are defined as a consequence of
+;;working with actual data.
 (ns marathon.ces.testing
   (:require [marathon.ces.missing] 
             [marathon.ces [engine  :as engine  :refer :all]]
@@ -63,7 +77,6 @@
   (is (sim/has-time-remaining? primed-sim) "we have time scheduled")
 )
 
-
 ;;#Event propogation tests.
 (defn push-message! [ctx edata name]
   (let [s (spork.sim.pure.network/get-state ctx)
@@ -82,7 +95,7 @@
   (is (=  (store/gete (sim/trigger-event :hello :dee :dumb "test!" nil listener-ctx) :state :messages)
          [[:debugger #spork.sim.simcontext.packet{:t 0, :type :hello, :from :dee, :to :dumb, :msg "test!", :data nil}]])
       "Should have one message logged."))
- 
+
 ;;Mocking up a sample run....
 ;;When we go to "run" marathon, we're really loading data from a
 ;;project.  The easiest way to do that is to provide marathon an API
@@ -118,6 +131,10 @@
 (def m-dstore (core/get-demandstore multiple-demands))
 (def times    (map sim/get-time (take-while spork.sim.agenda/still-time? (iterate sim/advance-time multiple-demands))))
 (def known-events   (core/events multiple-demands))
+;;We take a pretty granular view of events in Marathon, specifically, we schedule system-wide
+;;updates at specific times.  Rather than queing many small, atomic-scale updates, we batch
+;;updates by day and process them in bulk.  If a syste has no update, then nothing is done.
+;;So, currently, the only event in Marathon are :time events, that serve as a clock.
 (def expected-events (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
             {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
             {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
@@ -146,7 +163,6 @@
       (if (some seq cs)
         false
         acc))))
-;  (every? identity (map = colls)))
 
 (deftest scheduled-demands-correctly 
   (is (= times

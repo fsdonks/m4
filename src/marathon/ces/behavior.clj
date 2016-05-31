@@ -64,7 +64,7 @@
    (if (not (neg? x)) x
        (throw (Exception. (str lbl " " x " cannot be negative!")))))
   ([x] (non-neg! "" x)))
-
+         
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
      res# 
@@ -289,6 +289,24 @@
    negative spawn time or a spawntime in the present."
   [{:keys [entity ctx] :as benv}]
   (identical? (:state @entity) :spawning))
+
+;;These accessors help us ensure that we're not
+;;getting stuck in invalid transitions, or spawning
+;;with funky null errors.
+(defn position->state [policy positionpolicy] 
+  (if-let [res  (protocols/get-state policy positionpolicy)]
+    res
+    (throw (Exception. (str {:unknown-position positionpolicy
+                             :policy (:name policy)})))))
+
+;;We can make this processing more sophisticated...
+;;Since we 
+(defn position->time [policy positionpolicy]
+  (if-let [res  (protocols/get-cycle-time policy
+                                          positionpolicy)]
+    res
+    (throw (Exception. (str {:position-not-in-cycle positionpolicy
+                             :policy (:name policy)})))))
 ;  (let [st (:spawntime @entity)]
 ;    (or (neg? st)
 ;        (==  st    (core/get-time @ctx))))
@@ -409,6 +427,34 @@
 (def change-state-beh (->seq [(echo :<change-state-beh>)
                               change-state-beh!]))
 
+(defn compute-state-stats [entity cycletime policy positionpolicy]
+  (let [duration (:duration (:spawn-info @entity))
+        ;;If the position is not in the policy, then we need to
+        ;;find a way to compute the duration.
+        ;;If we have spawn-info, then we have duration...
+        position-time (if duration ;prescribed.
+                        0
+                        (position->time  policy positionpolicy))
+        _             (println
+                       {:cycletime cycletime :positiontime position-time
+                              :topos topos :frompos positionpolicy})
+        ;;We're running into problems here....the positionpolicy 
+        cycletime     (if (< cycletime position-time)
+                        position-time
+                        cycletime)]
+;;timeinstate also subject to spawn-info....
+    {:cycletime cycletime
+     :position-time position-time
+     :timeinstate
+     (if duration
+       0
+       (non-neg! "timeinstate" (- cycletime position-time)))
+;;timeremaining is subject to spawn info.
+     :timeremaining
+     (or duration ;this should keep us from bombing out...
+         (protocols/transfer-time policy
+           positionpolicy 
+           (protocols/next-position policy positionpolicy)))}))
 
 
 ;;Our default spawning behavior is to use cycle to indicate.
@@ -437,54 +483,59 @@
 ;;deltat being the timeinstate.
 (befn spawning-beh ^behaviorenv {:keys [to-position cycletime tupdate statedata entity ctx]
                                  :as  benv}
-  (when (spawning? statedata)     
-    (let [ent @entity
-          {:keys [ positionpolicy policy]} ent
-          {:keys [curstate prevstate nextstate timeinstate 
-                  timeinstateprior duration durationprior 
-                  statestart statehistory]} statedata
-          cycletime (or cycletime (:cycletime ent) 0)
-          topos     (if  (not (or to-position positionpolicy))
-                         (protocols/get-position (u/get-policy ent) cycletime)
-                         positionpolicy)
-          position-time (protocols/get-cycle-time policy
-                                                  positionpolicy)
-          cycletime     (if (< cycletime position-time)
-                          position-time
-                          cycletime)
-          timeinstate   (non-neg! "timeinstate" (- cycletime position-time))
-          timeremaining (protocols/transfer-time policy
-                                                 positionpolicy 
-                                                 (protocols/next-position policy positionpolicy))
-          newduration   (- timeremaining timeinstate)
-          nextstate     (protocols/get-state policy positionpolicy)
-          spawned-unit  (-> ent
-                            (assoc :cycletime cycletime)
-                            (u/initCycles tupdate)
-                            (u/add-dwell cycletime)
-                            (assoc :last-update tupdate)) ;;may not want to do this..
-          _             (reset! entity spawned-unit)
-          state-change {:newstate       nextstate
-                        :duration       timeremaining
-                        :followingstate nil
-                        :timeinstate timeinstate
-                        }
-          _             (debug [:nextstate nextstate :state-change state-change :current-state (:state ent)])          
-          ]
-      (->>  (assoc benv :state-change state-change
-                   :location-change {:from-location "Spawning"
-                                     :to-location   topos}
-                   :next-position   topos ;queue up a move...                 
-                   )
-            (log!  (core/msg "Spawning unit " (select-keys (u/summary spawned-unit)
-                                                           [:name :positionstate :positionpolicy :cycletime])))
-            (beval (->seq [(echo :change-state)
-                           change-state-beh
-                           (fn [benv]
-                             (do (reset! ctx 
-                                         (supply/log-move! tupdate :spawning (:positionpolicy @entity) @entity @ctx))
-                                 (success benv)))]
-                          ))))))
+      (when (spawning? statedata)     
+        (let [ent @entity              
+              {:keys [positionpolicy policy]} ent
+              {:keys [curstate prevstate nextstate timeinstate 
+                      timeinstateprior duration durationprior 
+                      statestart statehistory]} statedata
+              cycletime (or cycletime (:cycletime ent) 0)
+              topos     (if  (not (or to-position positionpolicy))
+                            (protocols/get-position (u/get-policy ent) cycletime)
+                            positionpolicy)
+              nextstate (position->state policy positionpolicy)
+              {:keys [timeinstate
+                      timeremaining
+                      cycletime
+                      position-time]}
+                    (compute-state-stats entity cycletime policy positionpolicy)
+             ;;  ;timeinstate also subject to spawn-info....
+             ;;  timeinstate   (if (:duration (:spawn-info @entity))
+             ;;                  0
+             ;;                  (non-neg! "timeinstate" (- cycletime position-time)))
+             ;; ;timeremaining is subject to spawn info.
+             ;;  timeremaining (or (:duration (:spawn-info @entity)) ;this should keep us from bombing out...
+             ;;                    (protocols/transfer-time policy
+             ;;                                             positionpolicy 
+             ;;                                             (protocols/next-position policy positionpolicy)))
+              newduration   (- timeremaining timeinstate)
+              spawned-unit  (-> ent
+                                (assoc :cycletime cycletime)
+                                (u/initCycles tupdate)
+                                (u/add-dwell cycletime)
+                                (assoc :last-update tupdate)) ;;may not want to do this..
+              _             (reset! entity spawned-unit)
+              state-change {:newstate       nextstate
+                            :duration       timeremaining
+                            :followingstate nil
+                            :timeinstate timeinstate
+                            }
+              _             (debug [:nextstate nextstate :state-change state-change :current-state (:state ent)])          
+              ]
+          (->>  (assoc benv :state-change state-change
+                       :location-change {:from-location "Spawning"
+                                         :to-location   topos}
+                       :next-position   topos ;queue up a move...                 
+                       )
+                (log!  (core/msg "Spawning unit " (select-keys (u/summary spawned-unit)
+                                                               [:name :positionstate :positionpolicy :cycletime])))
+                (beval (->seq [(echo :change-state)
+                               change-state-beh
+                               (fn [benv]
+                                 (do (reset! ctx 
+                                             (supply/log-move! tupdate :spawning (:positionpolicy @entity) @entity @ctx))
+                                     (success benv)))]
+                              ))))))
 
 ;;we want to update the unit to its current point in time.  Basically, 
 ;;we are folding over the behavior tree, updating along the way by 

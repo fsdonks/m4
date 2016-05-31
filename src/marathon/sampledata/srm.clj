@@ -298,39 +298,39 @@ DemandRecord	TRUE	1	1	1	731	365	0	Plastic	Uniform	B	Meredith	35	SRM	32	Plastic C
 "Type	Enabled	Quantity	SRC	Component	OITitle	Name	Behavior	CycleTime	Policy	Tags	SpawnTime	Location	Position	Original	Strength	Remarks	Command	Origin	Duration
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MD_DA_C1	MD_DA_C1	TRUE	1		Goalie	KO	9999999
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MD_DA_C1	MD_DA_C1	TRUE	1		Goalie	HI	9999999
-SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	TX	510
+SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	TX	510
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	KS	R_C2	TRUE	1		Referee	KS	0
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	GA	R_C2	TRUE	1		Referee	GA	0
-SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	CA	9999999
-SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	NY	150
+SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	CA	9999999
+SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	NY	150
 SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	NC	PT_C4	TRUE	1		Referee	NC	0
-SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	KY	210
+SupplyRecord	TRUE	1	Binder	AC	TrapperKeeper	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	KY	210
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	PA	PB_C3	TRUE	1		Referee	PA	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	VA	R_C2	TRUE	1		Referee	VA	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	MN	PB_C3	TRUE	1		Referee	MN	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	KS	R_C2	TRUE	1		Referee	KS	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	ID	R_C2	TRUE	1		Referee	ID	0
-SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	IN	60
+SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	IN	60
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	CA	PB_C3	TRUE	1		Referee	CA	0
 SupplyRecord	TRUE	1	Binder	NG	TrapperKeeper	Auto	SRM	1	SRMRC13	Auto	0	NY	PB_C3	TRUE	1		Referee	NY	0
 SupplyRecord	TRUE	2	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	WA	R_C2	TRUE	1		Goalie	WA	0
 SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	AK	PB_C3	TRUE	1		Goalie	AK	0
-SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Coach	GER	120
+SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Coach	GER	120
 SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
 SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
-SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	CO	270
+SupplyRecord	TRUE	1	Rubber	AC	Rubber Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	CO	270
 SupplyRecord	TRUE	1	Rubber	NG	Rubber Cup	Auto	SRM	1	SRMRC	Auto	0	PA	PB_C3	TRUE	1		Referee	PA	0
 SupplyRecord	TRUE	1	Rubber	NG	Rubber Cup	Auto	SRM	1	SRMRC	Auto	0	WA	PB_C3	TRUE	1		Referee	WA	0
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	HI	PT_C4	TRUE	1		Goalie	HI	0
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	HI	R_C2	TRUE	1		Goalie	HI	0
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	CO	210
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	CO	210
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_DA_C1	MA_DA_C1	TRUE	1		Referee	GA	150
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	NY	30
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	NY	30
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NY	PT_C4	TRUE	1		Referee	NY	0
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	LA	60
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	LA	60
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	KY	PT_C4	TRUE	1		Referee	KY	0
-SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	KY	270
+SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	KY	270
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	KY	PB_C3	TRUE	1		Referee	KY	0
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	ITAL	R_C2	TRUE	1	Hybrid	Coach	ITAL	0
 SupplyRecord	TRUE	1	Plastic	AC	Plastic Cup	Auto	SRM	1	SRMAC	Auto	0	NC	R_C2	TRUE	1	Hybrid	Referee	NC	240
@@ -351,10 +351,10 @@ SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	WI	PT_C4	TRUE
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	LA	PT_C4	TRUE	1		Referee	LA	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	OR	PT_C4	TRUE	1		Referee	OR	0
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	VT	PT_C4	TRUE	1		Referee	VT	0
-SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	FL	60
+SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	FL	60
 SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	IA	R_C2	TRUE	1		Referee	IA	0
-SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	PA	240
-SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C1	MA_NDA_C1	TRUE	1		Referee	VA	0
+SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	PA	240
+SupplyRecord	TRUE	1	Plastic	NG	Plastic Cup	Auto	SRM	1	SRMRC	Auto	0	MA_NDA_C3	MA_NDA_C3	TRUE	1	Altered from C1 to C3	Referee	VA	0
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	PB_C3	TRUE	1		Referee	TX	0
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	TX	R_C2	TRUE	1		Referee	TX	0
 SupplyRecord	TRUE	1	Steel	AC	Steel Cup	Auto	SRM	1	SRMAC	Auto	0	MA_DA_C1	MA_DA_C1	TRUE	1		Referee	TX	150
