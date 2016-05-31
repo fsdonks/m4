@@ -561,7 +561,10 @@
 ;;assumption that we can eventually pass time in some behavior....
 (befn roll-forward-beh {:keys [entity deltat statedata] :as benv}
       (do (debug [:<<<<<<<<begin-roll-forward (:name @entity) :last-update (:last-update @entity)])
-          (cond (pos? deltat)
+          (cond (spawning? statedata) (->seq [spawning-beh
+                                              roll-forward-beh])
+                                       
+                (pos? deltat)
                 (loop [dt   deltat
                        benv benv]
                   (let [sd (:statedata    benv)            
@@ -580,8 +583,7 @@
                                    (val! res))
                            res)))
                      nil)))
-                (spawning? statedata)
-                spawning-beh
+
                 :else
                 update-state-beh)))
 
@@ -1285,7 +1287,9 @@
 ;;For any movement, we need to check to see if
 ;;there are effects or guidance associated with the
 ;;place we're moving to.  Some places tell us what
-;;to do, outside of our policy.  
+;;to do, outside of our policy.
+;;The only way we can get here is if there is a location-policy
+;;in the environment.  How does it get there?
 (befn location-based-beh {:keys [entity location-policy ctx] :as benv}
     (when-let [lp location-policy]
       (let [info (store/gete benv lp)
@@ -1330,8 +1334,9 @@
 
 (do (println [:setting-srm])
     (swap! base/behaviors assoc
-           "SRM"
-           srm-beh))
+           "SRM" roll-forward-beh ;same thing.
+           ;srm-beh
+           ))
 
 (comment ;OBE
 

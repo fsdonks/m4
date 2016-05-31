@@ -1168,10 +1168,13 @@ DefaultDemotionPolicy	Auto
          :SupplyRecords
          (s/read-schema :SupplyRecords broken-supply-records)))
 
-(defn get-sample-records [name]
-  (if (non-tables name) 
-    (get sample-tables name)
-    (tbl/record-seq (get sample-tables name))))
+(defn get-sample-records
+  ([name ts]
+   (if (non-tables name) 
+     (get ts name)
+     (tbl/record-seq (get ts name))))
+  ([name] (get-sample-records name sample-tables)))
+  
 
 
                         

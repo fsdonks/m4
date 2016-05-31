@@ -112,6 +112,16 @@
   ([SRC Vignette Operation Priority StartDay Duration] 
      (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"])))
 
+(def extra-fields
+  '[Command
+    Location
+    DemandType
+    Theater
+    BOG
+    StartState
+    EndState
+    MissionLength])
+
 ;;Could inline for speed, may be unnecessary...
 (defn create-demand   
   "Produces a validated demand from the inputs.  We enforce invariants about 
@@ -144,9 +154,19 @@
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
   [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
-           SourceFirst Quantity  OITitle Vignette Operation  DemandGroup] :as rec}]
-  (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
-                 SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup))
+           SourceFirst Quantity  OITitle Vignette Operation  DemandGroup
+           ] :as rec}]
+  (-> (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
+                     SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup)
+      ;this is a slightly hacked way to do it, but it's passable...
+      (merge (select-keys rec [:Command
+                               :Location
+                               :DemandType
+                               :Theater
+                               :BOG
+                               :StartState
+                               :EndState
+                               :MissionLength]))))
 
 
 ;;#Optimization: we can use reducers here instead of seqs.

@@ -676,7 +676,6 @@
 
 ;;We can probably combine these into a unit behavior.
 ;;For instance, notice we update the deployments.
-
 (defn  deploy-unit [unit newlocation t deployment-idx ctx] 
   (keep-bogging-until-depleted (increment-deployments unit) newlocation ctx))
 

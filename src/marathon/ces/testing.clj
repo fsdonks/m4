@@ -262,10 +262,14 @@
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]  
-  (r/take-while identity (r/iterate (fn [ctx] 
-                                      (when  (engine/keep-simulating? ctx)
-                                        (sim/advance-time
-                                         (stepf (sim/get-time ctx) ctx))))
+  (r/take-while identity (r/iterate (fn [ctx]
+                                       (when  (engine/keep-simulating? ctx)
+                                          (let [init ctx
+                                                t  (sim/get-time ctx)
+                                                processed  (stepf t  ctx)
+                                                nxt        (sim/advance-time processed)]
+                                            (with-meta nxt {t {:start init
+                                                               :end processed}}))))
                                     init)))
 ;;A wrapper for an abstract simulation.  Can produce a sequence of
 ;;simulation states; reducible.
@@ -276,8 +280,12 @@
       (seq [this]  
         (take-while identity (iterate (fn [ctx] 
                                         (when  (engine/keep-simulating? ctx)
-                                          (sim/advance-time
-                                           (stepf (sim/get-time ctx) ctx))))
+                                          (let [init ctx
+                                                t  (sim/get-time ctx)
+                                                processed  (stepf t  ctx)
+                                                nxt        (sim/advance-time processed)]
+                                            (with-meta nxt {t {:start init
+                                                               :end processed}}))))
                                       seed)))
       clojure.core.protocols/CollReduce
       (coll-reduce [this f1]   (reduce f1 simred))
@@ -289,6 +297,9 @@
        (map (fn [ctx] [(core/get-time ctx) ctx]))
        (take-while #(<= (first %) tfinal))
        (into {})))
+
+(defn ending [h t] (get (meta (get h t) :end)))
+(defn start  [h t] (get (meta (get h t) :start)))
 
 (def demand-sim (->simulator demand-step defaultctx))
 (def the-unit    "4_SRC1_AC")
@@ -706,12 +717,13 @@
 ;;We should be able to load up our srm tables and get a context.
 
 (comment
-(def srmctx
-  (->> (setup/simstate-from  sd/srm-tables core/debugsim)
-       (sim/add-time 1)))
+  (def srmctx
+    (binding [marathon.ces.unit/*uic* "40_Plastic_AC"]
+      (->> (setup/simstate-from  sd/srm-tables core/debugsim)
+           (sim/add-time 1))))
 
-(def srm0
-  (->  (->history 0 ;(debugging-on #{451
+(def srm1
+  (->  (->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -720,7 +732,22 @@
                    ;              1051})
                  engine/sim-step
                  srmctx)
-       (get 0)))
+       (get 1)))
+
+(def srm1nofill
+  (->> srmctx
+         (engine/begin-day        0)  ;Trigger beginning-of-day logic and notifications.
+         (supply/manage-supply    0)  ;Update unit positions and policies.
+         (policy/manage-policies  0)  ;Apply policy changes, possibly affecting supply.
+         (demand/manage-demands   0)  ;Activate/DeActiveate demands, handle affected units.         
+         (filld/fill-demands      0)  ;Try to fill unfilled demands in priority order.
+         (supply/manage-followons 0)  ;Resets unused units from follow-on status. 
+         (engine/end-day 0)           ;End of day logic and notifications.
+         (sim/advance-time)           
+         (engine/begin-day        1)  ;Trigger beginning-of-day logic and notifications.
+         (supply/manage-supply    1)  ;Update unit positions and policies.
+         (demand/manage-demands   1)  ;Activate/DeActiveate demands, handle affected units.         
+         ))
 
 (def srm1
   (->  (->history 1 ;(debugging-on #{451
