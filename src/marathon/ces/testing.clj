@@ -39,6 +39,14 @@
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]))
 
+;;Some of our output is pretty 'uge, and trying to
+;;print it all out kills emacs.
+;;So we'll restrict our error messages for now...
+
+
+(set! *print-level* 5)
+(set! *print-length* 100)
+
 ;;Testing for the core Engine Infrastructure
 ;;==========================================
 
@@ -701,6 +709,19 @@
 (def srmctx
   (->> (setup/simstate-from  sd/srm-tables core/debugsim)
        (sim/add-time 1)))
+
+(def srm0
+  (->  (->history 0 ;(debugging-on #{451
+                  ;               467
+                   ;              523
+                   ;              563
+                   ;              595
+                   ;              963
+                   ;              1051})
+                 engine/sim-step
+                 srmctx)
+       (get 0)))
+
 (def srm1
   (->  (->history 1 ;(debugging-on #{451
                   ;               467

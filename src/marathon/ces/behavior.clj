@@ -186,18 +186,32 @@
           res
           (throw (Exception. (str [:dont-know-following-position position]))))))
 
-(defn policy-wait-time [policy statedata position deltat]
-  (cond (identical? position :recovery)
-        0  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.
-        (identical? position :recovered)
-        0
-        :else
-       (let [frompos  (get-next-position policy position)
-             topos    (get-next-position policy frompos)]
-         (if-let [t (protocols/transfer-time policy frompos topos)]
-           (- t (- deltat (fsm/remaining statedata)))
-           (throw (Exception. (str [:undefined-transfer position]))) ;if it's not defined in policy...instant?
-      ))))
+(defn policy-wait-time
+  ([policy statedata position deltat]
+   (cond (identical? position :recovery)
+         0  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.
+         (identical? position :recovered)
+         0
+         :else
+         (let [frompos  (get-next-position policy position)
+               topos    (get-next-position policy frompos)]
+           (if-let [t (protocols/transfer-time policy frompos topos)]
+             (- t (- deltat (fsm/remaining statedata)))
+             (throw (Exception. (str [:undefined-transfer position]))) ;if it's not defined in policy...instant?
+             )))
+   )
+  ;;weak, I just copied this down.  Ugh.
+  ([policy position]
+   (cond (identical? position :recovery)
+         0  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.
+         (identical? position :recovered)
+         0
+         :else
+         (let [frompos  (get-next-position policy position)
+               topos    (get-next-position policy frompos)]
+           (if-let [t (protocols/transfer-time policy frompos topos)]
+             t
+             (throw (Exception. (str [:undefined-transfer position]))))))))
 
 ;(def instants #{:abrupt-withdraw})
 
@@ -426,18 +440,26 @@
 
 (def change-state-beh (->seq [(echo :<change-state-beh>)
                               change-state-beh!]))
-
+;;Aux function to compute our state change during spawn.
+;;Setting up initial conditions is  a PITA, particularly
+;;since it's possible that some of the input data is
+;;intentionally empty or zeroed out.  This helps set up
+;;the bread-n-butter wait time as a function of the
+;;spawning information, if any, the entity's policy, and
+;;the proposed position for the entity.
 (defn compute-state-stats [entity cycletime policy positionpolicy]
-  (let [duration (:duration (:spawn-info @entity))
+  (let [duration (:duration (:spawn-info @entity)) ;;duration may be 0.
+        ;;if so, we check policy to see if we should be waiting more than 0.
+        duration (if (and duration (zero? duration))
+                   (do (debug [:deriving-duration (:name @entity) positionpolicy])
+                       (policy-wait-time policy positionpolicy)) ;derive from policy.
+                   duration)
         ;;If the position is not in the policy, then we need to
         ;;find a way to compute the duration.
         ;;If we have spawn-info, then we have duration...
         position-time (if duration ;prescribed.
                         0
                         (position->time  policy positionpolicy))
-        _             (println
-                       {:cycletime cycletime :positiontime position-time
-                              :topos topos :frompos positionpolicy})
         ;;We're running into problems here....the positionpolicy 
         cycletime     (if (< cycletime position-time)
                         position-time
@@ -498,33 +520,24 @@
                       timeremaining
                       cycletime
                       position-time]}
-                    (compute-state-stats entity cycletime policy positionpolicy)
-             ;;  ;timeinstate also subject to spawn-info....
-             ;;  timeinstate   (if (:duration (:spawn-info @entity))
-             ;;                  0
-             ;;                  (non-neg! "timeinstate" (- cycletime position-time)))
-             ;; ;timeremaining is subject to spawn info.
-             ;;  timeremaining (or (:duration (:spawn-info @entity)) ;this should keep us from bombing out...
-             ;;                    (protocols/transfer-time policy
-             ;;                                             positionpolicy 
-             ;;                                             (protocols/next-position policy positionpolicy)))
-              newduration   (- timeremaining timeinstate)
+                 (compute-state-stats entity cycletime policy positionpolicy)
               spawned-unit  (-> ent
                                 (assoc :cycletime cycletime)
                                 (u/initCycles tupdate)
                                 (u/add-dwell cycletime)
                                 (assoc :last-update tupdate)) ;;may not want to do this..
               _             (reset! entity spawned-unit)
-              state-change {:newstate       nextstate
-                            :duration       timeremaining
-                            :followingstate nil
-                            :timeinstate timeinstate
-                            }
+              state-change  {:newstate       nextstate
+                             :duration       timeremaining
+                             :followingstate nil
+                             :timeinstate timeinstate
+                             }
               _             (debug [:nextstate nextstate :state-change state-change :current-state (:state ent)])          
               ]
           (->>  (assoc benv :state-change state-change
                        :location-change {:from-location "Spawning"
-                                         :to-location   topos}
+                                         :to-location   (or (:location (:spawn-info ent))
+                                                            topos)}
                        :next-position   topos ;queue up a move...                 
                        )
                 (log!  (core/msg "Spawning unit " (select-keys (u/summary spawned-unit)
@@ -545,7 +558,7 @@
 ;;deltat = 0 in the context.  Note, this is predicated on the
 ;;assumption that we can eventually pass time in some behavior....
 (befn roll-forward-beh {:keys [entity deltat statedata] :as benv}
-      (do (debug [:>>>>>begin-roll-forward (:name @entity) :last-update (:last-update @entity)])
+      (do (debug [:<<<<<<<<begin-roll-forward (:name @entity) :last-update (:last-update @entity)])
           (cond (pos? deltat)
                 (loop [dt   deltat
                        benv benv]

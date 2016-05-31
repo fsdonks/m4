@@ -31,13 +31,13 @@
 ;;So, we could pass the unit, the message, and context into the behavior
 ;;function.  Wrap the crap here...
 (defn unit-update [e ctx]
-  (let [_     (spork.ai.core/debug [:<<<<<<<<<<<<<<<Begin-Update (:name e) (:last-update e)])
+  (let [_     (spork.ai.core/debug [:>>>>>>>>>>Begin-Update (:name e) (:last-update e)])
         res  (core/handle-message! ctx e
                                    (core/->msg (:name e) (:name e)
                                                (core/get-time ctx)
                                                :update
                                                nil))]
-    (spork.ai.core/debug [:>>>>>>>>End-Update (:name e) (store/gete res (:name e) :last-update)])
+    (spork.ai.core/debug [:<<<<<<<<<<End-Update (:name e) (store/gete res (:name e) :last-update)])
     res))
 
 ;(def update unit-update)
