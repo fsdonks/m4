@@ -273,15 +273,30 @@
 
 (def restricted-categories #{"SRM" :SRM})
 
+;;Ensures that we only allow StartStates
+;;that exist in the unit's policy....
+(defn knows-state [st]
+  (fn [u]
+     (protocols/get-state (:policy u) st)))
+      
+
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
-(defn demand->rule [d] 
-  {:src  (get d :src)
-   :cat  (let [c (get d :category :default)]
-           (if (restricted-categories c) c
-               :default))
-   :name (get d :name)
-   :order-by (resolve-source-first (get d :source-first "uniform"))
-   :required (d/required d)})
+(defn demand->rule [d]
+  (let [category (let [c (get d :category :default)]
+                   (if (restricted-categories c) c
+                       :default))
+        r
+        {:src  (get d :src)
+         :cat  category
+         :name (get d :name)
+         :order-by (resolve-source-first (get d :source-first "uniform"))
+         :required (d/required d)
+         }]
+    (if  (or (= category :default) (nil? (:StartState d)))
+      r
+      ;;we have a preference for startstate...
+      (assoc r :where  (knows-state (:StartState d))))))
+      
 
 ;;##Finding and Ordering Supply  
 
