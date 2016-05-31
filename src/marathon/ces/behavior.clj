@@ -525,7 +525,9 @@
                                 (assoc :cycletime cycletime)
                                 (u/initCycles tupdate)
                                 (u/add-dwell cycletime)
-                                (assoc :last-update tupdate)) ;;may not want to do this..
+                                (assoc :last-update tupdate)
+                                (dissoc :spawn-info) ;eliminate spawning data.
+                                ) ;;may not want to do this..
               _             (reset! entity spawned-unit)
               state-change  {:newstate       nextstate
                              :duration       timeremaining
@@ -1258,7 +1260,6 @@
 (do (println [:setting-defaults])
     (reset! base/default-behavior roll-forward-beh))
 
-
 ;;SRM bs...
 ;;SRM takes a different view of unit behavior.
 ;;Most importantly, for AC units (and deploying RC units),
@@ -1308,17 +1309,29 @@
                            :wait-time     (- MissionLength Overlap)
                            :next-position StartState))))))
 
-(befn srm-spawning-beh {:keys [entity ctx] :as benv}      
-      (echo [:srm-spawning]))
+;;All our behavior does right now is spawn...
+;;The only other changes we need to make are to alter how we deploy entities...
+;;We can actually handle that outside of the unit's deployment....
+;;Possibly include it as a message type...
+;;Have a special message handler for it...
+;;[genius]
+
+;;If we have an location-based-policy to apply, we can
+;;tell the unit via messaging...
+;;We typically tell the unit form outside, after we've
+;;set it up and everything...
 
 ;;SRM behavior overrides some functionality for the base behavior.
 (befn srm-beh []
       spawning-beh
+      
       ;(throw (Exception. (str "SRM Behavior doesn't do anything!")))
       )
 
 (do (println [:setting-srm])
-    (swap! base/behaviors assoc "SRM" srm-beh))
+    (swap! base/behaviors assoc
+           "SRM"
+           srm-beh))
 
 (comment ;OBE
 
