@@ -1156,7 +1156,7 @@
          ;;altering behavior due to demands.
          :location-based-move         
          (beval location-based-beh 
-                (assoc benv  :location-based-info        (:data msg)))
+                (assoc benv  :location-based-info (:data msg)))
          ;;allow the entity to change its behavior.
          :become (push! entity :behavior (:data msg))
          :do     (->do (:data msg))
@@ -1279,6 +1279,18 @@
 (do (println [:setting-defaults])
     (reset! base/default-behavior roll-forward-beh))
 
+;;aux function to help us add a breadcrumb for
+;;the location-based behavior updates.
+;;Some locations have overlap.  If so, we look for this
+;;to see if the move is prescribed.  We store this as a
+;;component in the entity.
+(defn prescribe-overlap! [benv {:keys [t overlap state] :as m}]
+  (if (and overlap (pos? overlap))
+    (let [entity (:entity benv)]
+      (do (swap! entity  assoc :prescribed-overlap m)
+          benv))
+    benv))
+  
 ;;SRM bs...
 ;;SRM takes a different view of unit behavior.
 ;;Most importantly, for AC units (and deploying RC units),
@@ -1321,28 +1333,37 @@
          ;;we need to schedule a state change.
           ;;and a location-change...
           _ (swap! entity assoc :location-behavior true)
+          followingstate  (if (pos? overlap)
+                            (conj newstate :overlapping)
+                            EndState)
           state-change {:newstate       newstate
                         :duration       (- MissionLength  overlap)
-                        :followingstate (if (pos? overlap)
-                                          (conj newstate :overlapping)
-                                          EndState)
+                        :followingstate followingstate
                         :timeinstate    (or timeinstate 0)}          
           location-change  {:from-location  (:locationname @entity)
                             :to-location     name}
+          ;;add the ability to check for prescribed moves...
+          ;;if the demand prescribes one, then we go ahead and schedule it with
+          ;;the entity...                               
           wt           (- MissionLength overlap)
-          _ (println [:location-based
-                      {:name (:name @entity)
-                       :state-change state-change
-                       :location-change location-change
-                       :wait-time wt
-                       :next-position StartState}])
+          _  (println [:location-based
+                       {:name (:name @entity)
+                        :state-change state-change
+                        :location-change location-change
+                        :wait-time wt
+                        :next-position StartState}])
           ]
           (beval  change-state-beh
-            (assoc benv
-                   :state-change state-change                          
-                   :location-change location-change                   
-                   :wait-time     wt
-                   :next-position StartState)))))
+                  (-> benv
+                      (prescribe-overlap! (when (pos? overlap)
+                                            {:t (+ (:tupdate benv) overlap)
+                                             :overlap overlap
+                                             :state followingstate}))                                             
+                      (assoc 
+                       :state-change state-change                          
+                       :location-change location-change                   
+                       :wait-time     wt
+                       :next-position StartState))))))
 
 ;;All our behavior does right now is spawn...
 ;;The only other changes we need to make are to alter how we deploy entities...
