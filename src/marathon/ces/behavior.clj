@@ -1102,6 +1102,8 @@
 ;;so now we can handle changing state and friends.
 ;;we can define a response-map, ala compojure and friends.
 
+;;Temporary hack..I'd like to repl
+(declare location-based-beh)
 ;;type sig:: msg -> benv/Associative -> benv/Associative
 ;;this gets called a lot.
 (defn message-handler [msg ^behaviorenv benv]
