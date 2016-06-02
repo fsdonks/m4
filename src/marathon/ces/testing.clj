@@ -719,9 +719,8 @@
 
 (comment
   (def srmctx
-    (binding [marathon.ces.unit/*uic* "40_Plastic_AC"]
       (->> (setup/simstate-from  sd/srm-tables core/debugsim)
-           (sim/add-time 1))))
+           (sim/add-time 1)))
 
 (def srm1
   (->  (->history 1 ;(debugging-on #{451

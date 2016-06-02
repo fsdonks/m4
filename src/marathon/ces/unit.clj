@@ -425,7 +425,7 @@
                                               {:newstate newstate
                                                :deltat deltat
                                                :duration duration
-                                               })))
+                                               }))))
     (core/handle-message! ctx entity
                           (core/->msg (:name entity) (:name entity)
                                       (core/get-time ctx)
@@ -433,7 +433,7 @@
                                       {:newstate newstate
                                        :deltat deltat
                                        :duration duration
-                                       }))))
+                                       })))
 
 ;;instructs the entity to execute a logical move; possibly changing
 ;;the physical location, and changing the state.

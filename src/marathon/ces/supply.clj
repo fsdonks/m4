@@ -489,6 +489,8 @@
       (->> (spawning-unit! unit ctx)
            (update-deployability supply unit nil nil)))))
 
+(defn create-unit [& args]
+  (throw (Exception. "create-unit is a stub....")))
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
 (defn new-unit [supplystore parameters policystore behaviors name src title 

@@ -85,14 +85,18 @@
           _ (reset! args benv)]
       benv))
 
+(def ^:dynamic *observed* nil)
+
 ;;immediate steps happen with no time-delta.
 ;;like ai/step-entity!, we should find a way to reuse it.
 (defn step-entity!
   ([ctx e msg default]
-   (let [^behaviorenv benv (->benv ctx e msg default)
-        _    (ai/debug [:stepping (:name e) :last-update (:last-update e)  msg])]
-    (-> (beval (.behavior benv) benv)
-        (return!)
-        (ai/commit-entity-))))
+   ;;TODO Check this for performance hits...
+   (binding [spork.ai.core/*debug* (or spork.ai.core/*debug*  (= (:name e) *observed*))]
+     (let [^behaviorenv benv (->benv ctx e msg default)
+           _    (ai/debug [:stepping (:name e) :last-update (:last-update e)  msg])]
+       (-> (beval (.behavior benv) benv)
+           (return!)
+           (ai/commit-entity-)))))
   ([ctx e msg] (step-entity! ctx e msg @default-behavior)))
 

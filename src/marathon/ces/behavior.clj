@@ -249,6 +249,7 @@
          spawning-beh
 ;         age-unit
          moving-beh
+         process-messages-beh
          )
 
 ;;API
@@ -558,6 +559,10 @@
                                      (success benv)))]
                               ))))))
 
+;;While we're rolling, we want to suspend message processing.
+;;We can do this by, at the outer level, dissocing the messages...
+;;or, associng a directive to disable message processing...
+
 ;;we want to update the unit to its current point in time.  Basically, 
 ;;we are folding over the behavior tree, updating along the way by 
 ;;modifying the context.  One of the bits of context we're modifying 
@@ -570,7 +575,7 @@
           (cond (spawning? statedata) (->seq [spawning-beh
                                               roll-forward-beh])
                                        
-                (pos? deltat)
+                (pos? deltat)                
                 (loop [dt   deltat
                        benv benv]
                   (let [sd (:statedata    benv)            
@@ -580,8 +585,14 @@
                         ]
                     (if-y 
                      (if (<= dt timeleft)
-                       (do (debug [:dt<=timeleft :updating-for dt])               
-                           (beval update-state-beh (assoc benv :deltat dt)))
+                       (do (debug [:dt<=timeleft :updating-for dt])
+                           ;;this is intended to be the last update...
+                           ;;as if we're send the unit an update message
+                           ;;for the last amount of time...
+                           
+                           (beval (->seq [update-state-beh
+                                          process-messages-beh]) ;we  suspend message processing until we're current.
+                                  (assoc benv :deltat dt)))
                        (let [residual   (max (- dt timeleft) 0)
                              res        (beval update-state-beh (assoc benv  :deltat timeleft))]
                          (if (success? res) 
@@ -591,7 +602,8 @@
                      nil)))
 
                 :else
-                update-state-beh)))
+                (->seq [update-state-beh
+                        process-messages-beh]))))
 
 ;;So, at the high level, we have a simple behavior that checks to see
 ;;if it can move, finds where to move to, starts the process of
@@ -1102,7 +1114,7 @@
 ;;so now we can handle changing state and friends.
 ;;we can define a response-map, ala compojure and friends.
 
-;;Temporary hack..I'd like to repl
+;;Temporary hack..
 (declare location-based-beh)
 ;;type sig:: msg -> benv/Associative -> benv/Associative
 ;;this gets called a lot.
@@ -1132,16 +1144,19 @@
          :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
                    (do (success benv)) ;entity is current
                    (->and [(echo :update)
-                           roll-forward-beh]))
+                                        ;roll-forward-beh ;;See if we can replace this with update-state...
+                           update-state-beh
+                           
+                           ]))
          :spawn  (->and [(echo :spawn)
                          (push! entity :state :spawning)                        
                          spawning-beh]
                         )
          ;;Allow the entity to apply location-based information to its movement, specifically
          ;;altering behavior due to demands.
-         :location-based-move
+         :location-based-move         
          (beval location-based-beh 
-           (assoc benv  :location-based-info        (:data msg)))
+                (assoc benv  :location-based-info        (:data msg)))
          ;;allow the entity to change its behavior.
          :become (push! entity :behavior (:data msg))
          :do     (->do (:data msg))
@@ -1184,13 +1199,15 @@
       (let [e @entity]
         (echo [:up-to-date (:name e) :cycletime (:cycletime e)])))
 
+(def process-messages-beh
+  (->or [(->and [(echo :check-messages)
+                         check-messages
+                         handle-messages])
+                 (echo :no-messages)]))
 ;;The root behavior for updating the entity.
 (def update-state-beh
   (->seq [(echo :<update-state-beh>)
-          (->or [(->and [(echo :check-messages)
-                         check-messages
-                         handle-messages])
-                 (echo :no-messages)])
+         ; process-messages-beh
           (->or [special-state
                  (->seq [(echo :<do-current-state>)
                          do-current-state
@@ -1201,19 +1218,6 @@
                             (fail ctx)))])
                  up-to-date])]))
 
-;;#revisit the need for this....
-(def lite-update-state-beh
-  (->seq [(echo :<lite-state-beh>)
-          (->or [special-state
-                 (->seq [(echo :<do-current-state>)
-                         do-current-state
-                         (echo :global-state)
-                         (fn [ctx]
-                           (if-y 
-                            global-state
-                            (fail ctx)))])
-                   up-to-date])]))
-                  
 ;;if we have a message, and the message indicates
 ;;a time delta, we should wait the amount of time
 ;;the delta indicates.  Waiting induces a change in the
