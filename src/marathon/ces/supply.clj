@@ -5,9 +5,9 @@
 (ns marathon.ces.supply
   (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.ces [missing :as missing]
-                          [core :as core] [policy :as policy] 
-             [unit :as u]]
+            [marathon.ces    [core :as core]
+                             [policy :as policy] 
+                             [unit :as u]]
             [marathon.data.protocols :as protocols]
             [spork.entitysystem.store :as store
              :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
@@ -199,13 +199,6 @@
 ;----FOREIGN -> THESE SHOULD BE MOVED, THEY'RE MORE GENERAL.....
 (defn conj-policy [unit policy] (update-in unit [:policy-queue] conj policy))
 
-;came from OpFactory..
-(defn create-unit [name src title component cycletime policy-id 
-                    parameters policystore & [behavior]]
-  (let [p (missing/choose-policy policy-id component parameters policystore src)]
-    (-> {:name name :src src  :oi-title title :component component 
-         :behavior behavior   :cycletime cycletime :policy p}
-        (udata/map->unitdata))))
 ;----------END FOREIGN------
 
 

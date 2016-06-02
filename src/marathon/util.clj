@@ -159,6 +159,16 @@
     (spit path 
           (xgml-graph g))))
 
+(defn flip-graph [g]
+  (graph/add-arcs
+   graph/empty-graph
+   (for [[from to w] (graph/arc-seq g)]
+     [to from w])))
+
+(defn callers [g target]
+  
+   (graph/subgraph (flip-graph  g) target))
+
 (defn subproject->xgml [path rootns filterf]
   (let [g   (graph/subgraph (project->graph) rootns)
         dropped (filter (complement filterf) (graph/get-node-labels g))
@@ -168,7 +178,13 @@
           (xgml-graph g))))
 
 
-    
+(defn callgraph [path rootns]
+  (let [g   (callers (project->graph) rootns)
+;        dropped (filter (complement filterf) (graph/get-node-labels g))
+;        g (graph/drop-nodes g dropped)
+        nds (graph/nodes  g)]
+    (spit path 
+          (xgml-graph g))))
                              
 
     

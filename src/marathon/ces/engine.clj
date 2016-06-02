@@ -22,8 +22,7 @@
 ;primary function, __event-step-marathon__, prescribes the order of application 
 ;;of each logical subsystem. 
 (ns marathon.ces.engine
-  (:require [marathon.ces.missing] 
-            [marathon.ces.core   :as core :refer [now]]           
+  (:require [marathon.ces.core   :as core :refer [now]]           
             [marathon.ces.supply :as supply :refer [manage-supply manage-followons update-all]]
             [marathon.ces.demand :as demand :refer [manage-demands manage-changed-demands]]
             [marathon.ces.fill.demand       :refer [fill-demands]]

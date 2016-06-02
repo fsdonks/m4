@@ -13,8 +13,7 @@
 ;;the vast majority are defined as a consequence of
 ;;working with actual data.
 (ns marathon.ces.testing
-  (:require [marathon.ces.missing] 
-            [marathon.ces [engine  :as engine  :refer :all]]
+  (:require [marathon.ces [engine  :as engine  :refer :all]]
             [marathon.ces [fill  :as fill]]
             [marathon.ces [core :as core]
                           [supply :as supply]
