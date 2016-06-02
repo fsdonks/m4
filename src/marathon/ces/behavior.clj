@@ -696,23 +696,47 @@
              ))
           ))))
 
+(def movekeys #{:position-change
+                :state-change
+                :location-change})
+
+(befn prescribed-move->statechange {:keys [prescribed-move tupdate] :as benv}
+      (when prescribed-move
+          (success (reduce-kv (fn [acc k v]
+                               (if v (assoc acc k v) acc))
+                             (assoc benv :prescribed-move nil) prescribed-move)
+        )))
+
+
+(defn prescribed? [e tupdate]
+  (when-let [pm (:prescribed-move @e)]
+    (== (:t pm) tupdate)))
+
 ;;This hooks us up with a next-position and a wait-time
-;;going forward.
-(befn find-move ^behaviorenv {:keys [entity next-position wait-time] :as benv}      
-  (let [e  @entity
-        currentpos (:positionpolicy e)
-        _ (when (= currentpos :re-entry)  (println (:tupdate benv)))
-        p  (or next-position
-               (do (debug [:computing-position currentpos])
-                   (get-next-position (:policy e)  currentpos)))                   
-        wt (if (and next-position wait-time) wait-time
-               (do (debug [:computing-wait (:positionpolicy e)])
-                   (get-wait-time @entity (:positionpolicy e) benv)))
-        _ (debug [:found-move {:next-position p :wait-time wt}])]
-    (bind!! {:next-position  p
-             :wait-time      wt
-             }  ;;have a move scheduled...
-            )))
+;;going forward.  We also now allow prescribed moves to
+;;be set, for things like location-specific policies..
+(befn find-move ^behaviorenv {:keys [entity next-position wait-time tupdate] :as benv}
+      (if  (prescribed? entity tupdate)
+        ;;we have a move set up..
+        (let [pm (:prescribed-move @entity)
+               _ (println [:found-prescribed-move pm])]
+               (do (swap! entity dissoc :prescribed-move)
+                   (bind!! {:prescribed-move pm})))
+        ;;let's derive a move...
+        (let [e  @entity                
+              currentpos (:positionpolicy e)
+              _  (when (= currentpos :re-entry)  (println (:tupdate benv)))
+              p  (or next-position
+                     (do (debug [:computing-position currentpos])
+                         (get-next-position (:policy e)  currentpos)))                   
+              wt (if (and next-position wait-time) wait-time
+                     (do (debug [:computing-wait (:positionpolicy e)])
+                         (get-wait-time @entity (:positionpolicy e) benv)))
+              _ (debug [:found-move {:next-position p :wait-time wt}])]
+          (bind!! {:next-position  p
+                   :wait-time      wt
+                   }  ;;have a move scheduled...
+                  ))))
 
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
@@ -789,7 +813,7 @@
       (when position-change
         (let [{:keys [to-position from-position]}   position-change
               res   (cond (identical? to-position   :overlapping)   true
-                          (identical? from-position :overlapping)   false
+                          (identical? from-position :overlapping)   false                          
                           :else :none)]
           (when (not (identical? res :none)) ;ugh?
             (do (swap! ctx ;;update the context...
@@ -836,7 +860,7 @@
 ;;in the process.
 (def execute-move
   (->seq [(echo :<move->statechange>)
-          move->statechange
+          (->or [prescribed-move->statechange move->statechange])
           (echo :<change-position>)
           change-position
           (echo :<change-location>)
@@ -845,6 +869,7 @@
           (echo :waiting)
           wait
           ]))
+
 
 ;;Movement is pretty straightforward: find a place to go, determine 
 ;;any changes necessary to "get" there, apply the changes, wait 
@@ -1284,10 +1309,18 @@
 ;;Some locations have overlap.  If so, we look for this
 ;;to see if the move is prescribed.  We store this as a
 ;;component in the entity.
-(defn prescribe-overlap! [benv {:keys [t overlap state] :as m}]
+(defn prescribe-overlap! [benv t overlap state]
   (if (and overlap (pos? overlap))
     (let [entity (:entity benv)]
-      (do (swap! entity  assoc :prescribed-overlap m)
+      (do (println [:prescribing-overlap (:name @entity)  overlap t])
+           (swap! entity  assoc :prescribed-move
+                 {:state-change
+                  {:newstate       state
+                   :duration       overlap
+                   :followingstate nil
+                   :timeinstate    0}
+                  :t t}
+                 )
           benv))
     benv))
   
@@ -1355,10 +1388,9 @@
           ]
           (beval  change-state-beh
                   (-> benv
-                      (prescribe-overlap! (when (pos? overlap)
-                                            {:t (+ (:tupdate benv) overlap)
-                                             :overlap overlap
-                                             :state followingstate}))                                             
+                      (prescribe-overlap!  (+ (:tupdate benv) wt)
+                                           overlap
+                                           followingstate)
                       (assoc 
                        :state-change state-change                          
                        :location-change location-change                   
