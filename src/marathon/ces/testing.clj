@@ -631,14 +631,13 @@
                         (->history 1000 engine/sim-step
                                    defaultctx))
 
-;;We get all the way to the end without any exceptions...
-(def h2521
-  (->history 2521 engine/sim-step 
-             defaultctx))
-
-
-
 )
+
+(deftest vanilla-sim
+  (let [h2521  (->history 2521 engine/sim-step 
+                          defaultctx)]
+    ))
+    
 
 
 ;;__Scoping tests__
@@ -675,8 +674,12 @@
          (demand/manage-changed-demands day))))
 )
 
-(def followontest
-  (->history 1100 ;(debugging-on #{451
+;;we need to verify that overlap is working...
+;;we should be able to see overlapping relations...
+
+;;Should get through 
+(deftest followontest
+  (let [ft  (->history 1100 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -684,11 +687,12 @@
                    ;              963
                    ;              1051})
                  engine/sim-step
-             followonctx))
+                 followonctx)]
+    ))
 
-;;dumb sampler...probably migrate this to
-;;use spork.trends sampling.
-(defn ->location-samples [h]
+
+
+(defn ->collect-samples [f h]
   (let [ks    (sort (keys h))
         pairs (partition 2 1 ks)]
     (into (vec (apply concat
@@ -697,8 +701,13 @@
                                    (let [ctx (get h l)]
                                      ;;sample in between...
                                      (for [t (range l r)]
-                                       (core/locations t ctx))))))))
-          (core/locations (last ks) (get h (last ks))))))
+                                       (f t ctx))))))))
+          (f (last ks) (get h (last ks))))))
+
+;;dumb sampler...probably migrate this to
+;;use spork.trends sampling.
+(defn ->location-samples [h]  (->collect-samples core/location h))
+(defn ->deployment-samples [h]  (->collect-samples core/deployments h))
 
 ;; (defn ->fills [h]
 ;;     (let [ks    (sort (keys h))
@@ -773,7 +782,6 @@
                    ;              1051})
                  simple-step
                  srmctx))
-
 (def srm1
   (->  (->history 1 ;(debugging-on #{451
                   ;               467
@@ -796,8 +804,7 @@
                    ;              1051})
                  engine/sim-step
                  srmctx))
-
-;;Our problem now is getting units registered as deployable in srm...
+;;Our problem now is getting unts registered as deployable in srm...
 ;;Rather than registering themselves as merely deployable,
 ;;they can register as srm-deployable.
 ;;Since they use a different behavior, we can override

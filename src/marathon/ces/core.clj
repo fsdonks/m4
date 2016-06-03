@@ -129,24 +129,12 @@
     (for [id  (keys (:unitmap   (get-supplystore ctx)))]
       (get-entity ctx id)))
 
-;;This is a pretty useful deployment query....
-(defn deployments [ctx]
-  (->> (get-demandstore ctx)
-       (:activedemands)
-       (keys)
-       (map #(store/get-entity ctx %))
-       (map (fn [d] {:name        (:name d)
-                     :assigned    (keys (:units-assigned d))
-                     :overlapping (keys (:units-overlapping d))
-                     :quantity    (:quantity d)
-                     :filled      (count (:units-assigned d))
-                     :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}))
-       ))
+
 ;;Wow...this is really really easy to do now....constructing queries on the
 ;;entity store is nice...
 (defn locations
   ([t ctx]
-   (->> (store/only-entities ctx [:name :locationname :location :positionpolicy])
+   (->> (store/only-entities ctx [:name :locationname :location :positionpolicy :src])
         (into [] (map #(assoc % :t t)))))
   ([ctx] (locations  (sim/get-time ctx) ctx)))
 
@@ -158,6 +146,25 @@
                              (map #(assoc % :t t))
                              )))))
   ([ctx] (fills  (sim/get-time ctx) ctx)))
+
+;;This is a pretty useful deployment query....
+(defn deployments
+  ([t ctx]
+   (->> (get-demandstore ctx)
+        (:activedemands)
+        (keys)
+        (map #(store/get-entity ctx %))
+        (map (fn [d] {:t t
+                      :name        (:name d)
+                      :src         (:src d)
+                      :assigned    (keys (:units-assigned d))
+                      :overlapping (keys (:units-overlapping d))
+                      :quantity    (:quantity d)
+                      :filled      (count (:units-assigned d))
+                      :unfilled    (- (:quantity d) (count (:units-assigned d)))
+                      :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}
+               ))))
+  ([ctx]  (deployments (sim/get-time ctx) ctx)))
 
 (defn location-table [ctx]
   (let [t (sim/get-time ctx)]
@@ -273,6 +280,9 @@
   `(binding [~'marathon.ces.core/*debug* true
              ~'spork.ai.core/*debug* true]
      ~@expr))
+(defmacro debug-entity [name & expr]
+  `(binding [~'marathon.ces.basebehavior/*observed* ~name]
+    ~@expr))
 
 (defmacro ignoring [es & expr]
   `(binding [~'marathon.ces.core/*ignored*  (into ~'marathon.ces.core/*ignored* ~es)]

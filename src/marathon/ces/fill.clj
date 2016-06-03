@@ -275,10 +275,9 @@
 
 ;;Ensures that we only allow StartStates
 ;;that exist in the unit's policy....
-(defn knows-state [st]
+(defn has-transition? [st]
   (fn [u]
-     (protocols/get-state (:policy u) st)))
-      
+    (protocols/next-position (:policy u) st)))      
 
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
 (defn demand->rule [d]
@@ -295,7 +294,7 @@
     (if  (or (= category :default) (nil? (:StartState d)))
       r
       ;;we have a preference for startstate...
-      (assoc r :where  (knows-state (:StartState d))))))
+      (assoc r :where  (has-transition? (:StartState d))))))
       
 
 ;;##Finding and Ordering Supply  
