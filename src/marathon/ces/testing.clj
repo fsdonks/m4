@@ -691,7 +691,6 @@
     ))
 
 
-
 (defn ->collect-samples [f h]
   (let [ks    (sort (keys h))
         pairs (partition 2 1 ks)]
@@ -706,8 +705,13 @@
 
 ;;dumb sampler...probably migrate this to
 ;;use spork.trends sampling.
-(defn ->location-samples [h]  (->collect-samples core/location h))
+(defn ->location-samples   [h]  (->collect-samples core/locations h))
 (defn ->deployment-samples [h]  (->collect-samples core/deployments h))
+(defn tsv->csv [path]
+  (with-open [rdr  (clojure.java.io/reader (str path))
+              wrtr (clojure.java.io/writer (str path ".csv"))]
+    (doseq [^String ln (line-seq rdr)]
+      (.write wrtr (str (clojure.string/replace ln \tab \,) \newline)))))
 
 ;; (defn ->fills [h]
 ;;     (let [ks    (sort (keys h))

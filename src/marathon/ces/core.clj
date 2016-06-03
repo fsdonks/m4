@@ -154,14 +154,19 @@
         (:activedemands)
         (keys)
         (map #(store/get-entity ctx %))
-        (map (fn [d] {:t t
+        (map (fn [{:keys [category demandgroup operation vignette Command] :as d}] {:t t
                       :name        (:name d)
                       :src         (:src d)
-                      :assigned    (keys (:units-assigned d))
-                      :overlapping (keys (:units-overlapping d))
+                      :assigned    (count  (:units-assigned d))
+                      :overlapping (count  (:units-overlapping d))
                       :quantity    (:quantity d)
                       :filled      (count (:units-assigned d))
                       :unfilled    (- (:quantity d) (count (:units-assigned d)))
+                      :category    category
+                      :demandgroup demandgroup
+                      :operation   operation
+                      :vignette    vignette
+                      :command     Command
                       :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}
                ))))
   ([ctx]  (deployments (sim/get-time ctx) ctx)))
