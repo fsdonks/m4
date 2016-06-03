@@ -264,9 +264,15 @@
 ;;We can revisit this in the entitystore context in the future...
 ;;Can probably store this in a flatter context.
 ;;#Demand Registration and Scheduling
-(defn get-activations   [dstore t]   (get-in dstore [:activations t] #{}))
+(defn get-activations   [dstore t]
+  (let [dmap (:demandmap dstore)]
+    (set (filter dmap (get-in dstore [:activations t] nil)))))
 (defn set-activations   [dstore t m] (gen/deep-assoc dstore [:activations t] m)) ;;requires a double assoc.
-(defn get-deactivations [dstore t]   (get-in dstore         [:deactivations t] #{}))
+
+(defn get-deactivations [dstore t]
+  (let [dmap (:demandmap dstore)]
+    (set (filter dmap  (get-in dstore         [:deactivations t] nil)))))
+
 (defn set-deactivations [dstore t m] (gen/deep-assoc dstore [:deactivations t] m))
 
 ;TOM note 27 Mar 2011 ->  I'd like to factor these two methods out into a single 
@@ -805,8 +811,8 @@
 (defn deactivations? [t demandstore] 
   (contains? (:deactivations demandstore) t))
 
-(defn  get-activations  [demandstore t] (get (:activations demandstore) t))
-(defn  get-deactivations [demandstore t] (get (:deactivations demandstore) t))
+;(defn  get-activations  [demandstore t] (get (:activations demandstore) t))
+;(defn  get-deactivations [demandstore t] (get (:deactivations demandstore) t))
 
 ;;activate-demand => add the demand to the active set.
 ;;update the fill for the active demand
@@ -851,7 +857,7 @@
    to time t, any demands scheduled to start at t are activated."
   [t ctx]
   (let [demandstore (core/get-demandstore ctx)]
-    (reduce (fn [ctx dname] 
+    (reduce (fn [ctx dname]
               (let [store (core/get-demandstore ctx)]
                 (activate-demand store t
                                  (store/get-entity ctx dname) ;(get-demand store dname)

@@ -258,12 +258,12 @@
   "Type	Enabled	Priority	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Title 10_32	OITitle	Strength	Command	Location	DemandType	Theater	BOG	StartState	EndState	MissionLength
 DemandRecord	TRUE	1	1	1	1	5000	0	Binder	Uniform	A	Al's Game	1	SRM	10	TrapperKeeper	1	Lifeguard	KO	Internal	Beach	FALSE	MD_DA_C1	R_C2	9999999
 DemandRecord	TRUE	1	1	1	1	5000	0	Binder	Uniform	A	Bill's Game	2	SRM	10	TrapperKeeper	1	Lifeguard	HI	Internal	Beach	FALSE	MD_DA_C1	R_C2	9999999
-DemandRecord	TRUE	1	1	1	1	730	0	Binder	AC_First	B	Chuck's Game	3	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	FALSE	MA_NDA_C1	PT_C4	730
-DemandRecord	TRUE	1	1	1	1	240	0	Binder	AC_First	B	Chuck's Game	4	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C1	PT_C4	240
-DemandRecord	TRUE	1	1	1	1	1700	30	Binder	AC_First	B	Ed's Game	5	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C1	PT_C4	365
-DemandRecord	TRUE	1	1	1	1	1640	30	Binder	AC_First	B	Frank's Game	6	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C1	PB_C3	270
-DemandRecord	TRUE	1	1	1	1	5000	0	Binder	AC_First	B	Gerry's Game	7	SRM	10	TrapperKeeper	1	Referee	CO	External	West	FALSE	MA_NDA_C1	PT_C4	9999999
-DemandRecord	TRUE	1	1	1	1	1370	0	Binder	RC_First	B	Hank's Game	8	SRM	10	TrapperKeeper	1	Referee	North	External	North	FALSE	MA_NDA_C1	PB_C3	365
+DemandRecord	TRUE	1	1	1	1	730	0	Binder	AC_First	B	Chuck's Game	3	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	FALSE	MA_NDA_C3	PT_C4	730
+DemandRecord	TRUE	1	1	1	1	240	0	Binder	AC_First	B	Chuck's Game	4	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	240
+DemandRecord	TRUE	1	1	1	1	1700	30	Binder	AC_First	B	Ed's Game	5	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	365
+DemandRecord	TRUE	1	1	1	1	1640	30	Binder	AC_First	B	Frank's Game	6	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PB_C3	270
+DemandRecord	TRUE	1	1	1	1	5000	0	Binder	AC_First	B	Gerry's Game	7	SRM	10	TrapperKeeper	1	Referee	CO	External	West	FALSE	MA_NDA_C3	PT_C4	9999999
+DemandRecord	TRUE	1	1	1	1	1370	0	Binder	RC_First	B	Hank's Game	8	SRM	10	TrapperKeeper	1	Referee	North	External	North	FALSE	MA_NDA_C3	PB_C3	365
 DemandRecord	TRUE	1	1	1	93	120	0	Rubber	Uniform	A	Paul's Game	9	SRM	10	Rubber Cup	1	Goalie	WA	Internal	Beach	FALSE	MD_DA_C1	PB_C3	120
 DemandRecord	TRUE	1	1	1	244	150	0	Rubber	Uniform	A	Paul's Game	10	SRM	10	Rubber Cup	1	Goalie	WA	Internal	Beach	FALSE	MD_DA_C1	PB_C3	150
 DemandRecord	TRUE	1	1	1	275	120	0	Rubber	Uniform	A	Paul's Game	11	SRM	10	Rubber Cup	1	Goalie	AK	Internal	Beach	FALSE	MD_DA_C1	PB_C3	120
@@ -283,14 +283,14 @@ DemandRecord	TRUE	1	1	1	1	1552	30	Steel	Uniform	B	Bob	24	SRM	10	Steel Cup	1	Refe
 DemandRecord	TRUE	1	1	1	1	1552	0	Steel	Uniform	B	Joe	25	SRM	10	Steel Cup	1	Referee	Continental	Internal	Continental	FALSE	MA_DA_C1	PB_C3	365
 DemandRecord	TRUE	1	1	1	1	730	0	Plastic	Uniform	B	Maurice	26	SRM	10	Plastic Cup	1	Referee	NAF	Internal	Dry	FALSE	MA_DA_C1	PB_C3	365
 DemandRecord	TRUE	1	1	1	1	1552	0	Plastic/Steel	Uniform	B	Jeremy	27	SRM	10	Plastic/Steel Cup	1	Referee	Continental	Internal	Continental	FALSE	MP_DA_C1	PT_C4	365
-DemandRecord	TRUE	1	1	1	32	300	0	Rubber	Uniform	B	Jack	28	SRM	10	Rubber Cup	1	Referee	GER	External	West	FALSE	MA_NDA_C1	PT_C4	300
-DemandRecord	TRUE	1	1	1	1	1784	30	Plastic	AC_First	B	Jill	29	SRM	10	Plastic Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C1	PT_C4	270
-DemandRecord	TRUE	1	1	1	1	1642	120	Plastic	AC_First	B	Jean	30	SRM	10	Plastic Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C1	PT_C4	365
-DemandRecord	TRUE	1	1	1	1	1700	30	Rubber	AC_First	B	Phyllis	31	SRM	10	Rubber Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C1	PT_C4	365
-DemandRecord	TRUE	1	1	1	1	1460	0	Plastic	RC_First	B	Michael	32	SRM	32	Plastic Cup	1	Referee	Beach	External	Beach	TRUE	MA_NDA_C1	PT_C4	365
-DemandRecord	TRUE	1	1	1	1	1460	0	Plastic	RC_First	B	Dwight	33	SRM	32	Plastic Cup	1	Referee	Special	External	Special	TRUE	MA_NDA_C1	PT_C4	365
-DemandRecord	TRUE	1	1	1	1	365	0	Plastic	RC_First	B	Stanley	34	SRM	32	Plastic Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C1	PT_C4	365
-DemandRecord	TRUE	1	1	1	731	365	0	Plastic	Uniform	B	Meredith	35	SRM	32	Plastic Cup	1	Referee	West	External	West	TRUE	MA_NDA_C1	PT_C4	365
+DemandRecord	TRUE	1	1	1	32	300	0	Rubber	Uniform	B	Jack	28	SRM	10	Rubber Cup	1	Referee	GER	External	West	FALSE	MA_NDA_C3	PT_C4	300
+DemandRecord	TRUE	1	1	1	1	1784	30	Plastic	AC_First	B	Jill	29	SRM	10	Plastic Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	270
+DemandRecord	TRUE	1	1	1	1	1642	120	Plastic	AC_First	B	Jean	30	SRM	10	Plastic Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	365
+DemandRecord	TRUE	1	1	1	1	1700	30	Rubber	AC_First	B	Phyllis	31	SRM	10	Rubber Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	365
+DemandRecord	TRUE	1	1	1	1	1460	0	Plastic	RC_First	B	Michael	32	SRM	32	Plastic Cup	1	Referee	Beach	External	Beach	TRUE	MA_NDA_C3	PT_C4	365
+DemandRecord	TRUE	1	1	1	1	1460	0	Plastic	RC_First	B	Dwight	33	SRM	32	Plastic Cup	1	Referee	Special	External	Special	TRUE	MA_NDA_C3	PT_C4	365
+DemandRecord	TRUE	1	1	1	1	365	0	Plastic	RC_First	B	Stanley	34	SRM	32	Plastic Cup	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	365
+DemandRecord	TRUE	1	1	1	731	365	0	Plastic	Uniform	B	Meredith	35	SRM	32	Plastic Cup	1	Referee	West	External	West	TRUE	MA_NDA_C3	PT_C4	365
 "
   )
 

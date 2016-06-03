@@ -810,8 +810,6 @@
 ;;Now that we have prescribed moves, the entities are going into
 ;;an overlapping state, but it's a state set..
 
-
-
 ;;this is really a behavior, modified from the old state.  called from overlapping_state.
 ;;used to be called check-overlap.
 (befn disengage {:keys [entity position-change ctx] :as benv}

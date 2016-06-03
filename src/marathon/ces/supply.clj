@@ -248,8 +248,8 @@
    between time t and its last update."
   [t supplystore unitname ctx]
   (if ;(core/disabled? supplystore unitname)
-       (gete ctx unitname :disabled) ;lame hack
-            (do ;(println [:update unitname t :disabled])
+       (gete ctx unitname :disabled);lame hack
+           (do ;(println [:update unitname t :disabled])
                 ctx)
       (let [unit (get-unit ctx unitname)
             ;_ (println [:updating unitname])

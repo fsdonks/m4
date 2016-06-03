@@ -182,6 +182,57 @@
   (when-let [c (gete ctx nm :Category)]
     (= c "SRM")))
 
+;;Functions for dealing with subsets of supply/demand,
+;;for defining smaller simulations.
+(defn entity? [x] (instance? spork.entitysystem.store.entity x))
+(defn prune-children [prune? parent]
+  (reduce-kv (fn [acc p c]
+               (if (prune? p)
+                 (dissoc acc p)
+                 (cond (and (map? c) (not (entity? c)))  (assoc acc p (prune-children prune? c))
+                                        ;(vector? c) (into [] (filter prune? c))
+                                        ;(seq c) (filter prune? c)
+                       :else 
+                       acc)))
+             parent parent))
+
+(defn drop-units [names ctx]
+  (let [drops (set names)
+        prune! #(prune-children drops %)]
+    (-> ctx
+        (store/updatee  :SupplyStore :unitmap prune!)
+        (store/updatee  :SupplyStore :deployable-buckets prune!))))
+
+(defn drop-demands [names ctx]
+  (let [drops (set names)
+        prune! #(prune-children drops %)]
+    (-> ctx
+        (store/updatee  :DemandStore :demandmap prune!)
+        (store/updatee  :DemandStore :activations prune!)
+        (store/updatee  :DemandStore :deactivations prune!)
+        (store/updatee  :DemandStore :activedemands  prune!)
+        )))
+;;we need to remove the entities from any reference too..
+;;THis is akin to enabling/disabling....
+(defn solo-src [solo ctx]
+  (let [dropped (set (map :name
+                          (store/select-entities ctx
+                                                 :from [:src]
+                                                 :where (fn [{:keys [src]}]
+                                                          (not= src solo)))))
+        
+        ]
+    (as->    (->> (reduce (fn [acc e]
+                               (store/drop-entity acc e)) ctx dropped)
+                     (drop-units dropped)
+                     (drop-demands dropped)
+                     )
+             dropped-ctx 
+        (reduce (fn [ctx nm]
+                  (store/add-entity ctx {:name nm :disabled true}))
+               dropped-ctx 
+               dropped))))
+
 ;;We're starting to build stats and queries...muahaha...this is where clojure kicks ass.
 ;; (defn deployed-population [ctx]
 ;;   (for [{:keys [name assigned overlapping quantity]}]
@@ -525,7 +576,8 @@
 (defn visualize-entities [ctx]
   (let [demandnames    (demand-names ctx)
         unitnames      (unit-names ctx)
-        basic-entities (set  (concat demandnames unitnames))
+        disabled       (keys (store/get-domain ctx :disabled))
+        basic-entities (set  (concat demandnames unitnames disabled))
         stores         (clojure.set/difference
                         (set  (keys (store/entities ctx)))
                         basic-entities)
@@ -535,7 +587,8 @@
     (inspect/tree-view
        {:stores  (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx stores)))
         :demands (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx demandnames)))
-        :units   (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx unitnames)))})))
+        :units   (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx unitnames)))
+        :disabled (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx disabled))) })))
 
 (defn visualize-subscriptions [ctx] 
   (inspect/tree-view (:subscriptions (get-policystore ctx))))

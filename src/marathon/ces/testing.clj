@@ -735,8 +735,25 @@
       (->> (setup/simstate-from  sd/srm-tables core/debugsim)
            (sim/add-time 1)))
 
-(def srm1
-  (->  (->history 1 ;(debugging-on #{451
+  (def binderctx
+    (->> (setup/simstate-from  sd/srm-tables core/debugsim)
+         (sim/add-time 1)
+         (core/solo-src "Binder")))
+  
+  (def bindertest
+    (->  (->history 1 ;(debugging-on #{451
+                  ;               467
+                   ;              523
+                   ;              563
+                   ;              595
+                   ;              963
+                   ;              1051})
+                 engine/sim-step
+                 binderctx)
+         (get 1)))
+  
+  (def srm1
+    (->  (->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
