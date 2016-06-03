@@ -22,6 +22,7 @@
 ;;feedback loop we're looking for.  Enough to edit in excel
 ;;and go on from there.
 (def p "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+
 (defn mod-date [path]
   (if path
     (.lastModified ^java.io.File (io/file path))
@@ -35,7 +36,6 @@
 (defn fresh? []
   (when-let [path (:path @tables)]
     (= (mod-date path) (:date @tables))))
-
 (defn marathon-book->marathon-tables 
   [wbpath & {:keys [tables] :or {tables 
                                  mxl/marathon-workbook-schema}}]
@@ -59,11 +59,36 @@
           loaded-tables (mxl/marathon-book->marathon-tables
                          (or (:path @tables) (throw (Exception. "no path set!")))
                          :tables {nm (get mxl/marathon-workbook-schema nm)})
+          loaded-tables (reduce-kv (fn [acc nm t]
+                                     (assoc acc nm (tbl/keywordize-field-names t)))
+                                   {}
+                                   loaded-tables)
           _           (swap! tables merge (assoc loaded-tables
                                                  :date (mod-date (:path @tables))))]
       (get @tables nm))))
+
+(defn load-tables [nms]
+  (let [unknown-tables (if  (fresh?)
+                         (filter (fn [acc nm]
+                                   (not (contains? @tables  nm))))
+                         nms)]
+    (let [_ (println (str [:reloading nms :from (:path @tables)]))
+          loaded-tables (mxl/marathon-book->marathon-tables
+                         (or (:path @tables) (throw (Exception. "no path set!")))
+                         :tables (zipmap nms
+                                         (map #(or (get mxl/marathon-workbook-schema %)
+                                                   (throw (Exception. (str [:unknown-table %]))))
+                                              nms)))
+          loaded-tables (reduce-kv (fn [acc nm t]
+                                     (assoc acc nm (tbl/keywordize-field-names t)))
+                                   {}
+                                   loaded-tables)
+          _           (swap! tables merge (assoc loaded-tables
+                                                   :date (mod-date (:path @tables))))]
+      @tables)))
+
 (defn get-table-records  ([name] (tbl/record-seq (get-table  name))))
-                   
+
 
 
 

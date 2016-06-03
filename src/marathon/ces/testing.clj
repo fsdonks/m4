@@ -30,6 +30,7 @@
             [marathon.data [simstate :as simstate]
                            [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
+            [marathon.project [linked :as linked]]
             [spork.sim     [simcontext :as sim]]
             [spork.entitysystem.store :as store]
             [spork.util [reducers]
@@ -181,7 +182,7 @@
   (is (same? (take 2 activations481)
              ["1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]"])
       "Should have actives on 481...")
-  (is (re-find #"1_Vig-ANON-.*[481...554]" (nth activations481 2))
+  (is (re-find #"1_Vig-ANON-.*[481...554]" (nth (seq activations481) 2))
       "The third active on 481 should be an anonymously named vignette with a  number in the name.")
   (is (some (fn [d] (= d (:name first-demand))) (demand/get-activations m-dstore tstart))
       "Demand should register as an activation on startday.")
