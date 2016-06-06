@@ -134,7 +134,7 @@
 ;;entity store is nice...
 (defn locations
   ([t ctx]
-   (->> (store/only-entities ctx [:name :locationname :location :positionpolicy :src])
+   (->> (store/only-entities ctx [:name :locationname :location :positionpolicy :src :component])
         (into [] (map #(assoc % :t t)))))
   ([ctx] (locations  (sim/get-time ctx) ctx)))
 

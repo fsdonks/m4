@@ -72,12 +72,16 @@
    :location :text
    :positionpolicy :text
    :src :text
+   :component :text
    :t :int
    })
 
-(defn patch-sampler [xs] (modal-sampler xs 91 :t
-                                        (fn [r] {:src  (:src r)  :name (:name r)})
-                                        (juxt :positionpolicy :locationname))))
+(defn patch-sampler [xs]
+  (modal-sampler xs 91 :t
+                 (fn [r] {:src       (:src r)
+                          :name      (:name r)
+                          :component (:component r)})
+                 (juxt :positionpolicy :locationname)))
 
 (def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
 (defn lines->samples [path]
@@ -91,12 +95,6 @@
 ;;operation is the name.
 (defn valuef [r] [(:category r) (:operation r)])
 
-
-(comment ;testing 
-  (def res  (lines->samples testpath))
-  (def grps (group-by #(-> % :key :src) res))
-)
-
 ;;this is more or less a pivot table.
 (defn table-by [rowkey colkey valuef recs]
   (let [rows (atom #{})
@@ -107,10 +105,7 @@
         rowcols   (fn [recs]
                     {:rows @rows :cols @cols
                       :rowcols recs})]
-    (->>  ;(if ;(dataset? recs)
-            ;  (:rows recs)
-     recs
-     ;)
+    (->>  recs
           (reduce (fn [rowcols r]
                     (let [row (rowkey r)
                           col (colkey r)
@@ -128,6 +123,12 @@
     [row (persistent!  (reduce (fn [acc r] (conj! acc  (:value r)))
                                (transient   [])
                                (sort-by :col rs)))]))
+(comment ;testing 
+  (def res         (lines->samples testpath))
+  (def grps        (group-by #(-> % :key :src) res))
+  (def binders     (get grps "Binder"))
+;;  (def btbl    (table-by :))
+)
 
 (def ^:dynamic *attributes*
   {"Committed"        {:SurgeType "Committed"}
@@ -142,8 +143,7 @@
 (def ^:constant +chunk-height+ 14)
 (def ^:dynamic *chunk-txt*)
 
-;; (canv/color-by (canv/gradient-right l r)
-;;                (s/->rectangle :white 0 0 +chunk-width+ +chunk-height+)))    
+;; (canv/color-by (canv/gradient-right l r);;                (s/->rectangle :white 0 0 +chunk-width+ +chunk-height+)))    
 
 ;; (defn ->transition [l r]        
 ;;   (canv/color-by (canv/gradient-right l r)
@@ -362,6 +362,49 @@
   ([shp] (strike-through shp
              (apply canv/->color-rgba 
                     (spork.graphics2d.canvas/random-color)))))
-                                             
 
+(defn clean-rec [{:keys [t key mode] :as r}]
+  (let [{:keys [name src component]} (:key r)]
+    {:t 0 :src src :name name :component component
+     :state (first mode)}))
 
+;;Visualization api
+(defn chunk-table [basedata sortkey]
+    (let [row-order (atom [])]
+      (->> basedata
+           (table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
+           (rowcols->vecs)
+           (sort-by (comp sortkey first))
+           (reduce (fn [acc [r xs]]                   
+                     (do (swap! row-order conj r)
+                         (conj acc xs))) [])
+           ((fn [r] (with-meta r {:row-order @row-order}))))))
+
+(def ^:dynamic *table-rate* 91)
+
+(defn sand-tables [ds]
+    (let [basedata  (->> ds 
+                         (sample-every *table-rate*) 
+                         (non-ghosts)
+                         ($where ($fn [Quarter] (<= Quarter 24))))]
+      (for [[k ds] (sort-by (comp vec vals first) ($group-by [:compo :SRC] basedata))]
+        (let [unit-map  (reduce (fn [acc r] (assoc acc (:unitid r) r)) {} (:rows ds))
+              sortkey   (fn [uid] (let [info  (get unit-map uid)]
+                                     [(:compo info) (:SRC info) uid]))
+              ctbl      (chunk-table ds sortkey)
+              row-order (get (meta ctbl) :row-order)
+              names     (map #(:name (get unit-map %))  row-order)]
+          [k names ctbl]))))
+
+(defn render-sand-tables [ds]
+  (let [sts (sand-tables (util/as-dataset ds))]    
+    (sketch/delineate
+     (into 
+      [
+       ;(chunk-headers (nth 2 (first sts)))
+       ]
+      (for [[{:keys [SRC compo]}  labels chunks] sts]        
+        (let [hist   (patches/sketch-history chunks)
+              height (:height (.shape-bounds hist))]
+          (sketch/beside (sketch/->labeled-box (str [SRC compo]) :black :light-gray 0 0 114 height)
+                         hist)))))))
