@@ -109,7 +109,7 @@
                     (let [row (rowkey r)
                           col (colkey r)
                           v   (valuef r)]
-                      (do (add-rowcol! row col)
+                      (do (add-rowcol!  row col)
                           (conj rowcols 
                                 {:row row 
                                  :col col 
@@ -135,7 +135,7 @@
    "Ready_Deployable" {:SurgeType "Ready"    }})
 )
 
-(def ^:constant +chunk-width+  150)
+(def ^:constant +chunk-width+  75);150)
 (def ^:constant +chunk-height+ 14)
 (def ^:dynamic *chunk-txt*)
 
@@ -173,15 +173,19 @@
 ;;   (if (.contains loc "Transition")
 ;;       (clojure.string/replace loc "Transition" "")))
 
+(defn ->color [[r g b]] (java.awt.Color. (int r) (int g) (int b)))
 (def palette
-  {:DarkYellow	[255	255	0]
-   :LightYellow	[255	255	153]
-   :DarkGreen	[84	130	53]
-   :LightGreen	[146	208	80]
-   :DarkBlue	[0	0	255]
-   :LightBlue	[0	255	255]})
+  (->>
+   {:DarkYellow	[255	255	0]
+    :LightYellow	[255	255	153]
+    :DarkGreen	[84	130	53]
+    :LightGreen	[146	208	80]
+    :DarkBlue	[0	0	255]
+    :LightBlue	[0	255	255]}
+   (map (fn [[lbl c]] [lbl (->color c)]))
+   (into {})))
 
-(def colors 
+(def colors
   {"MP_DA_C1"		:DarkBlue
    "MA_DA_C1"		:DarkBlue
    "MA_DA_C2"		:DarkBlue
@@ -223,7 +227,7 @@
   ([loc] (loc->color loc #(get *attributes* %))))
 )
 (defn loc->color
-  ([loc] (or (get colors loc) (throw (Exception. (str [:unknown-location loc])))))
+  ([loc] (or (get palette (get colors loc) ) (throw (Exception. (str [:unknown-location loc])))))
   ([loc & xs] (loc->color loc)))
   
        
@@ -290,71 +294,24 @@
 
 (defn ->chunk 
   ([color lbl]
-     (if (vector? color)
-       (->transition (first color) (second color))
-       
-                                        ;    (s/->rectangle coloro 0 0 +chunk-width+ +chunk-height+)
-       (sketch/->labeled-box lbl :black color 0 0 +chunk-width+ +chunk-height+)))
+       (sketch/->labeled-box lbl :black color 0 0 +chunk-width+ +chunk-height+))
   ([color] (->chunk color "")))
 
-;; (def colors 
-;;   [:green
-;;    :light-sky-blue
-;;    :orange 
-;;    :yellow
-;;   [:green  :light-sky-blue]
-;;   [:green  :orange]
-;;   [:green  :yellow]
-;;   [:orange :yellow]
-;;   [:light-sky-blue   :green]
-;;   [:light-sky-blue   :green]
-;;   [:light-sky-blue   :green]
-;;   [:orange :yellow]
-;;   [:green  :light-sky-blue]
-;;   [:yellow :green]
-;;   [:light-sky-blue   :green]
-;;   [:green  :light-sky-blue]
-;;   [:green  :orange]
-;;   [:orange :yellow]
-;;   [:light-sky-blue   :green]
-;;   [:light-sky-blue   :green]
-;;   [:light-sky-blue   :yellow]
-;;   [:yellow :light-sky-blue]
-;;   [:orange :yellow]
-;;   [:green  :light-sky-blue]
-;;   [:yellow :orange]])
-
-;; (def color-set (set colors))
-  
-(def chunks 
-  (zipmap colors 
-          (map (comp sketch/outline ->chunk) colors))) 
-
 (defn as-chunk 
-  [x & [lbl]]
-  (if (contains? palette x)
-    (sketch/outline (if lbl (->chunk x lbl) (->chunk x)))
-    (do (println (str "Unknown chunk!" x))
-        (->chunk :red))))
+  [x lbl]
+  (sketch/outline
+    (->chunk x lbl)))
 
 (def knownlocs ;#{"Prepare" "Ready" "Ready_Deployable" "TransitionReady_NotDeployable" "DeMobilization" "Mission_Deployable"})
   (set (keys colors)))
 
 (defn table->labels [rowcols]
   (for [row   rowcols]
-    (vec (for [[l r] row]
-           (cond (= l r) ""
-                 (contains? knownlocs r) ""
-                 :else r)))))
-
-;; (defn sketch-history [rowcols]
-;;   (let [tbl     (table->colors rowcols)
-;;         labels  (table->labels rowcols)
-;;         cells   (sketch/stack
-;;                         (mapv (fn [xs] (sketch/shelf (mapv as-chunk xs))) tbl))
-;;         width   (:width (.shape-bounds cells))]
-;;     cells))
-
+    (vec (for [r row]
+          ; (cond (= l r) ""
+           ;      (contains? knownlocs r) ""
+          ; :else r)
+         r))))
 
 ;;note we can use our table view from piccolo here as well...
 ;;in fact, we can convert this to a zui pretty easily.
@@ -362,12 +319,16 @@
   (let [tbl     (table->colors rowcols)
         labels  (table->labels rowcols)
         cells   (sketch/stack
-                 (map-indexed (fn [i row]
-                                (let [labs (nth labels i)]
-                                  (sketch/shelf
-                                   (map-indexed (fn [col x]
-                                                  (as-chunk x (nth labs col))) row)))) tbl))
-        width   (:width (.shape-bounds cells))]
+                 (map-indexed
+                  (fn [i row]
+                    (let [labs (nth labels i)
+                          ]
+                      (sketch/shelf
+                       (map-indexed (fn [col x]
+                                      (as-chunk x
+                                                (nth labs col)
+                                                )) row)))) tbl))
+        width   (:width (spork.graphics2d.canvas/shape-bounds cells))]
     cells))
 
 (defn strike-through 
@@ -403,6 +364,11 @@
                      (do (swap! row-order conj r)
                          (conj acc xs))) [])
            ((fn [r] (with-meta r {:row-order @row-order}))))))
+
+(defn truncate-history [xs n]
+  (mapv (fn [row]
+          (into [] (take n row))) xs))
+  
 (comment ;testing 
   (def res         (lines->samples testpath))
   (def grps        (group-by #(-> % :key :src) res))
