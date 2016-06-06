@@ -49,8 +49,8 @@
 
 ;;fold over the samples, taking as a sample
 ;;the mode of the data for the specified interval.
-(defn modal-sampler [xs interval tf keyf valf ]  
-  (into []  (comp (partition-by (fn [r] (zero? (mod (tf r) interval))))
+(defn modal-sampler [xs interval tf keyf valf]
+  (into []  (comp (partition-by (fn [r] (quot (tf r) interval)))
                   (mapcat (fn [rs]
                          (let [t (tf (first rs))]
                            (for [[u entries] (group-by keyf rs)]
