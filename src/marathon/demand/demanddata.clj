@@ -94,13 +94,15 @@
 ;End Sub
 
 (defn send-overlap [d u]
-  (if (has-unit? d u)
+  (if (has-unit? d u)    
     (let [assigned    (:units-assigned d)
           overlapping (:units-overlapping d)
           nm (:name u)]
-      (assoc d :assigned    (dissoc assigned nm)
-               :overlapping (assoc overlapping nm)))
-    d))
+      (-> d
+          (assoc :assigned   (dissoc assigned nm))
+          (assoc :overlapping (assoc overlapping nm nm))))
+    (throw (Exception. (str ["Cannot find unit" (:name u) d])))                            
+    ))
 
 ;Public Function unitCount() As Long
 ;unitCount = units-overlapping.count + units-assigned.count

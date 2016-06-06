@@ -816,9 +816,13 @@
 ;;used to be called check-overlap.
 (befn disengage {:keys [entity position-change ctx overlapping-position] :as benv}
       (if overlapping-position
-        (do  (println [:overlapping-prescribed])
-             (swap! ctx ;;update the context...
-                   #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % true))
+        (let [_  (println [:overlapping-prescribed])
+              lname (:locationname @entity)
+          ;    _  (println [:move->overlap (:name @entity) :from lname
+          ;                 (select-keys (store/get-entity @ctx lname)
+          ;                               [:units-assigned :units-overlapping])])
+             _ (swap! ctx ;;update the context...
+                   #(d/disengage (core/get-demandstore %) @entity lname % true))]
              (success (assoc benv :overlapping-position nil)))
         (when  position-change
           (let [{:keys [to-position from-position]}   position-change
@@ -868,14 +872,21 @@
 ;;this is a weak predicate..but it should work for now.
 (defn demand? [e] (not (nil? (:source-first e))))
 
+;;we can do this like a scalpel..
+;;All that matters is that the demand fill changes.
+;;We ensure we remove the unit from the demand's
+;;assignment, and then remove the unit from the demand,
+;;and update the fill status of the demand.
+;;If we leave a demand, we need to update its information
+;;and change fill status.
 ;;is the movement causing a change in fill?
 (befn change-fill {:keys [entity location-change ctx] :as benv}
       (when location-change
         (let [{:keys [from-location]} location-change]
           (when (demand? (store/get-entity @ctx from-location))
             (swap! ctx ;;update the context...
-                   #(d/disengage (core/get-demandstore %)
-                                 @entity (:locationname @entity) % false))
+                   #(d/remove-unit-from-demand (core/get-demandstore %)
+                                 @entity (:locationname @entity) %))
             (success benv)))))
         
 ;;with a wait-time and a next-position secured,
@@ -889,7 +900,7 @@
           change-position
           (echo :<change-location>)
           check-overlap ;;Added, I think I missed this earlier...
-          ;change-fill ;;newly added...
+          change-fill ;;newly added...
           change-location
           change-state-beh
           (echo :waiting)
@@ -1053,10 +1064,16 @@
 ;;a unit's capacity to re-enter the available pool.
 
 (def +recovery-time+ 90)
+;;uuuuuuuge hack....gotta get this out the door though.
+(def non-recoverable #{"SRMAC" "SRMRC" "SRMRC13"})
+
+;;We need to modify this to prevent any srm units from recovering.
 (defn can-recover? [unit]
-  (let [cyc (:currentcycle unit)]
-  (and (pos? (:bogbudget cyc))
-       (< (+ (:cycletime unit) +recovery-time+) (:duration-expected cyc)))))
+  (let [cyc (:currentcycle unit)
+        p   (:policy unit)]
+    (and  (not (non-recoverable (protocols/policy-name p)))
+          (pos? (:bogbudget cyc))
+          (< (+ (:cycletime unit) +recovery-time+) (:duration-expected cyc)))))
 
 (befn recovery-beh {:keys [entity deltat ctx] :as benv}
   (let [unit @entity]

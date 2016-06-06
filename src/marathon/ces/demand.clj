@@ -888,14 +888,18 @@
 	    (and demandgroup (not= "" demandgroup) (not (ungrouped? demandgroup)))
             (do  (debug :abw1)
                  (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
-                       _ (debug [:pre-abw unitname (store/gete ctx unitname :last-update)])] 
-                        (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
+                       _ (debug [:pre-abw unitname (store/gete ctx unitname :last-update)])]
+                   (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
             (not (ghost? unit))
             (do  (debug :abw2)
                  (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx))
 	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
                        (u/change-state (store/get-entity ctx unitname) :Reset 0 nil)))))                     
 
+
+;;We can swap out with-draw-unit with something else...
+;;Since we don't need to alter the unit's state, it's not an immediate withdraw,
+;;Specifically, we have location-based-behavior telling us when to go home.
 (defn send-home
   "Implements the state changes required to deactivate a demand, namely, to send
    a unit back to reset. The cases it covers are times when a demand is 
@@ -903,18 +907,17 @@
    overlapping at a newly-inactive demand, then they get sent home
    simultaneously."
   [t demand unit ctx] 
-  (let [unitname  (:name unit)
-        startloc  (:locationname unit)
+  (let [unitname    (:name unit)
+        startloc    (:locationname unit)
         demandgroup (:demandgroup demand)
         _ (debug [:demand/send-home (:name unit) :t t])
-        ctx         (u/unit-update unit ctx)
-        ;unit         (store/get-entity ctx unitname)
-        ]        
-    (->> ;(core/trigger-event :supply-update :DemandStore unitname ;WRONG
-         ;     (str "Send Home Caused SupplyUpdate for " unitname) unit ctx) ;WRONG
-         ctx
+        
+        ]    
+    (->> (u/unit-update unit ctx)      ;;we don't want to get caught in an update cycle.
          (withdraw-unit unit demand) 
          (disengaging! demand unitname)))) 
+
+
 
 ;;#Notes on calling change-state for the unit-level system
 ;there WILL be things happening to the ctx, possible mutations and such, that 
@@ -934,18 +937,18 @@
 ;;Overlapping supply is still associated with the demand, i.e. proximate and 
 ;;in use, but it is not ready to return to the global supply.
 
-
 ;TEMPORARY private helper function.....until I figure out a cleaner solution.
 ;broke out uber function into a smaller pairing of disengagement functions, to 
 ;handle specific pieces of the contextual change.
-(defn- disengage-unit [demand demandstore unit ctx & [overlap]]
+(defn- disengage-unit [demand demandstore unit ctx & {:keys [overlap]}]
   (if overlap
     (let [;_ (println [:pre demand])
           demand (d/send-overlap demand unit)
           ;_ (println [:overlapping demand])
           ]
-      (-> (overlapping! demandstore demand unit ctx)
-          (store/add-entity demand)))
+      (->> (store/add-entity ctx demand )
+          (overlapping! demandstore demand unit)
+          ))
     (->> (send-home (sim/current-time ctx) demand unit ctx)
          (disengaging-home! demandstore demand unit))))
 
@@ -956,15 +959,30 @@
   "Shifts the unit from being actively assigned to the demand, to passively 
    overlapping at the demand.  Updates the demand's fill status."
  ([demandstore unit demandname ctx overlap]
-  (let [;_         (println [:dis demandname])
-        demand    (get-in demandstore [:demandmap demandname])
+  (let [demand    (store/get-entity ctx  demandname)
         nextstore (register-change demandstore demandname)
-        ctx       (disengage-unit demand demandstore unit ctx overlap)]  
-    (if (zero? (d/required demand)) 
-      (update-fill demandname (:unfilledq demandstore) demandstore ctx)
-      ctx)))
+        ctx       (disengage-unit demand demandstore unit ctx :overlap overlap)]  
+   ; (if (zero? (d/required demand))
+      (update-fill nextstore demandname ctx)  ;;always check...
+;      (update-fill demandname (:unfilledq demandstore) demandstore ctx)
+  ;    ctx)
+  ))
  ([demandstore unit demandname ctx] ;hack....
   (disengage demandstore unit demandname ctx false)))
+
+;; sword of verboseness +1 
+(defn remove-unit-from-demand
+  "Shifts the unit from being actively assigned to the demand, to passively 
+   overlapping at the demand.  Updates the demand's fill status.  Does not 
+   update the unit."
+ [demandstore unit demandname ctx]
+ (let [demand    (d/send-home (get-in demandstore [:demandmap demandname])
+                              unit)
+       nextstore (register-change demandstore demandname)                   
+       ;;ctx       (disengage-unit demand demandstore unit ctx :overlap overlap)       
+       ]
+   (->> (store/add-entity ctx demand)
+        (update-fill  demandstore demandname))))
 
 (defn send-home-units
   "Sends home all units from a demand, essentially freeing consumed resources.  

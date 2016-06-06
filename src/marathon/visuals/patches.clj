@@ -123,21 +123,10 @@
                                (transient   [])
                                (sort-by :col rs)))]))
 
-
-(comment 
-(def ^:dynamic *attributes*
-  {"Committed"        {:SurgeType "Committed"}
-   "FCCommitted"      {:SurgeType "Committed"}
-   "FCMission"        {:SurgeType "Mission"  }
-   "Mission"          {:SurgeType "Mission"  }
-   "Demand1"          {:SurgeType "Committed"}
-   "Demand2"          {:SurgeType "Mission"  }
-   "Ready_Deployable" {:SurgeType "Ready"    }})
-)
-
+;;This is pretty hackish....
 (def ^:constant +chunk-width+  75);150)
 (def ^:constant +chunk-height+ 14)
-(def ^:dynamic *chunk-txt*)
+(def ^:dynamic  *chunk-txt*)
 
 ;; (canv/color-by (canv/gradient-right l r);;                (s/->rectangle :white 0 0 +chunk-width+ +chunk-height+)))    
 
