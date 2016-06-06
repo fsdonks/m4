@@ -1,11 +1,101 @@
 ;;A port of the patch-chart/laydown visualization from squirm. 
 ;;We need to establish a portable format for generating these dudes.
-(ns marthon.visuals.patches
+(ns marathon.visuals.patches
   (:require [spork.sketch :as sketch]
             [spork.geometry.shapes :as s]
             [spork.graphics2d.canvas :as canv]
-            [clojure.core.reducers :as r]))
+            [clojure.core.reducers :as r]
+            [spork.util.table :as tbl]))
 
+;;(table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
+
+;;So, we need to get quarterly samples by unit.
+;;each unit has a history at that time.
+
+;;Given locations of units we typically
+;;derive histories...
+
+;;In theory, I should be able to create a
+;;locations table .... I think we have a
+;;generic data format that'd be nice to follow...
+
+;;WE need to get a structure like this
+;;[q1, q2, q3, qn]
+;;for each unit out of the history.
+;;That's what makes the tracks.
+
+;;given our location history...
+;;we should be able to do this...
+;;We just split out the records by unit...
+;;by time (filtering time by 90 day intervals,
+;;or, using the subsampling of
+;;the mode of the state over said 90 day
+;;period).
+
+;;So, where we were using category/operation
+;;to define our demands, we're now
+;;using StartState and operation (I think).
+;;Since StartState maps to an underlying
+;;state, and we don't have to worry about
+;;transitions, we can map colors to the
+;;state.  I "think" we also need to
+;;add labels for locations...
+
+;;Note: once we have a table built with
+;;this cellular data, we can manipulate
+;;it pretty easily (ala find/replace).
+;;It'd just a matter of rendering cells
+;;with the appropriate values and coloring.
+
+;;fold over the samples, taking as a sample
+;;the mode of the data for the specified interval.
+(defn modal-sampler [xs interval tf keyf valf ]  
+  (into []  (comp (partition-by (fn [r] (zero? (mod (tf r) interval))))
+                  (mapcat (fn [rs]
+                         (let [t (tf (first rs))]
+                           (for [[u entries] (group-by keyf rs)]
+                             (let [v (->> entries
+                                          (map valf)
+                                          (frequencies)
+                                                 (reduce-kv (fn [[v0 n0 :as acc] v n]
+                                                              (if (> n n0)
+                                                                [v n]
+                                                                acc)) [nil 0])
+                                                 (first))]                               
+                               {:t t :key u :mode v }))))))
+        xs))
+
+(def locschema
+  {:id :text
+   :name :text
+   :locationname :text
+   :location :text
+   :positionpolicy :text
+   :src :text
+   :t :int
+   })
+
+(defn patch-sampler [xs] (modal-sampler xs 91 :t
+                                        (fn [r] {:src  (:src r)  :name (:name r)})
+                                        (juxt :positionpolicy :locationname))))
+
+(def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
+(defn lines->samples [path]
+;  (with-open [rdr (clojure.java.io/reader path)]
+    (-> (spork.util.general/line-reducer path)
+        (spork.util.table/lines->records   locschema)
+        (patch-sampler)))
+
+;;this is the default value function...
+;;Notice in category, it's SRM data...
+;;operation is the name.
+(defn valuef [r] [(:category r) (:operation r)])
+
+
+(comment ;testing 
+  (def res  (lines->samples testpath))
+  (def grps (group-by #(-> % :key :src) res))
+)
 
 ;;this is more or less a pivot table.
 (defn table-by [rowkey colkey valuef recs]
@@ -165,7 +255,6 @@
                      x))
                xs)))
 
- 
 (defn table->colors [rowcols]
   (->> rowcols
        (r/map #(clean-transitions (id-transitions (mapv loc->color %))))
@@ -244,6 +333,9 @@
 ;;         width   (:width (.shape-bounds cells))]
 ;;     cells))
 
+
+;;note we can use our table view from piccolo here as well...
+;;in fact, we can convert this to a zui pretty easily.
 (defn sketch-history [rowcols]
   (let [tbl     (table->colors rowcols)
         labels  (table->labels rowcols)
@@ -267,8 +359,9 @@
                                                  (+ x (dec (:width bounds))) y)]
        [shp 
         ln]))
-  ([shp] (strike-through shp (apply canv/->color-rgba 
-                                                        (spork.graphics2d.canvas/random-color)))))
+  ([shp] (strike-through shp
+             (apply canv/->color-rgba 
+                    (spork.graphics2d.canvas/random-color)))))
                                              
 
 

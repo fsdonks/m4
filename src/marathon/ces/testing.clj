@@ -845,6 +845,23 @@
 
 )
 
+;;This is a simple test function that
+;;gives us a robust srm history.
+(defn srm-hist []
+  (let [srmctx
+          (->> (setup/simstate-from  sd/srm-tables core/debugsim)
+               (sim/add-time 1))]
+    (->history 5001 
+               engine/sim-step
+               srmctx)))
+
+;;We'd like to take a simulation history, and glean from it
+;;location data.
+  
+(deftest srm-test
+  (srm-hist)
+      )
+
 ;;We should then be able to spawn all the entities.
 ;;Entities should schedule supply updates and move as normal.
 

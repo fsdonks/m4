@@ -256,13 +256,13 @@
 
 (def srm-demand-records
   "Type	Enabled	Priority	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Title 10_32	OITitle	Strength	Command	Location	DemandType	Theater	BOG	StartState	EndState	MissionLength
-DemandRecord	TRUE	1	1	1	1	5000	0	Binder	Uniform	A	Al's Game	1	SRM	10	TrapperKeeper	1	Lifeguard	KO	Internal	Beach	FALSE	MD_DA_C1	R_C2	9999999
-DemandRecord	TRUE	1	1	1	1	5000	0	Binder	Uniform	A	Bill's Game	2	SRM	10	TrapperKeeper	1	Lifeguard	HI	Internal	Beach	FALSE	MD_DA_C1	R_C2	9999999
+DemandRecord	FALSE	1	1	1	1	5000	0	Binder	Uniform	A	Al's Game	1	SRM	10	TrapperKeeper	1	Lifeguard	KO	Internal	Beach	FALSE	MD_DA_C1	R_C2	9999999
+DemandRecord	FALSE	1	1	1	1	5000	0	Binder	Uniform	A	Bill's Game	2	SRM	10	TrapperKeeper	1	Lifeguard	HI	Internal	Beach	FALSE	MD_DA_C1	R_C2	9999999
 DemandRecord	TRUE	1	1	1	1	730	0	Binder	AC_First	B	Chuck's Game	3	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	FALSE	MA_NDA_C3	PT_C4	730
 DemandRecord	TRUE	1	1	1	1	240	0	Binder	AC_First	B	Chuck's Game	4	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	240
 DemandRecord	TRUE	1	1	1	1	1700	30	Binder	AC_First	B	Ed's Game	5	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PT_C4	365
 DemandRecord	TRUE	1	1	1	1	1640	30	Binder	AC_First	B	Frank's Game	6	SRM	10	TrapperKeeper	1	Referee	Middle	External	Middle	TRUE	MA_NDA_C3	PB_C3	270
-DemandRecord	TRUE	1	1	1	1	5000	0	Binder	AC_First	B	Gerry's Game	7	SRM	10	TrapperKeeper	1	Referee	CO	External	West	FALSE	MA_NDA_C3	PT_C4	9999999
+DemandRecord	FALSE	1	1	1	1	5000	0	Binder	AC_First	B	Gerry's Game	7	SRM	10	TrapperKeeper	1	Referee	CO	External	West	FALSE	MA_NDA_C3	PT_C4	9999999
 DemandRecord	TRUE	1	1	1	1	1370	0	Binder	RC_First	B	Hank's Game	8	SRM	10	TrapperKeeper	1	Referee	North	External	North	FALSE	MA_NDA_C3	PB_C3	365
 DemandRecord	TRUE	1	1	1	93	120	0	Rubber	Uniform	A	Paul's Game	9	SRM	10	Rubber Cup	1	Goalie	WA	Internal	Beach	FALSE	MD_DA_C1	PB_C3	120
 DemandRecord	TRUE	1	1	1	244	150	0	Rubber	Uniform	A	Paul's Game	10	SRM	10	Rubber Cup	1	Goalie	WA	Internal	Beach	FALSE	MD_DA_C1	PB_C3	150
