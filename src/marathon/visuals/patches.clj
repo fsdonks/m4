@@ -85,10 +85,9 @@
 
 (def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
 (defn lines->samples [path]
-;  (with-open [rdr (clojure.java.io/reader path)]
-    (-> (spork.util.general/line-reducer path)
-        (spork.util.table/lines->records   locschema)
-        (patch-sampler)))
+  (-> (spork.util.general/line-reducer path)
+      (spork.util.table/lines->records   locschema)
+      (patch-sampler)))
 
 ;;this is the default value function...
 ;;Notice in category, it's SRM data...
@@ -109,7 +108,7 @@
           (reduce (fn [rowcols r]
                     (let [row (rowkey r)
                           col (colkey r)
-                          v  (valuef r)]
+                          v   (valuef r)]
                       (do (add-rowcol! row col)
                           (conj rowcols 
                                 {:row row 
@@ -123,13 +122,9 @@
     [row (persistent!  (reduce (fn [acc r] (conj! acc  (:value r)))
                                (transient   [])
                                (sort-by :col rs)))]))
-(comment ;testing 
-  (def res         (lines->samples testpath))
-  (def grps        (group-by #(-> % :key :src) res))
-  (def binders     (get grps "Binder"))
-;;  (def btbl    (table-by :))
-)
 
+
+(comment 
 (def ^:dynamic *attributes*
   {"Committed"        {:SurgeType "Committed"}
    "FCCommitted"      {:SurgeType "Committed"}
@@ -138,6 +133,7 @@
    "Demand1"          {:SurgeType "Committed"}
    "Demand2"          {:SurgeType "Mission"  }
    "Ready_Deployable" {:SurgeType "Ready"    }})
+)
 
 (def ^:constant +chunk-width+  150)
 (def ^:constant +chunk-height+ 14)
@@ -166,17 +162,43 @@
 ;;      (canv/color-by (canv/gradient-right l r)
 ;;                     (sketch/->labeled-box lbl :black :white 0 0 +cunk-width+ +chunk-height+))))
 
-(defn ->transition 
-  ([l r]      (canv/color-by (canv/gradient-right l r)
-                             (s/->rectangle :white 0 0 +chunk-width+ +chunk-height+)))
-  ([l r lbl]
-     (canv/color-by (canv/gradient-right l r)
-                    (sketch/->labeled-box lbl :black :white 0 0 +chunk-width+ +chunk-height+))))
+;; (defn ->transition 
+;;   ([l r]      (canv/color-by (canv/gradient-right l r)
+;;                              (s/->rectangle :white 0 0 +chunk-width+ +chunk-height+)))
+;;   ([l r lbl]
+;;      (canv/color-by (canv/gradient-right l r)
+;;                     (sketch/->labeled-box lbl :black :white 0 0 +chunk-width+ +chunk-height+))))
 
-(defn transition-type [^String loc]
-  (if (.contains loc "Transition")
-      (clojure.string/replace loc "Transition" "")))
+;; (defn transition-type [^String loc]
+;;   (if (.contains loc "Transition")
+;;       (clojure.string/replace loc "Transition" "")))
 
+(def palette
+  {:DarkYellow	[255	255	0]
+   :LightYellow	[255	255	153]
+   :DarkGreen	[84	130	53]
+   :LightGreen	[146	208	80]
+   :DarkBlue	[0	0	255]
+   :LightBlue	[0	255	255]})
+
+(def colors 
+  {"MP_DA_C1"		:DarkBlue
+   "MA_DA_C1"		:DarkBlue
+   "MA_DA_C2"		:DarkBlue
+   "MD_DA_C1"		:DarkBlue
+   "MD_DA_C2"		:DarkBlue
+   "MP_NDA_C3"		:LightBlue
+   "MA_NDA_C3"		:LightBlue
+   "MD_NDA_C3"		:LightBlue
+   "R_C1"		:DarkGreen
+   "R_C2"		:LightGreen
+   "PB_C3"		:DarkYellow
+   "PB_C4"		:DarkYellow
+   "PT_C4"		:LightYellow
+   "PL_C4"		:LightYellow
+   ":recovery"          :DarkYellow})
+
+(comment 
 (defn loc->color 
   ([loc location->attributes]
      (if (vector? loc)  (or (loc->color (first loc)) (loc->color (second loc)))
@@ -199,65 +221,71 @@
                "Prepare"   :yellow        
                (throw (Exception. (str "unknown mission type: " loc))))))))
   ([loc] (loc->color loc #(get *attributes* %))))
+)
+(defn loc->color
+  ([loc] (or (get colors loc) (throw (Exception. (str [:unknown-location loc])))))
+  ([loc & xs] (loc->color loc)))
+  
        
-(defn id-transitions [xs]
-  (loop [acc  []
-         prev nil
-         xs   xs]
-    (if (empty? xs) acc
-        (let [x (first xs)]
-          (case x 
-            ;we hit a transition
-            :transition 
-            (let [to (fnext xs)]
-              (recur 
-               (conj acc [prev to])
+;; (defn id-transitions [xs]
+;;   (loop [acc  []
+;;          prev nil
+;;          xs   xs]
+;;     (if (empty? xs) acc
+;;         (let [x (first xs)]
+;;           (case x 
+;;             ;we hit a transition
+;;             :transition 
+;;             (let [to (fnext xs)]
+;;               (recur 
+;;                (conj acc [prev to])
                
-               to
-               (rest xs)))
-            (recur (conj acc x)
-                   x
-                   (rest xs)))))))
+;;                to
+;;                (rest xs)))
+;;             (recur (conj acc x)
+;;                    x
+;;                    (rest xs)))))))
 
-(defn clean-transitions [xs]
-  (into []
-        (r/map (fn [x]
-                 (if (vector? x)
-                   (let [[l r] x]
-                     (if (or (or (nil? l) (nil? r))
-                             (or (identical? l :transition)
-                                 (identical? r :transition)))
-                       (case [l r]
-                         [nil :light-sky-blue]           [:green  :light-sky-blue]
-                         [nil :orange]         [:green  :orange]
-                         [nil :yellow]         [:orange :yellow]
-                         [nil :green]          [:light-sky-blue   :green]
-                         [nil :transition]     [:light-sky-blue :green]
-                         [:light-sky-blue   nil]         [:light-sky-blue   :green]
-                         [:orange nil]         [:orange :yellow]
-                         [:green  nil]         [:green  :light-sky-blue]
-                         [:yellow nil]         [:yellow :green]
-                         [:transition nil]     [:light-sky-blue :green]
-                         [:transition :light-sky-blue]   [:green  :light-sky-blue]
-                         [:transition :orange] [:green  :orange]
-                         [:transition :yellow] [:orange :yellow]
-                         [:transition :green]  [:light-sky-blue   :green]
-                         [:light-sky-blue   :transition] [:light-sky-blue   :green]
-                         [:orange :transition] [:orange :yellow]
-                         [:green  :transition] [:green  :light-sky-blue]
+;; (defn clean-transitions [xs]
+;;   (into []
+;;         (r/map (fn [x]
+;;                  (if (vector? x)
+;;                    (let [[l r] x]
+;;                      (if (or (or (nil? l) (nil? r))
+;;                              (or (identical? l :transition)
+;;                                  (identical? r :transition)))
+;;                        (case [l r]
+;;                          [nil :light-sky-blue]           [:green  :light-sky-blue]
+;;                          [nil :orange]         [:green  :orange]
+;;                          [nil :yellow]         [:orange :yellow]
+;;                          [nil :green]          [:light-sky-blue   :green]
+;;                          [nil :transition]     [:light-sky-blue :green]
+;;                          [:light-sky-blue   nil]         [:light-sky-blue   :green]
+;;                          [:orange nil]         [:orange :yellow]
+;;                          [:green  nil]         [:green  :light-sky-blue]
+;;                          [:yellow nil]         [:yellow :green]
+;;                          [:transition nil]     [:light-sky-blue :green]
+;;                          [:transition :light-sky-blue]   [:green  :light-sky-blue]
+;;                          [:transition :orange] [:green  :orange]
+;;                          [:transition :yellow] [:orange :yellow]
+;;                          [:transition :green]  [:light-sky-blue   :green]
+;;                          [:light-sky-blue   :transition] [:light-sky-blue   :green]
+;;                          [:orange :transition] [:orange :yellow]
+;;                          [:green  :transition] [:green  :light-sky-blue]
                          
-                         ;(throw (Exception. (str x)))
-                         (do ;(println (str "unknown color type:" x))
-                             :grey)
-                         )
-                       (if (= l r) l
-                           x)))
-                     x))
-               xs)))
+;;                          ;(throw (Exception. (str x)))
+;;                          (do ;(println (str "unknown color type:" x))
+;;                              :grey)
+;;                          )
+;;                        (if (= l r) l
+;;                            x)))
+;;                      x))
+;;                xs)))
 
 (defn table->colors [rowcols]
   (->> rowcols
-       (r/map #(clean-transitions (id-transitions (mapv loc->color %))))
+;      (r/map #(clean-transitions (id-transitions (mapv loc->color %))))
+       (r/map #(mapv loc->color %))
        (into [])))
 
 (defn ->chunk 
@@ -269,54 +297,48 @@
        (sketch/->labeled-box lbl :black color 0 0 +chunk-width+ +chunk-height+)))
   ([color] (->chunk color "")))
 
-(def colors 
-  [:green
-   :light-sky-blue
-   :orange 
-   :yellow
-  [:green  :light-sky-blue]
-  [:green  :orange]
-  [:green  :yellow]
-  [:orange :yellow]
-  [:light-sky-blue   :green]
-  [:light-sky-blue   :green]
-  [:light-sky-blue   :green]
-  [:orange :yellow]
-  [:green  :light-sky-blue]
-  [:yellow :green]
-  [:light-sky-blue   :green]
-  [:green  :light-sky-blue]
-  [:green  :orange]
-  [:orange :yellow]
-  [:light-sky-blue   :green]
-  [:light-sky-blue   :green]
-  [:light-sky-blue   :yellow]
-  [:yellow :light-sky-blue]
-  [:orange :yellow]
-  [:green  :light-sky-blue]
-  [:yellow :orange]])
+;; (def colors 
+;;   [:green
+;;    :light-sky-blue
+;;    :orange 
+;;    :yellow
+;;   [:green  :light-sky-blue]
+;;   [:green  :orange]
+;;   [:green  :yellow]
+;;   [:orange :yellow]
+;;   [:light-sky-blue   :green]
+;;   [:light-sky-blue   :green]
+;;   [:light-sky-blue   :green]
+;;   [:orange :yellow]
+;;   [:green  :light-sky-blue]
+;;   [:yellow :green]
+;;   [:light-sky-blue   :green]
+;;   [:green  :light-sky-blue]
+;;   [:green  :orange]
+;;   [:orange :yellow]
+;;   [:light-sky-blue   :green]
+;;   [:light-sky-blue   :green]
+;;   [:light-sky-blue   :yellow]
+;;   [:yellow :light-sky-blue]
+;;   [:orange :yellow]
+;;   [:green  :light-sky-blue]
+;;   [:yellow :orange]])
 
-(def color-set (set colors))
+;; (def color-set (set colors))
   
 (def chunks 
   (zipmap colors 
           (map (comp sketch/outline ->chunk) colors))) 
 
-;; (defn as-chunk 
-;;   [x]
-;;      (if-let [v (get chunks x)]
-;;        v
-;;        (do (println (str "Unknown chunk!" x))
-;;            (->chunk :red))))
-
 (defn as-chunk 
   [x & [lbl]]
-  (if (contains? color-set x)
+  (if (contains? palette x)
     (sketch/outline (if lbl (->chunk x lbl) (->chunk x)))
     (do (println (str "Unknown chunk!" x))
         (->chunk :red))))
 
-(def knownlocs #{"Prepare" "Ready" "Ready_Deployable" "TransitionReady_NotDeployable" "DeMobilization" "Mission_Deployable"})
+(def knownlocs ;#{"Prepare" "Ready" "Ready_Deployable" "TransitionReady_NotDeployable" "DeMobilization" "Mission_Deployable"})
+  (set (keys colors)))
 
 (defn table->labels [rowcols]
   (for [row   rowcols]
@@ -363,25 +385,34 @@
              (apply canv/->color-rgba 
                     (spork.graphics2d.canvas/random-color)))))
 
+;;this is a little adapter function 
 (defn clean-rec [{:keys [t key mode] :as r}]
   (let [{:keys [name src component]} (:key r)]
     {:t 0 :src src :name name :component component
-     :state (first mode)}))
+     :state (first mode)
+     :Quarter (quot t 91)}))
 
 ;;Visualization api
 (defn chunk-table [basedata sortkey]
     (let [row-order (atom [])]
       (->> basedata
-           (table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
+           (table-by  (juxt :component :src :name)  :Quarter :state)
            (rowcols->vecs)
            (sort-by (comp sortkey first))
            (reduce (fn [acc [r xs]]                   
                      (do (swap! row-order conj r)
                          (conj acc xs))) [])
            ((fn [r] (with-meta r {:row-order @row-order}))))))
+(comment ;testing 
+  (def res         (lines->samples testpath))
+  (def grps        (group-by #(-> % :key :src) res))
+  (def binders     (get grps "Binder"))
+  (def ct          (chunk-table (map clean-rec binders) :component))
+)
+
 
 (def ^:dynamic *table-rate* 91)
-
+(comment 
 (defn sand-tables [ds]
     (let [basedata  (->> ds 
                          (sample-every *table-rate*) 
@@ -408,3 +439,4 @@
               height (:height (.shape-bounds hist))]
           (sketch/beside (sketch/->labeled-box (str [SRC compo]) :black :light-gray 0 0 114 height)
                          hist)))))))
+)

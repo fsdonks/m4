@@ -653,7 +653,8 @@
 ;;to, we will add the wait-time to the context.  That way,
 ;;downstream behaviors can pick up on the wait-time, and 
 ;;apply it.
-(befn move->statechange ^behaviorenv {:keys [entity next-position tupdate statedata ctx] :as benv}
+(befn move->statechange ^behaviorenv {:keys [entity next-position location-change
+                                             tupdate statedata ctx] :as benv}
     (when-let [nextpos next-position] ;we must have a position computed, else we fail.                                       
       (let [t        tupdate
             u        @entity 
@@ -687,9 +688,10 @@
              {:position-change {:from-position frompos ;record information
                                 :to-position   nextpos}
               :state-change    state-change
-              :location-change (when (not (identical? from-loc to-loc))
-                                          {:from-location  from-loc
-                                           :to-location    to-loc})
+              :location-change (or location-change
+                                   (when (not (identical? from-loc to-loc))
+                                     {:from-location  from-loc
+                                      :to-location    to-loc}))
               :wait-time     nil
               :next-position nil
               :next-location nil}
@@ -812,16 +814,21 @@
 
 ;;this is really a behavior, modified from the old state.  called from overlapping_state.
 ;;used to be called check-overlap.
-(befn disengage {:keys [entity position-change ctx] :as benv}
-      (when position-change
-        (let [{:keys [to-position from-position]}   position-change
-              res   (cond (identical? to-position   :overlapping)   true
-                          (identical? from-position :overlapping)   false                          
-                          :else :none)]
-          (when (not (identical? res :none)) ;ugh?
-            (do (swap! ctx ;;update the context...
-                       #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % res))
-                (success benv))))))
+(befn disengage {:keys [entity position-change ctx overlapping-position] :as benv}
+      (if overlapping-position
+        (do  (println [:overlapping-prescribed])
+             (swap! ctx ;;update the context...
+                   #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % true))
+             (success (assoc benv :overlapping-position nil)))
+        (when  position-change
+          (let [{:keys [to-position from-position]}   position-change
+                res   (cond (identical? to-position   :overlapping)   true
+                            (identical? from-position :overlapping)   false                          
+                            :else :none)]
+            (when (not (identical? res :none)) ;ugh?
+              (do (swap! ctx ;;update the context...
+                         #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % res))
+                  (success benv)))))))
 
 ;;used to be called check-overlap; 
 (def  check-overlap disengage)
@@ -844,8 +851,7 @@
                                            (:from-position change)
                                            (:to-position change) @entity @ctx)) ;ugly, fire off a move event.check-overlap
          (reset! entity (assoc @entity :positionpolicy (:to-position change)))
-         (->seq [check-deployable
-                 check-overlap ;;Added, I think I missed this earlier...
+         (->seq [check-deployable                 
                  finish-cycle
                  (->alter  #(dissoc % :position-change))]))))
 
@@ -859,15 +865,31 @@
          ;;we need to trigger a location change on the unit...
          (success (dissoc benv :location-change))))))
 
+;;this is a weak predicate..but it should work for now.
+(defn demand? [e] (not (nil? (:source-first e))))
+
+;;is the movement causing a change in fill?
+(befn change-fill {:keys [entity location-change ctx] :as benv}
+      (when location-change
+        (let [{:keys [from-location]} location-change]
+          (when (demand? (store/get-entity @ctx from-location))
+            (swap! ctx ;;update the context...
+                   #(d/disengage (core/get-demandstore %)
+                                 @entity (:locationname @entity) % false))
+            (success benv)))))
+        
 ;;with a wait-time and a next-position secured,
 ;;we can now move.  Movement may compute a statechange
 ;;in the process.
 (def execute-move
   (->seq [(echo :<move->statechange>)
-          (->or [prescribed-move->statechange move->statechange])
+          (->or [prescribed-move->statechange
+                 move->statechange])
           (echo :<change-position>)
           change-position
           (echo :<change-location>)
+          check-overlap ;;Added, I think I missed this earlier...
+          ;change-fill ;;newly added...
           change-location
           change-state-beh
           (echo :waiting)
@@ -1323,6 +1345,7 @@
                    :duration       overlap
                    :followingstate nil
                    :timeinstate    0}
+                  :overlapping-position true
                   :t t}
                  )
           benv))

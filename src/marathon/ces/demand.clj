@@ -939,9 +939,13 @@
 ;broke out uber function into a smaller pairing of disengagement functions, to 
 ;handle specific pieces of the contextual change.
 (defn- disengage-unit [demand demandstore unit ctx & [overlap]]
-  (if overlap 
-    (->> (overlapping! demandstore demand unit ctx)
-         (d/send-overlap demand unit))
+  (if overlap
+    (let [;_ (println [:pre demand])
+          demand (d/send-overlap demand unit)
+          ;_ (println [:overlapping demand])
+          ]
+      (-> (overlapping! demandstore demand unit ctx)
+          (store/add-entity demand)))
     (->> (send-home (sim/current-time ctx) demand unit ctx)
          (disengaging-home! demandstore demand unit))))
 
@@ -951,13 +955,16 @@
 (defn disengage
   "Shifts the unit from being actively assigned to the demand, to passively 
    overlapping at the demand.  Updates the demand's fill status."
-  [demandstore unit demandname ctx & [overlap]]
-  (let [demand    (get-in demandstore [:demandmap demandname])
+ ([demandstore unit demandname ctx overlap]
+  (let [;_         (println [:dis demandname])
+        demand    (get-in demandstore [:demandmap demandname])
         nextstore (register-change demandstore demandname)
         ctx       (disengage-unit demand demandstore unit ctx overlap)]  
     (if (zero? (d/required demand)) 
       (update-fill demandname (:unfilledq demandstore) demandstore ctx)
       ctx)))
+ ([demandstore unit demandname ctx] ;hack....
+  (disengage demandstore unit demandname ctx false)))
 
 (defn send-home-units
   "Sends home all units from a demand, essentially freeing consumed resources.  

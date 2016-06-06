@@ -95,7 +95,11 @@
 
 (defn send-overlap [d u]
   (if (has-unit? d u)
-    (transfer (:units-assigned d) (:name u) (:units-overlapping d))
+    (let [assigned    (:units-assigned d)
+          overlapping (:units-overlapping d)
+          nm (:name u)]
+      (assoc d :assigned    (dissoc assigned nm)
+               :overlapping (assoc overlapping nm)))
     d))
 
 ;Public Function unitCount() As Long

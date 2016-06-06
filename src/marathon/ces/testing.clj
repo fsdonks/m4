@@ -172,17 +172,17 @@
         false
         acc))))
 
-(deftest scheduled-demands-correctly 
+(deftest scheduled-demands-correctly
   (is (= times
          '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
              778 811 901 963 991 1048 1051 1081 1261 1330 1351 1441 1531 1621 1711 1801 1981 2071 2095 2341 2521))
       "Scheduled times from sampledata should be consistent, in sorted order.")
   (is (= known-events expected-events)           
       "The only events scheduled should be time changes.")
-  (is (same? (take 2 activations481)
-             ["1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]"])
+  (is (same? (take 2 (sort activations481))
+             ["1_A11_SRC2[481...554]" "1_R29_SRC3[481...554]"])
       "Should have actives on 481...")
-  (is (re-find #"1_Vig-ANON-.*[481...554]" (nth (seq activations481) 2))
+  (is (re-find #"1_Vig-ANON-.*[481...554]" (nth (sort activations481) 2))
       "The third active on 481 should be an anonymously named vignette with a  number in the name.")
   (is (some (fn [d] (= d (:name first-demand))) (demand/get-activations m-dstore tstart))
       "Demand should register as an activation on startday.")
@@ -680,17 +680,17 @@
 
 ;;Should get through 
 (deftest followontest
-  (let [ft  (->history 1100 ;(debugging-on #{451
-                  ;               467
-                   ;              523
-                   ;              563
-                   ;              595
-                   ;              963
-                   ;              1051})
+  (let [ft  (->history 1100
+                   ;(debugging-on #{451
+                   ;               467
+                   ;               523
+                   ;               563
+                   ;               595
+                   ;               963
+                   ;               1051})
                  engine/sim-step
                  followonctx)]
     ))
-
 
 (defn ->collect-samples [f h]
   (let [ks    (sort (keys h))
