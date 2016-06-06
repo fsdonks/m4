@@ -99,8 +99,8 @@
           overlapping (:units-overlapping d)
           nm (:name u)]
       (-> d
-          (assoc :assigned   (dissoc assigned nm))
-          (assoc :overlapping (assoc overlapping nm nm))))
+          (assoc :units-assigned   (dissoc assigned nm))
+          (assoc :units-overlapping (assoc overlapping nm nm))))
     (throw (Exception. (str ["Cannot find unit" (:name u) d])))                            
     ))
 
