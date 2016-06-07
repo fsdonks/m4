@@ -721,7 +721,7 @@
       (if  (prescribed? entity tupdate)
         ;;we have a move set up..
         (let [pm (:prescribed-move @entity)
-               _ (println [:found-prescribed-move pm])]
+               _ (debug [:found-prescribed-move pm])]
                (do (swap! entity dissoc :prescribed-move)
                    (bind!! {:prescribed-move pm})))
         ;;let's derive a move...
@@ -816,7 +816,7 @@
 ;;used to be called check-overlap.
 (befn disengage {:keys [entity position-change ctx overlapping-position] :as benv}
       (if overlapping-position
-        (let [_  (println [:overlapping-prescribed])
+        (let [_  (debug [:overlapping-prescribed])
               lname (:locationname @entity)
           ;    _  (println [:move->overlap (:name @entity) :from lname
           ;                 (select-keys (store/get-entity @ctx lname)
@@ -886,7 +886,7 @@
           (when (demand? (store/get-entity @ctx from-location))
             (swap! ctx ;;update the context...
                    #(d/remove-unit-from-demand (core/get-demandstore %)
-                                 @entity (:locationname @entity) %))
+                                 @entity from-location %))
             (success benv)))))
         
 ;;with a wait-time and a next-position secured,
@@ -898,9 +898,11 @@
                  move->statechange])
           (echo :<change-position>)
           change-position
-          (echo :<change-location>)
+          (echo :<check-overlap>)
           check-overlap ;;Added, I think I missed this earlier...
+          (echo :<change-fill>)
           change-fill ;;newly added...
+          (echo :<change-location>)
           change-location
           change-state-beh
           (echo :waiting)
@@ -1355,7 +1357,7 @@
 (defn prescribe-overlap! [benv t overlap state]
   (if (and overlap (pos? overlap))
     (let [entity (:entity benv)]
-      (do (println [:prescribing-overlap (:name @entity)  overlap t])
+      (do (debug [:prescribing-overlap (:name @entity)  overlap t])
            (swap! entity  assoc :prescribed-move
                  {:state-change
                   {:newstate       state
@@ -1423,7 +1425,7 @@
           ;;if the demand prescribes one, then we go ahead and schedule it with
           ;;the entity...                               
           wt           (- MissionLength overlap)
-          _  (println [:location-based
+          _  (debug [:location-based
                        {:name (:name @entity)
                         :state-change state-change
                         :location-change location-change
