@@ -500,7 +500,7 @@
   {reset       182 
    train       183 
    available   365
-   deployed    (- 365 overlap) 
+   deployed    (- 365 overlap)
    Overlapping overlap})
 
 ;;Policy transitions for adapt arforgen
