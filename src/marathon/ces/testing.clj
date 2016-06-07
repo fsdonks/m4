@@ -37,7 +37,8 @@
                         [tags :as tags]]
             [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
-            [clojure.test :as test :refer :all]))
+            [clojure.test :as test :refer :all]
+            [marathon.analysis :as analysis]))
 
 ;;Some of our output is pretty 'uge, and trying to
 ;;print it all out kills emacs.
@@ -259,47 +260,6 @@
     (engine/end-day day)           ;End of day logic and notifications.
     (demand/manage-changed-demands day)));Clear set of changed demands
                                         ;in demandstore.
-
-;;#Move these into core...#
-(defn ->simreducer [stepf init]  
-  (r/take-while identity (r/iterate (fn [ctx]
-                                       (when  (engine/keep-simulating? ctx)
-                                          (let [init ctx
-                                                t  (sim/get-time ctx)
-                                                processed  (stepf t  ctx)
-                                                nxt        (sim/advance-time processed)]
-                                            (with-meta nxt {t {:start init
-                                                               :end processed}}))))
-                                    init)))
-;;A wrapper for an abstract simulation.  Can produce a sequence of
-;;simulation states; reducible.
-(defn ->simulator [stepf seed]
-  (let [simred (->simreducer stepf seed)]
-    (reify     
-      clojure.lang.Seqable 
-      (seq [this]  
-        (take-while identity (iterate (fn [ctx] 
-                                        (when  (engine/keep-simulating? ctx)
-                                          (let [init ctx
-                                                t  (sim/get-time ctx)
-                                                processed  (stepf t  ctx)
-                                                nxt        (sim/advance-time processed)]
-                                            (with-meta nxt {t {:start init
-                                                               :end processed}}))))
-                                      seed)))
-      clojure.core.protocols/CollReduce
-      (coll-reduce [this f1]   (reduce f1 simred))
-      (coll-reduce [_ f1 init] (reduce f1 init simred)))))
-
-(defn ->history [tfinal stepf init-ctx]
-  (->> init-ctx
-       (->simulator stepf)
-       (map (fn [ctx] [(core/get-time ctx) ctx]))
-       (take-while #(<= (first %) tfinal))
-       (into {})))
-
-(defn ending [h t] (get (meta (get h t) :end)))
-(defn start  [h t] (get (meta (get h t) :start)))
 
 (def demand-sim (->simulator demand-step defaultctx))
 (def the-unit    "4_SRC1_AC")
@@ -613,29 +573,29 @@
 ;;turning on debugging information for a narrow range of updates...
 (comment 
 (def h91
-  (->history 91  (debugging-on 91)
+  (analysis/->history 91  (debugging-on 91)
              defaultctx))
 
 (def ctx91 (get h91 91))
 (def s91 (core/get-supplystore (get h91 91)))
 
 (def h181
-  (->history 181  (debugging-on 181)
+  (analysis/->history 181  (debugging-on 181)
              ctx91))
 
 ;(binding [unit/*uic* "2_SRC1_NG"]
 (def h271 
-  (->history 271  (debugging-on (fn [_] true))
+  (analysis/->history 271  (debugging-on (fn [_] true))
              (get h181 181)))
 
 (def h1000
-                        (->history 1000 engine/sim-step
+                        (analysis/->history 1000 engine/sim-step
                                    defaultctx))
 
 )
 
 (deftest vanilla-sim
-  (let [h2521  (->history 2521 engine/sim-step 
+  (let [h2521  (analysis/->history 2521 engine/sim-step 
                           defaultctx)]
     ))
     
@@ -661,7 +621,7 @@
 (comment 
 (def followonfill
   (let [f467 
-        (get (->history 467 engine/sim-step             
+        (get (analysis/->history 467 engine/sim-step             
                         followonctx) 467)
         day (sim/get-time f467)]
     (->> f467
@@ -680,7 +640,7 @@
 
 ;;Should get through 
 (deftest followontest
-  (let [ft  (->history 1100
+  (let [ft  (analysis/->history 1100
                    ;(debugging-on #{451
                    ;               467
                    ;               523
@@ -706,7 +666,7 @@
 
 ;;dumb sampler...probably migrate this to
 ;;use spork.trends sampling.
-(defn ->location-samples   [h]  (->collect-samples core/locations h))
+(defn ->location-samples   [h]  (->collect-samples core/locations   h))
 (defn ->deployment-samples [h]  (->collect-samples core/deployments h))
 (defn tsv->csv [path]
   (with-open [rdr  (clojure.java.io/reader (str path))
@@ -742,7 +702,7 @@
          (core/solo-src "Binder")))
   
   (def bindertest
-    (->  (->history 1 ;(debugging-on #{451
+    (->  (analysis/->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -754,7 +714,7 @@
          (get 1)))
   
   (def srm1
-    (->  (->history 1 ;(debugging-on #{451
+    (->  (analysis/->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -795,7 +755,7 @@
    (deployment/deploy-unit srm1nofill (store/get-entity srm1nofill "3_Binder_AC") 1  srmd)))
 
 (def simple-srm
-  (->history 100 ;(debugging-on #{451
+  (analysis/->history 100 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -805,7 +765,7 @@
                  simple-step
                  srmctx))
 (def srm1
-  (->  (->history 1 ;(debugging-on #{451
+  (->  (analysis/->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -817,7 +777,7 @@
        (get 1)))
 
 (def srmtest
-  (->history 5001 ;(debugging-on #{451
+  (analysis/->history 5001 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -851,7 +811,7 @@
   (let [srmctx
           (->> (setup/simstate-from  sd/srm-tables core/debugsim)
                (sim/add-time 1))]
-    (->history tmax
+    (analysis/->history tmax
                engine/sim-step
                srmctx)))
 ;;We'd like to take a simulation history, and glean from it

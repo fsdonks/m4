@@ -83,7 +83,6 @@
                           :component (:component r)})
                  (juxt :positionpolicy :locationname)))
 
-(def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
 (defn lines->samples [path]
   (-> (spork.util.general/line-reducer path)
       (spork.util.table/lines->records   locschema)
@@ -219,65 +218,8 @@
   ([loc] (or (get palette (get colors loc) ) (throw (Exception. (str [:unknown-location loc])))))
   ([loc & xs] (loc->color loc)))
   
-       
-;; (defn id-transitions [xs]
-;;   (loop [acc  []
-;;          prev nil
-;;          xs   xs]
-;;     (if (empty? xs) acc
-;;         (let [x (first xs)]
-;;           (case x 
-;;             ;we hit a transition
-;;             :transition 
-;;             (let [to (fnext xs)]
-;;               (recur 
-;;                (conj acc [prev to])
-               
-;;                to
-;;                (rest xs)))
-;;             (recur (conj acc x)
-;;                    x
-;;                    (rest xs)))))))
-
-;; (defn clean-transitions [xs]
-;;   (into []
-;;         (r/map (fn [x]
-;;                  (if (vector? x)
-;;                    (let [[l r] x]
-;;                      (if (or (or (nil? l) (nil? r))
-;;                              (or (identical? l :transition)
-;;                                  (identical? r :transition)))
-;;                        (case [l r]
-;;                          [nil :light-sky-blue]           [:green  :light-sky-blue]
-;;                          [nil :orange]         [:green  :orange]
-;;                          [nil :yellow]         [:orange :yellow]
-;;                          [nil :green]          [:light-sky-blue   :green]
-;;                          [nil :transition]     [:light-sky-blue :green]
-;;                          [:light-sky-blue   nil]         [:light-sky-blue   :green]
-;;                          [:orange nil]         [:orange :yellow]
-;;                          [:green  nil]         [:green  :light-sky-blue]
-;;                          [:yellow nil]         [:yellow :green]
-;;                          [:transition nil]     [:light-sky-blue :green]
-;;                          [:transition :light-sky-blue]   [:green  :light-sky-blue]
-;;                          [:transition :orange] [:green  :orange]
-;;                          [:transition :yellow] [:orange :yellow]
-;;                          [:transition :green]  [:light-sky-blue   :green]
-;;                          [:light-sky-blue   :transition] [:light-sky-blue   :green]
-;;                          [:orange :transition] [:orange :yellow]
-;;                          [:green  :transition] [:green  :light-sky-blue]
-                         
-;;                          ;(throw (Exception. (str x)))
-;;                          (do ;(println (str "unknown color type:" x))
-;;                              :grey)
-;;                          )
-;;                        (if (= l r) l
-;;                            x)))
-;;                      x))
-;;                xs)))
-
 (defn table->colors [rowcols]
   (->> rowcols
-;      (r/map #(clean-transitions (id-transitions (mapv loc->color %))))
        (r/map #(mapv loc->color %))
        (into [])))
 
@@ -358,7 +300,8 @@
   (mapv (fn [row]
           (into [] (take n row))) xs))
   
-(comment ;testing 
+(comment ;testing
+  (def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
   (def res         (lines->samples testpath))
   (def grps        (group-by #(-> % :key :src) res))
   (def binders     (get grps "Binder"))
