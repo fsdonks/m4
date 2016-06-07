@@ -533,7 +533,6 @@
 (defn pop-priority-map [m]
   (if (empty? m) m (dissoc m (first (keys m)))))
 
-
 (defn drop-unfilled-demand [demandstore demand  ctx]
   (let [unfilled (:unfilledq   demandstore)
         src      (:src demand)
@@ -548,8 +547,8 @@
                 (->> (removing-unfilled! demandstore (:name demand) ctx)
                      (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))
            (not (:active demand))
-                 (deactivating-unfilled! demandstore (:name demand) ctx))     ;notification
-       :else ctx  ;;nothing to change..
+                 (deactivating-unfilled! demandstore (:name demand) ctx)     ;notification
+       :else ctx)  ;;nothing to change..
     ))
 
 ;;Register the unfilled demand entity and update the demandstore's unfilled.  We

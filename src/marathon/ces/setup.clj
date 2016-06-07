@@ -15,6 +15,21 @@
             [spork.util [tags :as tags]
                         [table :as tbl]]))
 
+;;We need to establish a workflow here...
+;;Typical workflow for analysts is to work
+;;Excel, build the project, then
+;;pull in tables from there.
+
+
+;;Could use a core API...
+;;as-tables...
+;;This is where the marathon project
+;;format could come in handy.
+;;Tables is just a map of table-name
+;;to table...so...a database....
+;;We can have multiple versions of
+;;this..
+
 ;;A central resource for getting tables.  
 (def ^:dynamic *tables*  sd/sample-tables)
 (defn alt-name [x]
