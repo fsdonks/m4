@@ -50,6 +50,8 @@
 ;;If an endtime is specified, we use that in our conditional logic, else we keep working until
 ;;no more eventful days are upon us.
 
+;;This is costing us a lot of time in profiling.  Almost 1/3 of the simulation
+;;runtime....function invocation is weak.
 ;;THis is a pretty weak port....
 (defn keep-simulating? [ctx]
   (let [state (:state ctx)]

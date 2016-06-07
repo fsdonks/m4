@@ -667,11 +667,19 @@
 ;Get a list of the names of policies in the policy store.
 (defn policy-names [policystore] (keys (get-policies policystore)))
 
+(def policy-cache (atom {}))
+
 ;Get a policy associated with Pname, relative to the policystore.
 (defn find-policy [pname policystore] 
   (if-let [p (or (get (get-policies policystore) pname)
-                 (if-let [pol (get pops/aliases pname)]
-                   (pol)))]
+                 (get @policy-cache pname)
+                 (when-let [pol (get pops/aliases pname)]
+                   (if-let [res (get @policy-cache pol)]
+                     (do (swap! policy-cache assoc pname res)
+                         res)
+                     (let [res (pol)]
+                       (do (swap! policy-cache assoc pol res)
+                           res)))))]
     p
     (throw (Exception. (str "Unknown policy! " pname)))))
 

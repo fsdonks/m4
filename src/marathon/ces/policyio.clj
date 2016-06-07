@@ -47,7 +47,9 @@
 (defn record->policy 
   [{:keys [Template PolicyName MaxBOG MaxDwell MinDwell Overlap 
            StartDeployable StopDeployable Deltas]}]
-  (let [deltas (or (clojure.edn/read-string Deltas) {})]
+  (let [deltas (if (= Deltas "{}") {}
+                   (clojure.edn/read-string Deltas))
+        ]
     (-> (if (= Template "Ghost") 
           (policyops/register-ghost-template PolicyName MaxBOG  :overlap Overlap)
           (policyops/register-template Template MaxDwell MinDwell MaxBOG 
