@@ -416,42 +416,6 @@
 (defn register-demands
   [xs ctx] (reduce (fn [acc d] (register-demand d acc) ) ctx xs))
 
-;;cop-out, see if it's faster...
-(comment
-  (defn register-demand  [demand ctx] (register-demands! [demand] ctx))
-)
-
-
-
-
-;; ;;Alternate formulation
-;; (deftransaction register-demands! {dstore    [:state :demandstore]
-;;                                    pstore    [:state :policystore]
-;;                                    locations {pstore [:locationmap]}
-;;                                    demandtags {dstore [:tags]}
-;;                                    demands    {dstore [:demands]}}
-;;   ...) 
-
-
-;; ;;even better....
-;; (transaction
-;;  register-demands! [{:resources [dstore pstore locations demandtags demands] 
-;;                      :or {dstore [:state :demandstore]
-;;                           pstore [:state :policystore]
-;;                           locations {pstore [:locationmap]}
-;;                           demandtags {dstore [:tags]}
-;;                           demands    {dstore [:demands]}} :as resources}]
-;;  ....do work 
-;;  (update-resources!))
-
-
-
-  
-                                   
-                                               
-                                   
-        
-
 ;;another way to look at this guy is that we're modifying disparate
 ;;domains via a transaction.  Specifically, we're working on multiple
 ;;things simultaneously.
@@ -511,23 +475,6 @@
 ;;  operate on demandstore's for the most part, or policystores.
 ;;  We can (and do) pack that into the transactional context.
 ;;  However, 
-
-                
-  
-
-;;bulk loading functions, experimental.
-;;If we could pass in the demandstore as an atomic reference, 
-;;that would suffice....then we update the accumulated 
-;;reference at the end...
-;; (defn register-demands [demands demandstore policystore ctx]
-;;   (let [dstore (core/->cell demandstore)
-;;         pstore (core/->cell policystore)]
-;;     (reduce (fn [acc demand]
-;;               (let [dname    (:name demand)
-;;                     newstore (tag-demand demand (add-demand dstore demand))]
-;;                 (->> (registering-demand! demand ctx)         
-;;                      (core/merge-entity {:policystore (policy/register-location dname policystore)})
-;;                      (schedule-demand demand newstore)))) 
 
 ;utility function....
 (defn pop-priority-map [m]
@@ -616,45 +563,6 @@
                ;;basically - add-unfilled-demand
                                         ;demand is unfilled, make sure it's added
                (add-unfilled-demand demandstore demand ctx))))))
-
-(comment ;;older version..
-(defn update-fill
-  "Derives a demand's fill status based on its current data.  Satisfied demands 
-   are removed from the unfilled queue, unsatisfied demands are kept or added to
-   the unfilled queue.  Deactivating unfilled demands are detected as well.
-   Propogates notifications for each special case."
-  [demandstore demandname ctx]
-  (let [demand   (get-in demandstore [:demandmap demandname])   ;     (store/get-entity ctx demandname) ;;this is get-demand...
-        fill-key (priority-key demand)
-        unfilled (:unfilledq   demandstore)   ;;do we need the store for this?  Can the unfilledq be an entity?
-        ]
-    (assert (not (nil? (:src demand))) (str "NO SRC for demand" demandname))
-    (assert (not (nil? demandname)) "Empty demand name!")
-    (let [required (d/required demand)
-          src      (:src demand)
-          _ (debug [:updfill demandname :required required])]
-      ;;basically - drop-unfilled-demand
-      (if (or (zero? required)  ;;if we move to components, active-demand? doesn't need the store..
-              (not (active-demand? demandstore demandname))) ;demand is filled, remove it  
-        (if (contains? unfilled src) ;either filled or deactivated
-          (let [demandq      (dissoc (get unfilled src) fill-key)
-                nextunfilled (if (zero? (count demandq)) 
-                                 (dissoc unfilled src) 
-                                 (assoc  unfilled src demandq))]
-            (->> (removing-unfilled! demandstore demandname ctx)
-                 (core/merge-entity {:DemandStore (assoc demandstore :unfilledq nextunfilled)})))              
-          (deactivating-unfilled! demandstore demandname ctx))     ;notification
-
-        ;;basically - add-unfilled-demand
-        ;demand is unfilled, make sure it's added
-        (let [demandq (get unfilled src (sorted-map))]  
-          (if (contains? demandq fill-key) ctx ;pass-through
-            (->> (core/merge-entity ;add to unfilled 
-                   {:DemandStore 
-                    (gen/deep-assoc demandstore [:unfilledq src] 
-                         (assoc demandq fill-key demand))} ctx) ;WRONG?
-                 (adding-unfilled! demandstore demandname)))))))) 
-)
 
 ;;##Describing Categories of Demand To Inform Demand Fill Rules
 ;;Demands have typically been binned into gross categories, based on the type 
