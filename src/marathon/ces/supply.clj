@@ -15,7 +15,8 @@
             [spork.ai.core :refer [debug]]
             [spork.sim    [simcontext :as sim] [updates :as updates]]
             [spork.util   [tags :as tag]
-                          [general :as gen]]))
+             [general :as gen]]
+            [clojure.core.reducers :as r]))
 
 ;;#Primitive Operations and Supply Queries
 ;'TODO -> formalize dependencies and pre-compilation checks....
@@ -260,6 +261,15 @@
                   (let [msg  (unit-msg unit ctx)]
                     (supply-update! supplystore unit msg ctx))))))))
 
+;;This is an area that is ripe for parallelism.  We have an explicit
+;;synchronization point, each unit is logically independent of the
+;;other.  We should be able to split work out across multiple
+;;cores and perform updates in parallel.  The ctx is a shared
+;;resource though....Most of the unit updates will consist
+;;of modifying the unit entity atomically during the behavior,
+;;then committing the entity at the end.  So we have that
+;;behavior covered...Each unit update will create its
+;;own behavior context as well.
 (defn update-units
   "Given a sequence of unit keys, xs, brings each unit up to date according to 
    day, relative to the supply and the simulation context."
@@ -272,7 +282,7 @@
    common point in time.  Typically used prior to sampling."
   [t supply ctx & [unitnames]]
   (->> (or unitnames (keys (get supply :unitmap)))
-       (filter (partial up-to-date? t ctx))
+       (r/filter (partial up-to-date? t ctx))
        (update-units t supply ctx)))
 
 ;;#General Supply Notifications
@@ -324,9 +334,14 @@
 ;So we can probably just plug them in as modules....they're all pure functions.
 ;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
 (defn log-position! [t frompos topos unit  ctx]
-  (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
-     (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
-     nil ctx))
+  
+  ;(comment 
+    (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
+                       (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
+                       nil ctx)
+   ; )
+ ; ctx
+  )
 
 ;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
@@ -455,6 +470,9 @@
 
 ;;#Registering New Supply
 
+;;Note: this is a current bottleneck for run setup (we spend a lot of time
+;;in here, could benefit from mutation, or anything that avoids
+;;all the associng and get calls.
 
 ;Note -> the signature for this originally returned the supply, but we're not 
 ;returning the context.  I think our other functions that use this guy will be

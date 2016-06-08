@@ -5,7 +5,12 @@
             [spork.geometry.shapes :as s]
             [spork.graphics2d.canvas :as canv]
             [clojure.core.reducers :as r]
-            [spork.util.table :as tbl]))
+            [spork.util.table :as tbl]
+            ;;temporary visualization measures...
+            [spork.graphics2d [debug :as debug]]
+            [piccolotest.sample :as picc]
+            [piccolotest.canvas :as pcanvas]
+            ))
 
 ;;(table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
 

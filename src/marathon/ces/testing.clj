@@ -261,7 +261,7 @@
     (demand/manage-changed-demands day)));Clear set of changed demands
                                         ;in demandstore.
 
-(def demand-sim (->simulator demand-step defaultctx))
+(def demand-sim (analysis/->simulator demand-step defaultctx))
 (def the-unit    "4_SRC1_AC")
 
 (defn disable-except [u ctx]
@@ -289,8 +289,8 @@
 
 (def small-ctx (disable-except "2_SRC1_NG" defaultctx))
 
-(def supply-sim (->simulator supply-step defaultctx))
-(def ss (->simulator supply-step (disable-except the-unit defaultctx)))
+(def supply-sim (analysis/->simulator supply-step defaultctx))
+(def ss (analysis/->simulator supply-step (disable-except the-unit defaultctx)))
 
 (defn actives [rctx]
   (into [] (r/map (fn [ctx] [(sim/get-time ctx) (:activedemands (core/get-demandstore ctx))])  rctx)))
@@ -305,9 +305,9 @@
 ;;Note:
 ;;simpler solution is to NOT maintain deployable buckets; Rather let
 ;;demand sort supply as needed....
-(def deployables  (filter unit/can-deploy? (core/units defaultctx)))
+(def  deployables  (filter unit/can-deploy? (core/units defaultctx)))
 (defn deployable-units [ctx] (filter unit/can-deploy?   (core/units ctx)))
-(def deploynames  (map :name deployables))
+(def  deploynames  (map :name deployables))
 
 ;;Every demand has a corresponding supply rule that indicates its preference for unit
 ;;types among other things.
@@ -512,7 +512,6 @@
       (policy/manage-policies day)
       (engine/end-day day)))
 
-
 ;;A basic supply/demand context, initialized for the first day
 ;;of simulation.
 (def zero-ctx
@@ -652,27 +651,6 @@
                  followonctx)]
     ))
 
-(defn ->collect-samples [f h]
-  (let [ks    (sort (keys h))
-        pairs (partition 2 1 ks)]
-    (into (vec (apply concat
-                    (->> pairs
-                         (mapcat (fn [[l r]]
-                                   (let [ctx (get h l)]
-                                     ;;sample in between...
-                                     (for [t (range l r)]
-                                       (f t ctx))))))))
-          (f (last ks) (get h (last ks))))))
-
-;;dumb sampler...probably migrate this to
-;;use spork.trends sampling.
-(defn ->location-samples   [h]  (->collect-samples core/locations   h))
-(defn ->deployment-samples [h]  (->collect-samples core/deployments h))
-(defn tsv->csv [path]
-  (with-open [rdr  (clojure.java.io/reader (str path))
-              wrtr (clojure.java.io/writer (str path ".csv"))]
-    (doseq [^String ln (line-seq rdr)]
-      (.write wrtr (str (clojure.string/replace ln \tab \,) \newline)))))
 
 ;; (defn ->fills [h]
 ;;     (let [ks    (sort (keys h))
@@ -814,9 +792,9 @@
     (analysis/->history tmax
                engine/sim-step
                srmctx)))
+
 ;;We'd like to take a simulation history, and glean from it
-;;location data.
-  
+;;location data.  
 (deftest srm-test
   (srm-hist)
       )

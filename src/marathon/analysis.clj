@@ -21,6 +21,7 @@
                                             (with-meta nxt {t {:start init
                                                                :end processed}}))))
                                     init)))
+
 ;;A wrapper for an abstract simulation.  Can produce a sequence of
 ;;simulation states; reducible.
 (defn ->simulator [stepf seed]
@@ -50,7 +51,6 @@
 
 (defn ending [h t] (get (meta (get h t) :end)))
 (defn start  [h t] (get (meta (get h t) :start)))
-
 
 (defn ->collect-samples [f h]
   (let [ks    (sort (keys h))
@@ -82,6 +82,14 @@
         (tbl/records->file (->location-samples h) lpath)
         (println [:spitting-deployments dpath])
         (tbl/records->file (->deployment-samples h) dpath))))
+
+
+
+;;we need to create a pipeline that allows us
+
+;;Right now, we're looking
+;;Actual output from a Marathon run will include....
+
 ;;
 (comment 
 
