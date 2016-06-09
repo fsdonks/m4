@@ -162,25 +162,36 @@
                 acc)
               acc))
           drec flds))
-                
+
+(defmacro coerce [[vars type] & expr]
+  `(let [~@(reduce (fn [acc [l r]]
+                     (-> acc
+                         (conj  l)
+                         (conj r)))
+                   []
+                  (for [v vars]
+                    `(~v (~type ~v))))]
+     ~@expr))
+
 (defn record->demand 
   "Basic io function for converting raw records to demanddata."
   [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
            SourceFirst Quantity  OITitle Vignette Operation  DemandGroup
            ] :as rec}]
-  (-> (create-demand DemandKey SRC  Priority StartDay Duration Overlap Category 
-                     SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup)
+  (coerce [[Priority StartDay Duration Overlap Quantity] long]
+    (-> (create-demand DemandKey SRC Priority StartDay Duration Overlap Category 
+                       SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup)
       ;this is a slightly hacked way to do it, but it's passable...
-      (merge (select-keys rec [:Command
-                               :Location
-                               :DemandType
-                               :Theater
-                               :BOG
-                               :StartState
-                               :EndState
-                               :MissionLength]))
-      (clean-nils [:StartState :EndState])
-      ))
+        (merge (select-keys rec [:Command
+                                 :Location
+                                 :DemandType
+                                 :Theater
+                                 :BOG
+                                 :StartState
+                                 :EndState
+                                 :MissionLength]))
+        (clean-nils [:StartState :EndState])
+        )))
 
 
 ;;#Optimization: we can use reducers here instead of seqs.

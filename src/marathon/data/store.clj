@@ -131,7 +131,7 @@
   [id name type priority startday duration overlap category source-first quantity title
    vignette operation demandgroup 
    & {:keys [location behavior fills  source-first theater
-             bog startstate endstate missionlength]}]
+             BOG StartState EndState MissionLength]}]
   {
    :components
    [:name name ;unique name associated with the demand entity.
@@ -154,10 +154,10 @@
                                         ;demand, due to a relief-in-place state.
     :location   (or location name) ;;physical location of the demand.
     :theater     theater ;;newly added for SRM. Describes the geolocal theater of the demand
-    :bog           bog  ;;newly added for SRM. Describes the geolocal theater of the demand
-    :startstate    startstate ;;Defines a possible starting state for the demand, if any.
-    :endstate      endstate ;;Defines the implication of leaving the demand on any associated entity.
-    :missionlength missionlength ;;Defines the length of duration of a local assignment to the demand.
+    :BOG           BOG  ;;newly added for SRM. Describes the geolocal theater of the demand
+    :StartState    StartState ;;Defines a possible starting state for the demand, if any.
+    :EndState      EndState ;;Defines the implication of leaving the demand on any associated entity.
+    :MissionLength MissionLength ;;Defines the length of duration of a local assignment to the demand.
     ]})
 
 ;;not sure how much of this needs to stick around...

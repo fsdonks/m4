@@ -21,7 +21,7 @@
 ;;factory method to be safe.  That provides the interactive
 ;;feedback loop we're looking for.  Enough to edit in excel
 ;;and go on from there.
-(def p "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+;(def p "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
 
 (defn mod-date [path]
   (if path
@@ -36,17 +36,18 @@
 (defn fresh? []
   (when-let [path (:path @tables)]
     (= (mod-date path) (:date @tables))))
-(defn marathon-book->marathon-tables 
-  [wbpath & {:keys [tables] :or {tables 
-                                 mxl/marathon-workbook-schema}}]
-  "Extract a map of canonical tables to a map with the same name.  Caller can 
-   supply additional tables, or supply the :all keyword to get all tables."
-  (let [wb (xl/as-workbook wbpath)
-        res     (into {} (for [[nm sheetname] (seq tables)]
-                           (do (println nm)
-                               [nm (xl/sheet->table (xl/as-sheet sheetname wb))])))]
-    (.close wb)
-    res))
+
+;; (defn marathon-book->marathon-tables 
+;;   [wbpath & {:keys [tables] :or {tables 
+;;                                  mxl/marathon-workbook-schema}}]
+;;   "Extract a map of canonical tables to a map with the same name.  Caller can 
+;;    supply additional tables, or supply the :all keyword to get all tables."
+;;   (let [wb (xl/as-workbook wbpath)
+;;         res     (into {} (for [[nm sheetname] (seq tables)]
+;;                            (do (println nm)
+;;                                [nm (xl/sheet->table (xl/as-sheet sheetname wb))])))]
+;;     (.close wb)
+;;     res))
 
 ;;these act like a drop-in replacement for sampledata.
 ;;So, we can interact with a project from Excel and jack around.

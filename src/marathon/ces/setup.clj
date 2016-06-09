@@ -20,7 +20,6 @@
 ;;Excel, build the project, then
 ;;pull in tables from there.
 
-
 ;;Could use a core API...
 ;;as-tables...
 ;;This is where the marathon project

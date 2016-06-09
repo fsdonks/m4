@@ -51,7 +51,9 @@
                      (for [[nm sheetname] (seq tables)]
                        (if-let [sht (xl/as-sheet sheetname wb)]
                          (do (println nm)                   
-                             [nm  (xl/sheet->table sht)])
+                             [(keyword nm)
+                              (spork.util.table/keywordize-field-names
+                               (xl/sheet->table sht))])
                          (println [:missing nm])))))))
 
 ;;This is all that really matters from marathon.project...   

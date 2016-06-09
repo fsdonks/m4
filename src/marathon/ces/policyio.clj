@@ -38,7 +38,6 @@
 (defn record->relation [inrec] 
   ((juxt :Relation :Donor :Recepient :Cost) inrec))
 
-
 ;;TODO -- Defer policy loading so that these are delayed.  Or make
 ;policy generation faster (we're bottlenecking there a bit).  We don't
 ;use all the policies, so we simply defer them until necessary, and
@@ -48,7 +47,9 @@
   [{:keys [Template PolicyName MaxBOG MaxDwell MinDwell Overlap 
            StartDeployable StopDeployable Deltas]}]
   (let [deltas (if (= Deltas "{}") {}
-                   (clojure.edn/read-string Deltas))
+                   (clojure.edn/read-string
+                    (clojure.string/replace Deltas
+                                            "\\" "")))
         ]
     (-> (if (= Template "Ghost") 
           (policyops/register-ghost-template PolicyName MaxBOG  :overlap Overlap)
@@ -134,56 +135,6 @@
                                       (table->compositions composite-table))))
   ([{:keys [RelationRecords PeriodRecords PolicyRecords CompositePolicyRecords]}]
      (tables->policystore RelationRecords PeriodRecords PolicyRecords CompositePolicyRecords)))
-
-;;this is currently too slow because we're generating a shitload of 
-;;intermediate colls, we're also evaling first.  I shifted to
-;;memoizing; along with lazy loading of policies, that might be a good
-;;option.
-
-;; (comment 
-;; (defn 
-;;   get-position!  [p cycletime] 
-;;   (loop [pos startstate
-;;          t   0]
-;;     (if-let [nxt (first (graph/sinks positiongraph pos))]
-;;       (let [tnxt (+ t   (long (graph/arc-weight positiongraph pos nxt)))]
-;;         (if (>= tnxt cycletime) pos
-;;             (recur nxt tnxt)))
-;;       (throw (Exception. "Cycletime exceeds policy!")))))
-;; (defn 
-;;   (set-deployable!   [p tstart tfinal] (-> p 
-;;                                            (core/insert-modifier tstart {:name :deployable})
-;;                                            (core/insert-modifier tfinal {:name :non-deployable})
-;;                                            (core/mark-deployable-region))))
-;; (defn insert-modifier 
-;;   ([policy cycletime {:keys [name weight] :or {name :modified weight 0}}]
-;;      (let [x     (get-position policy cycletime)
-;;            nxt   (next-position policy x)      
-;;            pg    (get-position-graph policy)
-;;            tprev (-> (graph/depth-first-search pg (start-state policy) x {:weightf graph/arc-weight})
-;;                      (get :distance)
-;;                      (get x))
-;;            offset (- cycletime tprev)
-;;            dnxt   (- (graph/arc-weight pg x nxt) offset)]                          
-;;        (set-position-graph policy
-;;             (-> pg 
-;;                 (graph/disj-arc x nxt)
-;;                 (graph/add-arcs [[x name offset]
-;;                                   [name [x name] weight]
-;;                                   [[x name] nxt dnxt]])))))
-;;   ([policy cycletime] (insert-modifier policy cycletime {})))
-
-;; (defn mark-deployable-region 
-;;   "Adds modifiers to each node in the position graph of a policy between :deployable and :non-deployable nodes, 
-;;    indicating the position is an eligible deployable state."
-;;   [policy] 
-;;   (let [pg (get-position-graph policy)]
-;;     (if-let [path (graph/first-path (graph/depth-first-search pg :deployable :non-deployable))]    
-;;       (->> (update-nodes pg (drop 1 (butlast path)) #(toggle-tag % :deployable))
-;;            (set-position-graph policy))
-;;       (throw (Exception. (str "No deployable range found between in " policy))))))
-
-;;)
 
 ;;testing
 (comment

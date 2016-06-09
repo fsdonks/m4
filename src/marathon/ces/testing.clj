@@ -30,7 +30,9 @@
             [marathon.data [simstate :as simstate]
                            [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
-            [marathon.project [linked :as linked]]
+            [marathon.project [linked :as linked]
+             [excel :as xl]]
+            [marathon.project :as proj]
             [spork.sim     [simcontext :as sim]]
             [spork.entitysystem.store :as store]
             [spork.util [reducers]
@@ -598,8 +600,6 @@
                           defaultctx)]
     ))
     
-
-
 ;;__Scoping tests__
 ;;This set of data has no demand for SRC4, and no supply for
 ;;SRC1,2, or 3.  Further, there are no substitutions.  We
@@ -802,7 +802,12 @@
 ;;We should then be able to spawn all the entities.
 ;;Entities should schedule supply updates and move as normal.
 
+(def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
 
-
+;;Project loading tests...
+(defn excel-ctx  [p]
+  (setup/simstate-from 
+   (:tables (proj/load-project p))
+   core/debugsim))
 
 
