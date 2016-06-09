@@ -42,12 +42,18 @@
       (coll-reduce [this f1]   (reduce f1 simred))
       (coll-reduce [_ f1 init] (reduce f1 init simred)))))
 
-(defn ->history [tfinal stepf init-ctx]
+
+(defn ->history-stream [tfinal stepf init-ctx]
   (->> init-ctx
        (->simulator stepf)
        (map (fn [ctx] [(core/get-time ctx) ctx]))
        (take-while #(<= (first %) tfinal))
-       (into {})))
+       ))
+
+(defn ->history [tfinal stepf init-ctx]
+  (into {} (->history-stream tfinal stepf init-ctx)))
+
+
 
 (defn ending [h t] (get (meta (get h t) :end  )))
 (defn start  [h t] (get (meta (get h t) :start)))
@@ -86,8 +92,25 @@
         (println [:spitting-deployments dpath])
         (tbl/records->file (->deployment-samples h) dpath))))
 
+(defn spit-log! [h path]
+  (println [:logging-to (str path "events.txt")])
+  (with-open [wrtr (clojure.java.io/writer (str path "events.txt"))]
+    (binding [*out* wrtr]
+      (core/debugging
+       (doseq [hd h]
+         )
+       ))))
 
 
+;;We can compare the event logs too...
+;;See where history diverges.
+(defn divergence [lh rh]
+  (map (fn [l r]
+         {:t (sim/get-time l)
+         (core/locations l)
+         (core/location  r)
+          (seq lh) (seq rh)
+  
 ;;we need to create a pipeline that allows us
 
 ;;Right now, we're looking

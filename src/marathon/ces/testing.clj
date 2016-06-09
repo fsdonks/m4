@@ -783,15 +783,19 @@
 
 )
 
-;;This is a simple test function that
-;;gives us a robust srm history.
-(defn srm-hist [& {:keys [tmax] :or {tmax 5001}}]
+
+(defn srm-stream [& {:keys [tmax] :or {tmax 5001}}]
   (let [srmctx
           (->> (setup/simstate-from  sd/srm-tables core/debugsim)
                (sim/add-time 1))]
-    (analysis/->history tmax
+    (analysis/->history-stream tmax
                engine/sim-step
                srmctx)))
+
+;;This is a simple test function that
+;;gives us a robust srm history.
+(defn srm-hist [& {:keys [tmax] :or {tmax 5001}}]
+  (into {} (srm-stream :tmax tmax)))
 
 ;;We'd like to take a simulation history, and glean from it
 ;;location data.  
@@ -802,12 +806,24 @@
 ;;We should then be able to spawn all the entities.
 ;;Entities should schedule supply updates and move as normal.
 
-(def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+;;We can load stuff from Excel now...
 
+;;We need to add more backends for other types of projects...
+;;later...
+
+;;we'll need to update this later...
+(def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
 ;;Project loading tests...
 (defn excel-ctx  [p]
-  (setup/simstate-from 
-   (:tables (proj/load-project p))
-   core/debugsim))
+  (->>  (setup/simstate-from 
+         (:tables (proj/load-project p))
+         core/debugsim)
+        (sim/add-time 1)))
 
+(defn excel-stream [& {:keys [tmax] :or {tmax 5001}}]
+  (analysis/->history-stream tmax
+                      engine/sim-step
+                      (excel-ctx ep)))
 
+(defn excel-hist [& {:keys [tmax] :or {tmax 5001}}]
+  (into {} (excel-stream :tmax tmax)))
