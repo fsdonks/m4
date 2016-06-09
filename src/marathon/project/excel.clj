@@ -38,6 +38,10 @@
 ;;We may need to perform coercions later...but for now
 ;;I think we're okay.
 
+;(defn coerce-nums [s tbl]
+;  (let [nums (
+
+              
 ;;Another option is to keep everything in tsv....and
 ;;edit/update from excel.  There are advantages and
 ;;disadvantages to this...

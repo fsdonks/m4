@@ -431,12 +431,12 @@
     [0 0]     ;the current position of the unit in its 2D space.
     [0 0]     ;velocity of the unit
     nil       ;color of the unit
-    (or home :default) ;unit's home station.
+    (or home  :default) ;unit's home station.
     :location :spawning ;the current physical location of the unit.
-    :speed (or speed 8) ;speed per unit of time the unit can move.
+    :speed    (or speed 8) ;speed per unit of time the unit can move.
     :behavior behavior ;the behavior the unit uses to interpret policy and messages.
     )
-   (merge {:cycletime    cycletime ;the unit's current coordinate in lifecycle space.
+   (merge {:cycletime    (long cycletime) ;the unit's current coordinate in lifecycle space.
            :followoncode nil       ;description of the categories this unit serve as a followon to.                      
            :currentcycle nil ;the current cycle data structure for the unit.
            :cycles [] ;an ordered collection of the cycles that the unit has completed.

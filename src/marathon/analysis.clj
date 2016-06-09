@@ -92,24 +92,51 @@
         (println [:spitting-deployments dpath])
         (tbl/records->file (->deployment-samples h) dpath))))
 
-(defn spit-log! [h path]
-  (println [:logging-to (str path "events.txt")])
-  (with-open [wrtr (clojure.java.io/writer (str path "events.txt"))]
-    (binding [*out* wrtr]
-      (core/debugging
-       (doseq [hd h]
-         )
-       ))))
+(defn spit-log
+  ([h root nm]
+   (println [:logging-to (str root nm)])
+   (with-open [wrtr (clojure.java.io/writer (str root nm))]
+     (binding [*out* wrtr]
+       (core/debugging
+        (doseq [hd h]
+          )
+        ))))
+  ([h root] (spit-log h root "events.txt")))
 
+(defn spit-log!
+  ([h root nm]
+   (println [:logging-to (str root nm)])
+   (with-open [wrtr (clojure.java.io/writer (str root nm))]
+     (binding [*out* wrtr]
+       (core/debugging!
+        (doseq [hd h]
+          )
+        ))))
+  ([h root] (spit-log! h root "events.txt")))
 
+(defn compare-lines [l r]
+  (with-open [left  (clojure.java.io/reader l)
+              right (clojure.java.io/reader r)]
+    (let [ls (line-seq left)
+          rs (line-seq right)]
+      (->> (map (fn [l r] [l r]) ls rs)
+           (map-indexed (fn [i [x y]]
+                          {:line i
+                           :l x
+                           :r y})
+                        )
+           (filter (fn [{:keys [l r]}]
+                     (not= l r)))
+           (first)))))
+      
 ;;We can compare the event logs too...
 ;;See where history diverges.
-(defn divergence [lh rh]
-  (map (fn [l r]
-         {:t (sim/get-time l)
-         (core/locations l)
-         (core/location  r)
-          (seq lh) (seq rh)
+;; (defn divergence [lh rh]
+;;   (map (fn [l r]
+;;          {:t (sim/get-time l)
+;;          (core/locations l)
+;;          (core/location  r)
+;;           (seq lh) (seq rh)
   
 ;;we need to create a pipeline that allows us
 
