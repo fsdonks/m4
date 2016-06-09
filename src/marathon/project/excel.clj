@@ -5,7 +5,6 @@
   (:require [spork.util.excel [core :as xl] [docjure :as docj]]
             [spork.util       [io :as io]
                               [table :as tbl]]))
-
 ;;From here on out, we're not worrying about post-processing legacy excel
 ;;projects.  This is strictly for loading a marathon input project
 ;;from a workbook, or finding whatever canonical tables we can, and
@@ -13,6 +12,9 @@
 
 ;;We should be able to adapt this pretty easily to a project coming from
 ;;tsv, just use schemas to do it...
+
+;;Note checking for canonical fields....this could
+;;be problematic...
 
 ;;Given a Marathon workbook, we know that these are the tables we'll care about.
 (def marathon-workbook-schema
@@ -39,13 +41,12 @@
 ;;Another option is to keep everything in tsv....and
 ;;edit/update from excel.  There are advantages and
 ;;disadvantages to this...
-
 (defn marathon-book->marathon-tables 
   [wbpath & {:keys [tables] :or {tables 
                                  marathon-workbook-schema}}]
   "Extract a map of canonical tables to a map with the same name.  Caller can 
    supply additional tables, or supply the :all keyword to get all tables."
-  (let [wb (xl/as-workbook wbpath)]
+  (let [wb   (xl/as-workbook wbpath)]
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
                        (if-let [sht (xl/as-sheet sheetname wb)]
