@@ -10,14 +10,40 @@
                          [general :as general]]
              [clojure [string :as strlib]]))
 
-;currently unused.
-;(defprotocol IResource
-;  (load-resource  [r])
-;  (read-resource  [r])
-;  (write-resource [r])
-;  (resource-type  [r]))
+;;I'm not sure how much of this we really
+;;need.
 
-;a list of resources we expect to find in any project.
+;;The basic requirements for a marathon project
+;;are to load a set of canonical tables from
+;;somewhere, parse them using the canonical
+;;schemas, and if they're valid, recognize
+;;them as tables.
+
+;;Since we just maintain a map of tables,
+;;which is our project, or db,
+;;we should be able to easily modify the
+;;project by modifying the map.
+;;For instance, patching the project
+;;by mergeing new tables on top,
+;;or performing slight alterations...
+
+;;These are all preprocessing steps...
+;;I vote for the simplest abstraction
+;;possible.  Keep using a simple
+;;map-based setup as the project
+;;definition.  The map stores (typically)
+;;tables.
+
+;;To read a project, we simply read the
+;;appropriate tables.  Easy.
+
+;;Project serialization should be
+;;as easy...we can just dump the serialized
+;;project (i.e. the tables and friends)
+;;using cryo, or any tsv, etc.
+
+;;a list of resources we expect to find in any project.
+;;We'll search for these and see if they 
 (def default-resources [:titles
                         :supply-records
                         :demand-records
@@ -45,8 +71,6 @@
                     :parameters       ["Parameters.txt"]
                     :deployments      ["Deployments.txt"]                    
                     :demand-trends    ["DemandTrends.txt"]})
-
-
 
 ;(defn load-project [path] (io/folders->map (io/as-directory path)))
 ;(defn save-project [path] (io/map->folders! (io/as-directory path)))

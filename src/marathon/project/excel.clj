@@ -3,33 +3,42 @@
 (ns marathon.project.excel
   (:use [marathon.project])
   (:require [spork.util.excel [core :as xl] [docjure :as docj]]
-            [spork.util       [io :as io]]))
+            [spork.util       [io :as io]
+                              [table :as tbl]]))
 
-;Given a Marathon workbook, we know that these are the tables we'll care about
-;during auditing.
-(def marathon-workbook-schema  
-  {:deployments      "Deployments"     ;output
-   :in-scope         "InScope"         ;output 
-   :out-of-scope     "OutOfScope"      ;output                     
-   :supply-records   "SupplyRecords"   ;input
-   :demand-records   "DemandRecords"   ;input
-   :period-records   "PeriodRecords"   ;input
-   :relation-records "RelationRecords" ;input
-   :src-tag-records  "SRCTagRecords"   ;input
-   :parameters       "Parameters"})    ;input
+;;From here on out, we're not worrying about post-processing legacy excel
+;;projects.  This is strictly for loading a marathon input project
+;;from a workbook, or finding whatever canonical tables we can, and
+;;then preparing it for processsing.
 
-(def input-sheets
-  (select-keys marathon-workbook-schema  
-              [:supply-records :demand-records :period-records :relation-records
-               :src-tag-records :parameters]))
+;;We should be able to adapt this pretty easily to a project coming from
+;;tsv, just use schemas to do it...
 
-;These are canonical outputs from a VBA Marathon run for capacity analysis. 
-(def marathon-text-file-output 
-  {:cycle-records  "cycles.txt" 
-   :event-log      "EventLog.csv"
-   :demand-trends  "DemandTrends.txt"
-   :sand-trends    "SandTrends.txt"
-   :locations      "locations.txt"})       
+;;Given a Marathon workbook, we know that these are the tables we'll care about.
+(def marathon-workbook-schema
+  {:CompositePolicyRecords "CompositePolicyRecords",
+   :DemandRecords          "DemandRecords",
+   :SuitabilityRecords     "SuitabilityRecords",
+   :PolicyTemplates        "PolicyTemplates",
+   :SRCTagRecords          "SRCTagRecords",
+   :Parameters             "Parameters",
+   :PolicyDefs             "PolicyDefs",
+   :PolicyRecords          "PolicyRecords",
+   :SupplyRecords          "SupplyRecords",
+   :RelationRecords        "RelationRecords",
+   ;:demand-table-schema "demand-table-schema",
+   :PeriodRecords          "PeriodRecords"})
+
+;;When we parse from excel, sometimes we'll get results,
+;;primarily numerics, that get parsed as something
+;;other than we'd like (doubles...)
+;;(defn coerce [s tbl])
+;;We may need to perform coercions later...but for now
+;;I think we're okay.
+
+;;Another option is to keep everything in tsv....and
+;;edit/update from excel.  There are advantages and
+;;disadvantages to this...
 
 (defn marathon-book->marathon-tables 
   [wbpath & {:keys [tables] :or {tables 
@@ -37,23 +46,37 @@
   "Extract a map of canonical tables to a map with the same name.  Caller can 
    supply additional tables, or supply the :all keyword to get all tables."
   (let [wb (xl/as-workbook wbpath)]
-    (into {} (for [[nm sheetname] (seq tables)]
-               (do (println nm)
-                   [nm (xl/sheet->table (xl/as-sheet sheetname wb))]))))) 
+    (into {} (filter identity
+                     (for [[nm sheetname] (seq tables)]
+                       (if-let [sht (xl/as-sheet sheetname wb)]
+                         (do (println nm)                   
+                             [nm  (xl/sheet->table sht)])
+                         (println [:missing nm])))))))
 
-(defmethod load-project "xlsm" [path & {:keys [tables]}] 
+;;This is all that really matters from marathon.project...   
+(defmethod load-project "xlsm" [path & {:keys [tables]}]
+    (let [ts    (marathon-book->marathon-tables path)
+        paths (reduce-kv (fn [acc nm _]
+                           (assoc acc nm
+                                  [path
+                                   (name nm)])) {} ts)]    
+      (-> (make-project
+           (clojure.string/replace (io/fname path) #".xlsm" "")
+           (io/as-directory (io/fdir path))) 
+          (assoc :tables ts)
+          (update :paths merge paths))))
+
+(defmethod load-project "xlsx" [path & {:keys [tables]}]
+  (let [ts    (marathon-book->marathon-tables path)
+        paths (reduce-kv (fn [acc nm _]
+                           (assoc acc nm
+                                  [path
+                                   (name nm)])) {} ts)]
   (-> (make-project
         (clojure.string/replace (io/fname path) #".xlsx" "")
         (io/as-directory (io/fdir path))) 
-      (assoc :tables 
-         (marathon-book->marathon-tables path))))
-
-(defmethod load-project "xlsx" [path & {:keys [tables]}] 
-  (-> (make-project
-        (clojure.string/replace (io/fname path) #".xlsx" "")
-        (io/as-directory (io/fdir path))) 
-      (assoc :tables 
-         (marathon-book->marathon-tables path))))
+      (assoc :tables ts)
+      (update :paths merge paths))))
 
 (defmethod save-project "xlsx" [proj path & options]
   (xl/tables->xlsx path (project->tables (add-path proj 
@@ -114,4 +137,23 @@
 (def destpath  "C:\\Users\\tom\\Documents\\Marathon_NIPR\\MigrationTest.xlsm")
 
 (migrate-project wbpath2 destpath)
+
+;; (comment 
+;; (def input-sheets
+;;   (select-keys marathon-workbook-schema  
+;;                [:supply-records
+;;                 :demand-records
+;;                 :period-records
+;;                 :relation-records
+;;                 :src-tag-records
+;;                 :parameters]))
+
+;; ;These are canonical outputs from a VBA Marathon run for capacity analysis. 
+;; (def marathon-text-file-output 
+;;   {:cycle-records  "cycles.txt" 
+;;    :event-log      "EventLog.csv"
+;;    :demand-trends  "DemandTrends.txt"
+;;    :sand-trends    "SandTrends.txt"
+;;    :locations      "locations.txt"})       
+;; )
 )  

@@ -49,7 +49,7 @@
        (take-while #(<= (first %) tfinal))
        (into {})))
 
-(defn ending [h t] (get (meta (get h t) :end)))
+(defn ending [h t] (get (meta (get h t) :end  )))
 (defn start  [h t] (get (meta (get h t) :start)))
 
 (defn ->collect-samples [f h]
@@ -73,6 +73,9 @@
               wrtr (clojure.java.io/writer (str path ".csv"))]
     (doseq [^String ln (line-seq rdr)]
       (.write wrtr (str (clojure.string/replace ln \tab \,) \newline)))))
+
+
+;;This will become 
 
 ;;this is basically the api for performing a run....
 (defn spit-history! [h path]
