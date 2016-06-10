@@ -816,11 +816,9 @@
 ;;Project loading tests...
 (defn excel-ctx  [p]
   (->>  (setup/simstate-from 
-         (assoc (:tables (proj/load-project p))
-                :PolicyRecords
-                (sd/get-sample-records 
+         (:tables (proj/load-project p))
          core/debugsim)
-        (sim/add-time 1)))))
+        (sim/add-time 1)))
 
 (defn excel-stream [& {:keys [tmax] :or {tmax 5001}}]
   (analysis/->history-stream tmax

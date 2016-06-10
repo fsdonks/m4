@@ -39,7 +39,7 @@
             [clojure.core.reducers :as r]))
     
 ;;This is a lifesaver...
-(def noisy (atom true))
+(def noisy            (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
 ;;From Stuart Sierra's blog post, for catching otherwise "slient" exceptions
 ;;Since we're using multithreading and the like, and we don't want

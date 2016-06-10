@@ -43,10 +43,22 @@
 ;;Since we know the schema, we can coerce the
 ;;schema value...
 ;;or we can just read as string values...
+(defn try-long [x] (if (zero? (mod x 1) )
+                     (long x)
+                     x))
 
+;;This is a little squirelly, and exists solely to
+;;cope with excel's handling of numbers and autoparsing
+;;text wierdness.
 (defn coerce [s tbl]
   (let [numtypes {:int int
-                  :long long}]
+                  :int? (fn [x] (when x (int x)))                  
+                  :long long
+                  :long? (fn [x] (when x (long x)))
+                  :text (fn [x] (if (number? x)
+                                  ;;we need to coerce this mofo.
+                                  (str (try-long x))
+                                  x))}]
     (spork.util.table/conj-fields 
      (for [[fld col] (tbl/enumerate-fields (tbl/table-fields tbl) (tbl/table-columns tbl))]
        (if-let [f (numtypes (s fld))]
