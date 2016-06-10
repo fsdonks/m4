@@ -50,14 +50,17 @@
        (take-while #(<= (first %) tfinal))
        ))
 
+;;Now using transducers.
 (defn ->history [tfinal stepf init-ctx]
-  (into {} (->history-stream tfinal stepf init-ctx)))
-
-
+  (into {} (comp (map (fn [ctx] [(core/get-time ctx) ctx]))
+                 (take-while #(<= (first %) tfinal)))        
+        (->simulator stepf init-ctx)))
 
 (defn ending [h t] (get (meta (get h t) :end  )))
 (defn start  [h t] (get (meta (get h t) :start)))
 
+;;We can speed this up by not using for/range..
+;;It's not a huge bottleneck at the moment...
 (defn ->collect-samples [f h]
   (let [ks    (sort (keys h))
         pairs (partition 2 1 ks)]
@@ -74,14 +77,15 @@
 ;;use spork.trends sampling.
 (defn ->location-samples   [h]  (->collect-samples core/locations   h))
 (defn ->deployment-samples [h]  (->collect-samples core/deployments h))
+
+;;can we spit out demandtrends?
+;;Yes....
+;;They're basically location-samples...
 (defn tsv->csv [path]
   (with-open [rdr  (clojure.java.io/reader (str path))
               wrtr (clojure.java.io/writer (str path ".csv"))]
     (doseq [^String ln (line-seq rdr)]
       (.write wrtr (str (clojure.string/replace ln \tab \,) \newline)))))
-
-
-;;This will become 
 
 ;;this is basically the api for performing a run....
 (defn spit-history! [h path]
@@ -128,6 +132,22 @@
            (filter (fn [{:keys [l r]}]
                      (not= l r)))
            (first)))))
+
+(defn compare-lines! [l r]
+  (with-open [left  (clojure.java.io/reader l)
+              right (clojure.java.io/reader r)]
+    (let [ls (line-seq left)
+          rs (line-seq right)]
+      (->> (map (fn [l r] [l r]) ls rs)
+           (map-indexed (fn [i [x y]]
+                          {:line i
+                           :l x
+                           :r y})
+                        )
+           (filter (fn [{:keys [l r]}]
+                     (not= l r)))
+           (vec)
+           ))))
       
 ;;We can compare the event logs too...
 ;;See where history diverges.

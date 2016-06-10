@@ -2,7 +2,8 @@
 ;workbook-based data.
 (ns marathon.project.excel
   (:use [marathon.project])
-  (:require [spork.util.excel [core :as xl] [docjure :as docj]]
+  (:require [marathon.schemas :as schemas]
+            [spork.util.excel [core :as xl] [docjure :as docj]]
             [spork.util       [io :as io]
                               [table :as tbl]]))
 ;;From here on out, we're not worrying about post-processing legacy excel
@@ -31,6 +32,7 @@
    ;:demand-table-schema "demand-table-schema",
    :PeriodRecords          "PeriodRecords"})
 
+(def input-sheets marathon-workbook-schema)
 ;;When we parse from excel, sometimes we'll get results,
 ;;primarily numerics, that get parsed as something
 ;;other than we'd like (doubles...)
@@ -38,10 +40,20 @@
 ;;We may need to perform coercions later...but for now
 ;;I think we're okay.
 
-;(defn coerce-nums [s tbl]
-;  (let [nums (
+;;Since we know the schema, we can coerce the
+;;schema value...
+;;or we can just read as string values...
 
-              
+(defn coerce [s tbl]
+  (let [numtypes {:int int
+                  :long long}]
+    (spork.util.table/conj-fields 
+     (for [[fld col] (tbl/enumerate-fields (tbl/table-fields tbl) (tbl/table-columns tbl))]
+       (if-let [f (numtypes (s fld))]
+         [fld (mapv f col)]
+         [fld col]))
+     spork.util.table/empty-table)))
+
 ;;Another option is to keep everything in tsv....and
 ;;edit/update from excel.  There are advantages and
 ;;disadvantages to this...
@@ -54,10 +66,13 @@
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
                        (if-let [sht (xl/as-sheet sheetname wb)]
-                         (do (println nm)                   
-                             [(keyword nm)
-                              (spork.util.table/keywordize-field-names
-                               (xl/sheet->table sht))])
+                         (let [tab (spork.util.table/keywordize-field-names
+                                    (xl/sheet->table sht))
+                               tab (if-let [s (schemas/get-schema nm)]
+                                     (coerce s tab)
+                                     tab)]
+                           (do (println nm)                   
+                               [(keyword nm)  tab]))
                          (println [:missing nm])))))))
 
 ;;This is all that really matters from marathon.project...   
@@ -89,7 +104,6 @@
   (xl/tables->xlsx path (project->tables (add-path proj 
                                            :project-path 
                                            (io/as-directory (io/fdir path))))))
-
 ;;this should probably go in docjure..
 (defn copy-sheet! [sheetname wb1 wb2]
   (if-let [from-sheet (docj/select-sheet sheetname wb1)]

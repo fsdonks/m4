@@ -116,7 +116,8 @@
       (case CompositionType 
         "Periodic" (update-in acc [CompositeName] assoc (:Period r) (:Policy r))
         "Sequential" (do (assert (not (contains? acc CompositeName)))
-                       (assoc-in acc [CompositeName] (ensure-vec (read-composition (:Policy r)))))
+                         (assoc-in acc [CompositeName]
+                             (ensure-vec (read-composition (:Policy r)))))
         (throw (Exception. "Error parsing composition policy!" 
                            CompositeName))))))
 
