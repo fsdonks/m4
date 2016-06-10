@@ -293,7 +293,7 @@
 (defn chunk-table [basedata sortkey]
     (let [row-order (atom [])]
       (->> basedata
-           (table-by  (juxt :component :src :name)  :Quarter :state)
+           (table-by  #(select-keys % [:component :src :name])  :Quarter :state)
            (rowcols->vecs)
            (sort-by (comp sortkey first))
            (reduce (fn [acc [r xs]]                   
@@ -304,13 +304,20 @@
 (defn truncate-history [xs n]
   (mapv (fn [row]
           (into [] (take n row))) xs))
-  
+
+;;It's probably better to extract cells from an existing
+;;table, then we can view the table through the lens
+;;of patches....more portable.  We can also add layers...
+;;Like the readiness layer....
+
 (comment ;testing
   (def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
   (def res         (lines->samples testpath))
   (def grps        (group-by #(-> % :key :src) res))
-  (def binders     (get grps "Binder"))
-  (def ct          (chunk-table (map clean-rec binders) :component))
+  (def binders     (get grps    "Binder"))
+  (def ct          (chunk-table (map clean-rec binders) (juxt :src :component :name )))
+  (defn render-patches! [rowcols]
+    (picc/render! (picc/->cartesian (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))))
 )
 
 
