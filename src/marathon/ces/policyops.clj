@@ -669,7 +669,7 @@
    "RC15" rc15 
    "RC12" rc12 
    "Ghost" ghost
-   "RC14ReMob" rc14-remob
+   "RC14ReMob"      rc14-remob
    "MaxUtilization" max-utilization
    "NearMaxUtilization" near-max-utilization
    ;temporarily aliased until I get them ported....
@@ -677,9 +677,11 @@
    "RCFFG" rc14
    "FFGMission" ghost
    "RCOpSus" rc14
-   "SRMAC" SRMAC
-   "SRMRC" SRMRC
+   "SRMAC"   SRMAC
+   "SRMRC"   SRMRC
    "SRMRC13" SRMRC13
+   "AdaptAC" AdaptAC
+   "AdaptRC" RC15
    })
 
 (doseq [[k ctor] aliases]

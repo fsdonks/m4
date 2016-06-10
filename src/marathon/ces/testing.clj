@@ -813,6 +813,7 @@
 
 ;;we'll need to update this later...
 (def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+
 ;;Project loading tests...
 (defn excel-ctx  [p]
   (->>  (setup/simstate-from 
@@ -820,10 +821,16 @@
          core/debugsim)
         (sim/add-time 1)))
 
-(defn excel-stream [& {:keys [tmax] :or {tmax 5001}}]
+(defn excel-stream [& {:keys [path tmax] :or {path ep tmax 5001}}]
   (analysis/->history-stream tmax
                       engine/sim-step
-                      (excel-ctx ep)))
+                      (excel-ctx path)))
 
-(defn excel-hist [& {:keys [tmax] :or {tmax 5001}}]
-  (into {} (excel-stream :tmax tmax)))
+(defn excel-hist [& {:keys [path tmax] :or {tmax 5001}}]
+  (into {} (excel-stream :path path :tmax tmax)))
+
+;;Testing with our new policies...
+(def ap "C:\\Users\\tspoon\\Documents\\srm\\arfnotionalbase.xlsx")
+(defn arf-hist [& {:keys [tmax] :or {tmax 5001}}]
+  (excel-hist  :path ap :tmax tmax))
+  

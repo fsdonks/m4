@@ -316,8 +316,13 @@
   (def grps        (group-by #(-> % :key :src) res))
   (def binders     (get grps    "Binder"))
   (def ct          (chunk-table (map clean-rec binders) (juxt :src :component :name )))
-  (defn render-patches! [rowcols]
-    (picc/render! (picc/->cartesian (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))))
+  
+  (defn patch-node [rowcols]  (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))
+  
+  (defn simple-chunks [data]
+    (chunk-table (map clean-rec (mapcat val (dissoc grps "Binder"))) (juxt :src :component :name)))
+  
+  (defn show! [nds] (picc/render!  (picc/->cartesian  nds)))
 )
 
 
