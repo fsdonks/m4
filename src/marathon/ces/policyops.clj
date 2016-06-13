@@ -287,7 +287,6 @@
 ;;SRM doesn't use the above....we define the policy a bit more directly (for the
 ;;time being)
 
-
 (defn max-util-waits [{:keys [overlap maxbog mindwell]}]
   {reset mindwell
    Deployable 0
@@ -627,6 +626,9 @@
                                 +inf+)))))
              m m))
 
+;;Note: if we don't go through this template, we don't get deployable times set,
+;;we we end up with policies that can't deploy.  I had the same problem with
+;;AdaptAC.
 (defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set]}]
   (try  (if-let [ctor (get @templates name (get @templates (keyword name)))]
           (let [stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
@@ -680,7 +682,7 @@
    "SRMAC"   SRMAC
    "SRMRC"   SRMRC
    "SRMRC13" SRMRC13
-   "AdaptAC" AdaptAC
+   "AdaptAC" AdaptAC ;(AdaptAC "AdaptAC" 730 185 270 185 730 :overlap 0)
    "AdaptRC" RC15
    })
 

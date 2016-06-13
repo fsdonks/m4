@@ -10,6 +10,7 @@
             [spork.graphics2d [debug :as debug]]
             [piccolotest.sample :as picc]
             [piccolotest.canvas :as pcanvas]
+            [clojure.pprint :refer [cl-format]]
             ))
 
 ;;(table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
@@ -138,7 +139,6 @@
 ;;   (canv/color-by (canv/gradient-right l r)
 ;;                  (s/->rectangle :white 0 0 +chunk-width+ +chunk-height+)))
 
-
 ;; (defn ->added-label  [txt label-color color x y w h]
 ;;   (let [r          (s/->rectangle  color x y w h)
 ;;         half-dur   (/ w 2.0)
@@ -147,7 +147,6 @@
 ;;         centery    0]
 ;;      (sketch/scale scalex 1.0 (sketch/uncartesian 
 ;;                                (sketch/->label txt centerx centery :color label-color)))))
-
 
 ;; (defn ->transition 
 ;;   ([l r] (->transition l r "Transition"))
@@ -174,7 +173,13 @@
     :DarkGreen	[84	130	53]
     :LightGreen	[146	208	80]
     :DarkBlue	[0	0	255]
-    :LightBlue	[0	255	255]}
+    :LightBlue	[0	255	255]
+    :red        [255 0 0]
+    :green      [0 176 80] 
+    :black      [0 0 0]
+    :orange     [255 192 0]
+    :yellow     [255 255 0]
+    }
    (map (fn [[lbl c]] [lbl (->color c)]))
    (into {})))
 
@@ -355,3 +360,93 @@
           (sketch/beside (sketch/->labeled-box (str [SRC compo]) :black :light-gray 0 0 114 height)
                          hist)))))))
 )
+
+
+
+;;we can create html patch charts pretty easily....
+;;Rather than rendering to swing, we can just spit out html...
+
+;;Thanks to mhshams from stack overflow....edited for clojure
+;;compatibility.
+(defn rgb->hex [r g b]
+  (String/format "#%02X%02X%02X" (object-array [r g b])))
+
+;;If we end up doing more markup, we'll switch to a
+;;real templating language like hiccup or something.
+;;for now, this is ugly but it works...
+(def idx->props
+    (->> '[;xl841521 "'height:15.0pt;border-top:none'" :src
+           ;xl841521 "'border-top:none'" :compo
+           ;xl841521 "'border-top:none'" :uic  
+           xl691521 "border-top:none"                  :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl701521 "border-top:none;border-left:none" :entry
+           xl691521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl701521 "border-top:none;border-left:none" :entry
+           xl691521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl701521 "border-top:none;border-left:none" :entry
+           xl691521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl701521 "border-top:none;border-left:none" :entry
+           xl691521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl701521 "border-top:none;border-left:none" :entry
+           xl691521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl651521 "border-top:none;border-left:none" :entry
+           xl701521 "border-top:none;border-left:none" :entry]
+         (partition 3)
+         (map-indexed (fn [idx xs] (into [idx] xs)))
+         (map (fn [[idx cls props entry]]
+                [idx
+                 {:class (str cls)
+                  :properties props
+                  :entry entry}]))
+         (into {})))
+
+(defn ->colored-row
+  ([src compo uic xs] (->colored-row (fn [_] "black") (fn [_] "grey") src compo uic xs))
+  ([entry->color entry->background src compo uic xs]
+   (let [->src     (cl-format nil "<td height=20 class=xl841521 style='height:15.0pt;border-top:none'>~A</td>" src)
+         ->compo   (cl-format nil "<td class=xl841521 style='border-top:none'>~A</td>" compo)
+         ->uic     (cl-format nil "<td class=xl841521 style='border-top:none'>~A</td>" uic)
+         rows      (map-indexed
+                    (fn [idx entry]
+                      (let [{:keys [class properties]} (idx->props idx)
+                            coloring (cl-format nil "color:~A;background:~A"
+                                                (entry->color      entry)
+                                                (entry->background entry))]
+                        (cl-format nil "<td class=~A style=~A>~A</td>"
+                                   class
+                                   (str "'" properties ";" coloring "'") entry)))
+                    xs)]
+
+     (cl-format nil
+                "<tr height=20 style='height:15.0pt'>~%~{~A~%~}</tr>"
+                (concat [->src
+                         ->compo
+                         ->uic]
+                        rows)))))
+
+;;create an html file with the patches loaded up.
+;;Currently it's a static view of 24 quarters.
+(defn patch-body [rowcols]
+  (let [row-info (:row-order (meta rowcols))
+        ]
+    (clojure.string/join \newline
+                         (for [[{:keys [component src name]} xs]
+                               (map-indexed (fn [idx rinfo]
+                                              [rinfo (nth rowcols idx)]) rowcols)]
+                           (->colored-row (fn [_] "black") (fn [_] "grey")
+                                          src component name xs)))))
+(def template-path  "C:\\Users\\tspoon\\Documents\\srm\\template.htm")
+(defn patch-file [rowcols path & {:keys [entry-color]]
+  (let [tmplt (slurp template-path)]
+    (spit path (clojure.string/replace tmplt ":BODY" (patch-body rowcols)))))

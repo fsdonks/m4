@@ -829,8 +829,11 @@
 (defn excel-hist [& {:keys [path tmax] :or {tmax 5001}}]
   (into {} (excel-stream :path path :tmax tmax)))
 
+;;We need to put canonical data like this into a resource
+;;path or something.
 ;;Testing with our new policies...
 (def ap "C:\\Users\\tspoon\\Documents\\srm\\arfnotionalbase.xlsx")
+
 (defn arf-hist [& {:keys [tmax] :or {tmax 5001}}]
   (excel-hist  :path ap :tmax tmax))
   
