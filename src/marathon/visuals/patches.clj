@@ -179,6 +179,7 @@
     :black      [0 0 0]
     :orange     [255 192 0]
     :yellow     [255 255 0]
+    :white      [255 255 255]
     }
    (map (fn [[lbl c]] [lbl (->color c)]))
    (into {})))
@@ -319,8 +320,9 @@
   (def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
   (def res         (lines->samples testpath))
   (def grps        (group-by #(-> % :key :src) res))
-  (def binders     (get grps    "Binder"))
+  (def binders     (get grps    "Binder"))  
   (def ct          (chunk-table (map clean-rec binders) (juxt :src :component :name )))
+  (def ctbig       (chunk-table (map clean-rec res) (juxt :src :component :name )))
   
   (defn patch-node [rowcols]  (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))
   
@@ -411,6 +413,16 @@
                   :entry entry}]))
          (into {})))
 
+(defn html-color [x]
+  (cond (vector? x) (apply rgb->hex x)
+        (instance? java.awt.Color x)
+             (let [^java.awt.Color x x]
+               (rgb->hex (.getRed x) (.getGreen x) (.getBlue x)))
+        :else 
+        (html-color (get palette x))
+        ))
+
+;;I just cribbed output from excel's html export and pushed this...
 (defn ->colored-row
   ([src compo uic xs] (->colored-row (fn [_] "black") (fn [_] "grey") src compo uic xs))
   ([entry->color entry->background src compo uic xs]
@@ -435,18 +447,57 @@
                          ->uic]
                         rows)))))
 
+(def srm-style
+  {"R_C2" {:background :LightGreen, :color :black},
+   "PL_C4" {:background :LightYellow, :color :black},
+   ":recovery" {:background :DarkYellow, :color :black},
+   "MA_DA_C1" {:background :DarkBlue, :color :white},
+   "MA_DA_C2" {:background :DarkBlue, :color :white},
+   "PB_C4" {:background :DarkYellow, :color :black},
+   "MP_DA_C1" {:background :DarkBlue, :color :white},
+   "MD_DA_C1" {:background :DarkBlue, :color :white},
+   "PT_C4" {:background :LightYellow, :color :black},
+   "MD_DA_C2" {:background :DarkBlue, :color :black},
+   "MD_NDA_C3" {:background :LightBlue, :color :black},
+   "MA_NDA_C3" {:background :LightBlue, :color :black},
+   "R_C1" {:background :DarkGreen, :color :black},
+   "MP_NDA_C3" {:background :LightBlue, :color :black},
+   "PB_C3" {:background :DarkYellow, :color :black}
+   "Reset"        {:background :red :color :black}
+   "Train"        {:background :orange :color :black}
+   "Ready"        {:background :yellow  :color :black}
+   "Available"    {:background :green :color :black}
+   "DeMobilizing" {:background :red :color :black}
+   "Deployed"     {:background :DarkBlue :color :black}
+   })
+
+(def html-style
+  (into {}
+        (for [[k {:keys [background color]}] srm-style]
+          [k {:background (html-color background)
+              :color      (html-color color)}])))
+
+
 ;;create an html file with the patches loaded up.
 ;;Currently it's a static view of 24 quarters.
-(defn patch-body [rowcols]
-  (let [row-info (:row-order (meta rowcols))
+(defn patch-body [rowcols {:keys [color background]}]
+  (let [row-info   (:row-order (meta rowcols))
+        color      (if (fn? color) color           (fn [e] (html-color e)))
+        background (if (fn? background) background (fn [e] (html-color background)))
         ]
     (clojure.string/join \newline
                          (for [[{:keys [component src name]} xs]
                                (map-indexed (fn [idx rinfo]
-                                              [rinfo (nth rowcols idx)]) rowcols)]
-                           (->colored-row (fn [_] "black") (fn [_] "grey")
+                                              [rinfo (nth rowcols idx)]) row-info)]
+                           (->colored-row color background
                                           src component name xs)))))
+
 (def template-path  "C:\\Users\\tspoon\\Documents\\srm\\template.htm")
-(defn patch-file [rowcols path & {:keys [entry-color]]
-  (let [tmplt (slurp template-path)]
-    (spit path (clojure.string/replace tmplt ":BODY" (patch-body rowcols)))))
+(defn patch-file
+  ([rowcols path entry->style]
+   (let [tmplt (slurp template-path)]
+     (spit path (clojure.string/replace tmplt ":BODY"
+                  (patch-body rowcols
+                  {:color      (fn [e] (or (:color (entry->style e)) :black))
+                   :background (fn [e] (or (:background (entry->style e)) "grey"))})))))
+  ([rowcols path] (patch-file rowcols path html-style)))
