@@ -11,6 +11,7 @@
             [piccolotest.sample :as picc]
             [piccolotest.canvas :as pcanvas]
             [clojure.pprint :refer [cl-format]]
+            [marathon.visuals.template :as templ]
             ))
 
 ;;(table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
@@ -492,10 +493,12 @@
                            (->colored-row color background
                                           src component name xs)))))
 
-(def template-path  "C:\\Users\\tspoon\\Documents\\srm\\template.htm")
+(def template (slurp   (clojure.java.io/input-stream (clojure.java.io/resource "patchtemplate.htm")) ))
+
 (defn patch-file
   ([rowcols path entry->style]
-   (let [tmplt (slurp template-path)]
+   (let [tmplt tmpl/patchtemplate ;(   
+         ]
      (spit path (clojure.string/replace tmplt ":BODY"
                   (patch-body rowcols
                   {:color      (fn [e] (or (:color (entry->style e)) :black))
