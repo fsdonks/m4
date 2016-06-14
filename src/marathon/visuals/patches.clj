@@ -170,7 +170,7 @@
   (->>
    {:DarkYellow	[255	255	0]
     :LightYellow	[255	255	153]
-    :DarkGreen	[84	130	53]
+    :DarkGreen	[0	102	0]
     :LightGreen	[146	208	80]
     :DarkBlue	[0	0	255]
     :LightBlue	[0	255	255]
@@ -317,7 +317,7 @@
 ;;Like the readiness layer....
 
 (comment ;testing
-  (def testpath "c:/users/tspoon/Documents/srm/locsamples.txt")
+  (def testpath "c:/users/tspoon/Documents/srm/tst/clj/locsamples.txt")
   (def res         (lines->samples testpath))
   (def grps        (group-by #(-> % :key :src) res))
   (def binders     (get grps    "Binder"))  
@@ -460,7 +460,7 @@
    "MD_DA_C2" {:background :DarkBlue, :color :black},
    "MD_NDA_C3" {:background :LightBlue, :color :black},
    "MA_NDA_C3" {:background :LightBlue, :color :black},
-   "R_C1" {:background :DarkGreen, :color :black},
+   "R_C1" {:background :DarkGreen, :color :white},
    "MP_NDA_C3" {:background :LightBlue, :color :black},
    "PB_C3" {:background :DarkYellow, :color :black}
    "Reset"        {:background :red :color :black}
