@@ -11,7 +11,6 @@
             [piccolotest.sample :as picc]
             [piccolotest.canvas :as pcanvas]
             [clojure.pprint :refer [cl-format]]
-            [marathon.visuals.template :as templ]
             ))
 
 ;;(table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
@@ -178,7 +177,7 @@
     :red        [255 0 0]
     :green      [0 176 80] 
     :black      [0 0 0]
-    :orange     [255 192 0]
+    :orange     [237 125 49] ; [255 192 0]
     :yellow     [255 255 0]
     :white      [255 255 255]
     }
@@ -202,30 +201,7 @@
    "PL_C4"		:LightYellow
    ":recovery"          :DarkYellow})
 
-(comment 
-(defn loc->color 
-  ([loc location->attributes]
-     (if (vector? loc)  (or (loc->color (first loc)) (loc->color (second loc)))
-         (case loc
-           "Label"   :grey
-           "Ready"   :green
-           "Prepare" :yellow
-           "TransitionReady" [:light-sky-blue :green]
-           "TransitionReady_NotDeployable" [:light-sky-blue :green]
-           "TransitionPrepare" [:orange :yellow]
-           "Mission_NotDeployable" :light-sky-blue
-           "Mission_Deployable" :light-sky-blue
-           (if (.contains ^String loc "Transition")
-             :transition
-             (case     (:SurgeType (location->attributes loc))
-               "Committed" :orange
-               "Mission"    :light-sky-blue
-               "Mission_Deployable" :light-sky-blue
-               "Ready"     :green
-               "Prepare"   :yellow        
-               (throw (Exception. (str "unknown mission type: " loc))))))))
-  ([loc] (loc->color loc #(get *attributes* %))))
-)
+
 (defn loc->color
   ([loc] (or (get palette (get colors loc) ) (throw (Exception. (str [:unknown-location loc])))))
   ([loc & xs] (loc->color loc)))
@@ -312,60 +288,7 @@
   (mapv (fn [row]
           (into [] (take n row))) xs))
 
-;;It's probably better to extract cells from an existing
-;;table, then we can view the table through the lens
-;;of patches....more portable.  We can also add layers...
-;;Like the readiness layer....
-
-(comment ;testing
-  (def testpath "c:/users/tspoon/Documents/srm/tst/clj/locsamples.txt")
-  (def res         (lines->samples testpath))
-  (def grps        (group-by #(-> % :key :src) res))
-  (def binders     (get grps    "Binder"))  
-  (def ct          (chunk-table (map clean-rec binders) (juxt :src :component :name )))
-  (def ctbig       (chunk-table (map clean-rec res) (juxt :src :component :name )))
-  
-  (defn patch-node [rowcols]  (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))
-  
-  (defn simple-chunks [data]
-    (chunk-table (map clean-rec (mapcat val (dissoc grps "Binder"))) (juxt :src :component :name)))
-  
-  (defn show! [nds] (picc/render!  (picc/->cartesian  nds)))
-)
-
-
 (def ^:dynamic *table-rate* 91)
-(comment 
-(defn sand-tables [ds]
-    (let [basedata  (->> ds 
-                         (sample-every *table-rate*) 
-                         (non-ghosts)
-                         ($where ($fn [Quarter] (<= Quarter 24))))]
-      (for [[k ds] (sort-by (comp vec vals first) ($group-by [:compo :SRC] basedata))]
-        (let [unit-map  (reduce (fn [acc r] (assoc acc (:unitid r) r)) {} (:rows ds))
-              sortkey   (fn [uid] (let [info  (get unit-map uid)]
-                                     [(:compo info) (:SRC info) uid]))
-              ctbl      (chunk-table ds sortkey)
-              row-order (get (meta ctbl) :row-order)
-              names     (map #(:name (get unit-map %))  row-order)]
-          [k names ctbl]))))
-
-(defn render-sand-tables [ds]
-  (let [sts (sand-tables (util/as-dataset ds))]    
-    (sketch/delineate
-     (into 
-      [
-       ;(chunk-headers (nth 2 (first sts)))
-       ]
-      (for [[{:keys [SRC compo]}  labels chunks] sts]        
-        (let [hist   (patches/sketch-history chunks)
-              height (:height (.shape-bounds hist))]
-          (sketch/beside (sketch/->labeled-box (str [SRC compo]) :black :light-gray 0 0 114 height)
-                         hist)))))))
-)
-
-
-
 ;;we can create html patch charts pretty easily....
 ;;Rather than rendering to swing, we can just spit out html...
 
@@ -467,9 +390,13 @@
    "Reset"        {:background :red :color :black}
    "Train"        {:background :orange :color :black}
    "Ready"        {:background :yellow  :color :black}
-   "Available"    {:background :green :color :black}
+   (str ["Ready" :deployable])         {:background :yellow  :color :black}
+   (str ["Available" :non-deployable]) {:background :green   :color :black}
+   "Available"  {:background :green   :color :black}
+   "DeMobilization" {:background :red :color :black}
    "DeMobilizing" {:background :red :color :black}
-   "Deployed"     {:background :DarkBlue :color :black}
+   "Deployed"     {:background :DarkBlue :color :white}
+   "Overlapping"   {:background :DarkBlue :color :white}
    })
 
 (def html-style
@@ -497,10 +424,41 @@
 
 (defn patch-file
   ([rowcols path entry->style]
-   (let [tmplt tmpl/patchtemplate ;(   
-         ]
-     (spit path (clojure.string/replace tmplt ":BODY"
+     (spit path (clojure.string/replace template ":BODY"
                   (patch-body rowcols
                   {:color      (fn [e] (or (:color (entry->style e)) :black))
-                   :background (fn [e] (or (:background (entry->style e)) "grey"))})))))
+                   :background (fn [e] (or (:background (entry->style e)) "grey"))}))))
   ([rowcols path] (patch-file rowcols path html-style)))
+
+;;It's probably better to extract cells from an existing
+;;table, then we can view the table through the lens
+;;of patches....more portable.  We can also add layers...
+;;Like the readiness layer....
+
+;;Entrypoint - call this on a root directory or
+;;on a specific infile and outfile.  Note: we can
+;;transfer this to proc possibly.
+(defn locations->patches
+  ([inpath outpath]
+   (->  (map clean-rec (lines->samples inpath))
+        (chunk-table (juxt :src :component :name))
+        (patch-file  outpath)))
+  ([root] (let [inpath (str root "locsamples.txt")
+                outpath (str root "patches.htm")]
+            (locations->patches inpath outpath))))
+
+(comment ;testing
+  (def testpath "c:/users/tspoon/Documents/srm/tst/arf/locsamples.txt")
+  (def res         (lines->samples testpath))
+  (def grps        (group-by #(-> % :key :src) res))
+  (def binders     (get grps    "Binder"))  
+  (def ct          (chunk-table (map clean-rec binders) (juxt :src :component :name )))
+  (def ctbig       (chunk-table (map clean-rec res) (juxt :src :component :name )))
+  
+  (defn patch-node [rowcols]  (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))
+  
+  (defn simple-chunks [data]
+    (chunk-table (map clean-rec (mapcat val (dissoc grps "Binder"))) (juxt :src :component :name)))
+  
+  (defn show! [nds] (picc/render!  (picc/->cartesian  nds)))
+)
