@@ -162,6 +162,111 @@
              {}
              marathon-schemas))
 
+(def flds
+  #{:Compo
+    :Location
+    :End
+    :Quantity
+    :Unitid
+    :Fill-type
+    :Duration
+    :Start
+    :Operation
+    :SRC
+    :Category ;?
+    :category ;?
+    :Unit
+    :DemandGroup
+    :FillType
+    :FollowOn
+    :Component
+    :DeploymentID
+    :DwellYearsBeforeDeploy
+    :DeployDate
+    :FollowonCount
+    :AtomicPolicy
+    :DeployInterval
+    :Fill-path
+    :Period
+    :Demand
+    :Pathlength
+    :Oititle
+    :BogBudget
+    :Cycletime
+    :Deploymentcount
+    :Demandtype
+    :Fillcount
+
+   ; :Location
+    :Dwellbeforedeploy
+   ; :Policy
+    :Sampled
+    :Dwell-plot?
+    :Deltat})
+
+;;According to Craig, probably not used
+(def non-proc
+  #{:Policy
+    :Fillcount
+    :Pathlength
+    :Fillpath
+    :Name ;;unit_SRC_Compo ....
+    :AtomicPolicy
+    :FollowonCount
+    :Deploydate
+    :deploymentID
+    :category
+    :Category
+    :Cycletime
+    :BogBudget
+    :DeploymentCount
+    :FillCount
+    ;:Policy
+    :Location})
+
+(def fillrecord {:Unit      :text
+                 :category :text
+                 :DemandGroup :text
+                 :SRC :text
+                 :FillType :text
+                 :FollowOn :boolean
+                 :name :text
+                 :Component :text
+                 :operation :text
+                 :start :int
+                 :DeploymentID :int
+                 :duration :int
+                 :dwell-plot? :boolean
+                 :DwellYearsBeforeDeploy :float
+                 :DeployDate :text
+                 :FollowOnCount :int
+                 :AtomicPolicy :text
+                 :Category :text
+                 :DeployInterval :int
+                 :fill-type :text
+                 :FillPath :text
+                 :Period :text
+                 :unitid :int
+                 :deltat :int
+                 :Demand :text
+                 :PathLength :int
+                 :OITitle :text
+                 :BogBudget :int
+                 :CycleTime :int
+                 :DeploymentCount :int
+                 :DemandType :text
+                 :quantity :int
+                 :end :int
+                 :FillCount :int
+                 :Location :text
+                 :location :text
+                 :compo :text     
+                 :DwellBeforeDeploy :int
+                 :Policy :text
+                 :sampled :boolean
+                 })
+
+
 (defn get-schema [nm] (get known-schemas nm))
 
 ;;look for like-named columns, if not found, returns nil
