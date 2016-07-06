@@ -4,11 +4,15 @@
 ;;define ways to process simulation history
 ;;and produce dynamic analysis.
 (ns marathon.analysis
-  (:require [spork.util.table      :as tbl]
+  (:require [spork.util.table       :as tbl]
             [marathon.ces [core     :as core]
-                          [engine :as engine]]
+                          [engine   :as engine]
+                          [setup    :as setup]
+                          ]
             [clojure.core.reducers :as r]
-            [spork.sim.simcontext  :as sim]))
+            [marathon.project  :as proj]
+            [spork.sim.simcontext  :as sim]
+            [marathon.serial :as ser]))
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]  
@@ -96,6 +100,7 @@
         (println [:spitting-deployments dpath])
         (tbl/records->file (->deployment-samples h) dpath))))
 
+;;spits a log of all the events passing through.
 (defn spit-log
   ([h root nm]
    (println [:logging-to (str root nm)])
@@ -107,6 +112,8 @@
         ))))
   ([h root] (spit-log h root "events.txt")))
 
+;;spits a verbose log of all the events and
+;;behavioral updates that are performed...
 (defn spit-log!
   ([h root nm]
    (println [:logging-to (str root nm)])
@@ -148,7 +155,45 @@
                      (not= l r)))
            (vec)
            ))))
-      
+
+
+;;API Definition
+;;==============
+
+
+;;This is the core of doing a "run"...
+(defn load-context
+  "Given a viable Marathon Project, p, we derive and initial 
+   simulation context, from which we can create a simulation
+   history."
+  [p]
+  (->>  (setup/simstate-from 
+         (:tables (proj/load-project p))
+         core/debugsim)
+        (sim/add-time 1)))
+
+(defn marathon-stream
+  "Create a stream of simulation states, indexed by time."
+  [& {:keys [path tmax] :or {tmax 5001}}]
+  (->> (load-context path)
+       (->history-stream tmax engine/sim-step)))
+
+;;The goal here is to easily serialize our entity database...
+;;Note...we have some options for how we do this...
+;;We could do an initial state + diffs (similar to
+;;git...) and save our stuff that way.  For now we
+;;have a stream of state snapshots which have internal
+;;references via persistent structures....so...
+;;we should? be able to persist our stuff efficiently.
+(defn freeze-history [h path]
+  (ser/freeze-to h path)
+  )
+  
+;;testing
+(def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+
+
+
 ;;We can compare the event logs too...
 ;;See where history diverges.
 ;; (defn divergence [lh rh]

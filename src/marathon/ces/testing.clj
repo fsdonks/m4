@@ -13,13 +13,13 @@
 ;;the vast majority are defined as a consequence of
 ;;working with actual data.
 (ns marathon.ces.testing
-  (:require [marathon.ces [engine  :as engine  :refer :all]]
-            [marathon.ces [fill  :as fill]]
-            [marathon.ces [core :as core]
-                          [supply :as supply]
-                          [demand :as demand]
-                          [unit :as unit]
-                          [policy :as policy]
+  (:require [marathon.ces [engine   :as engine  :refer :all]]
+            [marathon.ces [fill     :as fill]]
+            [marathon.ces [core     :as core]
+                          [supply   :as supply]
+                          [demand   :as demand]
+                          [unit     :as unit]
+                          [policy   :as policy]
                           [policyio :as policyio]
                           [sampledata :as sd]
                           [entityfactory :as ent]
@@ -348,7 +348,7 @@
       "Should have 12 units deployable")
   (is (same? odd-units
       '(["24_SRC3_NG" 1601]
-        ["8_SRC2_NG" 1825]
+        ["8_SRC2_NG"  1825]
         ["23_SRC3_NG" 1399]
         ["29_SRC3_NG" 1385]
         ["22_SRC3_NG" 1217])
@@ -833,7 +833,5 @@
 ;;path or something.
 ;;Testing with our new policies...
 (def ap "C:\\Users\\tspoon\\Documents\\srm\\arfnotionalbase.xlsx")
+(defn arf-hist [& {:keys [tmax] :or {tmax 5001}}] (excel-hist  :path ap :tmax tmax))
 
-(defn arf-hist [& {:keys [tmax] :or {tmax 5001}}]
-  (excel-hist  :path ap :tmax tmax))
-  

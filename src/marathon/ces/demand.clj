@@ -146,7 +146,9 @@
 
 ;Simple api function to group active demands from the store by their src. 
 (defn demands-by-src [store src] (get-in store [:unfilledq src]))
- 
+
+;;Looks like this is the only one that's holding demand information...
+
 ;1) Tom Note 20 May 2013 -> It would be nice to have a function or macro for 
 ;   defining nested updates like this, as it will probably happen quite a bit.
 (defn remove-demand [demandstore demandname]
@@ -897,6 +899,8 @@
    (->> (store/add-entity ctx demand)
         (update-fill  demandstore demandname))))
 
+;;Note: we're using demandmap for information here...rather than
+;;the context...
 (defn send-home-units
   "Sends home all units from a demand, essentially freeing consumed resources.  
    Only called against active demands as part of the deactivation process.  If
