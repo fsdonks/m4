@@ -11,6 +11,8 @@
                           ]
             [clojure.core.reducers :as r]
             [marathon.project  :as proj]
+            [marathon.project [linked :as linked]
+                              [excel :as xl]]
             [spork.sim.simcontext  :as sim]
             [marathon.serial :as ser]))
 
@@ -178,6 +180,17 @@
   (->> (load-context path)
        (->history-stream tmax engine/sim-step)))
 
+;;serializing all the snapshots is untenable...
+;;can we compute diffs?
+;;All we really care about, as we traverse forward,
+;;is information regarding who changed...
+;;So if any entity was touched or updated during the
+;;t, the it'll show...
+;;In theory, any last-updates to entities
+;;will show up....so that limits our diffs
+;;to the entities with last-update components..
+;;From there, we can just compare them with their previous selves...
+
 ;;The goal here is to easily serialize our entity database...
 ;;Note...we have some options for how we do this...
 ;;We could do an initial state + diffs (similar to
@@ -185,10 +198,42 @@
 ;;have a stream of state snapshots which have internal
 ;;references via persistent structures....so...
 ;;we should? be able to persist our stuff efficiently.
+;;We're going to stream this rather than do it all in
+;;memory...we can also add a diff buffer that can
+;;be serialized at the end of the day...
+;;So, anytime an entity is modified (via gete adde
+;;assoce, etc.), the diff buffer (or dirty flag)
+;;gets mutated in the db.  Then we compare dirty
+;;entities with their previous versions to see
+;;what the differences are...seems plausible...
+;;the brute-force approach is to just use
+;;hashing to compare...assuming we have hash
+;;equality, we just hash-compare the stores, and
+;;then the components in the stores, and then
+;;the entities...
+;;probably makes more sense to diff the components...
+;;structural diffing is a pretty powerful way to
+;;compute deltas...and laid back.  It "would" be
+;;nice if we'd cached the values though.
+(defn diff-stores [l r]
+  (let [lcomps (-> l :state :store :domain-map)
+        rcomps (-> r :state :stote :domain-map)]
+    ;;many components will be the same..
+    ;;man, we can actually save time if the hash hasn't been computed yet...
+    (if (identical? lcomps rcomps) nil
+        (reduce-kv (fn [acc lk lv]
+                     (if-let [rv (get rcomps lk)]
+                       (if (not (identical? lv rv))
+                         (conj acc lk) acc) (conj acc lk))) [] lcomps))))
+    
 (defn freeze-history [h path]
-  (ser/freeze-to h path)
+  (ser/freeze-to! h path)
   )
-  
+
+
+;;hmm...
+
+
 ;;testing
 (def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
 
