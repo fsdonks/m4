@@ -5,6 +5,7 @@
 ;;and produce dynamic analysis.
 (ns marathon.analysis
   (:require [spork.util.table       :as tbl]
+            [spork.entitysystem [store :as store]]
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
@@ -234,10 +235,105 @@
 ;;hmm...
 
 
+(comment 
 ;;testing
 (def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
 
+(def h (take 2 (marathon-stream :path ep))))
+(def l (first  h))
+(def r (second h))
 
+;;can we perform an efficient entity-diff in the entity-store
+;;library?, or do we have to go the long route?
+;;Also...how long is the long route...
+
+;;Also, if we diff this way, how does that play out when
+;;we're using mutation?
+;;Since it's a store, we really just care about which keys
+;;changed in the component/entity mappings.
+;;That's what we'll serialize.  Should cut down on our
+;;problems significantly.  And, we can cache diffs in the
+;;future to make this easier, maybe.
+(defn diff-map [ls rs]
+    (if (identical? ls rs)
+      nil
+      (let [lks (set (keys ls))
+            rks (set (keys rs))
+            ;;if anything is missing from either, we know
+            ;;they are different.
+            only-ls  (clojure.set/difference   lks rks)
+            only-rs  (clojure.set/difference   rks lks)
+            shared   (clojure.set/intersection lks rks) ;we only need to scan shared.
+            changes  (reduce (fn [acc k]
+                               (let [lv (get ls k)
+                                     rv (get rs k)]
+                                 (if (identical? lv rv) acc
+                                     (conj acc [k [lv rv]]))))
+                             []
+                             shared)]        
+          {:dropped only-ls
+           :changed changes
+           :added   (map (fn [c] [c (get rs c)]) only-rs)})))
+
+(defn entity-diff [lstore rstore]
+  (let [{:keys [dropped changed added]} (diff-map (:domain-map lstore) (:domain-map rstore))]
+    {:dropped dropped
+     :changed   (for [[c [old new]]  changed] ;by component, find changes.  These are basically instructions.
+                  [c (diff-map old new)])
+     :added added}))
+
+;;since components are maps...we can recursively diff to see which
+;;entities changed.
+
+;;If we constrain all access to go through assoce, etc,
+;;then we can get away with diffing...
+(defn diff-store [l r]
+  (let [le (:store (sim/get-state l))
+        re (:store (sim/get-state r))]
+    (if (identical? (:domain-map le) (:domain-amp re))
+      nil
+      (diff-map (:domain-map le) (:domain-map re)))))
+
+;;component add -> entity-add..
+;;{:assoc-entity     [entity component value]
+;; :dissoc-entity    [entity component]}
+;;to update our entitystore.
+(defn drops->patches [drops]
+  (map (fn [d] {:drop-domain d}) drops))
+(defn adds->patches [adds]
+  (for  [[component es] adds
+         [e v] es]
+    {:add [e component v]}))
+
+(defn changes->patches [changes]
+  (for  [[component diffs] changes
+         [e {:keys [dropped changed added]}]  diffs]
+    (apply concat
+           (map (fn [v] {:drop [e component]}) dropped)
+           (map (fn [v] {:add  [e component v]}) added)
+           (map (fn [[old new]] {:add [e component new]}) changed))))
+
+(defn entity-diffs->patch [{:keys [dropped changed added]}]
+  (apply concat (drops->patches dropped)
+                (adds->patches added)
+                (changes->patches changed)))
+
+;;apply a patch to an existing store to get the
+;;next store.
+(defn patch->store [init patches]
+  (reduce (fn [acc patch]
+            (if-let [addition (:add patch)]
+              (let [[e c v] addition]
+                (store/assoce acc e c v))
+              (store/drop-domain acc (:drop patch))))
+          init patches))
+        
+(defn patch-history [h]
+  (for [[[t1 l] [t2 r]] (partition 2 1 h)]
+    [t2 (changes->patches (diff-store l r))]))
+    
+
+)
 
 ;;We can compare the event logs too...
 ;;See where history diverges.
@@ -254,6 +350,4 @@
 ;;Actual output from a Marathon run will include....
 
 ;;
-(comment 
 
-)
