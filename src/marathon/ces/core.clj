@@ -154,20 +154,21 @@
         (:activedemands)
         (keys)
         (map #(store/get-entity ctx %))
-        (map (fn [{:keys [category demandgroup operation vignette Command] :as d}] {:t t
-                      :name        (:name d)
-                      :src         (:src d)
-                      :assigned    (count  (:units-assigned d))
-                      :overlapping (count  (:units-overlapping d))
-                      :quantity    (:quantity d)
-                      :filled      (count (:units-assigned d))
-                      :unfilled    (- (:quantity d) (count (:units-assigned d)))
-                      :category    category
-                      :demandgroup demandgroup
-                      :operation   operation
-                      :vignette    vignette
-                      :command     Command
-                      :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}
+        (map (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+               {:t t
+                :name        (:name d)
+                :src         (:src d)
+                :assigned    (count  (:units-assigned d))
+                :overlapping (count  (:units-overlapping d))
+                :quantity    (:quantity d)
+                :filled      (count (:units-assigned d))
+                :unfilled    (- (:quantity d) (count (:units-assigned d)))
+                :category    category
+                :demandgroup demandgroup
+                :operation   operation
+                :vignette    vignette
+                :command     Command
+                :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}
                ))))
   ([ctx]  (deployments (sim/get-time ctx) ctx)))
 
@@ -430,7 +431,21 @@
 
 (defn collect [fs xs]  
   (let [f (if (coll? fs) (apply juxt fs) fs)]
-      (map f xs)))
+    (map f xs)))
+
+;;Ephemeral Data
+;;==============
+(defn get-ephemeral [ctx id component]
+  (if-let [state (store/gete id component)]
+    [ctx state]
+    (let [atm (atom (transient []))
+          ctx (store/assoce id component atm)]
+      [ctx atm])))
+
+(defn conj-ephemeral [ctx id component v]
+  (let [[ctx state] (get-ephemeral ctx id component)]
+    (reset! state conj! evt)
+    ctx))
 
 ;; (defn parse-collector [fs]
 ;;   (cond (map? fs) (fn [x] 

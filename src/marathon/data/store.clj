@@ -274,6 +274,18 @@
 
 (defn get-parameters [ces] (gete ces :parameters))
 
+;;__Transient Data__
+;;We define entities with a transient component as being ephemeral or mutable...
+;;For things like logging, or other activities, we'd like to retain
+;;an  append-only event history.  It's easy to do this if we have
+;;a component tagging the mutable structure, so that we may clear it between
+;;frames.  For instance, we may have a system whose job is to traverse
+;;transient components and finalize them.
+;;So...for entities that have a transient and a finalize component,
+;;we can process them in a controlled manner.  This makes it easy
+;;to use different strategies for retaining things like log data,
+;;or events, or other things.
+
 ;;__Location Definitions__
 ;;Another unique entity that maintains data (primarily for lookup), that maps locations to
 ;;coordinates (in some coordinate system)

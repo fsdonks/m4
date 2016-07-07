@@ -99,10 +99,79 @@
         (map? h) (->map-samples f h)
         :eles (throw (Exception. (str "Dunno how to do samples with " (type h))))))
 
+
+;;our canonical samplers...
+
+;;these are just basic functions that collect a stream of samples
+;;from a state..
+;;It'd be nice to define a channel-based version of this so that
+;;we can compute samples state by state...
+;;at any given point in time, we have n samples we're collecting.
+;;as we transition through the state stream, we run each sampler
+;;to see if it computes a sample.
+
+;;Some samples are event-based...
+;;like dwell-before deployment stats...
+
+;;Can we just append a deployment record? 
 ;;dumb sampler...probably migrate this to
 ;;use spork.trends sampling.
 (defn ->location-samples   [h]  (->collect-samples core/locations   h))
 (defn ->deployment-samples [h]  (->collect-samples core/deployments h))
+
+(defn ->demand-trends      [h]  (->collect-samples core/deployments h))
+;;compute the deployments table
+
+(defn ->deployments        [h]   )
+
+
+
+;;creating legacy output from basic data..
+;;fills are a join of unit<>demanddata<>deployments
+
+
+
+;; (def fillrecord {:Unit      :text
+;;                  :category :text
+;;                  :DemandGroup :text
+;;                  :SRC :text
+;;                  :FillType :text
+;;                  :FollowOn :boolean
+;;                  :name :text
+;;                  :Component :text
+;;                  :operation :text
+;;                  :start :int
+;;                  :DeploymentID :int
+;;                  :duration :int
+;;                  :dwell-plot? :boolean
+;;                  :DwellYearsBeforeDeploy :float
+;;                  :DeployDate :text
+;;                  :FollowOnCount :int
+;;                  :AtomicPolicy :text
+;;                  :Category :text
+;;                  :DeployInterval :int
+;;                  :fill-type :text
+;;                  :FillPath :text
+;;                  :Period :text
+;;                  :unitid :int
+;;                  :deltat :int
+;;                  :Demand :text
+;;                  :PathLength :int
+;;                  :OITitle :text
+;;                  :BogBudget :int
+;;                  :CycleTime :int
+;;                  :DeploymentCount :int
+;;                  :DemandType :text
+;;                  :quantity :int
+;;                  :end :int
+;;                  :FillCount :int
+;;                  :Location :text
+;;                  :location :text
+;;                  :compo :text     
+;;                  :DwellBeforeDeploy :int
+;;                  :Policy :text
+;;                  :sampled :boolean
+;;                  })
 
 ;;can we spit out demandtrends?
 ;;Yes....
