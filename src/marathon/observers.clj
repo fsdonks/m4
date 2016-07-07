@@ -207,10 +207,35 @@
 ;;handlers are functions of the form
 ;;(ctx  -> edata -> name -> ctx)
 
+;;Deployments
+;;===========
+;;Recording deployments with benevolent side-effects.
+;;You know, we could just attach a deployment component
+;;to each entity that had a deployment on said day....and
+;;then wipe the deployments afterward.  That's an idea...
+;;handle "events" by attaching components.  Keeps everything
+;;in data.  The other approach is maintaing ephemeral
+;;logs like these...
+
+;;I like the approach of tagging entities with eventful
+;;data...
+;;Like, if we fire an event at an entity, we attach
+;;the event to the entity.  That way, if we
+;;look at the entity's history at said point in time,
+;;it'll have a an event component with all of the
+;;events for said day, i.e. the instantaneous events.
+
 ;;right now, on update, we're just firing off this
 ;;event...so we get event-based processing with
 ;;the pure functional approach...
-(defn add-deployment [ctx evt]
+
+
+;;maybe there's a deployments entity with unit components...
+;;we conj onto it...
+;;I like the data-driven approach a bit better...
+;;inside of log-deployment, we can conj into the deployments
+;;component for the unit.
+
 
 ;;deployments push records onto a transient vector inside of
 ;;an atom at :deployment-watch/:new-deployments 
@@ -219,15 +244,47 @@
         (new-deployment)
         (store/conj-ephemeral ctx :deployment-watch :new-deployments)))
 
+(defn commit-deployments [ctx edata  _]
+  (if-let [deployments (core/some-ephmeral ctcx :deployment-watch :new-deployments)]
+    (let [t (core/get-time ctx)]
+      (-> ctx
+          (store/updatee :state :deployments #(conj (persistent! @deployments)))
+          (core/reset-ephemeral :deployment-watch :new-deployments (transient []))))
+    ctx))
+
+
+;;these are basically event-driven systems...
+;;still works nicely in the ECS paradigm.
 
 ;;by default, we watch all this crap...
 (def default-routes
-  {:deployment-watch {:deploy  deployment-handler}
+  {:deployment-watch {:deploy    deployment-handler
+                      :end-day   commit-deployments}
+   :movement-watch   {:begin-day (fn [ctx _ _ ]
+                                   (store/drop-domain ctx :movement))}
+                      })   
+   ;;We can derive locations pretty easily...
+   ;;also demand trends....
+   ;;looks like deployments are the current odd datum we're not tracking.
 ;   :location-watch   
-   })
 
 (defn register-default-observers [ctx]
   (simnet/register-routes  default-routes ctx))
 
+;;We can map these into the requisite notifications for the animation/visualzation
+;;stuff.  that way, we get our deltas necessary for animation, and it ends up
+;;very easy to compare past to previous by diffing.
 
+;;if we have known policy trajectories...then we can alter position, velocity, etc.
+;;we'd like to ensure that entities who move are recorded.
+;;In our case, it's enough to tag a movement component onto the entities.
+;;We make sure to drop the movement domain when we begin a new day..
+(defn movement-watch [])  
+;;interested in positioning of units...
+;;policy changes...
+:PositionUnit
+
+
+;;unit movement events...location changes..
+:unitMoved
 

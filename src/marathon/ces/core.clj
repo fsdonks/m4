@@ -435,6 +435,8 @@
 
 ;;Ephemeral Data
 ;;==============
+;;Typically used for storing append-only daily logging
+;;information.
 (defn get-ephemeral [ctx id component]
   (if-let [state (store/gete id component)]
     [ctx state]
@@ -444,8 +446,17 @@
 
 (defn conj-ephemeral [ctx id component v]
   (let [[ctx state] (get-ephemeral ctx id component)]
-    (reset! state conj! evt)
+    (swap! state conj! v)
     ctx))
+
+(defn reset-ephemeral [ctx id component v]
+  (let [[ctx state] (get-ephmeral ctx id component)]
+    (reset! state v)
+    ctx))
+
+(defn some-ephemeral [ctx id component]
+  (when-let [atm (store/gete ctx id component)]    
+    (when (pos? (count @atm)) atm)))
 
 ;; (defn parse-collector [fs]
 ;;   (cond (map? fs) (fn [x] 

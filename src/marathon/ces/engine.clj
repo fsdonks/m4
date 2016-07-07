@@ -28,6 +28,7 @@
             [marathon.ces.fill.demand       :refer [fill-demands]]
             [marathon.ces.policy :as policy :refer [manage-policies]]
             [marathon.data [store :as simstate]]
+            [marathon      [observers :as obs]]
             [spork.sim     [simcontext :as sim]]))
 
 
@@ -65,36 +66,7 @@
                                         tlastdemand " in a truncated simulation, terminating!") nil ctx)
                 false))
           true))
-      (sim/has-time-remaining? ctx))))
-  
- ;;When we simulate, starting from a GUI, we usually want to tell the user if there are any anomolies in
- ;;the data.  Specifically, if there is no supply or no demand, we inform the user, requiring verification
- ;;before simulating.
-(defn get-user-verification [state & [suppress]]
-  (do (println "get-user-verification is currently a stub!  We need to add interface hooks here.  Messages will still print.")
-      (if (zero? (-> state :supplystore :unitmap   count)) (println "No Supply Loaded.  Continue With Simulation?"))
-      (if (zero? (-> state :demandstore :demandmap count)) (println "No Demand Loaded.  Continue With Simulation?"))
-      true))
-
-;; Uses the event stream provided by simcontext, to broadcast the availability of each element of the simstate.
-;; Allows interested observers, who require access across different domains, to bind to the components, making
-;; local processing easier to reason about.
-
-(defn notify-watches [simctx & [ctx simname & _]]
-  (let [ctx     (or ctx simctx)
-        state   (:state simctx)
-        simname (or simname (:name state))]
-    (->> ctx 
-        (sim/trigger-event :WatchDemand simname simname "" (:demandstore state))
-        (sim/trigger-event :WatchSupply simname simname "" (:supplystore state))
-        (sim/trigger-event :WatchTime simname simname ""   (:scheduler ctx))
-        (sim/trigger-event :WatchPolicy simname simname "" (:policystore state))
-        (sim/trigger-event :WatchParameters simname simname "" (:parameters state))
-        (sim/trigger-event :WatchFill simname simname "" (:fillstore state)))))
-        
-;;Notify interested parties of the existence of the GUI.
-(defn notifyUI [ui ctx]
-  (sim/trigger-event :WatchGUI "" "" "GUI Attached" ui ctx))
+      (sim/has-time-remaining? ctx))))        
 
 ;##Simulation Initialization
 (defn set-time
@@ -102,22 +74,6 @@
    last-day."
   [last-day ctx]  
  (sim/set-time-horizon 1 (guess-last-day ctx last-day) ctx))
-
-;This is just a handler that gets added, it was "placed" in the engine object
-;in the legacy VBA version.  __TODO__ Relocate or eliminate engine-handler.
-(defn engine-handler
-  "Forces all entities in supply to be brought up to date."
-  [ctx edata]
-  (if (= (:type edata) :update-all-units)
-    (supply/update-all ctx) ;from marathon.sim.supply
-    (throw (Exception. (str "Unknown event type " edata)))))
-
-(defn initialize-control
-  "Registers a default handler for updating all units in the supplystore
-   after an :update-all-units event."
-  [ctx]
-  (sim/add-listener :Engine 
-      (fn [ctx edata name] (engine-handler ctx edata)) [:update-all-units] ctx))
 
 ;#Initialization
 ;Initialization consists of 3 tasks:    
@@ -147,33 +103,17 @@
    preconditions applied."
   [ctx & [lastday]]
     (->> ctx
-        ;(start-state)
-;        (assoc-in  [:state :time-start] (now))
-;        (assoc-in  [:state :parameters :work-state] :simulating)
+        (start-state)
         (set-time lastday)
-        ;(notify-watches) 
         (initialize-control)
         (supply/manage-supply 0)
         (policy/manage-policies 0)))
-
-(defn initialize-output 
-  "Sets the output path for output streams in the outputstore.
-   Currently a stub...We can let an event handler deal with 
-   setting up the outputstore.  There are probably other 
-   entities interested in knowing about output setup 
-   prior to a run."
-  [ctx]
-  (do (println "initialize-output is currently a stub.")
-      (sim/trigger-event :initialize-output :Engine :Engine "Initialized output" nil ctx)))
 
 ;##Simulation Termination Logic
 ;When we exit the simulation, we typically want to perform some final tasks.
 ;For instance, any resources (for logging, display, etc.) may need to be freed.
 ;The default mechanism for this is to propogate some events through the context
 ;and let interested parties handle themselves appropriately.
-
-
-;;Look into using ->as here.
 
 ;;Note-> I bolted on manage-policies before.  I think we can just move
 ;;that to a handler...manage-policies enters units into the final period.

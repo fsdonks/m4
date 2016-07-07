@@ -20,8 +20,14 @@
 (defprotocol INotification
   (notify! [obj e msg]
            [obj m])) 
-           
 
+;;provide a constant set of components that
+;;will be cleared each day.
+;;Basically, we'll perform all of our processing
+;;and allocations, then drop anything that's considered
+;;ephemeral.
+(def ephemeral-components
+  #{:moved})
 ;;temporary hack to abstract out entity containers...
 
 ;;defines a unit-entity selector.  This is a little
