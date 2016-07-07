@@ -239,7 +239,7 @@
 
 ;;deployments push records onto a transient vector inside of
 ;;an atom at :deployment-watch/:new-deployments 
-(defn deployment-handler [ctx edata name]
+(defn record-deployment [ctx edata name]
   (->>  (:data edata)
         (new-deployment)
         (store/conj-ephemeral ctx :deployment-watch :new-deployments)))
@@ -252,16 +252,56 @@
           (core/reset-ephemeral :deployment-watch :new-deployments (transient []))))
     ctx))
 
+;;a cell for holding ephemeral values.
+;;We tend to only care about the initial state and the
+;;final state of an identity over time.  For this reason,
+;;we can use cells to capture the end points, and provide
+;;a simple structure that can be updated pretty quickly with
+;;new right-ends.
+(defrecord Cell [init current])
+(defn ->cell
+  ([init] (Cell.  init  init))
+  ([init current] (Cell. init current)))
+(defn push-cell [^Cell cl v] (Cell. (.init cl) v))
+
+;;if we have known policy trajectories...then we can alter position, velocity, etc.
+;;we'd like to ensure that entities who move are recorded.
+;;In our case, it's enough to tag a movement component onto the entities.
+;;We make sure to drop the movement domain when we begin a new day..
+(defn telemetry [ctx edata name]
+  (case (sim/event-type edata)
+    :positionUnit
+          (let [[name frompos topos] (:data edata)
+                [ctx storage] (core/get-ephemeral ctx :position-delta name nil)]
+            (do (if @storage
+                  (swap! storage  #(push-cell topos))            
+                  (reset! storage (->cell frompos topos)))
+                ctx))                
+     :unitMoved
+     (let [[name fromloc toloc] (:data edata)
+           [ctx storage]        (core/get-ephemeral ctx :movement-delta name nil)]
+       (do (if @storage
+             (swap! storage  #(push-cell toloc))            
+             (reset! storage (->cell fromloc toloc)))
+           ctx))          
+    (throw (Exception. (str [:unregistered-event (sim/event-type edata)])))
+    )
+  )
 
 ;;these are basically event-driven systems...
 ;;still works nicely in the ECS paradigm.
 
 ;;by default, we watch all this crap...
+;;This is almost identical to the pub/sub setup...
+;;We have multiple observer-functions processing
+;;events (serially...)
 (def default-routes
-  {:deployment-watch {:deploy    deployment-handler
-                      :end-day   commit-deployments}
-   :movement-watch   {:begin-day (fn [ctx _ _ ]
-                                   (store/drop-domain ctx :movement))}
+  {:deployment-watch {:deploy       record-deployment
+                      :end-day      commit-deployments}
+   :movement-watch   {:positionUnit movement-watch
+                      :unitMoved    movement-watch
+                      :end-day      commit-movement
+                                }
                       })   
    ;;We can derive locations pretty easily...
    ;;also demand trends....
@@ -277,17 +317,7 @@
 
 ;;we want to track policy changes.
 
-;;if we have known policy trajectories...then we can alter position, velocity, etc.
-;;we'd like to ensure that entities who move are recorded.
-;;In our case, it's enough to tag a movement component onto the entities.
-;;We make sure to drop the movement domain when we begin a new day..
-(defn movement-watch [ctx edata name]
-  (case (sim/event-type edata)
-    :positionUnit ctx
-    :unitMoved  ctx
-    (throw (Exception. (str [:unregistered-event (sim/event-type edata)])))
-    )
-  )
+
 
 ;;Is there a higher-level concept here?
 ;;Can we define entity-level events....

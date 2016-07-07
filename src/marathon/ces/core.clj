@@ -437,12 +437,14 @@
 ;;==============
 ;;Typically used for storing append-only daily logging
 ;;information.
-(defn get-ephemeral [ctx id component]
-  (if-let [state (store/gete id component)]
-    [ctx state]
-    (let [atm (atom (transient []))
-          ctx (store/assoce id component atm)]
-      [ctx atm])))
+(defn get-ephemeral
+  ([ctx id component default]
+   (if-let [state (store/gete id component)]
+     [ctx state]
+     (let [atm (atom default)
+           ctx (store/assoce id component atm)]
+       [ctx atm])))
+  ([ctx id component] (get-ephemeral ctx id component (transient []))))
 
 (defn conj-ephemeral [ctx id component v]
   (let [[ctx state] (get-ephemeral ctx id component)]
@@ -454,23 +456,14 @@
     (reset! state v)
     ctx))
 
+(defn swap-ephemeral [ctx id component f]
+  (let [[ctx state] (get-ephmeral ctx id component)]
+    (swap! state f)
+    ctx))
+
 (defn some-ephemeral [ctx id component]
   (when-let [atm (store/gete ctx id component)]    
     (when (pos? (count @atm)) atm)))
-
-;; (defn parse-collector [fs]
-;;   (cond (map? fs) (fn [x] 
-;;                     (reduce-kv (fn [m fld f] (assoc m fld (f x))) {} x))
-;;         (vector? fs) 
-;;             (reduce (fn [acc f]
-;;                       (if (and (vector? f) (= (count f) 2))
-;;                         (
-           
-;; (defn collect2 [fs xs]  
-;;   (let [f (if (coll? fs) 
-;;             (apply juxt fs) 
-;;             fs)]
-;;       (map f xs)))
 
 ;;Acts like juxt, except it returns the results in a map.
 ;;The map is implied by the args in kvps, where simple keys - numbers,

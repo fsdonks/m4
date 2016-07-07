@@ -323,7 +323,8 @@
 ;Aux function for logging/recording the fact that a unit changed locations
 (defn log-move!
   ([t fromloc toloc unit duration ctx]
-   (sim/trigger-event :unitMoved (:name unit) toloc (core/msg (:name unit) " moved from " fromloc " to " toloc) unit ctx))
+   (sim/trigger-event :unitMoved (:name unit) toloc (core/msg (:name unit) " moved from " fromloc " to " toloc)
+                      [unit fromloc toloc] ctx))
   ([t fromloc toloc unit ctx] (log-move! t fromloc toloc unit nil ctx)))
 
 ;TODO -> This should be renamed like positionEvent or something.
@@ -338,10 +339,10 @@
   ;(comment 
     (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
                        (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
-                       nil ctx)
+                       [name frompos topos] ctx)
    ; )
  ; ctx
-  )
+)
 
 ;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
@@ -361,8 +362,6 @@
 (defn first-deployment! [supply unit ctx]
   (sim/trigger-event :firstDeployment (:name supply) (:name supply) 
        (core/msg "Unit " (:name unit) " Deployed for the First Time") nil ctx))
-
-
 
 ;;#Supply Availability
 

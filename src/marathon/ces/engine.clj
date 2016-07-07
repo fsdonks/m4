@@ -156,22 +156,7 @@
   [day ctx]
   (->> ctx
     (sim/trigger-event :begin-day :Engine :Engine
-                       (day-msg "Begin" day) [day (sim/get-next-time ctx)])
-    ;(check-pause)
-    ))  
-
-(defn check-truncation
-  "Legacy function that checks to see if the simulation can be truncated, i.e. 
-   cut short.  Typically, we take the minimum time of 
-   [latest-demand-end-time  simulation-end-time], but there are other phenomena
-   that may cause us to advance the end time of the simulation."
-  [ctx] 
-  (if (and (-> ctx :state :truncate-time ) (-> ctx :state :found-truncation))
-    (-> (sim/trigger-event :all :Engine :Engine 
-           (str "Truncated the simulation on day " (sim/get-time ctx) ", tfinal is now : " 
-                (sim/get-final-time ctx)) nil ctx) 
-        (assoc-in [:state :found-truncation] true))
-    ctx))
+                       (day-msg "Begin" day) [day (sim/get-next-time ctx)])))  
 
 ;##End Day Logic
 ;At the end of each "day" or discrete time step, we typically mark the passage 
