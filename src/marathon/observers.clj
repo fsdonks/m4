@@ -275,12 +275,43 @@
 ;;stuff.  that way, we get our deltas necessary for animation, and it ends up
 ;;very easy to compare past to previous by diffing.
 
+;;we want to track policy changes.
+
 ;;if we have known policy trajectories...then we can alter position, velocity, etc.
 ;;we'd like to ensure that entities who move are recorded.
 ;;In our case, it's enough to tag a movement component onto the entities.
 ;;We make sure to drop the movement domain when we begin a new day..
-(defn movement-watch [])  
-;;interested in positioning of units...
+(defn movement-watch [ctx edata name]
+  (case (sim/event-type edata)
+    :positionUnit ctx
+    :unitMoved  ctx
+    (throw (Exception. (str [:unregistered-event (sim/event-type edata)])))
+    )
+  )
+
+;;Is there a higher-level concept here?
+;;Can we define entity-level events....
+;;and then apply our higher-order constructs for mapping and
+;;stuff?
+
+;;At the implementation level, the event is a component that's added at
+;;an instant in time.
+;;Multiple events overwrite (or do we buffer?)
+
+;;We get an event history that way.
+;;Also, possibly retain a shitload of events and event messages (may not
+;;want to do that).
+
+;;I'd like to say "as the unit moves, record all pairwise
+;;movements..."
+;;If we go with channels/transducers, we get this kind of stuff.
+;;So, if we have an initial channel, we can transduce over it to
+;;get the event history..
+;;Channels are just buffers in the end. 
+;;"ala (->> (:unitMoved) (partition 2 1) 
+
+
+;;interested in positioning of units...we have an event for that.
 ;;policy changes...
 :PositionUnit
 
