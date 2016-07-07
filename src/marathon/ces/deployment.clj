@@ -85,9 +85,11 @@
                                  unit-delta)
             ;;TODO - rip out all stuff relate to fencing....no longer necessary.
             supplystore   (assoc supplystore :tags  (supply/drop-fence (:tags supplystore)
-                                                                       (:name unit)))
-            ]  
-        (->> (store/updatee ctx to-location :units-assigned assoc (:name unit) unit) ;need to update this in ctx..  ;;estore version.       
+                                                                       unitname))
+            ]
+        ;;Ideally, we don't store the entire unit under units-assigned, only the name.
+        (->> ;;modified to just store unitname.
+             (store/updatee ctx to-location :units-assigned assoc unitname unitname) ;need to update this in ctx..  ;;estore version.       
              (sim/merge-entity {unitname     unit-delta
                                 ;;TODO - rip out all stuff relate to fencing....no longer necessary.
                                 :SupplyStore {:tags (:tags supplystore)} ;(supply/add-unit supplystore unit)

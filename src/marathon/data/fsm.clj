@@ -20,6 +20,9 @@
 
 (def inf (java.lang.Double/POSITIVE_INFINITY))
 
+;;we might want to get away from records due to readability issues.
+;;statedata could easily be map...although the records give use
+;;fast field access for free.
 (defrecord statedata [curstate
                       prevstate
                       nextstate 

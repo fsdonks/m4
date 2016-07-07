@@ -5,13 +5,17 @@
 ;;and produce dynamic analysis.
 (ns marathon.analysis
   (:require [spork.util.table       :as tbl]
-            [spork.entitysystem [store :as store]]
+           
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
                           ]
             [clojure.core.reducers :as r]
-            [marathon.project  :as proj]
+            [spork.util.reducers]
+            [clojure.pprint :refer [pprint]]
+            [marathon [project  :as proj]
+             ]
+            [spork.entitysystem [diff     :as diff]]
             [marathon.project [linked :as linked]
                               [excel :as xl]]
             [spork.sim.simcontext  :as sim]
@@ -49,7 +53,6 @@
       (coll-reduce [this f1]   (reduce f1 simred))
       (coll-reduce [_ f1 init] (reduce f1 init simred)))))
 
-
 (defn ->history-stream [tfinal stepf init-ctx]
   (->> init-ctx
        (->simulator stepf)
@@ -66,9 +69,10 @@
 (defn ending [h t] (get (meta (get h t) :end  )))
 (defn start  [h t] (get (meta (get h t) :start)))
 
+
 ;;We can speed this up by not using for/range..
 ;;It's not a huge bottleneck at the moment...
-(defn ->collect-samples [f h]
+(defn ->map-samples [f h]
   (let [ks    (sort (keys h))
         pairs (partition 2 1 ks)]
     (into (vec (apply concat
@@ -79,6 +83,22 @@
                                      (for [t (range l r)]
                                        (f t ctx))))))))
           (f (last ks) (get h (last ks))))))
+
+(defn ->seq-samples [f kvs]
+  (let [pairs (partition 2 1 kvs)
+        final (last kvs)]
+    (conj (vec (apply concat
+                      (->> pairs
+                           (mapcat (fn [[ [l ctx] [r nxt] ]]
+                                   ;;sample in between...
+                                   (for [t (range l r)]
+                                     (f t ctx)))))))
+          (f (first final) (second final)))))
+
+(defn ->collect-samples [f h]
+  (cond (seq? h) (->seq-samples f h)
+        (map? h) (->map-samples f h)
+        :eles (throw (Exception. (str "Dunno how to do samples with " (type h))))))
 
 ;;dumb sampler...probably migrate this to
 ;;use spork.trends sampling.
@@ -227,61 +247,6 @@
                        (if (not (identical? lv rv))
                          (conj acc lk) acc) (conj acc lk))) [] lcomps))))
     
-(defn freeze-history [h path]
-  (ser/freeze-to! h path)
-  )
-
-
-;;hmm...
-
-
-(comment 
-;;testing
-(def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
-
-(def h (take 2 (marathon-stream :path ep))))
-(def l (first  h))
-(def r (second h))
-
-;;can we perform an efficient entity-diff in the entity-store
-;;library?, or do we have to go the long route?
-;;Also...how long is the long route...
-
-;;Also, if we diff this way, how does that play out when
-;;we're using mutation?
-;;Since it's a store, we really just care about which keys
-;;changed in the component/entity mappings.
-;;That's what we'll serialize.  Should cut down on our
-;;problems significantly.  And, we can cache diffs in the
-;;future to make this easier, maybe.
-(defn diff-map [ls rs]
-    (if (identical? ls rs)
-      nil
-      (let [lks (set (keys ls))
-            rks (set (keys rs))
-            ;;if anything is missing from either, we know
-            ;;they are different.
-            only-ls  (clojure.set/difference   lks rks)
-            only-rs  (clojure.set/difference   rks lks)
-            shared   (clojure.set/intersection lks rks) ;we only need to scan shared.
-            changes  (reduce (fn [acc k]
-                               (let [lv (get ls k)
-                                     rv (get rs k)]
-                                 (if (identical? lv rv) acc
-                                     (conj acc [k [lv rv]]))))
-                             []
-                             shared)]        
-          {:dropped only-ls
-           :changed changes
-           :added   (map (fn [c] [c (get rs c)]) only-rs)})))
-
-(defn entity-diff [lstore rstore]
-  (let [{:keys [dropped changed added]} (diff-map (:domain-map lstore) (:domain-map rstore))]
-    {:dropped dropped
-     :changed   (for [[c [old new]]  changed] ;by component, find changes.  These are basically instructions.
-                  [c (diff-map old new)])
-     :added added}))
-
 ;;since components are maps...we can recursively diff to see which
 ;;entities changed.
 
@@ -292,47 +257,87 @@
         re (:store (sim/get-state r))]
     (if (identical? (:domain-map le) (:domain-amp re))
       nil
-      (diff-map (:domain-map le) (:domain-map re)))))
+      (diff/entity-diff le re))))
 
-;;component add -> entity-add..
-;;{:assoc-entity     [entity component value]
-;; :dissoc-entity    [entity component]}
-;;to update our entitystore.
-(defn drops->patches [drops]
-  (map (fn [d] {:drop-domain d}) drops))
-(defn adds->patches [adds]
-  (for  [[component es] adds
-         [e v] es]
-    {:add [e component v]}))
-
-(defn changes->patches [changes]
-  (for  [[component diffs] changes
-         [e {:keys [dropped changed added]}]  diffs]
-    (apply concat
-           (map (fn [v] {:drop [e component]}) dropped)
-           (map (fn [v] {:add  [e component v]}) added)
-           (map (fn [[old new]] {:add [e component new]}) changed))))
-
-(defn entity-diffs->patch [{:keys [dropped changed added]}]
-  (apply concat (drops->patches dropped)
-                (adds->patches added)
-                (changes->patches changed)))
-
-;;apply a patch to an existing store to get the
-;;next store.
-(defn patch->store [init patches]
-  (reduce (fn [acc patch]
-            (if-let [addition (:add patch)]
-              (let [[e c v] addition]
-                (store/assoce acc e c v))
-              (store/drop-domain acc (:drop patch))))
-          init patches))
-        
 (defn patch-history [h]
-  (for [[[t1 l] [t2 r]] (partition 2 1 h)]
-    [t2 (changes->patches (diff-store l r))]))
-    
+  {:init (first h)
+   :patches (for [[[t1 l] [t2 r]] (partition 2 1 h)]
+              [t2 (diff/entity-diffs->patch (diff-store l r))])})
 
+(defn write-history [h path]  (ser/freeze-to (patch-history h) path))
+
+(defmacro with-print [{:keys [level length]} & body]
+  `(let [before-level# ~'*print-level*
+        before-length# ~'*print-length*
+        lvl# ~level
+        length# ~length]
+    (do (set! ~'*print-level* lvl#)
+        (set! ~'*print-length* length#)
+        ~@body
+        (set! ~'*print-level*  before-level# )
+        (set! ~'*print-length*  before-length#))))
+
+;;textual, printed version
+;;if we use pprint, we get killed here.
+(defn print-history [h path]
+  (with-print {}
+    (with-open [writer (clojure.java.io/writer path)]
+      (binding [*out* writer]
+        (let [{:keys [init patches]} (patch-history h)]
+          (println "{:init")
+          (pr init)
+          (println " :patches")
+          (doseq [[t patches] patches]
+            (println "[" t)
+            (pr patches)
+            (println "]"))
+          (println "}"))))))
+
+(defn print-patches [h path]
+  (with-print {}
+    (with-open [writer (clojure.java.io/writer path)]
+      (binding [*out* writer]
+        (let [{:keys [init patches]} (patch-history h)]
+          (println "{:patches ")
+          (doseq [[t patches] patches]
+            (println "[" t)
+            (pr patches)
+            (println "]"))
+          (println "}"))))))
+
+;;hmmm...can we actually slurp this up?  It's 28 mb...so maybe...
+(defn read-history [path]
+  (println [:warning 'read-history "you're using read-string, vs. clojure.edn/read-string"])
+  (read-string (slurp path)))
+  
+
+(defn read-history! [path]
+  (let [{:keys [init patches]} (ser/thaw-from path)
+        store  (atom (second init))]
+    (into [init]
+          (map (fn [[t patch]]
+                 (let [prev @store
+                       nxt  (diff/patch->store prev patch)
+                       _    (reset! store nxt)]
+                   [t nxt]))
+               patches)
+          )))
+
+
+;;hmm...
+
+
+(comment 
+;;testing
+(def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+
+(def h (take 2 (marathon-stream :path ep)))
+(def l (first  h))
+(def r (second h))
+
+
+    
+    
 )
 
 ;;We can compare the event logs too...
