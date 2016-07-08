@@ -25,9 +25,12 @@
 ;;will be cleared each day.
 ;;Basically, we'll perform all of our processing
 ;;and allocations, then drop anything that's considered
-;;ephemeral.
-(def ephemeral-components
-  #{:moved})
+;;ephemeral.  Typically, we'll have multiple changes
+;;occuring over the same time instant, but spanning
+;;multiple event or update-instants.  We only care
+;;about the initial and the final value.
+(def delta-components
+  #{:position-delta :movement-delta :state-delta})
 ;;temporary hack to abstract out entity containers...
 
 ;;defines a unit-entity selector.  This is a little
@@ -391,6 +394,10 @@
               ]))
   )
 )
+
+;;These are fundamental primitives for handling visual aspects of
+;;the entity.
+
 ;;note, this combines movement (direction change) with displacement...
 ;;computes a displacement based on the entity's current position.
 (defn move-to!

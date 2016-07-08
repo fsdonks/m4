@@ -1,6 +1,9 @@
 ;;A place for defining queries on simulation state.  Serves as a
 ;;useful hub for defining complicated queries.  May also eventually 
 ;;extend spork.entitystore protocols to marathon stores.
+;;Currently looking into how we can either supplement or
+;;replace this with something based on datascript/datomic
+;;querying. 
 (ns marathon.ces.query
   (:require [marathon.ces  [core :as core]
                            [unit :as unit]

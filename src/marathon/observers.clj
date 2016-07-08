@@ -5,8 +5,10 @@
 ;;things like that.
 (ns marathon.observers
   (:require [marathon.data      [protocols :as generic]]
+            [marathon.ces [core :as core]]
             [spork.entitysystem [store :as store]]
-            [spork.sim.pure [network :as simnet]]))
+            [spork.sim.pure     [network :as simnet]]
+            [spork.sim          [data :as sim]]))
 
 ;;identical to proc....copied from there...
 ;;deployment records
@@ -239,13 +241,13 @@
 
 ;;deployments push records onto a transient vector inside of
 ;;an atom at :deployment-watch/:new-deployments 
-(defn record-deployment [ctx edata name]
+(defn record-deployment [ctx edata _]
   (->>  (:data edata)
         (new-deployment)
-        (store/conj-ephemeral ctx :deployment-watch :new-deployments)))
+        (core/conj-ephemeral ctx :deployment-watch :new-deployments)))
 
-(defn commit-deployments [ctx edata  _]
-  (if-let [deployments (core/some-ephmeral ctcx :deployment-watch :new-deployments)]
+(defn commit-deployments! [ctx edata  _]
+  (if-let [deployments (core/some-ephemeral ctx :deployment-watch :new-deployments)]
     (let [t (core/get-time ctx)]
       (-> ctx
           (store/updatee :state :deployments #(conj (persistent! @deployments)))
@@ -264,29 +266,90 @@
   ([init current] (Cell. init current)))
 (defn push-cell [^Cell cl v] (Cell. (.init cl) v))
 
+
+;;we seem to have a pattern emerging for event handlers...
+;;we'd like a function that dispatches based on the type of data.
+;;The event handlers maintain ephemeral data, and are responsible
+;;for cleaning up or not between eventful days.
+;;So, one pattern that's emerging is that we commit 
+
+;;maintaing ephemeral storage is nice...
+;;we have flexibility over where the ephems live though...
+
 ;;if we have known policy trajectories...then we can alter position, velocity, etc.
 ;;we'd like to ensure that entities who move are recorded.
 ;;In our case, it's enough to tag a movement component onto the entities.
 ;;We make sure to drop the movement domain when we begin a new day..
-(defn telemetry [ctx edata name]
-  (case (sim/event-type edata)
-    :positionUnit
-          (let [[name frompos topos] (:data edata)
-                [ctx storage] (core/get-ephemeral ctx :position-delta name nil)]
-            (do (if @storage
-                  (swap! storage  #(push-cell topos))            
-                  (reset! storage (->cell frompos topos)))
-                ctx))                
-     :unitMoved
-     (let [[name fromloc toloc] (:data edata)
-           [ctx storage]        (core/get-ephemeral ctx :movement-delta name nil)]
-       (do (if @storage
-             (swap! storage  #(push-cell toloc))            
-             (reset! storage (->cell fromloc toloc)))
-           ctx))          
-    (throw (Exception. (str [:unregistered-event (sim/event-type edata)])))
-    )
-  )
+;;can we establish a form of one-way binding here?
+;;so, (bind-> name :position-delta :PositionUnit)
+;;    (bind-> name :movement-delta :unitMoved)
+
+;;if we recognize :PositionUnit as an event....
+;;then we can map to it and stuff.
+;;Specifically, if we use channels and pub/sub, we already have all that
+;;junk setup.
+
+;;Maybe we abstract this later...
+
+;;We attach a position-delta to the entity directly...
+;;Note, we can drop position-delta and movement-delta
+;;from the domains on cleanup...
+
+;;So....a general system could be...
+;;(process-deltas position-delta movement-delta) =>
+;;  for each domain,
+;;    for each entity, broadcast its initial-value and its current-value.
+;;    remove the domain from the store.
+
+;;So, process-deltas could either directly handle the changes, or fire off
+;;notifications.
+
+
+;;so, these are effectively properties...
+(defn position-handler [ctx edata _]
+  (let [[name frompos topos] (:data edata)
+        [ctx storage]        (core/get-ephemeral ctx name :position-delta nil)]
+    (do (if @storage
+          (swap! storage  #(push-cell topos))            
+          (reset! storage (->cell frompos topos)))
+        ctx)))
+
+(defn movement-handler [ctx edata _] 
+  (let [[name fromloc toloc] (:data edata)
+        [ctx storage]        (core/get-ephemeral ctx  name :movement-delta nil)]
+    (do (if @storage
+          (swap! storage  #(push-cell toloc))            
+          (reset! storage (->cell fromloc toloc)))
+        ctx)))
+
+;;at the end of day, we want to commit changes.
+;;We can maintain another datastore that's just for ephemeral data...
+;;When we go to commit, we can define a specific commit event...
+(defn commit-telemetry! [ctx edata _]
+  (if-let [deployments (core/some-ephemeral ctx :deployment-watch :new-deployments)]
+    (let [t (core/get-time ctx)]
+      (-> ctx
+          (store/updatee :state :deployments #(conj (persistent! @deployments)))
+          (core/reset-ephemeral :deployment-watch :new-deployments (transient []))))
+    ctx))
+
+;;commit-telemtry could be a larger system.
+;;so...if we have any components registered as telemetry, we perform the
+;;necessary tasks to record the updates...
+
+;;for instance, if the unit's location changed, then we should
+;;fire a location change event or other notification.
+
+;;if the unit's policy position changed, then we should fire a position change
+;;event.
+
+;;if the unit's state changed, the color typically changes...
+;;  in the visualization state-change =>  color-change
+
+
+
+;;can we elevate the notion of events and ephemeral data to the ecs level?
+;;or do we maintain this as a separate thing...?
 
 ;;these are basically event-driven systems...
 ;;still works nicely in the ECS paradigm.
@@ -297,11 +360,11 @@
 ;;events (serially...)
 (def default-routes
   {:deployment-watch {:deploy       record-deployment
-                      :end-day      commit-deployments}
-   :movement-watch   {:positionUnit movement-watch
-                      :unitMoved    movement-watch
-                      :end-day      commit-movement
-                                }
+                      :end-day      commit-deployments!}
+   :telemetry-watch   {:positionUnit position-handler
+                       :unitMoved    movement-handler
+                       :end-day      commit-telemetry!
+                       }
                       })   
    ;;We can derive locations pretty easily...
    ;;also demand trends....
@@ -316,8 +379,6 @@
 ;;very easy to compare past to previous by diffing.
 
 ;;we want to track policy changes.
-
-
 
 ;;Is there a higher-level concept here?
 ;;Can we define entity-level events....
@@ -343,9 +404,130 @@
 
 ;;interested in positioning of units...we have an event for that.
 ;;policy changes...
-:PositionUnit
+;:PositionUnit
 
 
 ;;unit movement events...location changes..
-:unitMoved
+;:unitMoved
 
+
+
+;For dwell stats, we typically report a proxy record for units 
+;not utilized during a simulation period.  To do this, we have to sample the 
+;entire unit population, which this event handler does.  This is a specific bit
+;of functionality that we should probably move out of here at some point.
+
+(comment ;pulled from ces.engine
+(defn sample-unit-cycles
+  "This is a special event handler where the simulation context is notified of a 
+   need to sample all units in the supply.  This typically happens when a period 
+   change occurs, or some other sweeping event requires a synchronization of 
+   all the units."
+  [t ctx quarterly units]    
+  (->> (if (and quarterly (zero? (quot (- t 1) 90)))
+           (sim/add-time (+ t 90) ctx)
+           ctx)
+       (supply/update-all)
+       (sim/trigger-event :get-cycle-samples :Engine :Engine
+                          "Sample all UIC Cycles.  This is a hack." 
+                          {:t t :uics units})))
+)
+
+;;Notes on rendering using the prototype quilsample scheme:
+;;Currently, we can view the protoype as a function of
+;;step->notifications.
+;;Basically, at every frame, we take a step.
+;;The step results in computing a new context.
+;;During the computation of the new context, we end up firing off
+;;events, specifically about things that changed (via notify!).
+;;notifications are piped to an event channel currently.
+;;The notifications we care about are
+;;:state-change    : [e state] => color-change? 
+;;:color-change    
+;;:location-change : [e location destination]  => policy-velocity-change, ?position-change
+;;:deployed : deployment {entity component state dwell bog}
+;;:reset
+
+;;to more closely mirror what marathon's pushing out...
+;;marathon notifies       Hud expects
+;;positionChange      ==> state-change, color-change?
+;;unitMoved           ==  location-change
+;;deploy              ==  deployment
+;;CycleCompleted      ==  reset
+
+;;Hud gets                 hud does
+;;color-change       ==>  alters statistics...dunno (resamples)
+;;state-change       ==>  alters statistics...      (resamples), policy-velocity-change!
+;;location-change    ==>  alters statistics 
+;;reset              ==>  location-change!, state-change!, etc...
+;;deployment         ==>  alters statistics
+
+;;So, we have a general notion of hudmotion....
+;;changes in the state motivate changes in the hud.
+;;It might be best to explicitly compute changes...rather than
+;;side-effect everything.  Once changes are computed,
+;;we can fire notifications for them, or choose to formalize
+;;the update...
+
+;;With the hud, at any given time, we have a snapshot of the
+;;simulation state.  Portions of it don't change, but
+;;bits that pertain to the hud (and only the hud) are updated
+;;on a per-frame basis....
+
+;;So...in general, we have our visualization that wraps the
+;;simulation.
+
+;;If we have a current state, we can render it.
+;;If we view everything as immediate-mode, then all rendering
+;;is done on a daily basis (that's the current mechanism in hud).
+;;At a minimum, if the simulation determines policy-velocity
+;;[dwelldx deploydx], policy-position [x y] = [dwell deploy],
+;;and location, then our existing framework is
+;;compatble.
+
+;;Whenever there is a discrete change, which we know because of
+;;the simulated history, we can compute how long we have
+;;until the next discrete change.
+;;Basically, increment real-world time by sub-steps until we
+;;hit the event-step.
+;;During these sub-steps, the time-step framework takes hold.
+;;We update our time-step statistics from our time-step
+;;components.
+
+;;In effect, we have "Two" histories....
+;;The macro event-step history,
+;;and the micro, time-step history which occurs at a lower level.
+;;Another way to look it is this:
+;;If we compute the time delta between steps, we have a physical
+;;simulation that can step along with us.  All we do
+;;is insist on a minimum step-size (i.e. 1).
+;;If the next event is farther away than the minimum step-size,then
+;;we interpolate.
+
+;;So, the interpolated history is - typically - going to be
+;;a partial function of an initial state.  Most everything is
+;;staying the same, but some systems (interpolatable? time-varyable?
+;;non-discrete? continuous?)  are able to step.
+
+;;In this case, we have the constant state from the previous
+;;step (things like policy and the like), while the dynamic
+;;state is updated according to a finite number of steps.
+;;In fact, we can compute the steps until the next event...
+
+;;So, what we want is (possibly) a layer of indirection here...
+;;Another option is to just capture all the changes and
+;;interpret the changes appropriately...
+
+;;Then, all we'd need is a change->something
+;;Additionally, we can save the changes as part of the compressed history.
+
+;;Rather than cache all of our changes, we instantaneously notify
+;;interested parties.  Note: we could cache our changes...
+;;It'd be much easier to go from cached changes to notifications...
+;;The way we're set up, however, there's a protocol...
+
+;;we have immediate and discrete changes...
+;;discrete  changes retain their previous value unless a change occurs.
+;;immediate changes are recalculated every step (like immediate-mode rendering).
+
+;;All of our trends are classified as discrete...

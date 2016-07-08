@@ -452,12 +452,12 @@
     ctx))
 
 (defn reset-ephemeral [ctx id component v]
-  (let [[ctx state] (get-ephmeral ctx id component)]
+  (let [[ctx state] (get-ephemeral ctx id component)]
     (reset! state v)
     ctx))
 
 (defn swap-ephemeral [ctx id component f]
-  (let [[ctx state] (get-ephmeral ctx id component)]
+  (let [[ctx state] (get-ephemeral ctx id component)]
     (swap! state f)
     ctx))
 

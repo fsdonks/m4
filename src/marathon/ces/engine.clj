@@ -93,7 +93,7 @@
 ;;Intent is to apply initial conditions to the simulation state,
 ;;particularly moving unit entities to where they need to be.
 (defn start-state [ctx]
-  (do (println "start-state is a stub.  Should be setting entities to their starting states.")
+  (do (println (str *ns*) "start-state is a stub.  Should be setting entities to their starting states.")
       ctx))
 
 (defn initialize-sim
@@ -103,11 +103,10 @@
    preconditions applied."
   [ctx & [lastday]]
     (->> ctx
-        (start-state)
-        (set-time lastday)
-        (initialize-control)
-        (supply/manage-supply 0)
-        (policy/manage-policies 0)))
+         (start-state)
+         (set-time lastday)
+         (supply/manage-supply   0)
+         (policy/manage-policies 0)))
 
 ;##Simulation Termination Logic
 ;When we exit the simulation, we typically want to perform some final tasks.
@@ -174,27 +173,7 @@
     (sim/trigger-event :log-status :Engine :Engine 
        (str "Processed day " day " of " (sim/get-final-time ctx) " of Simulation") nil)
     (sim/trigger-event :sample :Engine :Engine "Sampling" nil)
-    (check-truncation)
     (sim/trigger-event :end-of-day :Engine :Engine (day-msg "End" day) nil)))
-
-;For dwell stats, we typically report a proxy record for units 
-;not utilized during a simulation period.  To do this, we have to sample the 
-;entire unit population, which this event handler does.  This is a specific bit
-;of functionality that we should probably move out of here at some point.
-
-(defn sample-unit-cycles
-  "This is a special event handler where the simulation context is notified of a 
-   need to sample all units in the supply.  This typically happens when a period 
-   change occurs, or some other sweeping event requires a synchronization of 
-   all the units."
-  [t ctx quarterly units]    
-  (->> (if (and quarterly (zero? (quot (- t 1) 90)))
-           (sim/add-time (+ t 90) ctx)
-           ctx)
-       (supply/update-all)
-       (sim/trigger-event :get-cycle-samples :Engine :Engine
-                          "Sample all UIC Cycles.  This is a hack." 
-                          {:t t :uics units})))
 
 (defn can-simulate? 
   "Simple predicate to ensure we have supply and demand in 
@@ -315,7 +294,9 @@
    upper bound on simulated time, computes the resulting simulation context via
    a state transfer function, typically sim.engine/sim-step."
   [last-day ctx] 
-  (let [init-ctx (initialize-sim (initialize-output ctx) last-day)]
+  (let [init-ctx (initialize-sim
+                  ctx ;(initialize-output ctx)
+                  last-day)]
     (assert (can-simulate? init-ctx) 
             "There's nothing to simulate. Check Supply, Demand, and Relations!")
     (loop [day    0
