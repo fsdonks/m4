@@ -411,7 +411,6 @@
 ;:unitMoved
 
 
-
 ;For dwell stats, we typically report a proxy record for units 
 ;not utilized during a simulation period.  To do this, we have to sample the 
 ;entire unit population, which this event handler does.  This is a specific bit
