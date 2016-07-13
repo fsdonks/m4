@@ -60,7 +60,7 @@
 ;;note, even the empty sim has time 0 on the clock.  Perhaps we should
 ;;alter that....
 (def primed-sim
-  (->> (initialize-sim core/emptysim +end-time+)
+  (->> (initialize-sim core/emptysim :lastday +end-time+)
        (sim/add-times [44 100 203 55])))
 
 ;;#Tests for basic simulation engine invariants.
@@ -73,9 +73,7 @@
   (is (zero?(sim/current-time core/emptysim)) 
       "empty simulations have no time")
   (is (not  (sim/has-time-remaining? (sim/advance-time core/emptysim))) 
-      "nothing scheduled, should be no more work.")
-)
-
+      "nothing scheduled, should be no more work."))
 
 ;;#Tests for minimal simulation context invariants.
 (deftest primed-engine-testing 

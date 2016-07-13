@@ -101,12 +101,14 @@
    on the simulation time - lastday - returns a simulation context that is 
    prepared for processing, with default time horizons and any standard 
    preconditions applied."
-  [ctx & [lastday]]
-    (->> ctx
-         (start-state)
-         (set-time lastday)
-         (supply/manage-supply   0)
-         (policy/manage-policies 0)))
+  [ctx & {:keys [lastday observer-routes]
+          :or {observer-routes obs/default-routes}}]
+  (->> ctx
+       (sim/register-routes observer-routes)
+       (start-state)
+       (set-time lastday)
+       (supply/manage-supply   0)
+       (policy/manage-policies 0)))
 
 ;##Simulation Termination Logic
 ;When we exit the simulation, we typically want to perform some final tasks.

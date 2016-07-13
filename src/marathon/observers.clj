@@ -3,12 +3,31 @@
 ;;From the legacy implementation, we
 ;;have these as logging deployments and
 ;;things like that.
+;;It may make sense to go back to the old style of
+;;defining global events, at least at the
+;;Marathon level of detail.  Perhaps they can
+;;be shadowed in a global event namespace.
 (ns marathon.observers
   (:require [marathon.data      [protocols :as generic]]
-            [marathon.ces [core :as core]]
+            [marathon.ces       [core :as core]]
             [spork.entitysystem [store :as store]]
             [spork.sim.pure     [network :as simnet]]
             [spork.sim          [data :as sim]]))
+
+;;utility schlock
+;;===============
+;;a cell for holding ephemeral values.
+;;We tend to only care about the initial state and the
+;;final state of an identity over time.  For this reason,
+;;we can use cells to capture the end points, and provide
+;;a simple structure that can be updated pretty quickly with
+;;new right-ends.
+(defrecord Cell [init current])
+(defn ->cell
+  ([init] (Cell.  init  init))
+  ([init current] (Cell. init current)))
+(defn push-cell [^Cell cl v] (Cell. (.init cl) v))
+
 
 ;;identical to proc....copied from there...
 ;;deployment records
@@ -38,7 +57,7 @@
    :FollowOnCount	:int
    :DeploymentCount	:int
    :Category	         :text
-   :DwellYearsBeforeDeploy :text
+   :DwellYearsBeforeDeploy   :text
    :OITitle	             :text})
 
 
@@ -147,7 +166,6 @@
                   :sampled :boolean
                   })
 
-
 (def deprecordchema
   {:Unit         :text
    :DemandGroup  :text
@@ -206,6 +224,8 @@
   )
 
 
+
+
 ;;handlers are functions of the form
 ;;(ctx  -> edata -> name -> ctx)
 
@@ -238,7 +258,6 @@
 ;;inside of log-deployment, we can conj into the deployments
 ;;component for the unit.
 
-
 ;;deployments push records onto a transient vector inside of
 ;;an atom at :deployment-watch/:new-deployments 
 (defn record-deployment [ctx edata _]
@@ -250,22 +269,14 @@
   (if-let [deployments (core/some-ephemeral ctx :deployment-watch :new-deployments)]
     (let [t (core/get-time ctx)]
       (-> ctx
-          (store/updatee :state :deployments #(conj (persistent! @deployments)))
-          (core/reset-ephemeral :deployment-watch :new-deployments (transient []))))
+          (store/updatee :state :deployments #(conj % (persistent! @deployments)))
+          (store/drop-domain :new-deployments)
+          ;(core/reset-ephemeral :deployment-watch :new-deployments (transient []))
+          ))
     ctx))
 
-;;a cell for holding ephemeral values.
-;;We tend to only care about the initial state and the
-;;final state of an identity over time.  For this reason,
-;;we can use cells to capture the end points, and provide
-;;a simple structure that can be updated pretty quickly with
-;;new right-ends.
-(defrecord Cell [init current])
-(defn ->cell
-  ([init] (Cell.  init  init))
-  ([init current] (Cell. init current)))
-(defn push-cell [^Cell cl v] (Cell. (.init cl) v))
-
+(defn drop-deployments! [ctx _ _]
+  (store/drop-domain ctx :deployments))
 
 ;;we seem to have a pattern emerging for event handlers...
 ;;we'd like a function that dispatches based on the type of data.
@@ -305,71 +316,102 @@
 ;;notifications.
 
 
+;;position and location deltas are associated with specific entities, computed
+;;daily.
+
+
+;;Notice these two handlers are identical:
+;;they update a stored value in response to an event.
+
+;;The problem here is that we have one concept of event
+;;handling (intermediate functions that compute new context
+;;from old), and another concept (pulling things off channels
+;;and doing stuff with them).
+
 ;;so, these are effectively properties...
+;;We'll see if it makes sense to use defproperty or binding
+;;as defined above, maybe.  For now, we only have two...
+
+;;Let's just go with the legacy implementation and move on from there...
+;;It'd be nice to say..
+;;  (on-event entity event handler)....
+
+;;Entity Telemetry (position location state)
+;;=========================================
+
+(def telemetry-components #{:position-delta
+                            :location-delta
+                            :state-delta})
+;;(defproperty position)
 (defn position-handler [ctx edata _]
   (let [[name frompos topos] (:data edata)
         [ctx storage]        (core/get-ephemeral ctx name :position-delta nil)]
     (do (if @storage
-          (swap! storage  #(push-cell topos))            
+          (swap! storage  #(push-cell % topos))            
           (reset! storage (->cell frompos topos)))
         ctx)))
 
+;;(defproperty movement)
 (defn movement-handler [ctx edata _] 
   (let [[name fromloc toloc] (:data edata)
-        [ctx storage]        (core/get-ephemeral ctx  name :movement-delta nil)]
+        [ctx storage]        (core/get-ephemeral ctx  name :location-delta nil)]
     (do (if @storage
-          (swap! storage  #(push-cell toloc))            
+          (swap! storage  #(push-cell % toloc))            
           (reset! storage (->cell fromloc toloc)))
         ctx)))
+
+;;(defproperty state)
+(defn state-handler [ctx edata _] 
+  (let [[name fromloc toloc] (:data edata)
+        [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
+    (do (if @storage
+          (swap! storage  #(push-cell % toloc))            
+          (reset! storage (->cell fromloc toloc)))
+        ctx)))
+
+;;If the ephemeral value is a transient (for example new-deployments),
+;;we'd like to persist it, otherwise we return the val.
+(defn try-freeze! [coll]
+  (if (instance? clojure.lang.ITransientCollection coll)
+    (persistent! coll)
+    coll))
+
+;;update all of the persistent crud 
+(defn commit!
+  [ctx xs]
+  (reduce (fn [ctx c]
+            (store/map-component ctx  c (fn [x] (try-freeze! @x)))
+            ctx xs)))
 
 ;;at the end of day, we want to commit changes.
 ;;We can maintain another datastore that's just for ephemeral data...
 ;;When we go to commit, we can define a specific commit event...
-(defn commit-telemetry! [ctx edata _]
-  (if-let [deployments (core/some-ephemeral ctx :deployment-watch :new-deployments)]
-    (let [t (core/get-time ctx)]
-      (-> ctx
-          (store/updatee :state :deployments #(conj (persistent! @deployments)))
-          (core/reset-ephemeral :deployment-watch :new-deployments (transient []))))
-    ctx))
+(defn commit-telemetry! [ctx _ _] (commit! ctx telemetry-components))
+(defn drop-telemetry!   [ctx _ _] (store/drop-domains ctx telemetry-components))
 
-;;commit-telemtry could be a larger system.
-;;so...if we have any components registered as telemetry, we perform the
-;;necessary tasks to record the updates...
-
-;;for instance, if the unit's location changed, then we should
-;;fire a location change event or other notification.
-
-;;if the unit's policy position changed, then we should fire a position change
-;;event.
-
-;;if the unit's state changed, the color typically changes...
-;;  in the visualization state-change =>  color-change
-
-
-
-;;can we elevate the notion of events and ephemeral data to the ecs level?
-;;or do we maintain this as a separate thing...?
-
-;;these are basically event-driven systems...
-;;still works nicely in the ECS paradigm.
+;;The cool thing is, since we're using functions,
+;;we can integrate these into the function-based
+;;system worldview, or we can keep with the decoupled
+;;"event-driven" approach... The system-based
+;;view makes everything more explicit.
 
 ;;by default, we watch all this crap...
 ;;This is almost identical to the pub/sub setup...
 ;;We have multiple observer-functions processing
 ;;events (serially...)
+;;in the ECS parlance, these are actually 
 (def default-routes
-  {:deployment-watch {:deploy       record-deployment
-                      :end-day      commit-deployments!}
-   :telemetry-watch   {:positionUnit position-handler
-                       :unitMoved    movement-handler
-                       :end-day      commit-telemetry!
-                       }
-                      })   
-   ;;We can derive locations pretty easily...
-   ;;also demand trends....
-   ;;looks like deployments are the current odd datum we're not tracking.
-;   :location-watch   
+  ;;this system processes deployments, and records new deployments
+  ;;each day.
+  {:deployment-watch {:begin-day     drop-deployments!   ;;ensure no deployments exist for today.
+                      :deploy        record-deployment   ;;record a deployment in new-deployments 
+                      :end-day       commit-deployments! ;;store new-deployments in deployments}
+   ;;this system will ingest events 
+   :telemetry-watch   {:begin-day    drop-telemetry!     ;;ensure no telemetry components exist
+                       :positionUnit position-handler    ;;record unit policy position changes.
+                       :unitMoved    movement-handler    ;;record unit location changes                   
+                       :end-day      commit-telemetry!   ;;freeze initial and final values for telemtry components.
+                       }}})
 
 (defn register-default-observers [ctx]
   (simnet/register-routes  default-routes ctx))
@@ -409,7 +451,6 @@
 
 ;;unit movement events...location changes..
 ;:unitMoved
-
 
 ;For dwell stats, we typically report a proxy record for units 
 ;not utilized during a simulation period.  To do this, we have to sample the 
@@ -530,3 +571,55 @@
 ;;immediate changes are recalculated every step (like immediate-mode rendering).
 
 ;;All of our trends are classified as discrete...
+
+;;
+
+
+;;This is a potentially intriguing idea...
+;;We maintain special classes of components that
+;;are known to be recepticals for state changes.
+;;They act as "properties" in that their state
+;;changes are tracked, at least between the
+;;initial value of the property and the current.
+;;Assuming every component is registered somewhere,
+;;we can traverse our store to see if any
+;;components exist as properties.
+;;If so, we can process them in one fell swoop.
+;;Alternately, we just handle the properties separately.
+;;Assuming we elevate property definition to the
+;;language level, we get the ability to process
+;;property components with the library helping out.
+
+;;registry of properties we've defined.
+;;This will allow us to use a simplified property-change
+;;system, which will grab entities with any of these properties
+;;in turn, and commit their changes.  We can handle
+;;the update in one fell swoop.
+(comment 
+(def properties       (atom #{}))
+;;maybe we have a convention?  maybe get-ephemeral
+;;actually sets up property tracking for us...
+(defmacro defproperty [name]
+  (let [component-name (keyword (str name "-delta"))]
+    `(do (defn ~name [ctx# edata# _]
+           (let [[id# old# new#] (:data edata#)
+                 [ctx# storage#] (core/get-ephemeral ctx# id# ~component-name nil)]
+             (do (if @storage#
+                   (swap! storage# #(push-cell % new#))
+                   (reset! storage# (->cell old# new#)))
+                 ctx#)))
+         (swap! ~'marathon.observers/properties conj ~component-name)
+         ~name)))
+)
+;; (defn commit-properties
+;;   [ctx]
+;;   (if-let [comps @properties] ;;set of keywords that correspond to properties.
+;;     (reduce (fn [ctx component]
+;;               (let [
+;;Can we get all the mileage we need from atoms here?
+;; (defmacro property-change! [ctx pname id old new]
+;;   `(let [[ctx# storage#] (core/get-ephemeral ~ctx id# ~pname nil)]
+;;     (do (if @storage#
+;;           (swap! storage# #(push-cell % ~new))
+;;           (reset! storage# (->cell ~old ~new)))
+;;         ctx#)))
