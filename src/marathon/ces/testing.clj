@@ -40,7 +40,9 @@
             [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]
-            [marathon.analysis :as analysis]))
+            [marathon [analysis :as analysis]
+                      [observers :as obs]]
+           ))
 
 ;;Some of our output is pretty 'uge, and trying to
 ;;print it all out kills emacs.
@@ -833,3 +835,18 @@
 (def ap "C:\\Users\\tspoon\\Documents\\srm\\arfnotionalbase.xlsx")
 (defn arf-hist [& {:keys [tmax] :or {tmax 5001}}] (excel-hist  :path ap :tmax tmax))
 
+
+;;need to thread this as the default...
+;;we're not really using the engine to
+;;do much...
+(defn obs-ctx [p]
+  (->>  (setup/simstate-from 
+         (:tables (proj/load-project p))
+         core/debugsim)
+        (sim/add-time 1)
+        (sim/register-routes obs/default-routes)))
+
+(defn observer-hist [& {:keys [tmax] :or {tmax 5001}}]
+ (into {} (analysis/->history-stream tmax
+                                     engine/sim-step
+                                     (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx"))))

@@ -157,7 +157,7 @@
         (map (fn [{:keys [category demandgroup operation vignette Command] :as d}]
                {:t t
                 :name        (:name d)
-                :src         (:src d)
+                :src         (:src  d)
                 :assigned    (count  (:units-assigned d))
                 :overlapping (count  (:units-overlapping d))
                 :quantity    (:quantity d)
@@ -439,10 +439,10 @@
 ;;information.
 (defn get-ephemeral
   ([ctx id component default]
-   (if-let [state (store/gete id component)]
+   (if-let [state (store/gete ctx id component)]
      [ctx state]
      (let [atm (atom default)
-           ctx (store/assoce id component atm)]
+           ctx (store/assoce ctx id component atm)]
        [ctx atm])))
   ([ctx id component] (get-ephemeral ctx id component (transient []))))
 
@@ -594,7 +594,7 @@
 ;;This is fairly close....
 (defn visualize-entities [ctx]
   (let [demandnames    (demand-names ctx)
-        unitnames      (unit-names ctx)
+        unitnames      (unit-names   ctx)
         disabled       (keys (store/get-domain ctx :disabled))
         basic-entities (set  (concat demandnames unitnames disabled))
         stores         (clojure.set/difference
@@ -602,7 +602,8 @@
                         basic-entities)
         named-entry (fn [e]
                       (if (instance? clojure.lang.MapEntry e) (inspect/entryvis e)
-                          (inspect/entryvis (clojure.lang.MapEntry. (:name e) e))))]         
+                          (inspect/entryvis (clojure.lang.MapEntry. (or (:name e)
+                                                                        (store/entity-name e)) e))))]         
     (inspect/tree-view
        {:stores  (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx stores)))
         :demands (map (comp inspect/entryvis named-entry)  (sort-by :name inspect/generic-comp (store/get-entities ctx demandnames)))

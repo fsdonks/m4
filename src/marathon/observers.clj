@@ -193,11 +193,13 @@
 
 ;;should match the deprecord schema.
 (defn new-deployment
-  ([{:keys [unitfrom locationfrom demandto fill fillcount t deploydate period]}]
-    (new-deployment unitfrom locationfrom demandto fill fillcount t deploydate period))
+  ([{:keys [unit fromloc demand fill fillcount t deploydate period]}]
+    (new-deployment unit fromloc demand fill fillcount t deploydate period))
   ([unitfrom locationfrom demandto fill fillcount t deploydate period]
    (let [{:keys [bogbudget followons deployments dwell]} (:CurrentCycle unitfrom)
-         pol (:policy unitfrom)]
+         pol (:policy unitfrom)
+         ;_ (println [:deployment! (:name unitfrom) t])
+         ]
      {:Unit          (:name unitfrom)
       :DemandGroup   (or (:demandgroup demandto) "UnGrouped")
       :FillType      (:quality  fill)
@@ -267,16 +269,15 @@
 
 (defn commit-deployments! [ctx edata  _]
   (if-let [deployments (core/some-ephemeral ctx :deployment-watch :new-deployments)]
-    (let [t (core/get-time ctx)]
       (-> ctx
-          (store/updatee :state :deployments #(conj % (persistent! @deployments)))
+          (store/assoce :deployment-watch :deployments  (persistent! @deployments))
           (store/drop-domain :new-deployments)
           ;(core/reset-ephemeral :deployment-watch :new-deployments (transient []))
-          ))
+          )
     ctx))
 
 (defn drop-deployments! [ctx _ _]
-  (store/drop-domain ctx :deployments))
+  (store/dissoce ctx :deployment-watch :deployments))
 
 ;;we seem to have a pattern emerging for event handlers...
 ;;we'd like a function that dispatches based on the type of data.
@@ -380,14 +381,17 @@
 (defn commit!
   [ctx xs]
   (reduce (fn [ctx c]
-            (store/map-component ctx  c (fn [x] (try-freeze! @x)))
-            ctx xs)))
+            (store/map-component ctx  c (fn [x] (try-freeze! @x))))
+            ctx xs))
 
 ;;at the end of day, we want to commit changes.
 ;;We can maintain another datastore that's just for ephemeral data...
 ;;When we go to commit, we can define a specific commit event...
 (defn commit-telemetry! [ctx _ _] (commit! ctx telemetry-components))
-(defn drop-telemetry!   [ctx _ _] (store/drop-domains ctx telemetry-components))
+(defn drop-telemetry!   [ctx _ _]
+                                        ;(store/drop-domains ctx telemetry-components)
+  ctx
+  )
 
 ;;The cool thing is, since we're using functions,
 ;;we can integrate these into the function-based
@@ -405,13 +409,13 @@
   ;;each day.
   {:deployment-watch {:begin-day     drop-deployments!   ;;ensure no deployments exist for today.
                       :deploy        record-deployment   ;;record a deployment in new-deployments 
-                      :end-day       commit-deployments! ;;store new-deployments in deployments}
+                      :end-of-day    commit-deployments!} ;;store new-deployments in deployments
    ;;this system will ingest events 
    :telemetry-watch   {:begin-day    drop-telemetry!     ;;ensure no telemetry components exist
                        :positionUnit position-handler    ;;record unit policy position changes.
                        :unitMoved    movement-handler    ;;record unit location changes                   
-                       :end-day      commit-telemetry!   ;;freeze initial and final values for telemtry components.
-                       }}})
+                       :end-of-day   commit-telemetry!   ;;freeze initial and final values for telemtry components.
+                       }})
 
 (defn register-default-observers [ctx]
   (simnet/register-routes  default-routes ctx))

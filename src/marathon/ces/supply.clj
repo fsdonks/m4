@@ -324,7 +324,7 @@
 (defn log-move!
   ([t fromloc toloc unit duration ctx]
    (sim/trigger-event :unitMoved (:name unit) toloc (core/msg (:name unit) " moved from " fromloc " to " toloc)
-                      [unit fromloc toloc] ctx))
+                      [(:name unit) fromloc toloc] ctx))
   ([t fromloc toloc unit ctx] (log-move! t fromloc toloc unit nil ctx)))
 
 ;TODO -> This should be renamed like positionEvent or something.
@@ -339,7 +339,7 @@
   ;(comment 
     (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
                        (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
-                       [name frompos topos] ctx)
+                       [(:name unit) frompos topos] ctx)
    ; )
  ; ctx
 )
