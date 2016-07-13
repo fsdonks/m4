@@ -172,6 +172,11 @@
                ))))
   ([ctx]  (deployments (sim/get-time ctx) ctx)))
 
+;;query the entity store to find deployments
+(defn deployment-records  [ctx]
+  
+  )
+
 (defn location-table [ctx]
   (let [t (sim/get-time ctx)]
     (->> (store/only-entities ctx [:name :locationname :location])

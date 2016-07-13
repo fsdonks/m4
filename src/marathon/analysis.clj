@@ -12,13 +12,53 @@
             [clojure.core.reducers :as r]
             [spork.util.reducers]
             [clojure.pprint :refer [pprint]]
-            [marathon [project  :as proj]
-             ]
-            [spork.entitysystem [diff     :as diff]]
+            [marathon [project  :as proj]]
+            [spork.entitysystem
+             [diff     :as diff]
+             [store :as store]]
             [marathon.project [linked :as linked]
                               [excel :as xl]]
             [spork.sim.simcontext  :as sim]
             [marathon.serial :as ser]))
+
+
+;;util functions, move these out...
+(defn compare-lines [l r]
+  (with-open [left  (clojure.java.io/reader l)
+              right (clojure.java.io/reader r)]
+    (let [ls (line-seq left)
+          rs (line-seq right)]
+      (->> (map (fn [l r] [l r]) ls rs)
+           (map-indexed (fn [i [x y]]
+                          {:line i
+                           :l x
+                           :r y})
+                        )
+           (filter (fn [{:keys [l r]}]
+                     (not= l r)))
+           (first)))))
+
+(defn compare-lines! [l r]
+  (with-open [left  (clojure.java.io/reader l)
+              right (clojure.java.io/reader r)]
+    (let [ls (line-seq left)
+          rs (line-seq right)]
+      (->> (map (fn [l r] [l r]) ls rs)
+           (map-indexed (fn [i [x y]]
+                          {:line i
+                           :l x
+                           :r y})
+                        )
+           (filter (fn [{:keys [l r]}]
+                     (not= l r)))
+           (vec)))))
+
+(defn tsv->csv [path]
+  (with-open [rdr  (clojure.java.io/reader (str path))
+              wrtr (clojure.java.io/writer (str path ".csv"))]
+    (doseq [^String ln (line-seq rdr)]
+      (.write wrtr (str (clojure.string/replace ln \tab \,) \newline)))))
+
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]  
@@ -68,6 +108,12 @@
 (defn ending [h t] (get (meta (get h t) :end  )))
 (defn start  [h t] (get (meta (get h t) :start)))
 
+;;Note: we probably want to vary the resolution
+;;here, currently we're hardwired to sample
+;;every day.  Based on the post-processing
+;;libs, we don't have to do this, and can use
+;;discrete event sampling to compute a minimal
+;;set of samples, then down-sample / upsample  based on that.
 
 ;;We can speed this up by not using for/range..
 ;;It's not a huge bottleneck at the moment...
@@ -99,11 +145,18 @@
         (map? h) (->map-samples f h)
         :eles (throw (Exception. (str "Dunno how to do samples with " (type h))))))
 
+;;Canonical Sampling Functions
+;;============================
 
-;;our canonical samplers...
+;;These samplers transform a stream of
+;;history into a stream of sampled output.
+;;We typically have a set of canonical outputs
+;;we expect for post-processing.  This lets us
+;;define them using higher-level sequence functions
+;;so we can define sampling based on the "history"
+;;rather than imperatively logging and myopically
+;;processing.
 
-;;these are just basic functions that collect a stream of samples
-;;from a state..
 ;;It'd be nice to define a channel-based version of this so that
 ;;we can compute samples state by state...
 ;;at any given point in time, we have n samples we're collecting.
@@ -117,19 +170,23 @@
 ;;dumb sampler...probably migrate this to
 ;;use spork.trends sampling.
 (defn ->location-samples   [h]  (->collect-samples core/locations   h))
+;;I think this is similar to demand-trends.
 (defn ->deployment-samples [h]  (->collect-samples core/deployments h))
-
 (defn ->demand-trends      [h]  (->collect-samples core/deployments h))
 ;;compute the deployments table
 
-(defn ->deployments        [h]   )
-
-
+;;derives a stream of deployments across the history.
+;;daily deployments are stored in the :deployments component.
+;;so we just extract that and boom.
+(defn ->deployment-records  [h]
+  (->> h 
+       (mapcat (fn [[t ctx]]
+                 (when-let [deps (store/get-domain ctx :deployments)]
+                    (first (vals deps)))))
+       (filter identity)))
 
 ;;creating legacy output from basic data..
 ;;fills are a join of unit<>demanddata<>deployments
-
-
 
 ;; (def fillrecord {:Unit      :text
 ;;                  :category :text
@@ -173,14 +230,13 @@
 ;;                  :sampled :boolean
 ;;                  })
 
+
+;;IO  Routines
+;;============
+
 ;;can we spit out demandtrends?
 ;;Yes....
 ;;They're basically location-samples...
-(defn tsv->csv [path]
-  (with-open [rdr  (clojure.java.io/reader (str path))
-              wrtr (clojure.java.io/writer (str path ".csv"))]
-    (doseq [^String ln (line-seq rdr)]
-      (.write wrtr (str (clojure.string/replace ln \tab \,) \newline)))))
 
 ;;this is basically the api for performing a run....
 (defn spit-history! [h path]
@@ -216,42 +272,8 @@
         ))))
   ([h root] (spit-log! h root "events.txt")))
 
-(defn compare-lines [l r]
-  (with-open [left  (clojure.java.io/reader l)
-              right (clojure.java.io/reader r)]
-    (let [ls (line-seq left)
-          rs (line-seq right)]
-      (->> (map (fn [l r] [l r]) ls rs)
-           (map-indexed (fn [i [x y]]
-                          {:line i
-                           :l x
-                           :r y})
-                        )
-           (filter (fn [{:keys [l r]}]
-                     (not= l r)))
-           (first)))))
-
-(defn compare-lines! [l r]
-  (with-open [left  (clojure.java.io/reader l)
-              right (clojure.java.io/reader r)]
-    (let [ls (line-seq left)
-          rs (line-seq right)]
-      (->> (map (fn [l r] [l r]) ls rs)
-           (map-indexed (fn [i [x y]]
-                          {:line i
-                           :l x
-                           :r y})
-                        )
-           (filter (fn [{:keys [l r]}]
-                     (not= l r)))
-           (vec)
-           ))))
-
-
 ;;API Definition
 ;;==============
-
-
 ;;This is the core of doing a "run"...
 (defn load-context
   "Given a viable Marathon Project, p, we derive and initial 
@@ -336,14 +358,14 @@
 
 (defmacro with-print [{:keys [level length]} & body]
   `(let [before-level# ~'*print-level*
-        before-length# ~'*print-length*
-        lvl# ~level
-        length# ~length]
-    (do (set! ~'*print-level* lvl#)
+         before-length# ~'*print-length*
+         lvl#    ~level
+         length# ~length]
+    (do (set! ~'*print-level*  lvl#)
         (set! ~'*print-length* length#)
         ~@body
-        (set! ~'*print-level*  before-level# )
-        (set! ~'*print-length*  before-length#))))
+        (set! ~'*print-level*  before-level#)
+        (set! ~'*print-length* before-length#))))
 
 ;;textual, printed version
 ;;if we use pprint, we get killed here.

@@ -335,14 +335,9 @@
 ;So we can probably just plug them in as modules....they're all pure functions.
 ;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
 (defn log-position! [t frompos topos unit  ctx]
-  
-  ;(comment 
-    (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
-                       (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
-                       [(:name unit) frompos topos] ctx)
-   ; )
- ; ctx
-)
+  (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
+                     (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
+                     [(:name unit) frompos topos] ctx))
 
 ;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
@@ -652,9 +647,7 @@
          updates {:SupplyStore (untag-units supplystore :MaxUtilizer 
                                             (concat followons normal))}]   
     (reduce release-followon-unit (sim/merge-entity updates ctx)
-            followons))
-  )
-
+            followons)))
 
 ;;#Deployment Related
 
@@ -692,18 +685,6 @@
        (update-units t supply ctx today-updates)
        ctx)))
   ([ctx] (manage-supply (core/get-time ctx) ctx)))
-
-
-;; (defn manage-supply
-;;   "High level hook for the supply system.  For entities that have scheduled 
-;;    updates at time t, they are brought up to date and have their changes 
-;;    incorporated into the context.  The entity behaviors will typically 
-;;    use some of the supply system functions defined above to alter the context."
-;;   [t ctx]
-;;   (let [supply (core/get-supplystore ctx)]
-;;     (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
-;;       (update-units t supply ctx today-updates)
-;;       ctx)))
 
 ;;A simple wrapper to unify the high level supply management.  We were calling 
 ;;this inline, it's more consistent now.
