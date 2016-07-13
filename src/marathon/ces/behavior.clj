@@ -434,13 +434,14 @@
              ;;we change statedata here...
              wt (- duration timeinstate)
              _  (when (neg? wt) (throw (Exception. (str [:negative-wait-time])))) 
-             _ (debug [:changing-state state-change :wait-time wt])
+             _  (debug [:changing-state state-change :wait-time wt])
              newdata (assoc (fsm/change-statedata statedata newstate duration followingstate)
                             :timeinstate timeinstate)
              benv    (merge (dissoc benv :state-change) {:statedata newdata
                                                          :duration duration
                                                          :timeinstate timeinstate
                                                          :wait-time wt})
+             _       (reset! ctx (supply/log-state! (:tupdate benv) @entity (:state @entity) newstate @ctx)) 
              _       (swap! entity #(assoc % :state newstate )) ;;update the entity state, currently redundant.
              ]
          (beval update-state-beh benv))))
@@ -1421,6 +1422,8 @@
                         :timeinstate    (or timeinstate 0)}          
           location-change  {:from-location  (:locationname @entity)
                             :to-location     name}
+          position-change {:from-position (:positionpolicy @entity)
+                           :to-position   StartState}
           ;;add the ability to check for prescribed moves...
           ;;if the demand prescribes one, then we go ahead and schedule it with
           ;;the entity...                               
@@ -1439,7 +1442,8 @@
                                            followingstate)
                       (assoc 
                        :state-change state-change                          
-                       :location-change location-change                   
+                       :location-change location-change
+                       :position-change position-change ;new
                        :wait-time     wt
                        :next-position StartState))))))
 

@@ -353,6 +353,15 @@
      {:fromloc   fromname  :unit unit :demand demand :fill filldata 
       :fillcount fillcount :period period :t t :deploydate deploydate}  ctx))
 
+;;records unit changes in state....new
+(defn log-state! 
+  [t unit from to ctx]
+  (let [unitname (:name unit)]
+    (sim/trigger-event :StateChange "SupplyManager" unitname              
+                       (core/msg "Unit " unitname 
+                                 " changed state from " from " to " to)
+                       [unitname from to] ctx)))
+
 ;When a unit engages in a followon deployment, we notify the context.
 (defn unit-followon-event! [unit demandname ctx]
   (sim/trigger-event :FollowingOn  (:name unit) demandname 

@@ -340,13 +340,22 @@
 ;;Entity Telemetry (position location state)
 ;;=========================================
 
-(def telemetry-components #{:position-delta
-                            :location-delta
-                            :state-delta})
+(def telemetry-components
+  #{:position-delta
+    :location-delta
+    :state-delta})
+
+;;Note: these focus on recording changes in the entity-store.
+;;We don't "have" to do this....and can change our
+;;delta strategy to suit, for instance, retaining
+;;a dropping-channel of deltas.
+
 ;;(defproperty position)
 (defn position-handler [ctx edata _]
-  (let [[name frompos topos] (:data edata)
-        [ctx storage]        (core/get-ephemeral ctx name :position-delta nil)]
+  (let [[name frompos topos]  (:data edata)
+        [ctx  storage]        (core/get-ephemeral ctx name :position-delta nil)
+        ;_ (println [:position name frompos topos])
+        ]
     (do (if @storage
           (swap! storage  #(push-cell % topos))            
           (reset! storage (->cell frompos topos)))
@@ -387,11 +396,12 @@
 ;;at the end of day, we want to commit changes.
 ;;We can maintain another datastore that's just for ephemeral data...
 ;;When we go to commit, we can define a specific commit event...
-(defn commit-telemetry! [ctx _ _] (commit! ctx telemetry-components))
+(defn commit-telemetry! [ctx _ _]
+  (commit! ctx telemetry-components))
+;;Another option here is to put things into
+;;a deltas component.
 (defn drop-telemetry!   [ctx _ _]
-                                        ;(store/drop-domains ctx telemetry-components)
-  ctx
-  )
+  (store/drop-domains ctx telemetry-components))
 
 ;;The cool thing is, since we're using functions,
 ;;we can integrate these into the function-based
@@ -411,9 +421,10 @@
                       :deploy        record-deployment   ;;record a deployment in new-deployments 
                       :end-of-day    commit-deployments!} ;;store new-deployments in deployments
    ;;this system will ingest events 
-   :telemetry-watch   {:begin-day    drop-telemetry!     ;;ensure no telemetry components exist
-                       :positionUnit position-handler    ;;record unit policy position changes.
-                       :unitMoved    movement-handler    ;;record unit location changes                   
+   :telemetry-watch   {:begin-day    drop-telemetry!     ;;ensure no telemetry components exist.
+                       :PositionUnit position-handler    ;;record unit policy position changes.
+                       :unitMoved    movement-handler    ;;record unit location changes.
+                       :StateChange  state-handler       ;;record changes in unit's state.
                        :end-of-day   commit-telemetry!   ;;freeze initial and final values for telemtry components.
                        }})
 
@@ -447,11 +458,9 @@
 ;;Channels are just buffers in the end. 
 ;;"ala (->> (:unitMoved) (partition 2 1) 
 
-
 ;;interested in positioning of units...we have an event for that.
 ;;policy changes...
 ;:PositionUnit
-
 
 ;;unit movement events...location changes..
 ;:unitMoved
