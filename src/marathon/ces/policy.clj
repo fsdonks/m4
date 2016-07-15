@@ -13,16 +13,16 @@
 ;;of the functions here deal with creating policies, composing policies, 
 ;;registering policies with the policystore, registering simulation periods with 
 ;;the policystore, and managing policies and periods during the simulation.
-
 (ns marathon.ces.policy
-  (:require [marathon.data   [protocols :as protocols] 
-                             [period :as period]]
-            [marathon.policy [policydata :as p] [policystore :as pstore] ]
-            [marathon.ces    [core :as core]
-                             [policyops :as pops]
-                             [unit :as u]]            
-            [spork.util [tags :as tag]
-             [general :as gen]]
+  (:require [marathon.data   [protocols   :as protocols] 
+                             [period      :as period]]
+            [marathon.policy [policydata  :as p]
+                             [policystore :as pstore]]
+            [marathon.ces    [core        :as core]
+                             [policyops   :as pops]
+                             [unit        :as u]]            
+            [spork.util [tags    :as tag]
+                        [general :as gen]]
             [spork.entitysystem [store :as store]]
             [spork.sim  [simcontext :as sim]]))
 
@@ -249,7 +249,6 @@
 ;;Defining abstract locations.  
 (defn get-locations [policystore] (:locationmap policystore))
 
-
 ;;#Decision point for determining how smaller aux functions may 
 ;;consume pre-existing mutation information...
 
@@ -264,30 +263,6 @@
 ;Conjoins a location to the set of known locations...
 (defn register-location [locname policystore]
   (gen/deep-update policystore [:locationmap]  conj  locname)) 
-
-
-(comment 
-;This sub helps us to keep track of demand and policy locations.
-;Conjoins a location to the set of known locations...
-(defn register-location! 
-  ([locname locs]
-     (conj locname locs))
-  ([locname policystore-cell locs]
-     (-> (get policystore-cell :locationmap)
-         (conj  locname))))
-)
-
-;; (defn register-location! 
-;;   ([locname policystore-cell locs]
-;;      (inside policystore-cell :locationmap ;;I like that...
-;;              (conj  locname))))
-
-;; (defn register-location! 
-;;   ([locname policystore-cell locs]
-;;      (inside policystore-cell :locationmap ;;expands based on type.
-;;         (if (map? pstore) (gen/deep-update .... (conj  locname))
-
-
 
 ;Register multiple locations in the locs collection with the policystore.
 (defn register-locations [locs policystore] 

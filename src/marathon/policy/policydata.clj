@@ -85,10 +85,7 @@
       (assoc p :positiongraph (graph/conj-arc positiongraph start destination transfer-time)))
   (merge-policy-stats   [p stats] (merge p stats)))
 
-
-
 (def empty-policy (make-policy))
-
 ;policies defined by more than one atomic policy.
 ;;Debate turning policies away from a map....so we can support more
 ;;than one policy composition type based off of data structure used to 
@@ -110,23 +107,23 @@
   (start-deployable    [p] (.start-deployable activepolicy))
   (stop-deployable     [p] (.stop-deployable activepolicy))
   (start-state         [p] (.start-state activepolicy))
-  (transfer-time    [p start-position end-position] (.transfer-time activepolicy start-position end-position))
-  (cycle-length     [p] (.cycle-length activepolicy))
-  (end-state        [p] (.end-state activepolicy))
-  (get-cycle-time   [p position] (.get-cycle-time activepolicy position))     
-  (get-policy-type  [p] :composite)
-  (get-position     [p cycletime] (.get-position activepolicy cycletime))                                    
-  (get-state        [p position]  (.get-state activepolicy position))
-  (max-bog          [p]            (.max-bog activepolicy))
-  (max-dwell        [p]            (.max-dwell activepolicy))
-  (max-mob          [p]            (.max-mob activepolicy))
-  (min-dwell        [p]            (.min-dwell activepolicy))
-  (get-locations    [p]            (.get-locations activepolicy))
+  (transfer-time       [p start-position end-position] (.transfer-time activepolicy start-position end-position))
+  (cycle-length        [p] (.cycle-length activepolicy))
+  (end-state           [p] (.end-state activepolicy))
+  (get-cycle-time      [p position] (.get-cycle-time activepolicy position))     
+  (get-policy-type     [p] :composite)
+  (get-position        [p cycletime] (.get-position activepolicy cycletime))                                    
+  (get-state           [p position]  (.get-state activepolicy position))
+  (max-bog             [p]            (.max-bog activepolicy))
+  (max-dwell           [p]            (.max-dwell activepolicy))
+  (max-mob             [p]            (.max-mob activepolicy))
+  (min-dwell           [p]            (.min-dwell activepolicy))
+  (get-locations       [p]            (.get-locations activepolicy))
   core/IPolicyContainer
-  (add-policy       [p period policy]   (policymap. name (or activepolicy policy) (or activeperiod period) (assoc policies period policy)))
-  (add-policy       [p keyval] (if (coll? keyval) 
-                                 (let [[k v] keyval] (.add-policy p k v))
-                                 (throw (Exception. "Expected a [period policy] pair for arity 2 add-policy on a policymap")))))
+  (add-policy          [p period policy]   (policymap. name (or activepolicy policy) (or activeperiod period) (assoc policies period policy)))
+  (add-policy          [p keyval] (if (coll? keyval) 
+                                    (let [[k v] keyval] (.add-policy p k v))
+                                    (throw (Exception. "Expected a [period policy] pair for arity 2 add-policy on a policymap")))))
 
 (def empty-policymap (make-policymap))
 
@@ -170,3 +167,4 @@
                                 (policyseq. name (or rootpolicy policy) idx  (conj policies policy))))
 
 (def empty-policyseq (make-policyseq))
+

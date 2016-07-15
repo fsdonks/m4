@@ -1153,7 +1153,7 @@
 ;;and behaviortree.
 (befn do-current-state {:keys [entity statedata] :as benv}
       (let [;state (:state @entity)
-            state  (:state  (deref!! entity) )
+            state  (:state  (deref!! entity) ) ;;slightly faster using keyword as function call.
             state-map (or (:statemap entity) default-statemap)]
         (if (set? state)  ;entity has multiple effects...
           (let [stats (r/filter identity (r/map (fn [s] (get state-map s)) state))]

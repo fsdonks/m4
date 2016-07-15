@@ -53,6 +53,7 @@
         ]
     (-> (if (= Template "Ghost") 
           (policyops/register-ghost-template PolicyName MaxBOG  :overlap Overlap)
+          ;;we'd like to delay this if possible...          
           (policyops/register-template Template MaxDwell MinDwell MaxBOG 
                                  StartDeployable StopDeployable
                                  :overlap Overlap 
