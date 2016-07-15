@@ -9,6 +9,45 @@
             [spork.sketch :as sketch]
             [clojure.pprint :as pprint]))
 
+
+;;util functions, move these out...
+(defn compare-lines [l r]
+  (with-open [left  (clojure.java.io/reader l)
+              right (clojure.java.io/reader r)]
+    (let [ls (line-seq left)
+          rs (line-seq right)]
+      (->> (map (fn [l r] [l r]) ls rs)
+           (map-indexed (fn [i [x y]]
+                          {:line i
+                           :l x
+                           :r y})
+                        )
+           (filter (fn [{:keys [l r]}]
+                     (not= l r)))
+           (first)))))
+
+(defn compare-lines! [l r]
+  (with-open [left  (clojure.java.io/reader l)
+              right (clojure.java.io/reader r)]
+    (let [ls (line-seq left)
+          rs (line-seq right)]
+      (->> (map (fn [l r] [l r]) ls rs)
+           (map-indexed (fn [i [x y]]
+                          {:line i
+                           :l x
+                           :r y})
+                        )
+           (filter (fn [{:keys [l r]}]
+                     (not= l r)))
+           (vec)))))
+
+(defn tsv->csv [path]
+  (with-open [rdr  (clojure.java.io/reader (str path))
+              wrtr (clojure.java.io/writer (str path ".csv"))]
+    (doseq [^String ln (line-seq rdr)]
+      (.write wrtr (str (clojure.string/replace ln \tab \,) \newline)))))
+
+
 ;;eliminate tempfiles...
 (def tempre #"[#~]")
 (def clj    #".clj")
