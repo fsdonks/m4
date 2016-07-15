@@ -22,7 +22,8 @@
                              [policyops :as pops]
                              [unit :as u]]            
             [spork.util [tags :as tag]
-                        [general :as gen]]
+             [general :as gen]]
+            [spork.entitysystem [store :as store]]
             [spork.sim  [simcontext :as sim]]))
 
 ;----------TEMPORARILY ADDED for marathon.sim.demand!
@@ -202,6 +203,11 @@
 (defn schedule-periods [policystore ctx] "Schedule multiple periods."
   (reduce (flip schedule-period) ctx (get-periods policystore))) 
 
+;;Note: Optimization
+;;We're doing this every time, which is costing us in performance.
+;;About 1/3 of our time in simulation is spent checking for
+;;periods due to this function...
+
 (defn find-periods
   "Finds all periods in the policy store that intersect time t."
   [t policystore]
@@ -221,6 +227,16 @@
                  p))
              nil
              (get-periods policystore)))
+
+(defn find-period-in 
+  "Finds the first arbitrary period in the policy store that intersects time t."
+  [t xs]
+  (reduce-kv (fn [p pname per]
+               (if  (period/intersects-period? t per)
+                 (reduced per)
+                 p))
+             nil
+             xs))
 
 ;Returns the the period currently active in the policy store.  This may change 
 ;when I introduce multiple timelines....
@@ -547,7 +563,28 @@
                 (period-change! fromname toname)
                 (change-policies fromname toname)))))
   ([day ctx] (manage-policies day ctx 
-                 (find-period day (core/get-policystore  ctx)))))
+                              (find-period-in day
+                                              (store/gete ctx :PolicyStore :periods)
+                                              ))))
+
+;; (defn manage-policies
+;;   "The policy system checks to see if we entered a new period, and changes 
+;;    the governing policies to fit the new period.  High level entry point, 
+;;    typically called by the simulation engine."
+;;   ([day ctx newperiod]
+;;      (let [policystore (core/get-policystore ctx)
+;;            toname      (:name newperiod)
+;;            period      (:activeperiod policystore)
+;;            fromname    (:name period)]
+;;        (if (= fromname toname) ctx
+;;            (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
+;;                 (core/merge-entity {:PolicyStore (update-period day toname policystore)})
+;;                 (period-change! fromname toname)
+;;                 (change-policies fromname toname)))))
+;;   ([day ctx] (manage-policies day ctx 
+;;                               (find-period day
+;;                                               (core/get-policystore  ctx)
+;;                                            ))))
 
 ;Fetches a policy, by name, from the policystore.
 ;TODO -> add in a policy does not exist exception...

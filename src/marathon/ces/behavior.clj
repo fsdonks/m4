@@ -1144,11 +1144,16 @@
    protocols/Overlapping  bogging-beh
    })
 
+(defmacro deref!! [v]
+  (let [v (with-meta v {:tag 'clojure.lang.IDeref})]
+    `(.deref ~v)))
+
 ;;lookup what effects or actions should be taken relative to
 ;;the current state we're in.  This is kind of blending fsm
 ;;and behaviortree.
 (befn do-current-state {:keys [entity statedata] :as benv}
-      (let [state (:state @entity)
+      (let [;state (:state @entity)
+            state  (:state  (deref!! entity) )
             state-map (or (:statemap entity) default-statemap)]
         (if (set? state)  ;entity has multiple effects...
           (let [stats (r/filter identity (r/map (fn [s] (get state-map s)) state))]

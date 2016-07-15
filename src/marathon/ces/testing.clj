@@ -850,3 +850,12 @@
  (into {} (analysis/->history-stream tmax
                                      engine/sim-step
                                      (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx"))))
+
+(defn observer-timing [& {:keys [n tmax] :or {n 1 tmax 5001}}]
+  (let [ctx (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")]
+    (time (dotimes [i n]
+            (into {} (analysis/->history-stream tmax
+                                                engine/sim-step                                                
+                                                ctx))))))
+  
+  
