@@ -34,3 +34,36 @@
 ;;For instance, when we access the entity store, we can alter
 ;;single component entries, sometimes more.
 
+;;Tagging => Fact Database + Logic Programming?
+;;=============================================
+;;The legacy implementation used a system of generic tags to
+;;encode metadata about certain objects...
+;;In this new system, we don't really need the tags....but we
+;;will need a way to encode extensible metadata for the objects.
+;;Perhaps a better way to accomplish the tagging is to just
+;;go full-bore with a fact database + inference engine.
+;;That way, we can simply assert facts (or rescind them)
+;;as the state changes, and declare relationships over time.
+
+;;Compelling use cases for this include:
+;; Querying non-standard relationships about
+;; entities....things like command, proximity, affinity,
+;; and a host of other properties that can be codified
+;; via triples and inference rules...
+;; This would primarily benefit extending the scripting of
+;; suitability functions and constraints...
+
+;;We could replace the entirety of the fill logic with
+;;a constraint satisfaction program using either core.logic
+;;or cloco (based on the java Choco library).
+
+;;Not sure what the performance implications are
+;;as of yet....this would certainly be preferable
+;;to manually "filling" via one set of rules, then
+;;breaking the rules when things suit us...
+
+;;Wow...this opens up a slew of interesting possibilities...
+;;we can apply rules to the simulation itself, to determine
+;;for instance, if a unit deployed to a demand, it must have
+;;gone through training at a prior point...
+
