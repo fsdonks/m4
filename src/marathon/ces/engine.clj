@@ -242,13 +242,15 @@
    for the next step."
   ([day ctx]
    (->> ctx 
-        (begin-day day)         ;Trigger beginning-of-day logic and notifications.
-        (manage-supply day)     ;Update unit positions and policies.
-        (manage-policies day)   ;Apply policy changes, possibly affecting supply.
-        (manage-demands day)    ;Activate/DeActiveate demands, handle affected units.      
-        (fill-demands day)      ;Try to fill unfilled demands in priority order. 
+        (begin-day        day)  ;Trigger beginning-of-day logic and notifications.
+        (manage-supply    day)  ;Update unit positions and policies.
+        (manage-policies  day)  ;Apply policy changes, possibly affecting supply.
+        (manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.      
+        (fill-demands     day)  ;Try to fill unfilled demands in priority order. 
         (manage-followons day)  ;Resets unused units from follow-on status. 
         (end-day day)           ;End of day logic and notifications.
+        ;;This is a little wierd/leftover/hacky/redundant. We should probably
+        ;;do this in a consolidated handler or something.
         (manage-changed-demands day)));Clear set of changed demands in demandstore.
   ([ctx] (sim-step (sim/get-time ctx) ctx)))
 

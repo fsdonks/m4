@@ -180,14 +180,14 @@
    :DeployInterval :text
    :FillPath      :text
    :Period        :text
-   :Demand        :text
-   :PathLength    :int
-   :BogBudget     :int
-   :CycleTime     :int
-   :DeploymentCount :int
-   :DemandType      :text
-   :FillCount       :int
-   :Location        :text
+   :Demand            :text
+   :PathLength        :int
+   :BogBudget         :int
+   :CycleTime         :int
+   :DeploymentCount   :int
+   :DemandType        :text
+   :FillCount         :int
+   :Location          :text
    :DwellBeforeDeploy :int
    :Policy            :text})
 
@@ -426,7 +426,12 @@
                        :unitMoved    movement-handler    ;;record unit location changes.
                        :StateChange  state-handler       ;;record changes in unit's state.
                        :end-of-day   commit-telemetry!   ;;freeze initial and final values for telemtry components.
-                       }})
+                       }
+   ;;this system looks for changes in demands and records "dirty" demands over time.
+   ;:demand-watch      {:begin-day    drop-demands!
+   ;                    :end-of-day   commit-demands!
+   ;                    }
+   })
 
 (defn register-default-observers [ctx]
   (simnet/register-routes  default-routes ctx))

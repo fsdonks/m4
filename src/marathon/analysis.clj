@@ -152,9 +152,13 @@
        (filter identity)))
 
 
+;;note: we may need to replicate the audit trail for completeness
+;;sake....this should be fairly easy...it's simple io stuff.
+
+;;we only need to capture this when demands change..
 (def demand-trend-schema
   {:t  	           :int
-   :Quarter	   :int
+   :Quarter	   :int ;;derived...
    :SRC	           :text
    :TotalRequired  :int
    :TotalFilled	   :int
@@ -169,35 +173,40 @@
    :GhostFilled	   :int
    :OtherFilled	   :int})
 
-
 ;;If we can define trends as a map
 ;;or a reduction....
-;;Might it not be a better idea to compute the deltas here? 
-
 ;;this is legacy support...
+;;Note: this should work with our 
 (defn demand-trends
   ([t ctx]
-   (->> (get-demandstore ctx)
-        (:activedemands)
-        (keys)
-        (map #(store/get-entity ctx %))
-        (map (fn [{:keys [category demandgroup operation vignette Command] :as d}]
-               {:t t
-                :name        (:name d)
-                :src         (:src  d)
-                :assigned    (count  (:units-assigned d))
-                :overlapping (count  (:units-overlapping d))
-                :quantity    (:quantity d)
-                :filled      (count (:units-assigned d))
-                :unfilled    (- (:quantity d) (count (:units-assigned d)))
-                :category    category
-                :demandgroup demandgroup
-                :operation   operation
-                :vignette    vignette
-                :command     Command
-                :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}
-               ))))
-  ([ctx]  (deployments (sim/get-time ctx) ctx)))
+   (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.
+         ]
+     (->> (get-demandstore ctx)
+          (:activedemands)
+          (keys)
+          (map #(store/get-entity ctx %))
+          (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+                  (let [assigned     (:units-assigned    d)
+                        overlapping  (:units-overlapping d)
+                        ua           (count              assigned)
+                        uo           (count              overlapping)
+                        compo-fills  (->> assigned
+                                          (keys)
+                                          (map (fn [nm]
+                                                 (store/gete ctx nm :component)))
+                                          (frequencies))]
+                  {:t             t
+                   :Quarter       qtr
+                   :SRC           (:src      d)
+                   :TotalRequired (:quantity d)
+                   :TotalFilled	  (+ uo ua)
+                   :Overlapping   uo
+                   :Deployed	  ua
+                   :DemandName    (:name d)
+                   :Vignette      vignette
+                   :DemandGroup   demandgroup]
+                  ))))))
+  ([ctx] (deployments (sim/get-time ctx) ctx)))
 
 ;;creating legacy output from basic data..
 ;;fills are a join of unit<>demanddata<>deployments

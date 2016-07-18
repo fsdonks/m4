@@ -17,6 +17,18 @@
 ;;Implement mutable versions for the core simulation structures,
 ;;possibly branching off entirely ala the network flow lib.  Use
 ;;test basis for verification.
+;;The primary basis for this would be to migrate the entitystore
+;;to a mutable entitystore implementation (likely based on
+;;concurrent hashmaps), we could event retain an
+;;append-log for diffing if we want to.  Everything else
+;;would flow from this.
+
+;;Serialization/DeSerialization
+;;=============================
+;;We currently serialize histories as an init context
+;;plus a sequence of [t patch] differentials that
+;;describe the internal differences in the simulation
+;;state (namely the entity store).
 
 ;;Changes/Deltas
 ;;==============
@@ -34,7 +46,19 @@
 ;;For instance, when we access the entity store, we can alter
 ;;single component entries, sometimes more.
 
-;;Tagging => Fact Database + Logic Programming?
+;;Another option is to setup a time component...
+;;Whenever entities change, or we want to record an
+;;association of the entity with a given point in time,
+;;we can conj the time component onto the entity.
+;;The downside is, we'd end up with a boatload of components.
+;;An alternative would be to store the times in an array, or
+;;an arraylist, and copy as necessary.
+
+;;This makes sense....it kind of gives us a way to index
+;;entities by txn...getting into datomic territory a little
+;;bit though.  txns kind of reference changes already...
+
+;;Tagging => (+ Fact Database  Logic Programming) ? 
 ;;=============================================
 ;;The legacy implementation used a system of generic tags to
 ;;encode metadata about certain objects...
@@ -66,4 +90,3 @@
 ;;we can apply rules to the simulation itself, to determine
 ;;for instance, if a unit deployed to a demand, it must have
 ;;gone through training at a prior point...
-
