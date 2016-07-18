@@ -85,8 +85,7 @@
   (is (= (sim/get-next-time primed-sim) 1)
       "Initialized simulation should have a start time of one....")
   (is (= (sim/get-final-time primed-sim) +end-time+ ) "upper bound should be the final time.")
-  (is (sim/has-time-remaining? primed-sim) "we have time scheduled")
-)
+  (is (sim/has-time-remaining? primed-sim) "we have time scheduled"))
 
 ;;#Event propogation tests.
 (defn push-message! [ctx edata name]
@@ -122,6 +121,7 @@
 (def tfinal   (+ tstart (:duration first-demand)))
 (def res      (demand/register-demand  first-demand testctx))
 (def dstore   (core/get-demandstore res))
+
 (deftest scheduled-demand-correctly 
   (is (= ((juxt  :startday :duration) first-demand)
          [ 901 1080])
@@ -506,6 +506,7 @@
 (def deployedctx    (deployment/deploy-units defaultctx the-deployers d))
 (def deployed-units (store/get-entities deployedctx selected))
 
+
 (defn simple-step [day ctx]
   (->> ctx
       (engine/begin-day       day)
@@ -548,7 +549,9 @@
 ;;we should have no unfilled demands at the end of day 1.
 
 (def ds1 (core/get-demandstore zctx1))
-(def activedemands1  (map (partial demand/get-demand ds1) (keys (:activedemands ds1))))
+(def activedemands1
+  (map (partial demand/get-demand ds1)
+       (keys (:activedemands ds1))))
  
 (deftest day1fill
   (is (empty? (demand/unfilled-demands "SRC3" (core/get-demandstore zctx1)))
@@ -595,6 +598,8 @@
 
 )
 
+;;just run the simulation for 2521 days and see if we
+;;don't pop any exceptions.
 (deftest vanilla-sim
   (let [h2521  (analysis/->history 2521 engine/sim-step 
                           defaultctx)]
@@ -651,21 +656,6 @@
                  followonctx)]
     ))
 
-
-;; (defn ->fills [h]
-;;     (let [ks    (sort (keys h))
-;;         pairs (partition 2 1 ks)]
-;;     (into (vec (apply concat
-;;                     (->> pairs
-;;                          (mapcat (fn [[l r]]
-;;                                    (let [ctx (get h l)
-;;                                          demands (store/gete ctx :DemandStore :activedemands)
-;;                                          ]                                     
-;;                                      ;;sample in between...
-;;                                      (for [t (range l r)]
-;;                                        (core/locations t ctx))))))))
-;;           (core/locations (last ks) (get h (last ks))))))
-  
 ;;srm-specific demand and supply.
 ;;We should be able to load up our srm tables and get a context.
 
@@ -835,7 +825,6 @@
 (def ap "C:\\Users\\tspoon\\Documents\\srm\\arfnotionalbase.xlsx")
 (defn arf-hist [& {:keys [tmax] :or {tmax 5001}}] (excel-hist  :path ap :tmax tmax))
 
-
 ;;need to thread this as the default...
 ;;we're not really using the engine to
 ;;do much...
@@ -857,5 +846,3 @@
             (into {} (analysis/->history-stream tmax
                                                 engine/sim-step                                                
                                                 ctx))))))
-  
-  

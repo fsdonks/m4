@@ -117,32 +117,32 @@
 ;;throughout the structure, then we should respect
 ;;the identities when we thaw.
 
-(defn as-reference [x]
+(defn as-reference [x])
   
 ;;i.e. {:class atom :val 2}
-(defn thaw-reference [x]
+(defn thaw-reference [x references]
   (let [h (:hash x)]
-    (if-let [x (get *references* h)]
-      (do (set-reference! x (:value h))
+    (if-let [x (get references h)]
+      (do (reset! x (:value h))
           x)
       ;;the ref.
       ;;new...
       (let [new-ref (atom x)
-            _  (swap! *references* assoc h new-ref)]
+            _       (swap! references assoc h new-ref)]
         new-ref))))
 
-(defn freeze-reference [r]
+(defn freeze-reference [r references]
   (let [h (hash r)]    
-    (if-let [x (get *references* h)]
+    (if-let [x (get references h)]
       (assoc x :value @x) 
       ;;new...
       (let [new-ref (->reference (class r) h @r)
-            _ (swap! *references* assoc h new-ref)]
+            _ (swap! references assoc h new-ref)]
         new-ref))))
     
 (nippy/extend-freeze clojure.lang.Atom :clojure/atom
   [x data-output]
-  (nippy/freeze-to-out!  data-output (->reference clojure.lang.Atom (hash x) @x))))
+  (nippy/freeze-to-out!  data-output (->reference clojure.lang.Atom (hash x) @x)))
 
 
 ;;This works perfectly!

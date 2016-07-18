@@ -316,7 +316,7 @@
    :patches (for [[[t1 l] [t2 r]] (partition 2 1 h)]
               [t2 (diff/entity-diffs->patch (diff-store l r))])})
 
-(defn write-history [h path]  (ser/freeze-to (patch-history h) path))
+(defn     write-history [h path]  (ser/freeze-to (patch-history h) path))
 
 (defmacro with-print [{:keys [level length]} & body]
   `(let [before-level# ~'*print-level*
