@@ -19,8 +19,9 @@
              [diff     :as diff]
              [store :as store]]
             [spork.sim.simcontext     :as sim]
-            [marathon [serial :as ser]
-                      [util :as util]]))
+            [marathon
+             [serial :as ser]
+             [util :as util]]))
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]  
@@ -200,11 +201,20 @@
 ;;Yes....
 ;;They're basically location-samples...
 
+;;note: if we stream, we don't compress, but we do
+;;get a differential compression. We might
+;;use lz4 to compress after the fact....once the
+;;file has been written.  For now, it's about 28 mb for
+;;a patch set for 13 years.
+
 ;;this is basically the api for performing a run....
 (defn spit-history! [h path]
-  (let [lpath (str path "locsamples.txt")
+  (let [hpath (str path "history.lz4")
+        lpath (str path "locsamples.txt")
         dpath (str path "depsamples.txt")]        
-    (do (println [:spitting-locations lpath])
+    (do (println [:saving-history hpath])
+        (write-history h hpath)
+        (println [:spitting-locations lpath])
         (tbl/records->file (->location-samples h) lpath)
         (println [:spitting-deployments dpath])
         (tbl/records->file (->deployment-samples h) dpath))))
@@ -311,12 +321,15 @@
       nil
       (diff/entity-diff le re))))
 
+;;we might have a memory leak here if we're force the first and traversing the
+;;rest of the history...
 (defn patch-history [h]
-  {:init (first h)
+  {:init    (first h)
    :patches (for [[[t1 l] [t2 r]] (partition 2 1 h)]
               [t2 (diff/entity-diffs->patch (diff-store l r))])})
 
-(defn     write-history [h path]  (ser/freeze-to (patch-history h) path))
+(defn     write-history  [h path]  (ser/freeze-to (patch-history h)  path))
+(defn     write-history! [h path]  (ser/freeze-to! (patch-history h) path))
 
 (defmacro with-print [{:keys [level length]} & body]
   `(let [before-level# ~'*print-level*
@@ -358,11 +371,11 @@
           (println "}"))))))
 
 ;;hmmm...can we actually slurp this up?  It's 28 mb...so maybe...
-(defn read-history [path]
+;;ahh...this poorly named...
+(defn string->history [path]
   (println [:warning 'read-history "you're using read-string, vs. clojure.edn/read-string"])
   (read-string (slurp path)))
   
-
 (defn read-history! [path]
   (let [{:keys [init patches]} (ser/thaw-from path)
         store  (atom (second init))]
@@ -374,7 +387,6 @@
                    [t nxt]))
                patches)
           )))
-
 
 ;;hmm...
 
