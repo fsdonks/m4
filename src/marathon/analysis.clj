@@ -209,9 +209,11 @@
 
 ;;this is basically the api for performing a run....
 (defn spit-history! [h path]
-  (let [hpath (str path "history.lz4")
+  ;;hackneyed way to munge outputs and spit them to files.
+  (let [hpath (str path "history.lz4"   )
         lpath (str path "locsamples.txt")
-        dpath (str path "depsamples.txt")]        
+        dpath (str path "depsamples.txt")
+        ]        
     (do (println [:saving-history hpath])
         (write-history h hpath)
         (println [:spitting-locations lpath])
