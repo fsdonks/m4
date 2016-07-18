@@ -53,11 +53,19 @@
 (defn add-demand [demandstore demand]
   (gen/deep-assoc demandstore [:demandmap (:name demand)] demand))
 
+;;notice, we manage change notifications by
+;;munging state inside the demandstore....
+;;How about we manage change altogether at
+;;the end of the day?
 (defn manage-changed-demands [day state] ;REDUNDANT
   (gen/deep-assoc state [:demand-store :changed] {}))
 
 (defn clear-changes [demandstore] (assoc demandstore :changed {}))
 
+;;Might think about elevating this..
+;;Alternately, we could have a "dirty" component.
+;;That keeps track of entities that are known to have
+;;changed...
 (defn register-change [demandstore demandname]
   (if (contains? (:changed demandstore) demandname)
     demandstore 

@@ -147,7 +147,25 @@
                              )))))
   ([ctx] (fills  (sim/get-time ctx) ctx)))
 
+(def demand-trend-schema
+  {:t  	           :int
+   :Quarter	   :int
+   :SRC	           :text
+   :TotalRequired  :int
+   :TotalFilled	   :int
+   :Overlapping	   :int
+   :Deployed	   :int
+   :DemandName	   :text
+   :Vignette 	   :text
+   :DemandGroup	   :text
+   :ACFilled	   :int
+   :RCFilled	   :int
+   :NGFilled	   :int
+   :GhostFilled	   :int
+   :OtherFilled	   :int})
+
 ;;This is a pretty useful deployment query....
+;;provides us with a map of 
 (defn deployments
   ([t ctx]
    (->> (get-demandstore ctx)

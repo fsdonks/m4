@@ -138,6 +138,9 @@
 (defn ->demand-trends      [h]  (->collect-samples core/deployments h))
 ;;compute the deployments table
 
+;;so, we basically just pipe th deployments component
+;;to out and concat....
+
 ;;derives a stream of deployments across the history.
 ;;daily deployments are stored in the :deployments component.
 ;;so we just extract that and boom.
@@ -147,6 +150,54 @@
                  (when-let [deps (store/get-domain ctx :deployments)]
                     (first (vals deps)))))
        (filter identity)))
+
+
+(def demand-trend-schema
+  {:t  	           :int
+   :Quarter	   :int
+   :SRC	           :text
+   :TotalRequired  :int
+   :TotalFilled	   :int
+   :Overlapping	   :int
+   :Deployed	   :int
+   :DemandName	   :text
+   :Vignette 	   :text
+   :DemandGroup	   :text
+   :ACFilled	   :int
+   :RCFilled	   :int
+   :NGFilled	   :int
+   :GhostFilled	   :int
+   :OtherFilled	   :int})
+
+
+;;If we can define trends as a map
+;;or a reduction....
+;;Might it not be a better idea to compute the deltas here? 
+
+;;this is legacy support...
+(defn demand-trends
+  ([t ctx]
+   (->> (get-demandstore ctx)
+        (:activedemands)
+        (keys)
+        (map #(store/get-entity ctx %))
+        (map (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+               {:t t
+                :name        (:name d)
+                :src         (:src  d)
+                :assigned    (count  (:units-assigned d))
+                :overlapping (count  (:units-overlapping d))
+                :quantity    (:quantity d)
+                :filled      (count (:units-assigned d))
+                :unfilled    (- (:quantity d) (count (:units-assigned d)))
+                :category    category
+                :demandgroup demandgroup
+                :operation   operation
+                :vignette    vignette
+                :command     Command
+                :total       (+ (count (:units-assigned d))  (count (:units-overlapping d)))}
+               ))))
+  ([ctx]  (deployments (sim/get-time ctx) ctx)))
 
 ;;creating legacy output from basic data..
 ;;fills are a join of unit<>demanddata<>deployments
@@ -194,57 +245,6 @@
 ;;                  })
 
 
-;;IO  Routines
-;;============
-
-;;can we spit out demandtrends?
-;;Yes....
-;;They're basically location-samples...
-
-;;note: if we stream, we don't compress, but we do
-;;get a differential compression. We might
-;;use lz4 to compress after the fact....once the
-;;file has been written.  For now, it's about 28 mb for
-;;a patch set for 13 years.
-
-;;this is basically the api for performing a run....
-(defn spit-history! [h path]
-  ;;hackneyed way to munge outputs and spit them to files.
-  (let [hpath (str path "history.lz4"   )
-        lpath (str path "locsamples.txt")
-        dpath (str path "depsamples.txt")
-        ]        
-    (do (println [:saving-history hpath])
-        (write-history h hpath)
-        (println [:spitting-locations lpath])
-        (tbl/records->file (->location-samples h) lpath)
-        (println [:spitting-deployments dpath])
-        (tbl/records->file (->deployment-samples h) dpath))))
-
-;;spits a log of all the events passing through.
-(defn spit-log
-  ([h root nm]
-   (println [:logging-to (str root nm)])
-   (with-open [wrtr (clojure.java.io/writer (str root nm))]
-     (binding [*out* wrtr]
-       (core/debugging
-        (doseq [hd h]
-          )
-        ))))
-  ([h root] (spit-log h root "events.txt")))
-
-;;spits a verbose log of all the events and
-;;behavioral updates that are performed...
-(defn spit-log!
-  ([h root nm]
-   (println [:logging-to (str root nm)])
-   (with-open [wrtr (clojure.java.io/writer (str root nm))]
-     (binding [*out* wrtr]
-       (core/debugging!
-        (doseq [hd h]
-          )
-        ))))
-  ([h root] (spit-log! h root "events.txt")))
 
 ;;API Definition
 ;;==============
@@ -391,6 +391,58 @@
           )))
 
 ;;hmm...
+
+;;IO  Routines
+;;============
+
+;;can we spit out demandtrends?
+;;Yes....
+;;They're basically location-samples...
+
+;;note: if we stream, we don't compress, but we do
+;;get a differential compression. We might
+;;use lz4 to compress after the fact....once the
+;;file has been written.  For now, it's about 28 mb for
+;;a patch set for 13 years.
+
+;;this is basically the api for performing a run....
+(defn spit-history! [h path]
+  ;;hackneyed way to munge outputs and spit them to files.
+  (let [hpath (str path "history.lz4"   )
+        lpath (str path "locsamples.txt")
+        dpath (str path "depsamples.txt")
+        ]        
+    (do (println [:saving-history hpath])
+        (write-history h hpath)
+        (println [:spitting-locations lpath])
+        (tbl/records->file (->location-samples h) lpath)
+        (println [:spitting-deployments dpath])
+        (tbl/records->file (->deployment-samples h) dpath))))
+
+;;spits a log of all the events passing through.
+(defn spit-log
+  ([h root nm]
+   (println [:logging-to (str root nm)])
+   (with-open [wrtr (clojure.java.io/writer (str root nm))]
+     (binding [*out* wrtr]
+       (core/debugging
+        (doseq [hd h]
+          )
+        ))))
+  ([h root] (spit-log h root "events.txt")))
+
+;;spits a verbose log of all the events and
+;;behavioral updates that are performed...
+(defn spit-log!
+  ([h root nm]
+   (println [:logging-to (str root nm)])
+   (with-open [wrtr (clojure.java.io/writer (str root nm))]
+     (binding [*out* wrtr]
+       (core/debugging!
+        (doseq [hd h]
+          )
+        ))))
+  ([h root] (spit-log! h root "events.txt")))
 
 
 (comment 

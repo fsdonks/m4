@@ -70,7 +70,7 @@
                 :EventName :text
                 :Msg :text})
 
-;;DemandRecords  ;;DEPRECATED , new SRM stuff trumps this.
+;;DemandRecords  ;;DEPRECATED , new SRM stuff trumps this, mostly.
 (def drecordschema {"Type"         :text
                     "Enabled"      :boolean
                     "Priority"	   :int
