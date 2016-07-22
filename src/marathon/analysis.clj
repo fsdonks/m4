@@ -36,6 +36,10 @@
                                                                :end processed}}))))
                                     init)))
 
+;;I think we want to convert this into a stream with the simulation
+;;state.  So, instead of just [t ctx], we get [t ctx :begin|:end]
+;;That way, other streams can filter on either begin/end or use both.
+
 ;;A wrapper for an abstract simulation.  Can produce a sequence of
 ;;simulation states; reducible.
 (defn ->simulator [stepf seed]
@@ -45,9 +49,9 @@
       (seq [this]  
         (take-while identity (iterate (fn [ctx] 
                                         (when  (engine/keep-simulating? ctx)
-                                          (let [init ctx
-                                                t  (sim/get-time ctx)
-                                                processed  (stepf t  ctx)
+                                          (let [init       ctx
+                                                t          (sim/get-time     ctx)
+                                                processed  (stepf t          ctx)
                                                 nxt        (sim/advance-time processed)]
                                             (with-meta nxt {t {:start init
                                                                :end processed}}))))
@@ -71,6 +75,24 @@
 
 (defn ending [h t] (get (meta (get h t) :end  )))
 (defn start  [h t] (get (meta (get h t) :start)))
+                    
+;;most metrics should be collected at the end of the
+;;day.  For debugging and verification purposes, we'd
+;;like to have the history at the beginning of each day.
+;;We technically provide access to both via the history stream.
+;;we embed the previous day's sample in the meta.
+(defn end-of-day-history [h]
+  (->> h
+       (map #(first (meta (second %))))
+       (filter identity)
+       (map (fn [[t {:keys [start end]}]] 
+              [t end]))))
+
+(defn expanded-history [h]
+  (mapcat (fn [[t ctx]]
+            (let [{:keys [start end]} (get (meta ctx) t)]
+              [[t start  :start]
+               [t end :end]])) h))
 
 ;;Note: we probably want to vary the resolution
 ;;here, currently we're hardwired to sample
@@ -96,6 +118,8 @@
 ;;#OPTIMIZATION
 ;;my gut says we can do this more efficiently, with regards to
 ;;final, since it holds onto the tail of the stream
+;;Also, allow sampling rate to vary...
+;;currently we sample every day.
 (defn ->seq-samples [f kvs]
   (let [pairs (partition 2 1 kvs)
         final (last kvs)]
