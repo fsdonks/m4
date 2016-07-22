@@ -57,10 +57,11 @@
 ;;munging state inside the demandstore....
 ;;How about we manage change altogether at
 ;;the end of the day?
-(defn manage-changed-demands [day state] ;REDUNDANT
-  (gen/deep-assoc state [:demand-store :changed] {}))
-
-(defn clear-changes [demandstore] (assoc demandstore :changed {}))
+;;DEPRECATED
+;; (defn manage-changed-demands [day state] ;REDUNDANT
+;;   (gen/deep-assoc state [:demand-store :changed] {}))
+;;DEPRECATED
+;(defn clear-changes [demandstore] (assoc demandstore :changed {}))
 
 ;;Might think about elevating this..
 ;;Alternately, we could have a "dirty" component.
@@ -269,7 +270,8 @@
 
 (defn registering-demand! [demand ctx]
   (sim/trigger-event :added-demand "DemandStore" "DemandStore" 
-       (core/msg "Added Demand " (:name demand)) nil ctx))
+                     (core/msg "Added Demand " (:name demand)) nil ctx))
+
 
 ;;We can revisit this in the entitystore context in the future...
 ;;Can probably store this in a flatter context.

@@ -6,6 +6,8 @@
             [marathon.policy [policydata :as pol]])
   (:use [spork.util.record :only [defrecord+ inc-field dec-field get-vals]]))
 
+;;#INCONSISTENCY#
+;;unitdata is missing a deployment-index, which is expected for deployment records.
 
 ;;TODO# should we extend IRotationaPolicy to these guys? Convenience function...
 ;record for unitdata state.

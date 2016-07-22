@@ -445,9 +445,13 @@
 ;             ->supply->rule->[fill-promise]  
 ;where fill-promise::(simcontext->'a->[filldata,simcontext])  
 
+
+;;Note: filldata == {:keys [rule fillPath pathlength followon source]}
 ;;simple....
 ;;TODO# replace with record or type.
-(defn unit->filldata [cat src length u]  
+(defn unit->filldata [cat src length u]
+  ;;we're out of position here..
+                    ;rule ;fillPath ;pathLength
   (filldata/->fill  cat src length nil u))
 
 ;;all we expect from fills is that there is a quantity
@@ -497,13 +501,19 @@
 ;apply the promise to a given context.  This should produce a pair of the 
 ;filldata --information about the unit realized for filling-- and an updated 
 ;simulation context.
-
+;;Note: we need to alter this...I understand the reason it exists, namely
+;;to allow for things like supply-generation in the face of constraints,
+;;but we're losing information from the filldata as a consequence.
+;;we get a fill-promise :: marathon.fill.filldata, and
+;;we project it onto :: [marathon.supply.unitdata ctx]
 (defn realize-fill
   "Applies the a function, fill-promise, that maps a context to a pair of 
    [filldata, updated-context].  The updated-context should represent the result
    of realizing the promised fill."
   [fill-promise ctx] 
-  [(get fill-promise :source)
+  [(if (map? fill-promise) fill-promise
+       (throw (Exception. (str "no other promise types supported"))))
+                                        ;(get fill-promise :source)
    (if-let [actions (get fill-promise :actions)]
      (actions ctx) ;;perform any actions necessary 
      ctx)])
@@ -536,7 +546,9 @@
 (defn fill!
  "Deploys the unit identified in filldata to demand via the supply system."
   [t period demand deployment-count filldata  ctx]
-  (let [unit (or (:unit filldata) filldata)]
+  (let [;unit (or (:unit filldata) filldata)
+        unit   (:source filldata)
+        ]
     (->> (deployment/deploy-unit  ctx unit  t demand                                
                                  (core/followon? unit))
          (supply/log-deployment! t (:locationname unit) demand unit   
@@ -567,7 +579,8 @@
     (->  (reduce (fn [ctx promised-fill]            
                    (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
                                         ;_ (println fd)
-                         unit     (or (:unit filldata) filldata)                         
+                         unit     (:source filldata)
+;                         unit     (or (:unit filldata)    filldata)
                          cnt      (swap! deployment-count unchecked-inc)
                          ] 
                      (->> ctx 

@@ -191,34 +191,35 @@
    :DwellBeforeDeploy :int
    :Policy            :text})
 
+
+;;note: filldata == {:keys [rule fillPath pathlength followon source]}
 ;;should match the deprecord schema.
 (defn new-deployment
   ([{:keys [unit fromloc demand fill fillcount t deploydate period]}]
     (new-deployment unit fromloc demand fill fillcount t deploydate period))
   ([unitfrom locationfrom demandto fill fillcount t deploydate period]
-   (let [{:keys [bogbudget followons deployments dwell]} (:CurrentCycle unitfrom)
-         pol (:policy unitfrom)
-         ;_ (println [:deployment! (:name unitfrom) t])
-         ]
+   (let [{:keys [bogbudget followons deployments dwell]} (:currentcycle unitfrom)
+         pol    (:policy unitfrom)]
      {:Unit          (:name unitfrom)
       :DemandGroup   (or (:demandgroup demandto) "UnGrouped")
       :FillType      (:quality  fill)
       :FollowOn      (:followon fill)
-      :UnitType      (:src unitfrom)
+      :UnitType      (:src  unitfrom)
       :Component     (:component unitfrom)
+      ;;INCONSISTENT: This data doesn't exist in unitdata at the moment.
       :DeploymentID  (:deploymentindex unitfrom)
-      :DeployDate    deploydate
-      :FollowOnCount followons
+      :DeployDate     deploydate
+      :FollowOnCount  followons
       :AtomicPolicy  (generic/atomic-name pol)
       :DeployInterval t
-      :FillPath      (:fillpath fill)
+      :FillPath      (:fillPath fill)
       :Period        period
       :Demand        (:name       demandto)
       :PathLength    (:pathlength fill)
       :BogBudget     bogbudget
       :CycleTime     (:cycletime unitfrom)
       :DeploymentCount deployments
-      :DemandType    (:primaryunit demandto)
+      :DemandType    (:src demandto)
       :FillCount     fillcount
       :Location      locationfrom
       :DwellBeforeDeploy dwell
@@ -278,6 +279,43 @@
 
 (defn drop-deployments! [ctx _ _]
   (store/dissoce ctx :deployment-watch :deployments))
+
+
+;;Demand Observation
+;;==================
+;;We record the contents of demands quite a bit, and we'd like to do this
+;;efficiently.  Since contents change by demand on an eventful basis,
+;;we can maintain - like deployments - a record of "dirty" or changed
+;;demand entities, and simply observe the changes over time.  We'll
+;;tie these changes into end-of-day event activities.
+(defn some-n? [coll]  (when (and coll (pos? (count coll)))
+                        coll))
+
+;;#Potential for unintentional indirection#
+;;Currently, this is modifying some stuff in the demandstore
+;;entity, but I'm not "terribly" worried about it.  The effect
+;;is benign; it's equivalent to the old formal system of
+;;managing-changed-demands at the end of day via clearing.  If anyone
+;;wants to debate the merits of centralized vs. decentralized
+;;delta mangement, they're welcome to.  It proably makes more
+;;sense to knock the :changed component out of the demandstore
+;;and just have the demand management register changes to the
+;;demand-watch directly.  Right now, that'd require some architectural
+;;munging, not a headache, but a little redesign. 
+(defn commit-demands! [ctx edata  _]
+  (if-let [demands (some-n? (store/gete ctx :DemandStore :changed))]
+      (-> ctx
+          (store/assoce      :demand-watch :demands  demands)
+          ;;clear the changed demand component in the demandstore.          
+          )      
+    ctx))
+
+;;Clear out the observed demand changes at the beginning of each day by dropping
+;;the component.
+(defn drop-demands! [ctx _ _]
+  (-> ctx 
+      (store/assoce :demand-watch :demands nil)
+      (store/assoce :DemandStore :changed {})))
 
 ;;we seem to have a pattern emerging for event handlers...
 ;;we'd like a function that dispatches based on the type of data.
@@ -416,11 +454,15 @@
 ;;in the ECS parlance, these are actually 
 (def default-routes
   ;;this system processes deployments, and records new deployments
-  ;;each day.
+  ;;each day.  At the end of a day, the deployment-watch entity will have an updated
+  ;;component that is the concatenation of all observed deployments for the current time
+  ;;interval.
   {:deployment-watch {:begin-day     drop-deployments!   ;;ensure no deployments exist for today.
                       :deploy        record-deployment   ;;record a deployment in new-deployments 
                       :end-of-day    commit-deployments!} ;;store new-deployments in deployments
-   ;;this system will ingest events 
+   ;;this system will ingest events related to entity movement, unit policy position change, and
+   ;;unit state change.  When changes occur, ephemeral components will be added to the 
+   ;;entity that record the initial value, and the current value (via a cell).
    :telemetry-watch   {:begin-day    drop-telemetry!     ;;ensure no telemetry components exist.
                        :PositionUnit position-handler    ;;record unit policy position changes.
                        :unitMoved    movement-handler    ;;record unit location changes.
@@ -428,9 +470,10 @@
                        :end-of-day   commit-telemetry!   ;;freeze initial and final values for telemtry components.
                        }
    ;;this system looks for changes in demands and records "dirty" demands over time.
-   ;:demand-watch      {:begin-day    drop-demands!
-   ;                    :end-of-day   commit-demands!
-   ;                    }
+   ;;Allows us to monitor changes in demand contents so that we can be smarter about sampling trends.
+   :demand-watch      {:begin-day    drop-demands! ;;clear any previously changed demands
+                       :end-of-day   commit-demands!  ;;compute :dirty-demands 
+                      }
    })
 
 (defn register-default-observers [ctx]

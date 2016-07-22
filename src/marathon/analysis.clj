@@ -223,6 +223,7 @@
 (defn demand-trends
   ([t ctx]
    (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.
+         
          ]
      (->> (core/get-demandstore ctx)
           (:activedemands)
@@ -475,15 +476,18 @@
 ;;this is basically the api for performing a run....
 (defn spit-history! [h path]
   ;;hackneyed way to munge outputs and spit them to files.
-  (let [hpath (str path "history.lz4"   )
-        lpath (str path "locsamples.txt")
-        dpath (str path "depsamples.txt")
+  (let [hpath      (str path "history.lz4"   )
+        lpath      (str path "locsamples.txt")
+        dpath      (str path "depsamples.txt")
+        dtrendpath (str path "demandtrends.txt") ;probably easier (and lighter) to just diff this.
         ]        
     (do (println [:saving-history hpath])
         (write-history h hpath)
         (println [:spitting-locations lpath])
         (tbl/records->file (->location-samples h) lpath)
         (println [:spitting-deployments dpath])
+        (tbl/records->file (->deployment-samples h) dpath)
+        (println [:spitting-demandtrends dtrendpath])
         (tbl/records->file (->deployment-samples h) dpath))))
 
 ;;spits a log of all the events passing through.

@@ -339,6 +339,11 @@
                                          :order-by query/uniform 
                                          :collect-by [:name :cycletime]})))
 
+
+(def even-units-raw (->> defaultctx 
+                         (query/find-supply {:where #(even? (:cycletime %)) 
+                                             :order-by query/uniform 
+                                             })))
 ;;These queries should not change from the sampledata.
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 

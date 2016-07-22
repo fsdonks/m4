@@ -24,7 +24,7 @@
 (ns marathon.ces.engine
   (:require [marathon.ces.core   :as core :refer [now]]           
             [marathon.ces.supply :as supply :refer [manage-supply manage-followons update-all]]
-            [marathon.ces.demand :as demand :refer [manage-demands manage-changed-demands]]
+            [marathon.ces.demand :as demand :refer [manage-demands]]
             [marathon.ces.fill.demand       :refer [fill-demands]]
             [marathon.ces.policy :as policy :refer [manage-policies]]
             [marathon.data [store :as simstate]]
@@ -249,9 +249,7 @@
         (fill-demands     day)  ;Try to fill unfilled demands in priority order. 
         (manage-followons day)  ;Resets unused units from follow-on status. 
         (end-day day)           ;End of day logic and notifications.
-        ;;This is a little wierd/leftover/hacky/redundant. We should probably
-        ;;do this in a consolidated handler or something.
-        (manage-changed-demands day)));Clear set of changed demands in demandstore.
+        ))
   ([ctx] (sim-step (sim/get-time ctx) ctx)))
 
 ;;in ECS parlance, the functions in sim-step are just systems.
@@ -318,3 +316,5 @@
 (comment 
 (keep-simulating? (sim/add-time  22 emptysim))
 )
+
+

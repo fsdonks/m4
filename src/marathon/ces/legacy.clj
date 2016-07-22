@@ -3,6 +3,21 @@
 ;;efforts.
 (ns marathon.sim.legacy)
 
+;;From marathon.ces.engine
+
+;;Removed a vestigial hack called manage-changed-demands
+;;We no longer do this explicitly, as it was really only used
+;;for sampling purposes.
+;;Now, if it matters, the sampling observers handle it on their own.
+;;Has no effect on the simulation systems.
+
+;;Note: we used to have 
+;;removed changed-demand stuff.
+;;This is a little wierd/leftover/hacky/redundant. We should probably
+;;do this in a consolidated handler or something.
+;;(manage-changed-demands day)));Clear set of changed demands in demandstore.
+
+
  ; :marathon.policy.policydata 
  ; :deferred 
          ;'TOM Change 20 May 2011 -> Policy nodes are NOW POSITIONS, no longer Locations.
