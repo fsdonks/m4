@@ -260,7 +260,8 @@
 ;    (fill-demands day)      ;Try to fill unfilled demands in priority order. 
 ;    (manage-followons day)  ;Resets unused units from follow-on status. 
     (engine/end-day day)           ;End of day logic and notifications.
-    (demand/manage-changed-demands day)));Clear set of changed demands
+                                        ;(demand/manage-changed-demands day))
+    );Clear set of changed demands
                                         ;in demandstore.
 
 (def demand-sim (analysis/->simulator demand-step defaultctx))
@@ -547,7 +548,8 @@
          (filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.         
          (supply/manage-followons day)  ;Resets unused units from follow-on status. 
          (engine/end-day day)           ;End of day logic and notifications.
-         (demand/manage-changed-demands day))));Clear set of changed demands in demandstore.
+         ;(demand/manage-changed-demands day)
+         )));Clear set of changed demands in demandstore.
 
 ;               (engine/sim-step 1)))
 
@@ -641,7 +643,8 @@
          (filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.
          (supply/manage-followons day)  ;Resets unused units from follow-on status. 
          (engine/end-day day)           ;End of day logic and notifications.
-         (demand/manage-changed-demands day))))
+         ;(demand/manage-changed-demands day)
+         )))
 )
 
 ;;we need to verify that overlap is working...
