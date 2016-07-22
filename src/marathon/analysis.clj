@@ -93,6 +93,9 @@
                                        (f t ctx))))))))
           (f (last ks) (get h (last ks))))))
 
+;;#OPTIMIZATION
+;;my gut says we can do this more efficiently, with regards to
+;;final, since it holds onto the tail of the stream
 (defn ->seq-samples [f kvs]
   (let [pairs (partition 2 1 kvs)
         final (last kvs)]
@@ -136,7 +139,6 @@
 (defn ->location-samples   [h]  (->collect-samples core/locations   h))
 ;;I think this is similar to demand-trends.
 (defn ->deployment-samples [h]  (->collect-samples core/deployments h))
-(defn ->demand-trends      [h]  (->collect-samples core/deployments h))
 ;;compute the deployments table
 
 ;;so, we basically just pipe th deployments component
@@ -231,6 +233,8 @@
                    :OtherFilled   (- ua (+ AC RC NG Ghost)) }
                   ))))))
   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
+
+(defn ->demand-trends      [h]  (->collect-samples demand-trends h))
 
 ;;creating legacy output from basic data..
 ;;fills are a join of unit<>demanddata<>deployments
