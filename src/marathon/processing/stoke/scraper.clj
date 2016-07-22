@@ -747,7 +747,6 @@
    (:SupplyNetwork proj) (:SupplyNodeFilters proj) 
    (:DemandPreferences proj) supply demand :demand-sorter (->demand-sorter (:Groups proj) supply)))
 
-
 (defn check-bounds 
   "Assert that no srcs are both bounded and fixed."
   [fixed bounded]

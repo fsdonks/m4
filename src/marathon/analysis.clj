@@ -4,7 +4,7 @@
 ;;define ways to process simulation history
 ;;and produce dynamic analysis.
 (ns marathon.analysis
-  (:require [spork.util.table       :as tbl]           
+  (:require [spork.util.table       :as tbl]            
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
@@ -20,8 +20,9 @@
              [store :as store]]
             [spork.sim.simcontext     :as sim]
             [marathon
-             [serial :as ser]
-             [util :as util]]))
+             [observers :as obs]
+             [serial    :as ser]
+             [util      :as util]]))
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]  
@@ -173,6 +174,22 @@
    :GhostFilled	   :int
    :OtherFilled	   :int})
 
+(def dt-fields   [:t  	           
+                  :Quarter	   
+                  :SRC	           
+                  :TotalRequired   
+                  :TotalFilled	   
+                  :Overlapping	   
+                  :Deployed	   
+                  :DemandName	   
+                  :Vignette 	   
+                  :DemandGroup	   
+                  :ACFilled	   
+                  :RCFilled	   
+                  :NGFilled	   
+                  :GhostFilled	   
+                  :OtherFilled])	   
+
 ;;If we can define trends as a map
 ;;or a reduction....
 ;;this is legacy support...
@@ -181,7 +198,7 @@
   ([t ctx]
    (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.
          ]
-     (->> (get-demandstore ctx)
+     (->> (core/get-demandstore ctx)
           (:activedemands)
           (keys)
           (map #(store/get-entity ctx %))
@@ -194,7 +211,9 @@
                                           (keys)
                                           (map (fn [nm]
                                                  (store/gete ctx nm :component)))
-                                          (frequencies))]
+                                          (frequencies))
+                        {:strs [AC RC NG Ghost]
+                         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]
                   {:t             t
                    :Quarter       qtr
                    :SRC           (:src      d)
@@ -204,9 +223,14 @@
                    :Deployed	  ua
                    :DemandName    (:name d)
                    :Vignette      vignette
-                   :DemandGroup   demandgroup]
+                   :DemandGroup   demandgroup
+                   :ACFilled      AC
+                   :RCFilled	  RC
+                   :NGFilled	  NG
+                   :GhostFilled	  Ghost
+                   :OtherFilled   (- ua (+ AC RC NG Ghost)) }
                   ))))))
-  ([ctx] (deployments (sim/get-time ctx) ctx)))
+  ([ctx] (demand-trends (sim/get-time ctx) ctx)))
 
 ;;creating legacy output from basic data..
 ;;fills are a join of unit<>demanddata<>deployments
@@ -254,7 +278,6 @@
 ;;                  })
 
 
-
 ;;API Definition
 ;;==============
 ;;This is the core of doing a "run"...
@@ -263,15 +286,22 @@
    simulation context, from which we can create a simulation
    history."
   [p]
-  (->>  (setup/simstate-from 
-         (:tables (proj/load-project p))
-         core/debugsim)
-        (sim/add-time 1)))
+   (->>  (setup/simstate-from 
+          (:tables (proj/load-project p))
+          core/debugsim)  
+         (sim/add-time 1)
+         (sim/register-routes obs/default-routes)))
 
+(defn as-context [x]
+  (cond (string? x) (load-context x)
+        (util/context? x) x
+        :else (throw (Exception.
+                      (str "Invalid MARATHON sim context " x)))))
+        
 (defn marathon-stream
   "Create a stream of simulation states, indexed by time."
-  [& {:keys [path tmax] :or {tmax 5001}}]
-  (->> (load-context path)
+  [path-or-ctx & {:keys [tmax] :or {tmax 5001}}]
+  (->> (as-context path-or-ctx)
        (->history-stream tmax engine/sim-step)))
 
 ;;serializing all the snapshots is untenable...
@@ -457,8 +487,9 @@
 (comment 
 ;;testing
 (def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+(def ctx (load-context ep))
 
-(def h (take 2 (marathon-stream :path ep)))
+(def h (take 2 (marathon-stream  ep)))
 (def l (first  h))
 (def r (second h))
 

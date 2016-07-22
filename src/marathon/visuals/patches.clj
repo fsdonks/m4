@@ -1,5 +1,7 @@
 ;;A port of the patch-chart/laydown visualization from squirm. 
 ;;We need to establish a portable format for generating these dudes.
+;;TODO: need to clean up the debris here, the entry point is
+;;down at the bottom, and is file-based.
 (ns marathon.visuals.patches
   (:require [spork.sketch :as sketch]
             [spork.geometry.shapes :as s]
@@ -435,15 +437,19 @@
 ;;of patches....more portable.  We can also add layers...
 ;;Like the readiness layer....
 
+;;API
+;;===
 ;;Entrypoint - call this on a root directory or
 ;;on a specific infile and outfile.  Note: we can
 ;;transfer this to proc possibly.
+;;Additionally, we may want to provide this as a streaming
+;;output rather than a dedicated post processing task...
 (defn locations->patches
   ([inpath outpath]
    (->  (map clean-rec (lines->samples inpath))
         (chunk-table (juxt :src :component :name))
         (patch-file  outpath)))
-  ([root] (let [inpath (str root "locsamples.txt")
+  ([root] (let [inpath  (str root "locsamples.txt")
                 outpath (str root "patches.htm")]
             (locations->patches inpath outpath))))
 

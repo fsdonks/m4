@@ -525,7 +525,7 @@
    [[case-name case-future] lazy-records]"
   [db & {:keys [field-merges] 
          :or   {field-merges {:start :StartDay 
-                                    :duration :Duration}}}]
+                              :duration :Duration}}}]
   (let [case-key   (juxt :case-name :case-future)
         fix-fields (comp (partial collapse-fields field-merges) integral-times)]
     (concat

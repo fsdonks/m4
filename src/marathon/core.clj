@@ -16,8 +16,8 @@
   (:import [javax.swing JFrame]) ;Bah!
   (:gen-class :main true))
 
-(def  path-history (atom [(System/getProperty "user.dir")]))
-(defn add-path! [p] (swap! path-history conj p))
+(def  path-history   (atom [(System/getProperty "user.dir")]))
+(defn add-path! [p]  (swap! path-history conj p))
 (defn active-path [] (last @path-history))  
 
 (defn select-file []

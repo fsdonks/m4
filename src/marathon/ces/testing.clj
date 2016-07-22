@@ -297,7 +297,7 @@
 (defn actives [rctx]
   (into [] (r/map (fn [ctx] [(sim/get-time ctx) (:activedemands (core/get-demandstore ctx))])  rctx)))
 
-(def demandctx         (demand-step 1 defaultctx))
+(def demandctx    (demand-step 1 defaultctx))
 (def unfilled-ds  (keys (val (first (:unfilledq (core/get-demandstore demandctx))))))
 
 (deftest unfilled-demands

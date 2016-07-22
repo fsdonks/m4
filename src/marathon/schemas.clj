@@ -5,7 +5,6 @@
   (:require [spork.util [parsing :as p]
                         [table :as tbl]
                         [general :as g]]))
-
 (defn schema [name field-defs]
   {(keyword name)
    (reduce (fn [acc f]
@@ -14,6 +13,7 @@
                  (-> acc (assoc (first f) (second f)))))
              {}
              field-defs)})
+
 (defn schemas [& xs]
   (reduce merge (for [[n fields] xs] 
                   (schema n fields))))
