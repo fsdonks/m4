@@ -11,6 +11,7 @@
 
 (defn context? [x]
   (instance? spork.sim.simcontext.simcontext x))
+
 ;;util functions, move these out...
 (defn compare-lines [l r]
   (with-open [left  (clojure.java.io/reader l)
