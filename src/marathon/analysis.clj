@@ -120,16 +120,17 @@
 ;;final, since it holds onto the tail of the stream
 ;;Also, allow sampling rate to vary...
 ;;currently we sample every day.
+;;Changed to reflect end-of-day sampling.
 (defn ->seq-samples [f kvs]
   (let [pairs (partition 2 1 kvs)
-        final (last kvs)]
-    (conj (vec (apply concat
-                      (->> pairs
-                           (mapcat (fn [[ [l ctx] [r nxt] ]]
-                                   ;;sample in between...
-                                   (for [t (range l r)]
-                                     (f t ctx)))))))
-          (f (first final) (second final)))))
+        ;final (last kvs) ;no longer necessary, possible memory leak.
+        ]
+    (apply concat
+       (->> pairs
+            (mapcat (fn [[ [l ctx] [r nxt] ]]
+                      ;;sample in between...
+                      (for [t (range l r)]
+                        (f t ctx))))))))
 
 (defn ->collect-samples [f h]
   (cond (seq? h) (->seq-samples f h)
@@ -222,8 +223,7 @@
 ;;Note: this should work with our 
 (defn demand-trends
   ([t ctx]
-   (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.
-         
+   (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.         
          ]
      (->> (core/get-demandstore ctx)
           (:activedemands)
@@ -258,6 +258,45 @@
                    :OtherFilled   (- ua (+ AC RC NG Ghost)) }
                   ))))))
   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
+
+;; (defn demand-trends
+;;   ([t ctx]
+;;    (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.
+         
+;;          ]
+;;      (->> (core/get-demandstore ctx)
+;;           (:activedemands)
+;;           (keys)
+;;           (map #(store/get-entity ctx %))
+;;           (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+;;                   (let [assigned     (:units-assigned    d)
+;;                         overlapping  (:units-overlapping d)
+;;                         ua           (count              assigned)
+;;                         uo           (count              overlapping)
+;;                         compo-fills  (->> assigned
+;;                                           (keys)
+;;                                           (map (fn [nm]
+;;                                                  (store/gete ctx nm :component)))
+;;                                           (frequencies))
+;;                         {:strs [AC RC NG Ghost]
+;;                          :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]
+;;                   {:t             t
+;;                    :Quarter       qtr
+;;                    :SRC           (:src      d)
+;;                    :TotalRequired (:quantity d)
+;;                    :TotalFilled	  (+ uo ua)
+;;                    :Overlapping   uo
+;;                    :Deployed	  ua
+;;                    :DemandName    (:name d)
+;;                    :Vignette      vignette
+;;                    :DemandGroup   demandgroup
+;;                    :ACFilled      AC
+;;                    :RCFilled	  RC
+;;                    :NGFilled	  NG
+;;                    :GhostFilled	  Ghost
+;;                    :OtherFilled   (- ua (+ AC RC NG Ghost)) }
+;;                   ))))))
+;;   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
 
 (defn ->demand-trends      [h]  (->collect-samples demand-trends h))
 
