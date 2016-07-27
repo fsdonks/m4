@@ -217,14 +217,6 @@
                   :GhostFilled	   
                   :OtherFilled])	   
 
-
-         ]
-     (->> (core/get-demandstore ctx)
-          (:activedemands)
-          (keys)
-          (map #(store/get-entity ctx %))
-
-
 ;;If we can define trends as a map
 ;;or a reduction....
 ;;this is legacy support...

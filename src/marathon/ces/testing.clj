@@ -261,7 +261,7 @@
 ;    (manage-followons day)  ;Resets unused units from follow-on status. 
     (engine/end-day day)           ;End of day logic and notifications.
                                         ;(demand/manage-changed-demands day))
-    );Clear set of changed demands
+    ));Clear set of changed demands
                                         ;in demandstore.
 
 (def demand-sim (analysis/->simulator demand-step defaultctx))
