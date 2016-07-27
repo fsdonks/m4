@@ -267,6 +267,10 @@
              (apply canv/->color-rgba 
                     (spork.graphics2d.canvas/random-color)))))
 
+;;currently limiting the output to 24 quarters, even if we simulate
+;;13 years.
+(def ^:constant +quarter-limit+ 24)
+
 ;;this is a little adapter function 
 (defn clean-rec [{:keys [t key mode] :as r}]
   (let [{:keys [name src component]} (:key r)]
@@ -446,7 +450,9 @@
 ;;output rather than a dedicated post processing task...
 (defn locations->patches
   ([inpath outpath]
-   (->  (map clean-rec (lines->samples inpath))
+   (->  (->> (lines->samples inpath)
+             (map clean-rec )
+             (take-while (fn [r] (< (:Quarter r) +quarter-limit+))))
         (chunk-table (juxt :src :component :name))
         (patch-file  outpath)))
   ([root] (let [inpath  (str root "locsamples.txt")
@@ -454,7 +460,8 @@
             (locations->patches inpath outpath))))
 
 (comment ;testing
-  (def testpath "c:/users/tspoon/Documents/srm/tst/arf/locsamples.txt")
+  (def testpath    "c:/users/tspoon/Documents/srm/tst/arf/locsamples.txt")
+  (def testpath    "c:/Users/1143108763.C/Documents/srm/cleaninput/runs/srmbase/locsamples.txt")
   (def res         (lines->samples testpath))
   (def grps        (group-by #(-> % :key :src) res))
   (def binders     (get grps    "Binder"))  

@@ -217,6 +217,14 @@
                   :GhostFilled	   
                   :OtherFilled])	   
 
+
+         ]
+     (->> (core/get-demandstore ctx)
+          (:activedemands)
+          (keys)
+          (map #(store/get-entity ctx %))
+
+
 ;;If we can define trends as a map
 ;;or a reduction....
 ;;this is legacy support...
@@ -224,79 +232,41 @@
 (defn demand-trends
   ([t ctx]
    (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.         
-         ]
-     (->> (core/get-demandstore ctx)
-          (:activedemands)
-          (keys)
-          (map #(store/get-entity ctx %))
-          (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
-                  (let [assigned     (:units-assigned    d)
-                        overlapping  (:units-overlapping d)
-                        ua           (count              assigned)
-                        uo           (count              overlapping)
-                        compo-fills  (->> assigned
-                                          (keys)
-                                          (map (fn [nm]
-                                                 (store/gete ctx nm :component)))
-                                          (frequencies))
+         changes (store/gete ctx :demand-watch :demands)
+         actives (store/gete ctx :DemandStore :activedemands)]
+     (when (seq changes)
+       (->> actives
+            (keys)
+            (map #(store/get-entity ctx %))
+            (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+                    (let [assigned     (:units-assigned    d)
+                          overlapping  (:units-overlapping d)
+                          ua           (count              assigned)
+                          uo           (count              overlapping)
+                          compo-fills  (->> assigned
+                                            (keys)
+                                            (map (fn [nm]
+                                                   (store/gete ctx nm :component)))
+                                            (frequencies))
                         {:strs [AC RC NG Ghost]
-                         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]
-                  {:t             t
-                   :Quarter       qtr
-                   :SRC           (:src      d)
-                   :TotalRequired (:quantity d)
-                   :TotalFilled	  (+ uo ua)
-                   :Overlapping   uo
-                   :Deployed	  ua
-                   :DemandName    (:name d)
-                   :Vignette      vignette
-                   :DemandGroup   demandgroup
-                   :ACFilled      AC
-                   :RCFilled	  RC
-                   :NGFilled	  NG
-                   :GhostFilled	  Ghost
-                   :OtherFilled   (- ua (+ AC RC NG Ghost)) }
-                  ))))))
+                         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]                      
+                      {:t             t
+                       :Quarter       qtr
+                       :SRC           (:src      d)
+                       :TotalRequired (:quantity d)
+                       :TotalFilled   (+ uo ua)
+                       :Overlapping   uo
+                       :Deployed      ua
+                       :DemandName    (:name d)
+                       :Vignette      vignette
+                       :DemandGroup   demandgroup
+                       :ACFilled      AC
+                       :RCFilled      RC
+                       :NGFilled      NG
+                       :GhostFilled   Ghost
+                       :OtherFilled   (- ua (+ AC RC NG Ghost))}
+            )))))))
   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
-
-;; (defn demand-trends
-;;   ([t ctx]
-;;    (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.
-         
-;;          ]
-;;      (->> (core/get-demandstore ctx)
-;;           (:activedemands)
-;;           (keys)
-;;           (map #(store/get-entity ctx %))
-;;           (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
-;;                   (let [assigned     (:units-assigned    d)
-;;                         overlapping  (:units-overlapping d)
-;;                         ua           (count              assigned)
-;;                         uo           (count              overlapping)
-;;                         compo-fills  (->> assigned
-;;                                           (keys)
-;;                                           (map (fn [nm]
-;;                                                  (store/gete ctx nm :component)))
-;;                                           (frequencies))
-;;                         {:strs [AC RC NG Ghost]
-;;                          :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]
-;;                   {:t             t
-;;                    :Quarter       qtr
-;;                    :SRC           (:src      d)
-;;                    :TotalRequired (:quantity d)
-;;                    :TotalFilled	  (+ uo ua)
-;;                    :Overlapping   uo
-;;                    :Deployed	  ua
-;;                    :DemandName    (:name d)
-;;                    :Vignette      vignette
-;;                    :DemandGroup   demandgroup
-;;                    :ACFilled      AC
-;;                    :RCFilled	  RC
-;;                    :NGFilled	  NG
-;;                    :GhostFilled	  Ghost
-;;                    :OtherFilled   (- ua (+ AC RC NG Ghost)) }
-;;                   ))))))
-;;   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
 
 (defn ->demand-trends      [h]  (->collect-samples demand-trends h))
 
@@ -370,7 +340,8 @@
   "Create a stream of simulation states, indexed by time."
   [path-or-ctx & {:keys [tmax] :or {tmax 5001}}]
   (->> (as-context path-or-ctx)
-       (->history-stream tmax engine/sim-step)))
+       (->history-stream tmax engine/sim-step)
+       (end-of-day-history)))
 
 ;;serializing all the snapshots is untenable...
 ;;can we compute diffs?
@@ -518,16 +489,17 @@
   (let [hpath      (str path "history.lz4"   )
         lpath      (str path "locsamples.txt")
         dpath      (str path "depsamples.txt")
-        dtrendpath (str path "demandtrends.txt") ;probably easier (and lighter) to just diff this.
+        dtrendpath (str path "DemandTrends.txt") ;probably easier (and lighter) to just diff this.
         ]        
     (do (println [:saving-history hpath])
-        (write-history h hpath)
+        (println [:fix-memory-leak-when-serializing!])
+        ;(write-history h hpath)
         (println [:spitting-locations lpath])
         (tbl/records->file (->location-samples h) lpath)
         (println [:spitting-deployments dpath])
         (tbl/records->file (->deployment-samples h) dpath)
         (println [:spitting-demandtrends dtrendpath])
-        (tbl/records->file (->deployment-samples h) dpath))))
+        (tbl/records->file (->demand-trends h) dpath))))
 
 ;;spits a log of all the events passing through.
 (defn spit-log
@@ -558,6 +530,9 @@
 (comment 
 ;;testing
 (def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
+;;local diff.
+(def ep "C:\\Users\\1143108763.C\\srm\\notionalbase.xlsx")
+
 (def ctx (load-context ep))
 
 (def h (take 2 (marathon-stream  ep)))
