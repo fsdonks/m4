@@ -29,6 +29,8 @@
    "MP, DA"   "MP_DA_C1"})
 
 (def root "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\")
+(def root "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\")
+
 (def srm "srmbase.xlsx")
 (def arf "arfbase.xlsx")
 (defn strip [x] (first (clojure.string/split x #"\.")))
