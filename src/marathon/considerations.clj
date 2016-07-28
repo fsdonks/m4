@@ -90,3 +90,28 @@
 ;;we can apply rules to the simulation itself, to determine
 ;;for instance, if a unit deployed to a demand, it must have
 ;;gone through training at a prior point...
+
+
+;;Potential Bugs - Pending Verification
+;;=====================================
+;;Overlap bug - legacy implementation had a problem with unit
+;;overlap + early disengagement causing invalid deployability.
+;;stemmed from inconsistent deployability criteria (should
+;;be unit's bogbudget > policy's overlap.  Believe the
+;;port eliminated this inconsistency, but it needs to be
+;;verified.
+
+
+;;Data Validation Needs
+;;=====================
+;;Having done a couple of runs and pushed the scripting
+;;and data around, it's pretty easy to mess up transitioning
+;;between SRM and ARFORGEN policies.
+;;We need to include some invariants and exceptions to
+;;safeguard the data validation prior to running.
+;;One example: if you're using a Rotational demand
+;;category, the start/endstate shouldn't matter, where
+;;if you're using SRM, they definitely matter.
+
+
+
