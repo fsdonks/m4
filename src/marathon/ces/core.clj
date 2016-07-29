@@ -28,7 +28,8 @@
                         [table    :as tbl]
                         [reducers]
                         [cellular :as cells]
-                        [inspection :as inspect]]
+                        [inspection :as inspect]
+                        [temporal :as temp]]
             [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity] :as store]
@@ -596,6 +597,41 @@
 ;;maps, so bonus.
 (defn demand-names [ctx] (keys (gete ctx :DemandStore :demandmap)))
 (defn unit-names   [ctx] (keys (gete ctx :SupplyStore :unitmap)))
+(defn unit-entities [s]
+  (store/get-domain s :unit-entity))
+(defn demand-entities [s]
+  (store/get-domain s :DemandType))
+
+;;this is actually using our new positional stuff.
+;;we need to map deployed-trend to risk....
+;;I think we just want to use demand-trends...
+;;demand-changes gets us the units...
+;;we also need to compute the peak demand.
+(defn all-demands [store]
+  (store/select-entities store :from [:startday :duration :quantity :DemandType]))
+
+;;not sure about this, we may want to break out by trends...
+;;We'll see what use case pops up for this type of query.
+(defn demand-profile [store]
+  (->> (temp/activity-profile 
+        (all-demands store)
+        :start-func :startday :duration-func :duration
+        )
+       (map (fn [[t {:keys [actives]}]]
+              [t (reduce + 0 (map :quantity actives))]))))
+
+(defn peak-demand [store]
+  (->> (temp/peak-activities
+        (all-demands store)
+        :start-func :startday :duration-func :duration
+        :peak-function (fn [{:keys [actives]}]
+                         (reduce + 0 (map :quantity actives))))
+       (first)
+       (val)
+       (:actives)
+       (map :quantity)
+       (reduce + 0)))
+
 
 ;;This is fairly close....
 (defn visualize-entities [ctx]
