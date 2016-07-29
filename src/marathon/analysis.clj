@@ -491,7 +491,7 @@
         (println [:spitting-deployments dpath])
         (tbl/records->file (->deployment-samples h) dpath)
         (println [:spitting-demandtrends dtrendpath])
-        (tbl/records->file (->demand-trends h) dpath))))
+        (tbl/records->file (->demand-trends h) dtrendpath))))
 
 ;;spits a log of all the events passing through.
 (defn spit-log
