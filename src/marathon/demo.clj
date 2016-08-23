@@ -52,14 +52,15 @@
    do-run.  Assumes that the output directory is intended to be a subdirectory 
    identical to the name of the file being processed.  Thus, blah.xlsx would 
    have its output in ./blah/... "
-  [xs]
-  (doseq [x xs]
-    (println [:running x])
-    (let [nm  (strip    x)
-          in  (str root x)
-          out (str root nm "\\")
-          _   (io/hock (str out "timestamp.txt") (System/currentTimeMillis))]
-      (do-run in out))))
+  ([folder xs]
+   (doseq [x xs]
+     (println [:running x])
+     (let [nm  (strip    x)
+           in  (str folder x)
+           out (str folder nm "\\")
+           _   (io/hock (str out "timestamp.txt") (System/currentTimeMillis))]
+       (do-run in out))))
+  ([xs] (run-cases root xs)))
 
 (comment ;testing
   (do-run ep "C:\\Users\\1143108763.C\\srm\\newtest\\")

@@ -4,7 +4,8 @@
             [marathon.processing.helmet [core :as helm]]
             [marathon.processing.stoke [core :as stoke]
                                        [io :as stokeio]
-                                       [scraper :as scraper]]
+             [scraper :as scraper]]
+            [marathon.demo :as demo]
             [clojure       [pprint :as pprint]]
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
@@ -125,14 +126,29 @@
   {;"Clean"              "Cleans a run"
    ;"High-Water"         "Computes HighWater trails"
    ;"Deployment-Vectors" "Analyzes deployments"
-   ;;"Charts"         "Generate plots."   
+   ;;"Charts"             "Generate plots."   
    "Capacity-Analysis"     "Performs a capacity run (default)"
    "Requirements-Analysis" "Performs a Requirements Run"
    "Stochastic-Demand"     "Generate stochastic demand files from a casebook."
    "Compute-Peaks"         "Extract the peak concurrent demands from a folder."
+   "Debug-Run"             "Runs the capacity analysis with output directed toward a file"
 ;;   "Custom"             "Run a custom script on the project"
 ;;   "Eval"               "Evaluate an expression in the context"
    })
+
+(def debug-menu-spec  
+  {"Noisy-Capacity-Analysis"
+      "Performs a capacity analysis with copious amounts of debug info."
+    "Really-Noisy-Capacity-Analysis"
+       "Capacity Analysis With ai-behavior level output."
+  ;  "Save-Project"    "Saves a project into the project path."
+  ;  "Save-Project-As" "Saves a currently-loaded project into path."
+ ;   "Convert-Project" "Convert a project from one format to another."
+ ;   "Derive-Project"  "Allows one to derive multiple projects from the current."
+ ;   "Migrate-Project" "Port data from a legacy version of marathon to a new one."
+   ; "Audit-Project"   "Audits the current project."
+   ; "Audit-Projects"  "Audits multiple projects"
+    })
 
 (def scripting-menu-spec
   {"Load-Script" "Load a clojure script into the environment."
@@ -224,7 +240,37 @@
                                    (repeat "\\")))
             ;(select-folder))
             _ (print (str "dumping to " dump-folder))]      
-        (spit-tables cases dump-folder))))
+      (spit-tables cases dump-folder))))
+
+(defn capacity-analysis [wbpath]
+  (let [pieces       (clojure.string/split wbpath #"\\")
+        root         (io/as-directory (clojure.string/join "\\" (butlast pieces)))
+        target       (last    pieces)
+        _            (println [:running :capacity-analysis :at wbpath])]
+    (demo/run-cases root [target])))
+
+(defn capacity-analysis-dialogue []
+    (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
+                  (capacity-analysis wbpath)))
+
+(defn debug-run-dialogue []
+  (request-path [wbpath "Please select the location of a valid MARATHON project file."]
+    (let [pieces       (clojure.string/split wbpath #"\\")
+          root         (io/as-directory (clojure.string/join "\\" (butlast pieces)))
+          target       (last    pieces)
+          dbgtgt       (str root "debug.txt")
+          _ (println [:performing-debug-run :to dbgtgt])]
+      (with-open [wrtr (clojure.java.io/writer dbgtgt)]
+        (binding [*out* wrtr]
+          (marathon.ces.core/debugging                
+           (capacity-analysis wbpath)
+         ))))))
+
+(defn debug-run-dialogue! []
+  (request-path [wbpath "Please select the location of a valid MARATHON project file."] 
+     (marathon.ces.core/debugging!                
+      (capacity-analysis wbpath)
+      )))
 
 ;;holy wow this is terrible.  must be a better way...
 (defn menu-handler
@@ -238,10 +284,9 @@
             :stochastic-demand  '(stoch-demand-dialogue)
             :compute-peaks      '(compute-peaks-dialogue) 
             :say-hello          '(println "hello!")
+            :capacity-analysis  '(capacity-analysis-dialogue)
             `(~'println ~e))]
       (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
-
-(defn set-handler! [f rpl] (reset! handle (f rpl)))
 
 (defn hub [& {:keys [project exit?]}]
   (let [close-beh (if exit?
@@ -264,9 +309,8 @@
         handle-menu     (atom  (menu-handler rpl))
         reflect-selection (->> menu-events 
                                (obs/subscribe  #(gui/change-label textlog %)))
-        _                  (->> menu-events 
-                               (obs/subscribe  #(@handle-menu %)))
-        
+        _                 (->> menu-events 
+                               (obs/subscribe  #(@handle-menu %)))        
         ]
     (mvc/make-modelview 
       (agent {:state (if project {:current-project project} {})
@@ -282,6 +326,11 @@
        :repl rpl
        :handle-menu handle-menu
        :set-handler (fn [f] (reset! handle-menu (menu-handler rpl)))})))
+
+(defn reset-handler! [h]
+  (let [h (:control h)
+        r (:repl h)]
+    (reset! (:handle-menu h) (menu-handler r))))
 
 (defn -main [& args] (hub :exit? true))
 
