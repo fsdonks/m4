@@ -137,9 +137,9 @@
    })
 
 (def debug-menu-spec  
-  {"Noisy-Capacity-Analysis"
+  {"Debug-Run"
       "Performs a capacity analysis with copious amounts of debug info."
-    "Really-Noisy-Capacity-Analysis"
+    "Debug-Run-Heavy"
        "Capacity Analysis With ai-behavior level output."
   ;  "Save-Project"    "Saves a project into the project path."
   ;  "Save-Project-As" "Saves a currently-loaded project into path."
@@ -285,6 +285,7 @@
             :compute-peaks      '(compute-peaks-dialogue) 
             :say-hello          '(println "hello!")
             :capacity-analysis  '(capacity-analysis-dialogue)
+            :debug-run          '(debug-run-dialogue)
             `(~'println ~e))]
       (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
 
@@ -299,14 +300,18 @@
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"
                                                 processing-menu-spec)
+        debug-menu      (gui/map->reactive-menu "Debug"
+                                                debug-menu-spec)
         main-menu       (gui/menu-bar (:view project-menu)
-                                      (:view processing-menu))
-        menu-events     (obs/merge-obs (-> project-menu :control :event-stream)
-                                       (-> processing-menu :control :event-stream)) 
+                                      (:view processing-menu)
+                                      (:view debug-menu))
+        menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
+                                             (-> processing-menu :control :event-stream)
+                                             (-> debug-menu   :control :event-stream)])
         textlog         (gui/label "Idle")
-        audit           (gui/button "Audit" (fn [_] 
-                                              (obs/notify! menu-events :audit)))
-        handle-menu     (atom  (menu-handler rpl))
+        audit           (gui/button "Clear" (fn [_] 
+                                              (obs/notify! menu-events :clear)))
+        handle-menu       (atom  (menu-handler rpl))
         reflect-selection (->> menu-events 
                                (obs/subscribe  #(gui/change-label textlog %)))
         _                 (->> menu-events 
