@@ -111,7 +111,7 @@
 )
 
 (def project-menu-spec  
-   {"Load-Project"    "Loads a project into the context."
+  {"Load-Project"    "Loads a project into the context."
   ;  "Save-Project"    "Saves a project into the project path."
   ;  "Save-Project-As" "Saves a currently-loaded project into path."
  ;   "Convert-Project" "Convert a project from one format to another."
@@ -125,11 +125,11 @@
   {;"Clean"              "Cleans a run"
    ;"High-Water"         "Computes HighWater trails"
    ;"Deployment-Vectors" "Analyzes deployments"
-   ;;"Charts"         "Generate plots."
-   "Capacity Analysis"  "Performs a capacity run (default)"
-   "Requirements Analysis" "Performs a Requirements Run"
-   "Stochastic-Demand"  "Generate stochastic demand files from a casebook."
-   "Compute-Peaks"      "Extract the peak concurrent demands from a folder."
+   ;;"Charts"         "Generate plots."   
+   "Capacity-Analysis"     "Performs a capacity run (default)"
+   "Requirements-Analysis" "Performs a Requirements Run"
+   "Stochastic-Demand"     "Generate stochastic demand files from a casebook."
+   "Compute-Peaks"         "Extract the peak concurrent demands from a folder."
 ;;   "Custom"             "Run a custom script on the project"
 ;;   "Eval"               "Evaluate an expression in the context"
    })
@@ -226,16 +226,30 @@
             _ (print (str "dumping to " dump-folder))]      
         (spit-tables cases dump-folder))))
 
-;;weirdly enough....if I make a repl-panel to begin with...
-;;this works fine, otherwise we get a weird stalling behavior...
+;;holy wow this is terrible.  must be a better way...
+(defn menu-handler
+  "Default menu-handling function.  Handles events coming from the 
+   swing menu, which are typically just keywords, and dispatches them 
+   to the appropriate command."
+  [rpl]
+  (fn [e]
+    (let [expr 
+          (case e
+            :stochastic-demand  '(stoch-demand-dialogue)
+            :compute-peaks      '(compute-peaks-dialogue) 
+            :say-hello          '(println "hello!")
+            `(~'println ~e))]
+      (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
 
-(do (repl-panel 800 600) nil)
+(defn set-handler! [f rpl] (reset! handle (f rpl)))
 
 (defn hub [& {:keys [project exit?]}]
-  (let [close-beh (if exit? (fn [^JFrame fr] 
-                        (doto fr
-                          (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
-                    identity)
+  (let [close-beh (if exit?
+                    (fn [^JFrame fr] 
+                      (doto fr
+                        (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
+                      identity)
+        rpl             (repl/repl-panel 800 600)
         project-menu    (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"
@@ -244,19 +258,16 @@
                                       (:view processing-menu))
         menu-events     (obs/merge-obs (-> project-menu :control :event-stream)
                                        (-> processing-menu :control :event-stream)) 
-        textlog (gui/label "Idle")
-        audit   (gui/button "Audit" (fn [_] 
-                                      (obs/notify! menu-events :audit)))
-;        textbox (gui/text-box)
+        textlog         (gui/label "Idle")
+        audit           (gui/button "Audit" (fn [_] 
+                                              (obs/notify! menu-events :audit)))
+        handle-menu     (atom  (menu-handler rpl))
         reflect-selection (->> menu-events 
-                            (obs/subscribe  #(gui/change-label textlog %)))
-        _                 (->> menu-events 
-                            (obs/filter-obs #(= % :stochastic-demand))
-                            (obs/subscribe (fn [_] (stoch-demand-dialogue))))
-        _                 (->> menu-events 
-                            (obs/filter-obs #(= % :compute-peaks))
-                            (obs/subscribe (fn [_] (compute-peaks-dialogue))))
-        rpl               (repl/repl-panel 800 600)]
+                               (obs/subscribe  #(gui/change-label textlog %)))
+        _                  (->> menu-events 
+                               (obs/subscribe  #(@handle-menu %)))
+        
+        ]
     (mvc/make-modelview 
       (agent {:state (if project {:current-project project} {})
               :routes (merge default-routes project-routes)})       
@@ -267,7 +278,10 @@
                    (gui/stack textlog  
                               rpl
                               audit))
-      {:menu-events menu-events})))
+      {:menu-events menu-events
+       :repl rpl
+       :handle-menu handle-menu
+       :set-handler (fn [f] (reset! handle-menu (menu-handler rpl)))})))
 
 (defn -main [& args] (hub :exit? true))
 
