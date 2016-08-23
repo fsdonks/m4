@@ -8,11 +8,22 @@
 
 (def ep "C:\\Users\\1143108763.C\\srm\\notionalbase.xlsx")
 
-(defn build-patches [rootpath]
+(defn build-patches
+  "Given a path to a processed run directory, renders the 
+   processed history into a stylized HTML file.  The styling 
+   is compatible with web browsers, and can be imported to 
+   Excel.  The visualization looks like a unit 'patch chart'."
+  [rootpath]
   (do (println [:building-patches (str rootpath "patches.htm")])
       (patches/locations->patches rootpath)))
 
-(defn do-run [from-path target-path]
+(defn do-run
+  "Given two paths to folders - a path to a marathon project 
+   [from-path], and a path to post results to [target-path] - 
+   computes the marathon history for the run, producing results 
+   into the target path.  Default outputs will be derived from 
+   the simulation history, including a compressed history."
+  [from-path target-path]
   (do (a/spit-history! (a/marathon-stream from-path) target-path)
       (build-patches target-path)))
 
@@ -35,7 +46,13 @@
 (def arf "arfbase.xlsx")
 (defn strip [x] (first (clojure.string/split x #"\.")))
 
-(defn run-cases [xs]
+;;this is probably our primary api.
+(defn run-cases
+  "Given a sequence of paths to case files, processes each case in turn per
+   do-run.  Assumes that the output directory is intended to be a subdirectory 
+   identical to the name of the file being processed.  Thus, blah.xlsx would 
+   have its output in ./blah/... "
+  [xs]
   (doseq [x xs]
     (println [:running x])
     (let [nm  (strip    x)

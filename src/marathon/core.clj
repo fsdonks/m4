@@ -9,12 +9,26 @@
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
-                           [native :as swing-events]])
+             [native :as swing-events]]
+            [piccolotest.repl :as repl])
   (:use [spork.util.mailbox]
         [marathon.processing.post]
         [marathon.project])
   (:import [javax.swing JFrame]) ;Bah!
   (:gen-class :main true))
+
+(def noisy (atom true))
+(defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
+;;From Stuart Sierra's blog post, for catching otherwise "slient" exceptions
+;;Since we're using multithreading and the like, and we don't want
+;;exceptions to get silently swallowed
+(let [out *out*]
+  (Thread/setDefaultUncaughtExceptionHandler
+   (reify Thread$UncaughtExceptionHandler
+     (uncaughtException [_ thread ex]
+       (when @noisy 
+         (binding [*out* out]
+           (println ["Uncaught Exception on" (.getName thread) ex])))))))
 
 (def  path-history   (atom [(System/getProperty "user.dir")]))
 (defn add-path! [p]  (swap! path-history conj p))
@@ -98,19 +112,22 @@
 
 (def project-menu-spec  
    {"Load-Project"    "Loads a project into the context."
-    "Save-Project"    "Saves a project into the project path."
-    "Save-Project-As" "Saves a currently-loaded project into path."
-    "Convert-Project" "Convert a project from one format to another."
-    "Derive-Project"  "Allows one to derive multiple projects from the current."
-    "Migrate-Project" "Port data from a legacy version of marathon to a new one."
-    "Audit-Project"   "Audits the current project."
-    "Audit-Projects"  "Audits multiple projects"})
+  ;  "Save-Project"    "Saves a project into the project path."
+  ;  "Save-Project-As" "Saves a currently-loaded project into path."
+ ;   "Convert-Project" "Convert a project from one format to another."
+ ;   "Derive-Project"  "Allows one to derive multiple projects from the current."
+ ;   "Migrate-Project" "Port data from a legacy version of marathon to a new one."
+   ; "Audit-Project"   "Audits the current project."
+   ; "Audit-Projects"  "Audits multiple projects"
+    })
 
 (def processing-menu-spec
-  {"Clean"              "Cleans a run"
-   "High-Water"         "Computes HighWater trails"
-   "Deployment-Vectors" "Analyzes deployments"
-;;   "Charts"             "Generate plots."
+  {;"Clean"              "Cleans a run"
+   ;"High-Water"         "Computes HighWater trails"
+   ;"Deployment-Vectors" "Analyzes deployments"
+   ;;"Charts"         "Generate plots."
+   "Capacity Analysis"  "Performs a capacity run (default)"
+   "Requirements Analysis" "Performs a Requirements Run"
    "Stochastic-Demand"  "Generate stochastic demand files from a casebook."
    "Compute-Peaks"      "Extract the peak concurrent demands from a folder."
 ;;   "Custom"             "Run a custom script on the project"
@@ -196,9 +213,10 @@
           _ (print (str "dumping to " dump-folder))]      
       (spit-tables cases dump-folder))))
 
+;;legacy auditing of marathon workbooks.....needs verification.
 (defn audit-project-dialogue []
   (request-path [wbpath "Please select the location of valid case-files."]  
-    (let [fl          (clojure.java.io/file wbpath)
+    (let [fl           (clojure.java.io/file wbpath)
           cases       {(str (io/fname fl) \_ "split.txt") (tbl/read-table fl)}
           ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
           dump-folder ;(if dump-same?
@@ -208,19 +226,24 @@
             _ (print (str "dumping to " dump-folder))]      
         (spit-tables cases dump-folder))))
 
+;;weirdly enough....if I make a repl-panel to begin with...
+;;this works fine, otherwise we get a weird stalling behavior...
+
+(do (repl-panel 800 600) nil)
+
 (defn hub [& {:keys [project exit?]}]
   (let [close-beh (if exit? (fn [^JFrame fr] 
                         (doto fr
                           (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
                     identity)
-        project-menu   (gui/map->reactive-menu "Project-Management"  
+        project-menu    (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"
                                                 processing-menu-spec)
-        main-menu (gui/menu-bar (:view project-menu)
-                                (:view processing-menu))
-        menu-events (obs/merge-obs (-> project-menu :control :event-stream)
-                                    (-> processing-menu :control :event-stream)) 
+        main-menu       (gui/menu-bar (:view project-menu)
+                                      (:view processing-menu))
+        menu-events     (obs/merge-obs (-> project-menu :control :event-stream)
+                                       (-> processing-menu :control :event-stream)) 
         textlog (gui/label "Idle")
         audit   (gui/button "Audit" (fn [_] 
                                       (obs/notify! menu-events :audit)))
@@ -232,15 +255,17 @@
                             (obs/subscribe (fn [_] (stoch-demand-dialogue))))
         _                 (->> menu-events 
                             (obs/filter-obs #(= % :compute-peaks))
-                            (obs/subscribe (fn [_] (compute-peaks-dialogue))))]
+                            (obs/subscribe (fn [_] (compute-peaks-dialogue))))
+        rpl               (repl/repl-panel 800 600)]
     (mvc/make-modelview 
       (agent {:state (if project {:current-project project} {})
               :routes (merge default-routes project-routes)})       
       (gui/display (->> (close-beh 
                           (gui/empty-frame "Marathon Project Management")) 
-                        (gui/add-menu main-menu))
+                        (gui/add-menu main-menu)
+                        )
                    (gui/stack textlog  
-                              (gui/text-box) 
+                              rpl
                               audit))
       {:menu-events menu-events})))
 

@@ -595,12 +595,10 @@
 ;;Short queries...we should move these away from being a map for
 ;;entities, and into sets. Set access is actually faster than
 ;;maps, so bonus.
-(defn demand-names [ctx] (keys (gete ctx :DemandStore :demandmap)))
-(defn unit-names   [ctx] (keys (gete ctx :SupplyStore :unitmap)))
-(defn unit-entities [s]
-  (store/get-domain s :unit-entity))
-(defn demand-entities [s]
-  (store/get-domain s :DemandType))
+(defn demand-names    [ctx] (keys (gete ctx :DemandStore :demandmap)))
+(defn unit-names      [ctx] (keys (gete ctx :SupplyStore :unitmap)))
+(defn unit-entities   [s]   (store/get-domain s :unit-entity))
+(defn demand-entities [s]   (store/get-domain s :DemandType))
 
 ;;this is actually using our new positional stuff.
 ;;we need to map deployed-trend to risk....

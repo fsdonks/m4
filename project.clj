@@ -10,5 +10,8 @@
                  [org.clojure/core.logic "0.8.10"]
                  ]
   :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m"]
-  ;:main marathon.core
+  :profiles {:uberjar {:aot [marathon.core]
+                       :main marathon.core
+                        }}
+  ;
   )
