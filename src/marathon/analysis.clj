@@ -25,12 +25,46 @@
              [serial    :as ser]
              [util      :as util]]))
 
+;;ripped from clojure.core.reducers temporarily...
+(defn- do-curried
+  [name doc meta args body]
+  (let [cargs (vec (butlast args))]
+    `(defn ~name ~doc ~meta
+       (~cargs (fn [x#] (~name ~@cargs x#)))
+       (~args ~@body))))
+
+(defmacro  defcurried
+  "Builds another arity of the fn that returns a fn awaiting the last
+  param"
+  [name doc meta args & body]
+  (do-curried name doc meta args body))
 ;;Note: there's a problem with the compile-time trick here...
 ;;in-ns, used in spork.util.reducers, actually produces
+;;Huh...well, we'll have to cop this.
+;;we're going to add in iterate, range, and friends
+;;Reducers patch for Clojure courtesy of Alan Malloy, CLJ-992, Eclipse Public License
+(defcurried r-iterate
+  "A reducible collection of [seed, (f seed), (f (f seed)), ...]"
+  {:added "1.5"}
+  [f seed]
+  (reify
+    clojure.core.protocols/CollReduce
+    (coll-reduce [this f1] (clojure.core.protocols/coll-reduce this f1 (f1)))
+    (coll-reduce [this f1 init]
+      (loop [ret (f1 init seed), seed seed]
+        (if (reduced? ret)
+          @ret
+          (let [next (f seed)]
+            (recur (f1 ret next) next)))))
+    
+    clojure.lang.Seqable
+    (seq [this]
+      (seq (clojure.core/iterate f seed)))))
+
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]  
-  (r/take-while identity (r/iterate (fn [ctx]
+  (r/take-while identity (r-iterate (fn [ctx]
                                        (when  (engine/keep-simulating? ctx)
                                           (let [init ctx
                                                 t  (sim/get-time ctx)

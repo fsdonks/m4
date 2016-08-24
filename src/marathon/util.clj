@@ -232,3 +232,42 @@
   
   
   
+(comment
+  (defn flatten-requires [[req & xs]]
+    (flatten 
+     (for [reqs xs]
+       (case (count reqs)
+         1   (first reqs)
+         (let [[root & decls] reqs]
+           (or (seq (for [d (take-while #(not= % :refer) decls)
+                     :when (coll? d)]
+                      (symbol (str (name root) "." (name (first d))))))
+               root))))))
+  (defmacro timed-require [xs]
+    (let [reqs (flatten-requires xs)]
+      `(do ~@(for [r reqs]
+               `(do (println (quote ~r))
+                    (time (require (quote ~r) :reload)))))))
+                                  
+  '(:require [spork.util.table]            
+             [marathon.ces
+              [core     :as core]
+              [engine   :as engine]
+              [setup    :as setup]
+              ]             
+             [clojure.core.reducers :as r]
+             [spork.util.reducers]
+             [clojure.pprint :refer [pprint]]
+             [marathon [project  :as proj]]
+             [marathon.project [linked :as linked]
+              [excel  :as xl]]
+             [spork.entitysystem
+              [diff    :as diff]
+              [store   :as store]]
+             [spork.sim.simcontext     :as sim]
+             [marathon
+              [observers :as obs]
+              [serial    :as ser]
+              [util      :as util]]
+             )
+)

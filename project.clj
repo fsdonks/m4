@@ -13,6 +13,15 @@
   :profiles {:uberjar {:aot  [marathon.main]
                        :main  marathon.main
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
-                        }}
+                       }
+             :publish [:uberjar
+                       {:aot [spork.util.reducers
+                              spork.cljgui.components.PaintPanel
+                              spork.cljgui.components.swing
+                              spork.util.table
+                              spork.util.metaprogramming                              
+                              marathon.ces.core
+                              marathon.serial 
+                              marathon.core]}]}
   )
 
