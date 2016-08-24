@@ -8,7 +8,8 @@
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
-                          ]
+             ]
+
             [clojure.core.reducers :as r]
             [spork.util.reducers]
             [clojure.pprint :refer [pprint]]
@@ -23,6 +24,9 @@
              [observers :as obs]
              [serial    :as ser]
              [util      :as util]]))
+
+;;Note: there's a problem with the compile-time trick here...
+;;in-ns, used in spork.util.reducers, actually produces
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]  

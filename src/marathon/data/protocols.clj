@@ -4,8 +4,8 @@
 ;core data structures....especially if the core data structures are just 
 ;maps or records (which support a map API).
 (ns marathon.data.protocols
-  (:use [spork.util.metaprogramming :only [keyvals->constants]]
-        [spork.cljgraph.core :as graph]))
+  (:require [spork.cljgraph [core :as graph]]
+            [spork.util.metaprogramming :refer [keyvals->constants]]))
 
 ;This is the policy interface.  We have both constant and composite 
 ;(or time/event variant) policies. This interface is used to implement a common 
@@ -317,7 +317,7 @@
 (defn compute-cycle-length [p]
   (let [pg (get-position-graph p)]
     (reduce + 
-            (let [[hd & tl] (first (graph/cyclical-components pg))
+            (let [[hd & tl] (first (spork.cljgraph.core/cyclical-components pg))
                   full (into [(last tl) hd] tl)] 
               (map (fn [[from to]]  
                      (graph/arc-weight pg from to)) (partition 2 1 full))))))

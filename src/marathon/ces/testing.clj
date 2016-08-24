@@ -21,6 +21,7 @@
                           [unit     :as unit]
                           [policy   :as policy]
                           [policyio :as policyio]
+                          [policyops :as policyops]
                           [sampledata :as sd]
                           [entityfactory :as ent]
                           [setup :as setup]

@@ -4,9 +4,11 @@
             [marathon.processing.helmet [core :as helm]]
             [marathon.processing.stoke [core :as stoke]
                                        [io :as stokeio]
-             [scraper :as scraper]]
+                                        ;[scraper :as scraper]
+             ]
             [marathon.demo :as demo]
-            [clojure       [pprint :as pprint]]
+            [clojure       [pprint :as pprint]
+                           [set :as set]]
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
@@ -16,7 +18,8 @@
         [marathon.processing.post]
         [marathon.project])
   (:import [javax.swing JFrame]) ;Bah!
-  (:gen-class :main true))
+  ;(:gen-class :main true)
+  )
 
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
@@ -289,13 +292,14 @@
             `(~'println ~e))]
       (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
 
-(defn hub [& {:keys [project exit?]}]
+(defn hub [& {:keys [project exit? repl-options]}]
   (let [close-beh (if exit?
                     (fn [^JFrame fr] 
                       (doto fr
                         (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
                       identity)
-        rpl             (repl/repl-panel 800 600)
+        rpl             
+                          (repl/repl-panel 800 600)
         project-menu    (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"
@@ -337,7 +341,8 @@
         r (:repl h)]
     (reset! (:handle-menu h) (menu-handler r))))
 
-(defn -main [& args] (hub :exit? true))
+(defn -main [& args]
+  (hub :exit? true))
 
 ;       :add-table   
 ;       :clear-project     

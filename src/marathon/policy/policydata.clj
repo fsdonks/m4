@@ -10,8 +10,9 @@
 ;;graph with special properties.  
 (ns marathon.policy.policydata
   (:use [spork.util.record :only [defrecord+]])
-  (:require [marathon.data  [protocols :as core]]
-            [spork.cljgraph [core :as graph]]))
+  (:require [spork.cljgraph [core :as graph]]
+            [marathon.data  [protocols :as core]]
+            ))
 
 ;__TODO__ Extend core/IRotationPolicy protocol to policy and
 ;policycomposite..

@@ -1,5 +1,6 @@
 (ns marathon.ces.policyops
-  (:require [spork.util.metaprogramming :refer [keyvals->constants]]
+  (:require
+            [spork.util.metaprogramming :refer [keyvals->constants]]
             [spork.cljgraph.core :as graph]
             [marathon.ces.core :refer [+inf+]]
             [marathon.policy.policydata :as policydata]            
