@@ -292,6 +292,45 @@
             `(~'println ~e))]
       (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
 
+;;work on separating out from the jframe.
+;; (defn hub-panel []
+;;   (let [rpl             (repl/repl-panel 800 600)
+;;         project-menu    (gui/map->reactive-menu "Project-Management"  
+;;                                                project-menu-spec)
+;;         processing-menu (gui/map->reactive-menu "Processing"
+;;                                                 processing-menu-spec)
+;;         debug-menu      (gui/map->reactive-menu "Debug"
+;;                                                 debug-menu-spec)
+;;         main-menu       (gui/menu-bar (:view project-menu)
+;;                                       (:view processing-menu)
+;;                                       (:view debug-menu))
+;;         menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
+;;                                              (-> processing-menu :control :event-stream)
+;;                                              (-> debug-menu   :control :event-stream)])
+;;         textlog         (gui/label "Idle")
+;;         audit           (gui/button "Clear" (fn [_] 
+;;                                               (obs/notify! menu-events :clear)))
+;;         handle-menu       (atom  (menu-handler rpl))
+;;         reflect-selection (->> menu-events 
+;;                                (obs/subscribe  #(gui/change-label textlog %)))
+;;         _                 (->> menu-events 
+;;                                (obs/subscribe  #(@handle-menu %)))        
+;;         ]
+;;     (mvc/make-modelview 
+;;       (agent {:state (if project {:current-project project} {})
+;;               :routes (merge default-routes project-routes)})       
+;;       (gui/display (->> (close-beh 
+;;                           (gui/empty-frame "Marathon Project Management")) 
+;;                         (gui/add-menu main-menu)
+;;                         )
+;;                    (gui/stack textlog  
+;;                               rpl
+;;                               audit))
+;;       {:menu-events menu-events
+;;        :repl rpl
+;;        :handle-menu handle-menu
+;;        :set-handler (fn [f] (reset! handle-menu (menu-handler rpl)))})))
+
 (defn hub [& {:keys [project exit? repl-options]}]
   (let [close-beh (if exit?
                     (fn [^JFrame fr] 
