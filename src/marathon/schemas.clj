@@ -21,7 +21,6 @@
 ;;Various schemas for representing marathon related input data.
 ;;We'll add output here as well.
 ;;Where field types are not annotated, the inferred type is :text .
-
 (def marathon-schemas    
    {:PolicyTemplates 
     [[:Behavior  :keyword]
@@ -155,6 +154,21 @@
     :Group
     :DemandType
     "Title 10_32"]})
+
+;;optional helper function.
+;;Allows us to print the schemas in a format readable
+;;by beamer and other presntation stuff.
+(defn print-schema
+  ([schema field-spec]
+    (str "- " (name schema) \newline
+         (clojure.string/join \newline
+             (for [fld field-spec]
+                (let [fname (if (vector? fld) (name (first fld)) (name fld))
+                      ftype (if (vector? fld) (second fld) :text)
+                      fdoc  (if (vector? fld) (get fld 2 "") "")]
+                  (format "  - %s %s %s" fname ftype fdoc))))         
+         ))
+  ([v] (print-schema (first v) (second v))))
 
 (def known-schemas 
   (reduce-kv (fn [acc name fields]
