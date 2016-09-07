@@ -16,7 +16,8 @@
             [piccolotest.repl :as repl])
   (:use [spork.util.mailbox]
         [marathon.processing.post]
-        [marathon.project])
+        [marathon.project]
+        [clojure.repl])
   (:import [javax.swing JFrame]) ;Bah!
   ;(:gen-class :main true)
   )
@@ -55,25 +56,23 @@
   ([msg] (fn [] (gui/alert (str msg " Not Implemented"))))
   ([] (not-implemented "")))
 
+
 ;project-manager is a simple agent that maintains internal state. 
 ;we design the event handling functions as simple events that the user enters,
 ;can communicate them to project-manager. 
 
 ;Project-manager then routes tasks, using the currently-loaded project as its 
 ;environment. 
-
 (defn project-mvc [routes init-state]
   {:model (agent {:state init-state
                   :routes routes})
    :view nil 
    :control route-message})
 
-
 (def sample-path 
   "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling")
 (def sample 
   "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling\\MPI_3.760298326.xlsm")
-
 
 ;This is a hack, need a more elegant solution.
 (defn tbl->view [t & {:keys [sorted] :or 
@@ -81,7 +80,7 @@
     (gui/->swing-table (tbl/table-fields t)
                        (tbl/table-rows t) 
                        :sorted sorted))   
-
+(comment 
 (def project-routes 
   {:clear-project (message-handler 
                     (assoc-in env 
@@ -106,7 +105,7 @@
                        (add-table (:current-project state)
                           msg-data))))}) ;state->msg->state
 
-(comment 
+
   (def project-manager
     (project-mvc (merge default-routes project-routes)   {}))
   
@@ -154,8 +153,9 @@
     })
 
 (def scripting-menu-spec
-  {"Load-Script" "Load a clojure script into the environment."
-   "REPL"        "Jack in to a Read Evaluate Print Loop."})
+  {"Load-Script" "Load a clojure script into the environment."})
+(def help-menu-spec
+  {"Search-For" "Interactive Help"})
 
 (def preferences-menu-spec
   {"Update" "Check for updates to Marathon."
@@ -294,6 +294,10 @@
             :capacity-analysis  '(capacity-analysis-dialogue)
             :debug-run          '(debug-run-dialogue)
             :examine-project    '(examine-project-dialogue)
+            :search-for         '(pprint/pprint
+                                  (apropos
+                                   (gui/input-box
+                                    :prompt "Enter A Topic")))
             `(~'println ~e))]
       (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
 
@@ -350,12 +354,22 @@
                                                 processing-menu-spec)
         debug-menu      (gui/map->reactive-menu "Debug"
                                                 debug-menu-spec)
+        scripting-menu  (gui/map->reactive-menu "Scripting"
+                                                scripting-menu-spec)
+        help-menu       (gui/map->reactive-menu "Help"
+                                                help-menu-spec)
         main-menu       (gui/menu-bar (:view project-menu)
                                       (:view processing-menu)
-                                      (:view debug-menu))
+                                      (:view scripting-menu)
+                                      (:view debug-menu)
+                                      (:view help-menu)
+                                       )        
         menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
                                              (-> processing-menu :control :event-stream)
-                                             (-> debug-menu   :control :event-stream)])
+                                             (-> debug-menu   :control :event-stream)
+                                             (-> help-menu    :control :event-stream)
+                                             (-> scripting-menu :control :event-stream)
+                                             ])
         textlog         (gui/label "Idle")
         audit           (gui/button "Clear" (fn [_] 
                                               (obs/notify! menu-events :clear)))
