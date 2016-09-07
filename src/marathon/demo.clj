@@ -58,6 +58,11 @@
   (core/visualize-entities 
    (a/load-context path)))
 
+(defn audit-project
+  ""
+  [path]
+  )
+
 (comment ;testing
   (do-run ep "C:\\Users\\1143108763.C\\srm\\newtest\\")
   (def h

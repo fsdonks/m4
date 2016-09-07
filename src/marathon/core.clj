@@ -301,6 +301,9 @@
                                   (apropos
                                    (gui/input-box
                                     :prompt "Enter A Topic")))
+            :load-script        '(load-file
+                                  (gui/input-box
+                                   :prompt "Select a Clojure script"))
             `(~'println ~e))]
       (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
 
