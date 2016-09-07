@@ -79,8 +79,9 @@
                        {sorted true}}]    
     (gui/->swing-table (tbl/table-fields t)
                        (tbl/table-rows t) 
-                       :sorted sorted))   
-(comment 
+                       :sorted sorted))
+
+;;Probably need to modify this....
 (def project-routes 
   {:clear-project (message-handler 
                     (assoc-in env 
@@ -104,6 +105,8 @@
                      (assoc-in env [:state :current-project] 
                        (add-table (:current-project state)
                           msg-data))))}) ;state->msg->state
+
+(comment 
 
 
   (def project-manager
