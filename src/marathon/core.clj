@@ -115,7 +115,7 @@
 )
 
 (def project-menu-spec  
-  {"Load-Project"    "Loads a project into the context."
+  {"Examine-Project"    "Provides a visual presentation of a project."   
   ;  "Save-Project"    "Saves a project into the project path."
   ;  "Save-Project-As" "Saves a currently-loaded project into path."
  ;   "Convert-Project" "Convert a project from one format to another."
@@ -275,6 +275,10 @@
       (capacity-analysis wbpath)
       )))
 
+(defn examine-project-dialogue []
+  (request-path [wbpath "Please select the location of a valid MARATHON project file."] 
+     (demo/examine-project wbpath)))
+
 ;;holy wow this is terrible.  must be a better way...
 (defn menu-handler
   "Default menu-handling function.  Handles events coming from the 
@@ -289,6 +293,7 @@
             :say-hello          '(println "hello!")
             :capacity-analysis  '(capacity-analysis-dialogue)
             :debug-run          '(debug-run-dialogue)
+            :examine-project    '(examine-project-dialogue)
             `(~'println ~e))]
       (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
 

@@ -50,6 +50,14 @@
        (do-run in out))))
   ([xs] (run-cases root xs)))
 
+(defn examine-project
+  "Given a path to a valid MARATHON project, will load the project into a 
+   simulation context, and present a tree-based view of the initial state.
+   Useful for exploring the simulation state data structure, and debugging."
+  [path]
+  (core/visualize-entities 
+   (a/load-context path)))
+
 (comment ;testing
   (do-run ep "C:\\Users\\1143108763.C\\srm\\newtest\\")
   (def h
