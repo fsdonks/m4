@@ -202,7 +202,8 @@
          pol    (:policy unitfrom)]
      {:Unit          (:name unitfrom)
       :DemandGroup   (or (:demandgroup demandto) "UnGrouped")
-      :FillType      (:quality  fill)
+      :FillType      (if (zero? (:pathlength fill))
+                       "Primary" "Substitution")
       :FollowOn      (:followon fill)
       :UnitType      (:src  unitfrom)
       :Component     (:component unitfrom)

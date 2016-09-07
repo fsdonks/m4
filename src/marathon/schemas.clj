@@ -297,3 +297,49 @@
     (tbl/tabdelimited->table txt :schema schm)
     (throw (Exception. (str "Unknown schema " name)))))
     
+
+;;Field Order
+;;===========
+;;some useful stuff for writing ordered records (i.e. output)
+(def deployment-fields
+  [:DeploymentID ;;INCONSISTENT: This data doesn't exist in unitdata at the moment.
+   :Location
+   :Demand
+   :DwellBeforeDeploy
+   :BogBudget
+   :CycleTime
+   :DeployInterval
+   :DeployDate
+   :FillType
+   :FillCount
+   :UnitType
+   :DemandType
+   :DemandGroup
+   :Unit
+   :Policy
+   :AtomicPolicy
+   :Component
+   :Period
+   :FillPath
+   :PathLength
+   :FollowOn
+   :FollowOnCount
+   :DeploymentCount
+   ])
+
+(def demandtrend-fields
+  [:t  	        
+   :Quarter	
+   :SRC	        
+   :TotalRequired	
+   :TotalFilled	
+   :Overlapping	
+   :Deployed	
+   :DemandName	
+   :Vignette	
+   :DemandGroup	
+   :ACFilled	
+   :RCFilled	
+   :NGFilled	
+   :GhostFilled	
+   :OtherFilled])

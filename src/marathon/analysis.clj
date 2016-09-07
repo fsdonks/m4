@@ -21,6 +21,7 @@
              [store :as store]]
             [spork.sim.simcontext     :as sim]
             [marathon
+             [schemas   :as schemas]
              [observers :as obs]
              [serial    :as ser]
              [util      :as util]]))
@@ -215,45 +216,15 @@
        (mapcat (fn [[t ctx]]
                  (when-let [deps (store/get-domain ctx :deployments)]
                     (first (vals deps)))))
-       (filter identity)))
+       (filter identity)
+       (map-indexed (fn [idx d] (assoc d :DeploymentID idx)))))
 
 
 ;;note: we may need to replicate the audit trail for completeness
 ;;sake....this should be fairly easy...it's simple io stuff.
 
 ;;we only need to capture this when demands change..
-(def demand-trend-schema
-  {:t  	           :int
-   :Quarter	   :int ;;derived...
-   :SRC	           :text
-   :TotalRequired  :int
-   :TotalFilled	   :int
-   :Overlapping	   :int
-   :Deployed	   :int
-   :DemandName	   :text
-   :Vignette 	   :text
-   :DemandGroup	   :text
-   :ACFilled	   :int
-   :RCFilled	   :int
-   :NGFilled	   :int
-   :GhostFilled	   :int
-   :OtherFilled	   :int})
-
-(def dt-fields   [:t  	           
-                  :Quarter	   
-                  :SRC	           
-                  :TotalRequired   
-                  :TotalFilled	   
-                  :Overlapping	   
-                  :Deployed	   
-                  :DemandName	   
-                  :Vignette 	   
-                  :DemandGroup	   
-                  :ACFilled	   
-                  :RCFilled	   
-                  :NGFilled	   
-                  :GhostFilled	   
-                  :OtherFilled])	   
+	   
 
 ;;If we can define trends as a map
 ;;or a reduction....
@@ -519,17 +490,22 @@
   (let [hpath      (str path "history.lz4"   )
         lpath      (str path "locsamples.txt")
         dpath      (str path "depsamples.txt")
+        deploypath (str path "deployments.txt")
         dtrendpath (str path "DemandTrends.txt") ;probably easier (and lighter) to just diff this.
         ]        
     (do (println [:saving-history hpath])
         (println [:fix-memory-leak-when-serializing!])
         ;(write-history h hpath)
         (println [:spitting-locations lpath])
-        (tbl/records->file (->location-samples h) lpath)
-        (println [:spitting-deployments dpath])
+        (tbl/records->file (->location-samples h) lpath )
+        (println [:spitting-deployed-samples dpath])
         (tbl/records->file (->deployment-samples h) dpath)
+        (println [:spitting-deployments deploypath])
+        (tbl/records->file (->deployment-records h) deploypath
+          :field-order schemas/deployment-fields)
         (println [:spitting-demandtrends dtrendpath])
-        (tbl/records->file (->demand-trends h) dtrendpath))))
+        (tbl/records->file (->demand-trends h) dtrendpath
+           :field-order schemas/demandtrend-fields))))
 
 ;;spits a log of all the events passing through.
 (defn spit-log
@@ -590,3 +566,38 @@
 
 ;;
 
+;;obe
+(comment
+  (def demand-trend-schema
+  {:t  	           :int
+   :Quarter	   :int ;;derived...
+   :SRC	           :text
+   :TotalRequired  :int
+   :TotalFilled	   :int
+   :Overlapping	   :int
+   :Deployed	   :int
+   :DemandName	   :text
+   :Vignette 	   :text
+   :DemandGroup	   :text
+   :ACFilled	   :int
+   :RCFilled	   :int
+   :NGFilled	   :int
+   :GhostFilled	   :int
+   :OtherFilled	   :int})
+
+(def dt-fields   [:t  	           
+                  :Quarter	   
+                  :SRC	           
+                  :TotalRequired   
+                  :TotalFilled	   
+                  :Overlapping	   
+                  :Deployed	   
+                  :DemandName	   
+                  :Vignette 	   
+                  :DemandGroup	   
+                  :ACFilled	   
+                  :RCFilled	   
+                  :NGFilled	   
+                  :GhostFilled	   
+                  :OtherFilled])
+)

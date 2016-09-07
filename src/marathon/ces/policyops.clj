@@ -664,6 +664,8 @@
 ;;adding a bunch of default templates, these are basically just
 ;;aliases....
 
+;;Aliasing is causing us problems....we're getting strange
+;;run-time errors.  Need to sort this out...
 (def aliases
   {"AC12"  ac12
    "AC13"  ac13

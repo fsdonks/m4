@@ -27,18 +27,6 @@
   (do (a/spit-history! (a/marathon-stream from-path) target-path)
       (build-patches target-path)))
 
-;;This is just a helper to translate from craig's encoding for
-;;srm policy positions.
-(def translation
-  {"MA, DA" "MA_DA_C1"
-   "MD, DA" "MD_DA_C1"
-   "MA, NDA" "MA_NDA_C1"
-   "Ready"   "R_C2"
-   "PB"      "PB_C3"
-   "MP, NDA"  "MP_NDA_C3"
-   "PT"       "PT_C4"
-   "MP, DA"   "MP_DA_C1"})
-
 (def root "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\")
 (def root "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\")
 
@@ -66,4 +54,18 @@
   (do-run ep "C:\\Users\\1143108763.C\\srm\\newtest\\")
   (def h
     (a/load-context "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\srmbase.xlsx"))
-)
+
+;;This is just a helper to translate from craig's encoding for
+;;srm policy positions.
+(def translation
+  {"MA, DA" "MA_DA_C1"
+   "MD, DA" "MD_DA_C1"
+   "MA, NDA" "MA_NDA_C1"
+   "Ready"   "R_C2"
+   "PB"      "PB_C3"
+   "MP, NDA"  "MP_NDA_C3"
+   "PT"       "PT_C4"
+   "MP, DA"   "MP_DA_C1"})
+  )
+
+
