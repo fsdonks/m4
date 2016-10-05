@@ -67,9 +67,6 @@
  ;;we could always color it based on a spectrum... 
 ;;hardwired for now...
 
-
-
-
 ;;a more parametric version
 ;;Really, this divides our space up into
 ;;3 regions, defined by overlapping
@@ -98,13 +95,13 @@
 (let [f (->assessor 365        365
                     (+ 366 90) 270
                     (+ 366 90) 271)]                    
-  (defn pos->color [x y]
-    (cond ;(zero? y) nil
-      (or  (between? x 0 365)
-           (> y 365)) :red
-           (and (between? x 366 (+ 366 90))  (between? y 1 270))   :orange
-           (and (between? x 366 (+ 366 90))  (between? y 271 365)) :amber
-           (and (> x 366)  (between? y 271 365)) :amber
+  (defn pos->color [dwell bog]
+    (cond ;(zero? bog) nil
+      (or  (between? dwell 0 365)
+           (> bog 365)) :red
+           (and (between? dwell 366 (+ 366 90))  (between? bog 1 270))   :orange
+           (and (between? dwell 366 (+ 366 90))  (between? bog 271 365)) :amber
+           (and (> dwell 366)  (between? bog 271 365)) :amber
            :else :green)))
 
 ;; (picc/render!
@@ -113,15 +110,16 @@
 ;;                     (picc/->filled-rect :orange (+ 366 90)  0 (- 1095 366 90) 270)
 ;;                     (picc/->filled-rect :green  730  0 (- 1095 730) 270)]))
 
-
+;;assessments currently map to java.awt.Color values...
+;;we'd like to maybe not do this?
 
 ;;Note: we can optimize this later
 ;;by applying a dwell-velocity
 ;;to units, and a bog-velocity
 (defn arforgen-assessment [ent]
-  (let [dwell (unit/get-dwell ent)
-        bog   (unit/get-bog   ent)]
-    (pos->color dwell bog)))
+  (pos->color (unit/get-dwell ent) (unit/get-bog ent)))
+
+;;currently maps to color...
 
 ;;No idea how to assess SRM at the moment...
 ;;we could just have the color's mirror
@@ -136,8 +134,50 @@
     (throw (Exception. (str "No known color for "
                             (:positionpolicy ent))))))
 
+;;can we make the assessor smarter?
+;;For instance, if the entity is following an SRM behavior,
+;;we assess it differently?
+
+;;Currently....we're not mixing ARF and SRM...
+;;at some point we may though.
+
+;;Just try to get the animation working.
+
+
+;;So now we can define assessors...
+;;Basically, anything that maps a map-like object
+;;to 
+
 ;;the interesting bit is....which assessor do we
 ;;use?  Does it depend on policy or behavior?
 
 ;;for now, we'll just default to assessing using
 ;;arforgen...
+
+
+;;There's probably a generic widget in here somewhere...
+;;for instance, we can display an assessment
+;;node in piccolotest...a surface.
+
+;;As long as you have a function that projects
+;;from inputs to a color space, you can have a
+;;surface.
+
+;;Further, we can plot markers on the surface.
+;;Currently, said markers are just entities...
+
+;;how do we assess our RC entities?
+;;How do we have a normalized assessment too?
+
+;;Additionally, when we plot the entity,
+;;what are the x,y coords if we're assessing based off
+;;of bog/dwell?
+;;We can still plot dwell/bog coords...
+
+;;So, for now, we'll have our assessment
+;;change the colors of entities as a function of bog/dwell.
+
+;;Since we don't have an event-based interface here,
+;;we'll have to scan all entities with a policy and assess them
+;;every timestep to compute "dynamic" colors for
+;;fills, etc.

@@ -233,6 +233,13 @@
 ;End Property
 (defn get-dwell [u] (-> u :currentcycle :dwell))
 
+(defn unit-stats [u]
+  (let [c (:currentcycle u)]
+    {:bog        (:bog   c)
+     :dwell      (:dwell c)
+     :cycle-time (:cycletime u)
+     :duration   (:duration-expected c)}))
+
 ;Public Property Get BDR() As Single
 ;BDR = CurrentCycle.BDR
 ;End Property

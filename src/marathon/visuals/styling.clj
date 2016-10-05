@@ -1,7 +1,7 @@
 ;;A namespace to keep color palettes and
 ;;style-related information together
 ;;for charting and whatnot.
-(ns marthon.visuals.styling)
+(ns marathon.visuals.styling)
 
 (defn ->color [[r g b]] (java.awt.Color. (int r) (int g) (int b)))
 (def palette
