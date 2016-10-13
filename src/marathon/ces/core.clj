@@ -148,6 +148,20 @@
                              )))))
   ([ctx] (fills  (sim/get-time ctx) ctx)))
 
+;;Tells us is the location is a demand
+(defn demand? [ctx location]
+  (contains? (store/gete ctx :DemandStore :demandmap) location))
+
+(defn active-fills [ctx]
+  (persistent!
+   (reduce-kv (fn [acc id _]
+                (let [d (store/get-entity ctx id)]
+                  (as-> acc inner
+                    (reduce conj! inner (keys (:units-assigned d)))
+                    (reduce conj! inner (keys (:units-overlapping d))))))
+              (transient [])
+              (store/gete ctx :DemandStore :activedemands))))
+
 ;;This is a pretty useful deployment query....
 ;;provides us with a map of 
 (defn deployments
