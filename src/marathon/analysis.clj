@@ -323,24 +323,27 @@
 (defn load-context
   "Given a viable Marathon Project, p, we derive and initial 
    simulation context, from which we can create a simulation
-   history."
-  [p]
+   history.  An optional function table-xform may be supplied 
+   to pre-process the project tables, to implement options 
+   like filtering, etc."
+   [p & {:keys [table-xform] :or {table-xform identity}}]
    (->>  (setup/simstate-from 
-          (:tables (proj/load-project p))
+          (table-xform (:tables (proj/load-project p)))
           core/debugsim)  
          (sim/add-time 1)
          (sim/register-routes obs/default-routes)))
 
-(defn as-context [x]
-  (cond (string? x) (load-context x)
+(defn as-context [x & {:keys [table-xform]
+                       :or {table-xform identity}}]
+  (cond (string? x) (load-context x :table-xform table-xform)
         (util/context? x) x
         :else (throw (Exception.
                       (str "Invalid MARATHON sim context " x)))))
         
 (defn marathon-stream
   "Create a stream of simulation states, indexed by time."
-  [path-or-ctx & {:keys [tmax] :or {tmax 5001}}]
-  (->> (as-context path-or-ctx)
+  [path-or-ctx & {:keys [tmax table-xform] :or {tmax 5001 table-xform identity}}]
+  (->> (as-context path-or-ctx :table-xform table-xform)
        (->history-stream tmax engine/sim-step)
        (end-of-day-history)))
 
