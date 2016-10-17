@@ -347,6 +347,19 @@
        (->history-stream tmax engine/sim-step)
        (end-of-day-history)))
 
+;;simple-project xforms               
+(defn filter-srcs
+  "Given a sequence of srcs to keep, pre-processes the project tables 
+   to retain only records with an associated :SRC value, where the value 
+   is in the set defined by srcs.  Defaults to filtering supply and demand 
+   records."
+  [srcs & {:keys [tables]
+                             :or {tables [:SupplyRecords :DemandRecords]}}]
+  (let [srcs        (set srcs)
+        tbl-filter #(spork.util.table/filter-records (fn [r]  (srcs (:SRC r))) %)]
+      (fn [tbls]
+        (reduce (fn [acc t] (update acc t tbl-filter)) tbls tables))))
+
 ;;serializing all the snapshots is untenable...
 ;;can we compute diffs?
 ;;All we really care about, as we traverse forward,

@@ -35,7 +35,8 @@
 
 ;;no change for estore.
 (defn unit-msg [unit ctx]
-  (str "Updated Unit " (:name unit) " " (get-stats (:name unit) ctx)))
+  (str "Updated Unit " (:name unit) " " (get-stats (:name unit) ctx))
+  )
 
 (defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
 ;;estore version
