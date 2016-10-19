@@ -101,7 +101,6 @@
 ;;port eliminated this inconsistency, but it needs to be
 ;;verified.
 
-
 ;;Data Validation Needs
 ;;=====================
 ;;Having done a couple of runs and pushed the scripting
@@ -113,5 +112,14 @@
 ;;category, the start/endstate shouldn't matter, where
 ;;if you're using SRM, they definitely matter.
 
+;;Additional Policy/Demand Validation For SRM Policies
+;;====================================================
+;;It'd be a "good thing" to be able to verify ahead of time
+;;if we have demands that can never have their preconditions
+;;met based on the policies of units.  For instance, we
+;;had a M_NDA_C1 transition that never could actually
+;;happen.  So, we need to shore this up and tell the user
+;;ahead of time if there's a problem.
 
+;;Note: shouldn't be an issue with older policies.
 
