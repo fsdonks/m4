@@ -53,7 +53,7 @@
    duration
    (.duration sdata)
    (.statestart sdata)
-   (conj (.statehistory sdata) tostate)))
+   (.cons ^clojure.lang.PersistentVector (.statehistory sdata) tostate)))
 
 (defn remaining [fsm]  
    (- (:duration fsm) (:timeinstate fsm)))

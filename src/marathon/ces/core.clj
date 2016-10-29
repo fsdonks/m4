@@ -690,6 +690,11 @@
 ;;:default and :SRM categories of supply, i.e. they never go away.
 (def known-buckets #{:default :SRM "SRM"})
 
+;;PERFORMANCE NOTE: This is on the HotSpot, Apparently....
+;;maybe just clojure 1.7, but we're creating a keyseq for clojure.core/keys,
+;;which is exploiting this hotspot.  Should be way faster.  we'll use
+;;reduce-kv to alleviate it....
+
 ;;The name here is a bit generic.  We're really trying to acquire the keys of 
 ;;a map that contains information about followon-eligible supply.  In this 
 ;;context, the keys are actually the followon-code of the unit, (typically a
@@ -699,8 +704,20 @@
    supply.  Used for constraining or preferring supply during the followon 
    fill phase."
   [ctx]
-  (let [m (into #{} (filter (complement known-buckets) (keys (store/gete ctx :SupplyStore :deployable-buckets))))]
+  (let [m  (reduce-kv (fn [acc k _]
+                        (if-not (known-buckets k) (conj! acc k) acc)) (transient #{})
+                        (store/gete ctx :SupplyStore :deployable-buckets))]
+    (when (pos? (count m)) (persistent! m))))
+
+(comment ;old
+(defn get-followon-keys
+  "Returns a sequence of followon codes that are currently present in the 
+   supply.  Used for constraining or preferring supply during the followon 
+   fill phase."
+  [ctx]
+  (let [m (into #{} (filter (complement known-buckets)) (keys (store/gete ctx :SupplyStore :deployable-buckets)))]
     (when (pos? (count m)) m)))
+)
 
 ;;Check the validity here...
 ;;Do we need so much redundancy now?

@@ -169,6 +169,21 @@
   (supply-record  "SupplyRecord"  true 1 "Ghost" "Ghost"
                   "Anything" "Auto"  "Ghost365_45" ;default behavior...
                   0 "Ghost365_45" "Auto"  0 "Auto" "Auto" false))
+;;note:
+;;the act of "creating supply" from a supply record
+;;transforms a serialized form into a sequence of instructions
+;;that create entities and schedule initial behavior, like spawning.
+;;So, one way to view it is that the record maps to a sequence of
+;;instructions, which yield entities.
+
+;;We're basically altering the initial supply via supply records....
+;;The reason we do so is because the system is setup to initialize
+;;the context from raw tables, so changing the data creates
+;;new sim contexts automagically.
+
+;;As we look at how to vary supply programmatically, rather than
+;;"just" varying the table, we could look into varying the
+;;context directly....
 
 ;;reads distributions from a table of [src ac rc ng]
 ;;probably a better way to do this...legacy implementation
@@ -180,26 +195,6 @@
               (assoc acc src {"AC" AC "RC" RC "NG" NG}}))
           {}
           (get tbls distribution-table)))
-
-'Tom change 19 April 2012
-'We need to take a count of ghosts, and convert them into n records of supply.
-'We basically merge their counts into the existing distributed set of records dynamically.
-Public Sub Distribute(src As String, count As Long, Optional Binary As Boolean, Optional ns As Collection)
-Dim amounts As Dictionary
-Dim total As Long
-Set amounts = computeAmounts(src, count)
-
-If ns.count = 0 Then
-    total = 0
-Else
-    total = ns(ns.count).item("totalghosts")
-End If
-
-applyAmounts src, amounts
-ns.add newdict("src", src, "count", count, "totalghosts", total + count, "added", amounts, "total", copysupply)
-
-End Sub
-
 
 ;;kind of lame at the moment
 ;;should return a map of [compo val]

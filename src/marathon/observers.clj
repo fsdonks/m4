@@ -192,6 +192,7 @@
    :Policy            :text})
 
 
+;;PERFORMANCE NOTE: Minor Hotspot
 ;;note: filldata == {:keys [rule fillPath pathlength followon source]}
 ;;should match the deprecord schema.
 (defn new-deployment
@@ -278,6 +279,10 @@
           )
     ctx))
 
+;;PERFORMANCE NOTE:
+;;This is a hotspot, it gets called often.  We're basically
+;;repeatedly dropping deployments at the beginning of everyday
+;;if we need to or not.
 (defn drop-deployments! [ctx _ _]
   (store/dissoce ctx :deployment-watch :deployments))
 

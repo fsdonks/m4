@@ -194,91 +194,97 @@
 ;;#Demand Notifications
 (defn request-fill! [demandstore category d ctx]
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore)
-     (str "Highest priority demand in Category " category " is " (:name d) 
+     (core/msg "Highest priority demand in Category " category " is " (:name d) 
           " with priority " (:priority d)) nil ctx))
 
 (defn trying-to-fill! [demandstore category ctx] 
   (sim/trigger-event :RequestFill (:name demandstore) (:name demandstore) 
-     (str "Trying to Fill Demand Category " category) nil ctx))
+     (core/msg "Trying to Fill Demand Category " category) nil ctx))
 
 (defn fill-demand! [demandstore demandname ctx]
    (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore)
-      (str "Sourced Demand " demandname) nil ctx ))
+      (core/msg "Sourced Demand " demandname) nil ctx ))
 
 (defn can-fill-demand! [demandstore demandname ctx]
   (sim/trigger-event :CanFillDemand (:name demandstore) 
-       demandname (str "Completely Filled " demandname) nil ctx))
+       demandname (core/msg "Completely Filled " demandname) nil ctx))
 
 (defn demand-fill-changed! [demandstore demand ctx]
   (sim/trigger-event :DemandFillChanged (:name demandstore) (:name demand) 
-     (str "The fill for " (:name demand) " changed.") demand ctx))
+     (core/msg "The fill for " (:name demand) " changed.") demand ctx))
 
 (defn sourced-demand! [demandstore demand ctx]
   (sim/trigger-event :FillDemand (:name demandstore) (:name demandstore) 
-     (str "Sourced Demand " (:name demand)) nil ctx))
+     (core/msg "Sourced Demand " (:name demand)) nil ctx))
 
 (defn activating-demand! [demandstore demand t ctx]
   (let [demandname (:name demand)]
     (sim/trigger-event :ActivateDemand (:name demandstore)  demandname
-                       (str "Activating demand " demandname " on day " t) nil ctx)))
+                       (core/msg "Activating demand " demandname " on day " t) nil ctx)))
 
 (defn deactivating-demand! [demandstore demand t ctx]
   (let [dname (:name demand)]
     (sim/trigger-event :DeActivateDemand (:name demandstore) dname
-       (str "DeActivating demand " dname " on day " t) dname ctx)))
+       (core/msg "DeActivating demand " dname " on day " t) dname ctx)))
 
 ;Look into unifying this with deactivating-unfilled....seems redundant.
 (defn deactivating-empty-demand! [demand t ctx]
   (sim/trigger-event :DeActivateDemand :DemandStore (:name demand)  
-       (str "Demand " (:name demand) " Deactivated on day " t
+       (core/msg "Demand " (:name demand) " Deactivated on day " t
             " with nothing deployed ") nil ctx))    
 
 (defn deactivating-unfilled! [demandstore demandname ctx] 
   (sim/trigger-event :DeActivateDemand (:name demandstore) demandname 
-       (str "Demand " demandname " was deactivated unfilled") nil ctx))
+       (core/msg "Demand " demandname " was deactivated unfilled") nil ctx))
 
 (defn removing-unfilled! [demandstore demandname ctx] 
   (sim/trigger-event :FillDemand (:name demandstore) demandname
-     (str "Removing demand " demandname " from the unfilled Q") nil ctx))
+     (core/msg "Removing demand " demandname " from the unfilled Q") nil ctx))
 
 (defn adding-unfilled! [demandstore demandname ctx] 
   (sim/trigger-event :RequestFill (:name demandstore) demandname  ;WRONG                   
-     (str "Adding demand " demandname " to the unfilled Q") nil ctx))
+     (core/msg "Adding demand " demandname " to the unfilled Q") nil ctx))
 
 (defn ghost-returned! [demand unitname ctx]
   (sim/trigger-event :GhostReturned (:src demand) unitname 
-     (str "Ghost for src " (:src demand) " left deployment.") nil ctx))
+     (core/msg "Ghost for src " (:src demand) " left deployment.") nil ctx))
 
 (defn sending-home! [unitname ctx] 
   (sim/trigger-event :supply-update :DemandStore unitname 
-     (str "Send Home Caused SupplyUpdate for " unitname) nil ctx))
+     (core/msg "Send Home Caused SupplyUpdate for " unitname) nil ctx))
 
 (defn disengaging! [demand unitname ctx]
   (sim/trigger-event :DisengageUnit :DemandStore unitname 
-     (str "Disengaging unit" unitname " from de-activated demand" 
+     (core/msg "Disengaging unit" unitname " from de-activated demand" 
         (:name demand)) nil ctx))
 
 (defn disengaging-home! [demandstore demand unit ctx]
   (sim/trigger-event :DisengageUnit (:name demandstore)  (:name unit) ;WRONG
-     (str "Sending unit" (:name unit) 
+     (core/msg "Sending unit" (:name unit) 
           "home from demand" (:name demand)) unit ctx))
 
 (defn overlapping! [demandstore demand unit ctx]
   (sim/trigger-event :overlapping-unit (:name demandstore) (:name unit)
-        (str "Overlapping unit" (:name unit) " in demand" 
+        (core/msg "Overlapping unit" (:name unit) " in demand" 
              (:name demand)) unit ctx))
 
 (defn registering-demand! [demand ctx]
   (sim/trigger-event :added-demand "DemandStore" "DemandStore" 
                      (core/msg "Added Demand " (:name demand)) nil ctx))
 
-
 ;;We can revisit this in the entitystore context in the future...
 ;;Can probably store this in a flatter context.
 ;;#Demand Registration and Scheduling
-(defn get-activations   [dstore t]
+#_(defn get-activations   [dstore t]
   (let [dmap (:demandmap dstore)]
     (set (filter dmap (get-in dstore [:activations t] nil)))))
+
+(defn get-activations   [dstore t]
+  (let [dmap (:demandmap dstore)
+        outer (.valAt ^clojure.lang.ILookup dstore :activations)
+        inner (.valAt ^clojure.lang.ILookup outer t)]
+    (set (filter dmap inner))))
+
 (defn set-activations   [dstore t m] (gen/deep-assoc dstore [:activations t] m)) ;;requires a double assoc.
 
 (defn get-deactivations [dstore t]

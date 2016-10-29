@@ -30,8 +30,9 @@
 
 (defn get-stats
   ([nm ctx]
-   (core/msg "Policy: "    (protocols/atomic-name (store/gete ctx nm :policy)) " "
-             "Cycletime: " (store/gete ctx nm :cycletime ))))
+   (let [e (store/get-entity ctx nm)]
+     (core/msg "Policy: "    (protocols/atomic-name (:policy e)) " "
+               "Cycletime: " (:cycletime e)))))
 
 ;;no change for estore.
 (defn unit-msg [unit ctx]

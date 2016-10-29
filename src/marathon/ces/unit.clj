@@ -110,6 +110,7 @@
 ;CurrentCycle.duration = CurrentCycle.duration + dt
 ;End Sub
 
+;;PERFORMANCE NOTE: This is a hotspot;
 (defn add-duration [u t]
   
   (merge u {:currentcycle (-> (:currentcycle u) 
@@ -244,7 +245,21 @@
 ;;TODO# Verify this statistic is accurate....
 (defn normalized-dwell [u] 
  (double  (/ (get u :cycletime)
-            (-> u :currentcycle :dwell-expected))))
+             (-> u :currentcycle :dwell-expected))))
+
+;;trying to boost speed.
+(comment
+  (defn normalized-dwell [^clojure.lang.ILookup u]
+    (let [ct                         (.valAt u :cycletime)
+          ^clojure.lang.ILookup cc   (.valAt u :currentcycle)]
+   (/ (double ct)
+      (.valAt cc :dwell-expected))))
+  
+;;maybe faster?
+(defn normalized-dwell [u] 
+  (/ (* 1.0 (get u :cycletime))
+     (-> u :currentcycle :dwell-expected)))
+)
 
 ;Public Property Get BDR() As Single
 ;BDR = CurrentCycle.BDR

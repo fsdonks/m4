@@ -109,6 +109,19 @@
 (defn echo [msg]
   (fn [ctx] (do (debug msg) (success ctx))))
 
+(defmacro deref!! [v]
+  (let [v (with-meta v {:tag 'clojure.lang.IDeref})]
+    `(.deref ~v)))
+
+(defmacro val-at
+  "Synonimous with clojure.core/get, except it uses interop to 
+   directly inject the method call and avoid function invocation.
+   Intended to optimize hotspots where clojure.core/get adds  
+   unwanted overhead."
+  [m & args]
+   (let [m (with-meta m  {:tag 'clojure.lang.ILookup})]
+    `(.valAt ~m ~@args)))
+
 ;;an alternative idea here...
 ;;use a closure to do all this stuff, and reify to give us implementations
 ;;for the object.  We can also just us a mutable hashmap behind the
@@ -715,6 +728,7 @@
   (when-let [pm (:prescribed-move @e)]
     (== (:t pm) tupdate)))
 
+;;PERFORMANCE NOTE: <HOTSPOT> - eliding debug info here saves time...
 ;;This hooks us up with a next-position and a wait-time
 ;;going forward.  We also now allow prescribed moves to
 ;;be set, for things like location-specific policies..
@@ -730,10 +744,10 @@
               currentpos (:positionpolicy e)
               _  (when (= currentpos :re-entry)  (println (:tupdate benv)))
               p  (or next-position
-                     (do (debug [:computing-position currentpos])
+                     (do (debug [:computing-position currentpos]) ;;performance 1
                          (get-next-position (:policy e)  currentpos)))                   
               wt (if (and next-position wait-time) wait-time
-                     (do (debug [:computing-wait (:positionpolicy e)])
+                     (do (debug [:computing-wait (:positionpolicy e)]) ;;performance 2
                          (get-wait-time @entity (:positionpolicy e) benv)))
               _ (debug [:found-move {:next-position p :wait-time wt}])]
           (bind!! {:next-position  p
@@ -922,13 +936,16 @@
           execute-move
           ]))
 
+;;PERFORMANCE NOTE: Minor HotSpot
+;;Changed to == instead of zero? due to minor perf issues.
+
 ;;State handler for generic updates that occur regardless of the state.
 ;;These are specific to the unit data structure, not any particular state.
 ;;Should we keep a timestamp with the unit? That way we can keep track
 ;;of how fresh it is.
 (befn age-unit ^behaviorenv {:keys [deltat statedata entity ctx] :as benv}
-      (let [dt (or deltat 0)]
-        (if (zero? dt)
+      (let [^long dt (or deltat 0)]
+        (if (== dt 0)
             (success benv) ;done aging.
             (let [e  @entity
                   ;_ (println [:currentcycle (:currentcycle e)])
@@ -1144,10 +1161,9 @@
    protocols/Overlapping  bogging-beh
    })
 
-(defmacro deref!! [v]
-  (let [v (with-meta v {:tag 'clojure.lang.IDeref})]
-    `(.deref ~v)))
 
+                      
+;;PERFORMANCE NOTE: HotSpot - used val-at macro to inline method calls.
 ;;lookup what effects or actions should be taken relative to
 ;;the current state we're in.  This is kind of blending fsm
 ;;and behaviortree.
@@ -1156,9 +1172,20 @@
             state  (:state  (deref!! entity) ) ;;slightly faster using keyword as function call.
             state-map (or (:statemap entity) default-statemap)]
         (if (set? state)  ;entity has multiple effects...
+          (let [stats (r/filter identity (r/map (fn [s] (val-at state-map s)) state))]
+            (->seq stats))
+          (get state-map state))))
+
+(comment ;old version
+(befn do-current-state {:keys [entity statedata] :as benv}
+      (let [;state (:state @entity)
+            state  (:state  (deref!! entity) ) ;;slightly faster using keyword as function call.
+            state-map (or (:statemap entity) default-statemap)]
+        (if (set? state)  ;entity has multiple effects...
           (let [stats (r/filter identity (r/map (fn [s] (get state-map s)) state))]
             (->seq stats))
           (get state-map state))))
+)
 
 ;;the entity will see if a message has been sent
 ;;externally, and then compare this with its current internal

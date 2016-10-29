@@ -39,12 +39,53 @@
 
 (def lastfill (atom nil))
 
+
+(defn fill-category [demandstore category ctx & {:keys [stop-early? pending] 
+                                                 :or   {stop-early? true}}]
+  ;We use our UnfilledQ to quickly find unfilled demands. 
+  (loop [pending   (or pending
+                       (dem/find-eligible-demands demandstore category ctx))
+         ctx       (dem/trying-to-fill! demandstore category ctx)]
+    (if-not (seq pending) ctx ;no demands to fill!      
+      (let [
+            demandstore (core/get-demandstore ctx)
+            demand      (second (first pending)) 
+            demandname  (:name demand)           ;try to fill the topmost demand
+            ctx         (dem/request-fill! demandstore category demand ctx)
+            _           (reset! lastfill [demand ctx])
+            [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
+            ;_           (println [fill-status demandname])
+            can-fill?   (= fill-status :filled)
+            _           (debug [:fill-status fill-status])
+            next-ctx    (if (= fill-status :unfilled) fill-ctx 
+                          (->> fill-ctx 
+                               (dem/demand-fill-changed! demandstore demand) ;2)
+                               (core/merge-entity               ;UGLY 
+                                 {:DemandStore 
+                                  (dem/register-change  (core/get-demandstore fill-ctx) demandname)})))
+            newstore    (core/get-demandstore next-ctx)
+            _ (debug [:demand    (:name demand)
+                      :pre-fill  (keys (:units-assigned demand))
+                      :post-fill (keys (:units-assigned (dem/get-demand newstore demandname)))
+                        ])                        
+             ]
+        (if (and stop-early? (not can-fill?)) ;stop trying if we're told to...
+          next-ctx                                                           ;3)
+          ;otherwise, continue filling!
+          (recur
+           (rest  pending)     ;(dem/pop-priority-map      pending) ;advance to the next unfilled demand
+           (->> (dem/sourced-demand!  newstore demand next-ctx);notification
+                ((fn [ctx] (debug [:should-be-popping demandname]) ctx))
+                (dem/update-fill      newstore demandname)  ;update unfilledQ.
+                (dem/can-fill-demand! newstore demandname))))))));notification
+
+
 ;;Tom Hack 26 May 2016
 ;;We're going to wire in the fact that SRM demands are special, and that
 ;;any other category is okay to fill...
 ;;fill/satisfy-demand will make accomodations for special categories,
 ;;namely SRM...
-(defn fill-category [demandstore category ctx & {:keys [stop-early? pending] 
+#_(defn fill-category [demandstore category ctx & {:keys [stop-early? pending] 
                                                  :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
   (loop [pending   (or pending
