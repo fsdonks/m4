@@ -86,11 +86,11 @@
                             paths (assoc default-paths 
                                          :project-path project-path)
                             tables {}}}]
-  {:name name 
-   :version version 
+  {:name         name 
+   :version      version 
    :dependencies dependencies 
-   :paths paths
-   :tables tables})
+   :paths        paths
+   :tables       tables})
 
 (defn project-path
   "Fetch the project path, or the root folder where the project is located."

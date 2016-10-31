@@ -273,12 +273,21 @@
 ;;and then use a policy parser to point at the correct policies in 
 ;;the policystore.
 (def ^:constant +policy-defaults+ 
-  {"Ghost" {:special "SpecialGhostPolicy"
-            :default "DefaultGhostPolicy"}
-   "AC"    {:special "SpecialACPolicy"
-            :default "DefaultACPolicy"}          
-   "RC"    {:special "SpecialRCPolicy"
-            :default "DefaultRCPolicy"}})
+  {"Ghost" {:special :SpecialGhostPolicy
+            :default :DefaultGhostPolicy}
+   "AC"    {:special :SpecialACPolicy
+            :default :DefaultACPolicy}          
+   "RC"    {:special :SpecialRCPolicy
+             :default :DefaultRCPolicy}
+   "NG"   {:special :SpecialNGPolicy
+           :default :DefaultNGPolicy}})
+
+;;we need a way to derive policy-defaults
+(defn default-policy [params policystore policytype component]
+  (let [policyname (get-in params [component policytype])]
+    (if-let [p (plcy/find-policy  policyname policystore)]
+      p
+      (throw (Exception. (str ["No Default Policy for " policytype component]))))))
 
 ;;Note -> we're not mutating anything here.  We can pass in a 
 ;;parameters.
@@ -290,12 +299,15 @@
   (let [policy-type  (if (or (core/empty-string? src) 
                              (not (core/special-src? (:tags parameters) src)))
                        :default
-                       :special)]
+                       :special)
+       ; _ (println [:choosing-policy policyname component policy-type])
+                    ]
     (if-let [p (or (get-in policystore [:policies policyname])
-                   (plcy/find-policy policyname policystore))]
+                   (and (not= "Auto" policyname) ;added check to policyname
+                        (plcy/find-policy policyname policystore)))]
       p 
       (if-let [res (get-in +policy-defaults+ [component policy-type])]
-        res
+        (plcy/find-policy  (get parameters res) policystore)
         (throw (Exception. (str "Default Policy is set at "  
                                 policyname  " which does not exist!")))))))
 
@@ -533,12 +545,17 @@
 ;;need to define extensible ways to create batches of units,
 ;;possibly using multimethods..
 
+(defn pstore->params [pstore] (core/get-parameters (:ctx (meta pstore))))
 ;;We can extract the supply dependencies, and the ghost arg, 
 ;;if we provide the behavior to be used.
 (defn create-units
   [idx amount pstore base-record]
   (let [bound     (+ idx (quot amount 1))
-        policy    (plcy/find-policy  (:Policy base-record) pstore)]
+        pname     (:Policy base-record)
+        policy    (case pname
+                    "Auto" (choose-policy pname (:Component base-record) pstore
+                                          (pstore->params pstore) (:SRC base-record))
+                    (plcy/find-policy pname pstore))]
     (if (pos? amount)
         (loop [idx idx
                acc []]

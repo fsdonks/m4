@@ -316,6 +316,10 @@
 ;;                  :sampled :boolean
 ;;                  })
 
+(defmacro or-get [m k & else]
+  `(if-let [res# (get ~m ~k)]
+    res#
+    ~@else))
 
 ;;API Definition
 ;;==============
@@ -325,10 +329,12 @@
    simulation context, from which we can create a simulation
    history.  An optional function table-xform may be supplied 
    to pre-process the project tables, to implement options 
-   like filtering, etc."
+   like filtering, etc.  The project may be a path to a string, 
+   "
    [p & {:keys [table-xform] :or {table-xform identity}}]
-   (->>  (setup/simstate-from 
-          (table-xform (:tables (proj/load-project p)))
+   (->>  (setup/simstate-from ;;allows us to pass maps in, hackey
+          (table-xform (or-get p :tables
+                         (:tables (proj/load-project p))))
           core/debugsim)  
          (sim/add-time 1)
          (sim/register-routes obs/default-routes)))

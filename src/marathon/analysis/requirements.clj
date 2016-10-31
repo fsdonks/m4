@@ -1,6 +1,48 @@
 ;;Requirements Analysis implementation.
 (ns marathon.analysis.requirements
-  (:require [spork.util [record :as r]]))
+  (:require [spork.util [record :as r]]
+            [marathon.ces [core :as core]]
+            [marathon [analysis :as a]]))
+
+;;Utility functions
+;;=================
+(defn ->supply-record [src compo n]
+  {:Type       "SupplyRecord"
+   :Enabled    true
+   :Quantity   n
+   :SRC        src
+   :Component  compo
+   :OITitle    (str "Generated_" src)
+   :Name       "Auto"
+   :Behavior   "Auto"
+   :CycleTime  "Auto"
+   :Policy     "Auto" 
+   :Tags       "Auto"
+   :SpawnTime  0
+   :Location   "Auto"
+   :Position   "Auto"
+   :Original   false
+   :Strength   "Auto"
+   :Remarks    "Auto"})
+
+(defn clear-supply
+  "Eliminate all the unit entities from the context."
+  [ctx]
+  )
+(defn reload-supply [ctx]
+  (default-supply))
+
+;;allows a nice handle on 
+(defn load-variable-supply-context [tbls]
+  (fn [supply-records]
+    
+    )
+  )
+(comment ;testing
+
+  (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
+  )
+
 ;;Requirements analysis is the process of calculating some required additional supply in the face of a given
 ;;demand signal.  Technically, requirements analysis is indifferent to the existence of supply.  We can
 ;;calculate a requirement regardless of pre-existing supply.  In fact, we can grow a requirement.
@@ -133,8 +175,6 @@
 ;;Note: We can also have deterministic growth
 ;;using a seeded prng...
 
-
-
 ;;oh, we need to be able to generate supply...
 ;;Well, we can delegate that to RA....
 ;;Instead of creating "supply generators"
@@ -191,7 +231,8 @@
                                               :or {distribution-table "GhostProportionsAggregate"
                                                    dtype :bin}}]
   (reduce (fn [acc r]
-            (let [{:keys [SRC AC RC NG] r}]
+            (let [{:keys [SRC AC RC NG] r}
+                   ]
               (assoc acc src {"AC" AC "RC" RC "NG" NG}}))
           {}
           (get tbls distribution-table)))
@@ -243,7 +284,7 @@
     (-> reqstate
         (apply-amounts src amounts) 
         (assoc  :steps ;;record the step we took.
-                (conj steps {:src src
+                (conj steps {:src   src
                              :count count
                              :total-ghosts (+ total count)
                              :added amounts
@@ -285,13 +326,26 @@
 ;;TODO: Replace event-step-marathon with the appropriate simreducer or whatnot.
 ;;Returns the next requirement state, if we actually have a requirement.
 ;;Otherwise nil.
-(defn calculate-requirement [reqstate ctx ns & {:keys [step distance]
-                                                :or   {step unconstrained-ghost-step
-                                                       distance history->ghosts}}]
+(defn calculate-requirements [{:keys [ctx src ns] :as reqstate}
+                              & {:keys [step distance]
+                                 :or   {step unconstrained-ghost-step
+                                        distance history->ghosts}}]
   (let [dist (-> ctx (step-function) (distance))]
     (when (pos? distance)
       (do (println "Generated ghosts on iteration")
           (distribute reqstate src dist)))))
+
+
+;;Compute a sequence of "empty" supply records
+;;from the proportions indicated 
+(defn proportion-record->supply-records [r]
+  (let [src (:SRC r)
+        compos [:AC :RC :NG]]
+    (for [c compos
+          :let [n (get r c)]
+          :when (pos? n)]
+      (->supply-record src c n))))
+  
 
 ;;do we actually need a ghost watcher?
 ;;We have ghost-specific events, like ghost spawn and the
@@ -335,60 +389,64 @@
     ;;Given a set of no new units (i.e. zero ghosts generated), iterative convergence returns the reported supply.  The data is already on-hand for
     ;;additional analysis (namely capacity analyis), if desired.
 
-;;Probably a good idea to break this apart.
-(defn ->requirement-state [ctx supply]
-  {:steps []
-   :ctx   nil
-   :supply supply
-   }
+;;creates a "lightweight" context
+;;for requirements analysis, so we can
+;;go faster.  Basically, drop any observers that
+;;aren't useful.
+(defn requirements-ctx [tbls]
+  ;;we'll basically do the same thing we normally do.
+  ;;For now at least...
+  ;;use init-context here, but 
   )
 
+;;Note: we need a higher-order function that wraps
+;;performing RA for multiple srcs...
+;;I think the chain of causality is...
+;;Given an SRC, some tables,
+;;  Filter the supply,demand,policy records...
+;;  Compute requirements (however, typically iterative convergence)
+;;    ;;Create a simcontext from filtered tables.
+;;This gives us the mapping of src->requirements
+;;really, src->supply-records
 
-;;create an efficient requirements analysis context from
-;;a set of initial tables.
-(defn requirements-context [tables]
-  (throw (Exception. (str "not implemented"))))
 
-;;Think about the inputs you'd need...
-;;We typically call this from the outside, supplying our
-;;tables....
-(defn interative-convergence [tables]
-  (let [ctx0 (requirements-ctx tables)
-        rs   (->requirement-state ctx (initial-supply ctx))
-  )
+;;we'll explicitly pass in SRC as a filter for now.
+;;It'd be really nice to share the context once we've
+;;created it....although policies and stuff might change...
+;;there's a bit of overhead in the policy stuff, so it's
+;;easier to move from ctx->ctx than otherwise...
+;;For now, we'll just suck it up. And redo every time,
+;;see how expensive it ends up being.
+(defn ->requirements-state
+  "Given a map of tables (a marathon project), 
+   creates a map that contains all of the state 
+   we'll need for our requirements analysis."
+  [tables src compo-distros]
+  (let [ctx0 (requirements-ctx tables src)
+        s    (initial-supply compo-distros)]
+    {:ctx ctx0 ;initial simulation context.
+     :supply s  ;initial set of supply records.
+     :distributions compo-distros
+     :steps []
+     :iteration 0}))
 
-Public Sub IterativeConvergence(Optional logevents As Boolean, Optional addcapacity As Boolean, Optional squeeze As Boolean)
-
-Dim tstrt As Single
-Dim logger As TimeStep_ObserverLogFile
-Dim ghosts As TimeStep_ObserverGhostWatch
-'tom change 25 April 2012
-Dim ns As Collection
-
-Set ns = New Collection
-Iteration = 0
-importSupplyRecords
-importAggregateDistributions , dtype
-
-Err.Raise 101, , "Needs updating!"
-If sim Is Nothing Then
-    Set sim = New TimeStep_Engine
-    sim.noio = noio
-    sim.Initialize_Engine_FromExcel New TimeStep_SimState, True  'this will cause overhead....
-Else
-    sim.noio = noio
-    sim.Reset_Engine_FromExcel
-End If
-     
-
-If logevents Then
-    Set logger = New TimeStep_ObserverLogFile
-    logger.init "ReqEvents" & Iteration, sim.EventManager.evtstream
-End If
-     
-    
-     
-tstrt = Timer()
+(defn interative-convergence
+  "Given a requirements-state, searches the force structure 
+   space by varying the supply of the requirements, until 
+   it converges on a minimum feasible force structure.
+   At the low end, we'll just be performing multiple 
+   capacity analyses..."
+  [{:keys [ctx supply distributions] :as reqstate}]
+  ;;we need afucntion to reset the engine.
+  ;;Since we're using immutable data, it's easier...
+  ;;We don't have to reset.
+  (loop [reqs      reqstate]
+    (if-let [res (calculate-requirement reqs)] ;;naive growth.
+      (recur (inc iteration)
+             res)
+      res)
+         
+    ))
 
 Do
     Set ghosts = sim.outputmanager.observers("Ghosts")
@@ -435,6 +493,23 @@ End Sub
 Private Function zeroSupply(ns As Collection) As Dictionary
 Set zeroSupply = copyDict(ns(1))
 End Function
+
+(defn tables->requirements
+  "Given a database of distributions, and the required tables for a marathon 
+   project, computes a sequence of [src {compo requirement}] for each src."
+  [tbls & {:keys [dtype search] :or {search requirements-search
+                                     dtype :proportional}}]
+  (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
+        distros (import-aggregate-distributions tbls dtype) 
+        srcs    (keys distros)]
+    (for [[src compo->distros] srcs]
+      (let [_ (println [:computing-requirements src])
+            src-filter (a/filter-srcs [src])
+            src-tables (src-filter tbls) ;alters SupplyRecords, DemandRecords
+            req-state  (->requirements-state src-tables ;create the searchstate.
+                                             src compo->distros)
+            ]
+        [src (search reqstate)]))))
 
 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
 'This is meant to be performed on a single SRC, i.e. a single independent requirement.
@@ -523,22 +598,6 @@ Set sim = Nothing
 
 End Sub
 
-
-;;We use this...
-Public Sub FastConvergence(Optional logevents As Boolean, Optional Binary As Boolean)
-noio = True
-IterativeConvergence logevents, , Binary
-End Sub
-
-
-;; Public Sub BinaryConvergence()
-;; noio = True
-;; BisectionConvergence False
-;; End Sub
-
-
-
-
 ;; Private Sub makeghost()
 
 ;; Dim grecord As GenericRecord
@@ -569,89 +628,8 @@ End Sub
 ;; End Sub
 
 
-
-;; 'Write the supplytable to xl.
-;; Public Sub updateGeneratedSupply()
-;; Static rcrdstream As IRecordStream
-;; Dim rec
-;; Dim tmp
-;; Static myrecord As GenericRecord
-
-
-;; 'TOM change 16 April 2012
-;; 'Set rcrdstream = New Streamer_xl
-;; Set rcrdstream = New Streamer_CSV
-
-
-;; For Each rec In supplyTable
-;;     Set myrecord = supplyTable(rec)
-;;     rcrdstream.init myrecord.fieldnames, ActiveWorkbook.path & "\GeneratedSupply.csv"
-;;     Exit For
-;; Next rec
-
-;; For Each rec In supplyTable
-;;     Set myrecord = supplyTable(rec) 'these are float values.
-;;     Set myrecord = myrecord.clone
-;;     myrecord.UpdateField "Quantity", myrecord.fields("Quantity")
-;;     rcrdstream.writeGeneric myrecord
-;; Next rec
-
-;; End Sub
-
-
-
+;;GeneratedSupply.csv  is out default output, apparently.
 ;;Don't think we really need these...
-
-;; ;;increment the count in the record.  Based on src and component, calculate a key to fetch the record from
-;; ;;the supplytable.  Then increment the count of the record.
-;; Public Sub incRecord(src As String, component As String, increment As Single)
-;; Static rec As GenericRecord
-
-;; Static val As Single
-;; If hasrecord(src, component) Then
-;;     Set rec = supplyTable(Encode(src, component))
-;;     val = rec.fields("Quantity")
-;;     rec.UpdateField ("Quantity"), val + increment
-;; Else
-;;     supplyTable.add (Encode(src, component)), srecord(src, component, CLng(increment))
-;; End If
-
-;; End Sub
-
-;; ;;increment the count in the record.  Based on src and component, calculate a key to fetch the record from
-;; ;;the supplytable. Then increment the count of the record.
-;; Public Sub setRecord(src As String, component As String, amount As Single)
-;; Static rec As GenericRecord
-
-;; 'Static val As Single
-;; If hasrecord(src, component) Then
-;;     Set rec = supplyTable(Encode(src, component))
-;;     'val = rec.fields("Quantity")
-;;     rec.UpdateField ("Quantity"), CLng(amount)
-;; Else
-;;     supplyTable.add (Encode(src, component)), srecord(src, component, CLng(amount))
-;; End If
-;; End Sub
-
-;; Private Function hasrecord(src As String, component As String) As Boolean
-;; hasrecord = supplyTable.exists(Encode(src, component))
-;; End Function
-
-
-
-;; Private Function copysupply(Optional supplytbl As Dictionary) As Dictionary
-;; Dim tbl
-;; Dim ptr As GenericRecord
-;; Set copysupply = New Dictionary
-;; If supplytbl Is Nothing Then Set supplytbl = supplyTable
-;; For Each tbl In supplytbl
-;;     Set ptr = New GenericRecord
-;;     Set ptr = supplytbl.item(tbl).clone
-;;     copysupply.add tbl, ptr
-;; Next tbl
-
-;; End Function
-
 
 ;;Distributors
 ;;============
@@ -682,6 +660,16 @@ End Sub
 ;; End Select
 
 ;; End Function
+
+;;note: we need to filter only positive compodistriutions.
+
+;;multimethod for constructing different distributors.
+(defmulti distributor identity)
+(defmethod distributor :binned [n] nil))
+(defmethod distributor :continuous1418 [kw] nil)
+(defmethod distributor :rounding1418 [kw] nil)
+
+
 
 ;; ''TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
 ;; ''This is meant to be performed on a single SRC, i.e. a single independent requirement.
