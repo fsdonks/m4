@@ -299,9 +299,7 @@
   (let [policy-type  (if (or (core/empty-string? src) 
                              (not (core/special-src? (:tags parameters) src)))
                        :default
-                       :special)
-       ; _ (println [:choosing-policy policyname component policy-type])
-                    ]
+                       :special)]
     (if-let [p (or (get-in policystore [:policies policyname])
                    (and (not= "Auto" policyname) ;added check to policyname
                         (plcy/find-policy policyname policystore)))]
