@@ -46,8 +46,8 @@
   "Eliminate all the unit entities from the context."
   [ctx]
   )
-(defn reload-supply [ctx]
-  (default-supply))
+#_(defn reload-supply [ctx]
+    (default-supply))
 
 ;;allows a nice handle on 
 (defn load-variable-supply-context [tbls]
@@ -218,7 +218,7 @@
   ([src component count]
    (->srecord "SupplyRecord" true count src component (str "Generated_"  src)
               "Auto" "Auto" 0 "Auto" "Auto" 0 "Auto" "Auto" false))
-  ([src component] (srecord src component 0)))
+  ([src component] (->srecord src component 0)))
   
 
 ;;import the original provided supply records (currently from excel) into the supplytable
@@ -401,8 +401,8 @@
 ;;Returns the next requirement state, if we actually have a requirement.
 ;;Otherwise nil.
 (defn calculate-requirements [{:keys [ctx src ns] :as reqstate}
-                              & {:keys [step distance]
-                                 :or   {step unconstrained-ghost-step
+                              & {:keys [step-function distance]
+                                 :or   {step-function unconstrained-ghost-step
                                         distance history->ghosts}}]
   (let [dist (-> ctx (step-function) (distance))]
     (when (pos? distance)
@@ -483,6 +483,8 @@
 ;;This gives us the mapping of src->requirements
 ;;really, src->supply-records
 
+(defn initial-supply [compo-distros]
+  (throw (Exception. (str "not implemented"))))
 
 ;;we'll explicitly pass in SRC as a filter for now.
 ;;It'd be really nice to share the context once we've
@@ -504,6 +506,9 @@
      :steps []
      :iteration 0}))
 
+(defn calculate-requirement [reqstate]
+  (throw (Exception. (str "not implemented"))))
+
 (defn interative-convergence
   "Given a requirements-state, searches the force structure 
    space by varying the supply of the requirements, until 
@@ -514,59 +519,66 @@
   ;;we need afucntion to reset the engine.
   ;;Since we're using immutable data, it's easier...
   ;;We don't have to reset.
-  (loop [reqs      reqstate]
+  (loop [iteration 0
+         reqs      reqstate]
     (if-let [res (calculate-requirement reqs)] ;;naive growth.
       (recur (inc iteration)
              res)
-      res)
+      reqs)
          
     ))
 
-Do
-    Set ghosts = sim.outputmanager.observers("Ghosts")
-    Iteration = Iteration + 1
+;; Do
+;;     Set ghosts = sim.outputmanager.observers("Ghosts")
+;;     Iteration = Iteration + 1
     
-    If Not CalculateRequirement(sim, ghosts, , ns) Then
-        Debug.Print "No More ghosts to generate!"
-        Exit Do
-    Else
-        tstrt = Timer() - tstrt
+;;     If Not CalculateRequirement(sim, ghosts, , ns) Then
+;;         Debug.Print "No More ghosts to generate!"
+;;         Exit Do
+;;     Else
+;;         tstrt = Timer() - tstrt
         
-        If noio Then 'don't bother writing to the sheet
-            sim.Reset_Engine_FromExcel True, supplyTable 'this will reset marathon, using the GeneratedSupply Worksheet to pull in initial supply.
-        Else
-            updateGeneratedSupply
-            sim.Reset_Engine_FromExcel True
-        End If
+;;         If noio Then 'don't bother writing to the sheet
+;;             sim.Reset_Engine_FromExcel True, supplyTable 'this will reset marathon, using the GeneratedSupply Worksheet to pull in initial supply.
+;;         Else
+;;             updateGeneratedSupply
+;;             sim.Reset_Engine_FromExcel True
+;;         End If
         
-        If logevents Then
-            Set logger = Nothing
-            Set logger = New TimeStep_ObserverLogFile
-            logger.init "ReqEvents" & Iteration, sim.EventManager.evtstream
-        End If
-    End If
-Loop
+;;         If logevents Then
+;;             Set logger = Nothing
+;;             Set logger = New TimeStep_ObserverLogFile
+;;             logger.init "ReqEvents" & Iteration, sim.EventManager.evtstream
+;;         End If
+;;     End If
+;; Loop
 
 
-If squeeze Then 'Make sure we've found the optimal using bisection
-    If ns.count > 1 Then 'need to handle this corner case.
-        Bisect sim, ns, ns(ns.count - 1), ns(ns.count), Iteration
-    ElseIf ns.count = 1 Then
-        Bisect sim, ns, zeroSupply(ns), ns(ns.count), Iteration
-    End If
-End If
+;; If squeeze Then 'Make sure we've found the optimal using bisection
+;;     If ns.count > 1 Then 'need to handle this corner case.
+;;         Bisect sim, ns, ns(ns.count - 1), ns(ns.count), Iteration
+;;     ElseIf ns.count = 1 Then
+;;         Bisect sim, ns, zeroSupply(ns), ns(ns.count), Iteration
+;;     End If
+;; End If
 
-If noio Then finalIO sim
+;; If noio Then finalIO sim
 
-updateGeneratedSupply
+;; updateGeneratedSupply
 
-Set logger = Nothing
-Set sim = Nothing
+;; Set logger = Nothing
+;; Set sim = Nothing
 
-End Sub
-Private Function zeroSupply(ns As Collection) As Dictionary
-Set zeroSupply = copyDict(ns(1))
-End Function
+;; End Sub
+
+
+
+;; Private Function zeroSupply(ns As Collection) As Dictionary
+;; Set zeroSupply = copyDict(ns(1))
+;; End Function
+
+(defn requirements-search [reqs]
+  (throw (Exception. (str "not implemented"))))
 
 (defn tables->requirements
   "Given a database of distributions, and the required tables for a marathon 
@@ -574,103 +586,107 @@ End Function
   [tbls & {:keys [dtype search] :or {search requirements-search
                                      dtype :proportional}}]
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
-        distros (import-aggregate-distributions tbls dtype) 
+        distros (aggregate-distributions tbls :dtype dtype) 
         srcs    (keys distros)]
     (for [[src compo->distros] srcs]
       (let [_ (println [:computing-requirements src])
             src-filter (a/filter-srcs [src])
             src-tables (src-filter tbls) ;alters SupplyRecords, DemandRecords
-            req-state  (->requirements-state src-tables ;create the searchstate.
+            reqstate  (->requirements-state src-tables ;create the searchstate.
                                              src compo->distros)
             ]
         [src (search reqstate)]))))
 
-'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
-'This is meant to be performed on a single SRC, i.e. a single independent requirement.
-'Bisection requires an src as the arguement.
-Public Sub Bisect(sim As TimeStep_Engine, ns As Collection, left As Dictionary, right As Dictionary, Iteration As Long)
+;; 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
+;; 'This is meant to be performed on a single SRC, i.e. a single independent requirement.
+;; 'Bisection requires an src as the arguement.
+;; Public Sub Bisect(sim As TimeStep_Engine, ns As Collection, left As Dictionary, right As Dictionary, Iteration As Long)
 
-Dim searchstate As Collection
-Dim middle As Long
-Dim lower As Long
-Dim upper As Long
-Dim src As String
-Dim lowest As Long
-Dim uppermoved As Boolean
-Dim idx As Long, bin As Long
-Dim binstate As Dictionary
+;; Dim searchstate As Collection
+;; Dim middle As Long
+;; Dim lower As Long
+;; Dim upper As Long
+;; Dim src As String
+;; Dim lowest As Long
+;; Dim uppermoved As Boolean
+;; Dim idx As Long, bin As Long
+;; Dim binstate As Dictionary
 
-Dim ghosts As TimeStep_ObserverGhostWatch
+;; Dim ghosts As TimeStep_ObserverGhostWatch
 
-Set searchstate = New Collection
+;; Set searchstate = New Collection
 
-lower = left.item("totalghosts")
-lowest = lower
-upper = right.item("totalghosts")
-middle = lower + (upper - lower) \ 2
+;; lower = left.item("totalghosts")
+;; lowest = lower
+;; upper = right.item("totalghosts")
+;; middle = lower + (upper - lower) \ 2
 
-src = left("src")
+;; src = left("src")
    
-'determine what the next step should be
+;; 'determine what the next step should be
 
-While upper - lower > 1
-    Iteration = Iteration + 1
-    Debug.Print "Iteration " & Iteration & ", Bracketing solution between n = [" & lower & ", " & upper & "] ghosts."
+;; While upper - lower > 1
+;;     Iteration = Iteration + 1
+;;     Debug.Print "Iteration " & Iteration & ", Bracketing solution between n = [" & lower & ", " & upper & "] ghosts."
 
-    Set supplyTable = copysupply(left("total")) 'starting from our last step
-    Distribute src, middle - lowest, , searchstate  'add our ghosts.
+;;     Set supplyTable = copysupply(left("total")) 'starting from our last step
+;;     Distribute src, middle - lowest, , searchstate  'add our ghosts.
     
-    If noio Then 'don't bother writing to the sheet
-        sim.Reset_Engine_FromExcel True, supplyTable 'this will reset marathon, using the GeneratedSupply Worksheet to pull in initial supply.
-    Else
-        updateGeneratedSupply
-        sim.Reset_Engine_FromExcel True
-    End If
+;;     If noio Then 'don't bother writing to the sheet
+;;         sim.Reset_Engine_FromExcel True, supplyTable 'this will reset marathon, using the GeneratedSupply Worksheet to pull in initial supply.
+;;     Else
+;;         updateGeneratedSupply
+;;         sim.Reset_Engine_FromExcel True
+;;     End If
 
-    Set ghosts = sim.outputmanager.observers("Ghosts")
+;;     Set ghosts = sim.outputmanager.observers("Ghosts")
 
 
-    'test sufficiency with new supply
-    If Not CalculateRequirement(sim, ghosts, , searchstate) Then
-        'did not generate ghosts.....
-        'this means our middle value is now our right, upperbound.
-        upper = middle 'move the bracket <<<<<<-
-        middle = lower + (upper - lower) \ 2
-        'no need to redistribute.
-        uppermoved = True
-    Else
-        'we added ghosts, which means middle is insufficient.
-        lower = middle 'move the bracket ->>>>>>>
-        middle = lower + (upper - lower) \ 2
-        'Set left = searchstate(searchstate.count)
-        uppermoved = False
-    End If
-Wend
+;;     'test sufficiency with new supply
+;;     If Not CalculateRequirement(sim, ghosts, , searchstate) Then
+;;         'did not generate ghosts.....
+;;         'this means our middle value is now our right, upperbound.
+;;         upper = middle 'move the bracket <<<<<<-
+;;         middle = lower + (upper - lower) \ 2
+;;         'no need to redistribute.
+;;         uppermoved = True
+;;     Else
+;;         'we added ghosts, which means middle is insufficient.
+;;         lower = middle 'move the bracket ->>>>>>>
+;;         middle = lower + (upper - lower) \ 2
+;;         'Set left = searchstate(searchstate.count)
+;;         uppermoved = False
+;;     End If
+;; Wend
 
-If upper - lower = 1 Then 'ubound is the answer
-    lower = upper
-    Set supplyTable = copysupply(left("total")) 'starting from our last step
-    Distribute src, upper - lowest, , searchstate  'add our ghosts.
-ElseIf upper - lower = 2 Then 'middle is the answer
-     If uppermoved Then
-        lower = lower + 1
-     Else
-        lower = upper
-     End If
-     Distribute src, upper - lowest, , searchstate
-Else
-    Err.Raise 101, , "convergence is off"
-End If
+;; If upper - lower = 1 Then 'ubound is the answer
+;;     lower = upper
+;;     Set supplyTable = copysupply(left("total")) 'starting from our last step
+;;     Distribute src, upper - lowest, , searchstate  'add our ghosts.
+;; ElseIf upper - lower = 2 Then 'middle is the answer
+;;      If uppermoved Then
+;;         lower = lower + 1
+;;      Else
+;;         lower = upper
+;;      End If
+;;      Distribute src, upper - lowest, , searchstate
+;; Else
+;;     Err.Raise 101, , "convergence is off"
+;; End If
 
-Debug.Print "No More ghosts to generate.  Binary search converged on " & lower & " Ghosts for src " & src
+;; Debug.Print "No More ghosts to generate.  Binary search converged on " & lower & " Ghosts for src " & src
 
-If noio Then finalIO sim
+;; If noio Then finalIO sim
 
-updateGeneratedSupply
+;; updateGeneratedSupply
 
-Set sim = Nothing
+;; Set sim = Nothing
 
-End Sub
+;; End Sub
+
+
+
+
 
 ;; Private Sub makeghost()
 
@@ -739,7 +755,7 @@ End Sub
 
 ;;multimethod for constructing different distributors.
 (defmulti distributor identity)
-(defmethod distributor :binned [n] nil))
+(defmethod distributor :binned [n] nil)
 (defmethod distributor :continuous1418 [kw] nil)
 (defmethod distributor :rounding1418 [kw] nil)
 
