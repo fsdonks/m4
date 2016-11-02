@@ -11,188 +11,123 @@
      res#
      ~@else))
 
+;;this isn't a huge deal; multiplying by ratios returns bigints...
+(defn distribute-rationally [n xs] (mapv (fn [r] (* n r)) xs))
+(defn sums-to-one?   [xs] (== 1.0 (double (reduce + xs))))
+;;useful utility function...
+(defn sum-by [f init xs]
+  (transduce (map f) (completing +) init xs))
+
 ;;useful function for spork.util.table todo: move there...
-(defn apply-schema [s t]
+(defn apply-schema
+  "Given schema s and table t, attempts to coerce the table entries into 
+   the appropriate data format for all fields defined in s.  Coerces 
+   field entries to strings prior to conversion, so there may be a 
+   penalty.  Typically most useful working with string-ified data, 
+   such as a literal table.  Fieldnames must match exactly, i.e.  
+   string fieldnames will not match keyword schema names."
+  [s t]
   (let [parse-field (fn [fld col]
                       (if-let [f (spork.util.parsing/parse-defaults  (get-or s fld))]
                         [fld (mapv (comp f str) col)]
                         [fld col]))]
     (spork.util.table/order-fields-by (spork.util.table/table-fields t)
-                                      (->  (map parse-field
-                                                (spork.util.table/table-fields  t)
-                                                (spork.util.table/table-columns t))           
-                                           (spork.util.table/conj-fields spork.util.table/empty-table)))))
+        (->  (map parse-field
+                  (spork.util.table/table-fields  t)
+                  (spork.util.table/table-columns t))           
+             (spork.util.table/conj-fields spork.util.table/empty-table)))))
 
-(defn ->supply-record [src compo n]
-  {:Type       "SupplyRecord"
-   :Enabled    true
-   :Quantity   n
-   :SRC        src
-   :Component  compo
-   :OITitle    (str "Generated_" src)
-   :Name       "Auto"
-   :Behavior   "Auto"
-   :CycleTime  "Auto"
-   :Policy     "Auto" 
-   :Tags       "Auto"
-   :SpawnTime  0
-   :Location   "Auto"
-   :Position   "Auto"
-   :Original   false
-   :Strength   "Auto"
-   :Remarks    "Auto"})
+;;Data munging and records
+;;========================
 
-(defn clear-supply
-  "Eliminate all the unit entities from the context."
-  [ctx]
-  )
-#_(defn reload-supply [ctx]
-    (default-supply))
+;;If we use records, we get ordered fields automatically.  Better strategy.
+;;generic supply record.  Should probably tie these to marathon.schemas
+(defrecord srecord [Type Enabled Quantity SRC Component OITitle
+                    Name Behavior CycleTime Policy Tags Spawntime Location Position Original])
+;;outstreaam/mystream is output....canonically RequirementsGeneratedSupply.csv
+;;may not use this guy...we'll see.
+(r/defrecord+ outrecord [[Iteration 0]
+                         [SRC ""]
+                         [Component ""]
+                         [Quantity   0]])
 
-;;allows a nice handle on 
-(defn load-variable-supply-context [tbls]
-  (fn [supply-records]
-    
-    )
-  )
-
-(comment ;testing
-  (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
-
-  
-  )
-
-;;Requirements analysis is the process of calculating some required additional supply in the face of a given
-;;demand signal.  Technically, requirements analysis is indifferent to the existence of supply.  We can
-;;calculate a requirement regardless of pre-existing supply.  In fact, we can grow a requirement.
-;;Traditional requirements analysis consisted of a fixed-point function:
-    ;;RequiredSupply(SupplyInitial) = SupplyInitial + Generated(SupplyInitial, Demand)
-            ;;Do until SupplyNext = SupplyInitial
-                ;;SupplyInitial <- SupplyNext
-                ;;SupplyNext <- Distribute(RequiredSupply(SupplyInitial), SupplyInitial)
-                
-;;We will use DemandAnalysis and Supply Analysis to help the convergence go much faster.
-;;As a pre-process step, we utilize Static Demand Analysis to determine the peak demands and the
-;;maximum deployment acceleration experienced during the run.
-    ;;This provides definite constraints on our minimum required supply.
-        ;;ANY supply must have a theoretical capacity >= the peak demand.
-
-;;We then utilize Static Supply Analysis to determine the theoretical rotational capacity for the initial
-;;supply.  (If we have no supply, capacity is nil)
-;;Prior to starting the convergence algorithm, we distribute this intial gap in supply.
-
-;;Then run until convergence.
-    ;;Should take less time.
+;;generate a new supplyrecord.
+(defn ->supply-record
+  ([src component count]
+   (->srecord "SupplyRecord" true count src component (str "Generated_"  src)
+              "Auto" "Auto" 0 "Auto" "Auto" 0 "Auto" "Auto" false))
+  ([src component] (->srecord src component 0)))
 
 
-
-;;Note -> Requirements analysis does not utilize substitutions.  This is a pure 1:1 demand to supply.
-;;This makes the problem essentially much easier (and faster).
-;;It also makes calculating requirements even faster and more effecient, because we can parallelize the
-;;entire analysis into a set of n independent simulations, which only considers the supply and demand of a
-;;single type.
-
-;;Given a set of demand data, the theoretical proportion of supply by component, and policy schedules,
-;;calculate the supply required by SRC.
-
-;;Requirements analysis is the process of calculating some required additional supply in the face of a given
-;;demand signal.  Technically, requirements analysis is indifferent to the existence of supply.  We can
-;;calculate a requirement regardless of pre-existing supply.  In fact, we can grow a requirement.
-;;Traditional requirements analysis consisted of a fixed-point function:
-    ;;RequiredSupply(SupplyInitial) = SupplyInitial + Generated(SupplyInitial, Demand)
-            ;;Do until SupplyNext = SupplyInitial
-                ;;SupplyInitial <- SupplyNext
-                ;;SupplyNext <- Distribute(RequiredSupply(SupplyInitial), SupplyInitial)
-                
-;;We will use DemandAnalysis and Supply Analysis to help the convergence go much faster.
-;;As a pre-process step, we utilize Static Demand Analysis to determine the peak demands and the
-;;maximum deployment acceleration experienced during the run.
-    ;;This provides definite constraints on our minimum required supply.
-        ;;ANY supply must have a theoretical capacity >= the peak demand.
-
-;;We then utilize Static Supply Analysis to determine the theoretical rotational capacity for the initial
-;;supply.  (If we have no supply, capacity is nil)
-;;Prior to starting the convergence algorithm, we distribute this intial gap in supply.
-
-;;Then run until convergence.
-    ;;Should take less time.
-    
-;;Note -> Requirements analysis does not utilize substitutions.  This is a pure 1:1 demand to supply.
-;;This makes the problem essentially much easier (and faster).
-;;It also makes calculating requirements even faster and more effecient, because we can parallelize the
-;;entire analysis into a set of n independent simulations, which only considers the supply and demand of a
-;;single type.
-
-;;Given a set of demand data, the theoretical proportion of supply by component, and policy schedules,
-;;calculate the supply required by SRC.
-
-;;loosely ported from vba....
-;;What we'll do instead of having file i/o driving this, is we'll
-;;derive any necessary i/o from the sequence we compute as we converge.
-;;Basically, using reductions, we'll derive the supply table each iteration.
-
-;;There's a whole mess here about distributors too...
-;;I think we'll just 
-(defn compute-requirements [ctx init-supply-table proportions]
-  (let [supply-table init-supply-table
-        distributions {}]
-    ))
-
-;;this isn't a huge deal; multiplying by ratios returns bigints...
-(defn distribute-rationally [n xs] (mapv (fn [r] (* n r)) xs))
-(defn sums-to-one?   [xs] (== 1.0 (double (reduce + xs))))
-
-
-
-;;if we wanted to backsolve for requirements to grow accurately,
-;;getting MFS, how would we do it?
-;;naively....our previous history would form a set of constraints on
-;;the position of the supply we're adding...
-;;Tradeoff could be, adding supply is more expensive, but we're
-;;accurate....
-
-;;If we grow supply - in the context of the initial state of things -
-;;we have a dependent "chain" of supply.  Each time we add supply, we
-;;have to account for initial conditions....
-
-;;What's the minimal information necessary to determine accurate initial
-;;conditions?
-;;We would have to create a policy trajectory where - for some reason -
-;;the unit was not available to be utilized - ever - and was
-;;available just-in-time to fill the missing demand....
-
-;;"If" we could do this, then we regain consistency in our
-;;RA, so that we effectively have some notion of an additive
-;;history, or additive growth, that is, every time we
-;;add supply, we are guaranteed to fill more demand than
-;;in the previous step.
-
-;;Another way to do this is to grow supply additively...
-;;Kind of like Barry did...
-;;We only EVER advance if we can assure that we have enough supply...
-;;Rather than run the entire future...basically do an iterative
-;;depth first search.
-
-;;At any given step, we have a state:
-;;{supply, t, tmax}
-;;Our goal is to get to tmax, and return
-;;the supply.
-;;The canonical way to do this is to run
-;;the scenario with an initial supply,
-;;get a capacity analysis,
-;;and use some representation of missed demand
-;;(typically through ghost-units)
-;;When you think about it, ghosts are just placeholders,
-;;and they follow their own policy.
-;;We "can" use max-utilization as a
-;;lower-bound / initial supply.
-;;This is like having an army of ghosts.
-
+;;Distributors
+;;============
 ;;distributors need to be implemented....
 ;;default is binned, provides deterministic
 ;;round-robin growth.
 ;;Note: We can also have deterministic growth
 ;;using a seeded prng...
+
+;;kind of lame at the moment
+;;should return a map of [compo val]
+(defprotocol IDistributor
+  (distribute- [obj n]))  
+
+(defn distribute-by [f n]
+  (let [tf (type f)]
+    (cond (extends? IDistributor tf)
+            (distribute- f n)
+          (extends? clojure.core.protocols/IKVReduce tf)
+            (reduce-kv (fn [acc k prop]
+                         (assoc acc k (* prop n))) {} f)
+          (fn? f) (f n)
+          :else
+          (throw (Exception. (str "unknown distributor!"))))))
+
+;;Basic Algorithm
+;;===============
+;;Requirements analysis is the process of calculating some required additional
+;;supply in the face of a given demand signal.  Technically, requirements
+;;analysis is indifferent to the existence of supply.  We can calculate a
+;;requirement regardless of pre-existing supply.  In fact, we can grow a
+;;requirement.
+
+;;Traditional requirements analysis consisted of a fixed-point function:
+;;- RequiredSupply(SupplyInitial) = SupplyInitial + Generated(SupplyInitial, Demand)
+;;  - Do until SupplyNext = SupplyInitial
+;;    - SupplyInitial <- SupplyNext
+;;    - SupplyNext <- Distribute(RequiredSupply(SupplyInitial), SupplyInitial)
+
+;;Estimating Bounds
+;;=================
+;;We will use DemandAnalysis and Supply Analysis to help the convergence go
+;;much faster. As a pre-process step, we utilize Static Demand Analysis to
+;;determine the peak demands and the maximum deployment acceleration
+;;experienced during the run.
+;;- This provides definite constraints on our minimum required supply.
+;;  - ANY supply must have a theoretical capacity >= the peak demand.
+
+;;We then utilize Static Supply Analysis to determine the theoretical
+;;rotational capacity for the initial supply.  (If we have no supply,
+;;capacity is nil). Prior to starting the convergence algorithm, we
+;;distribute this intial gap in supply.
+
+;;Then run until convergence.
+    ;;Should take less time.
+
+;;Note -> Requirements analysis does not utilize substitutions.
+;;- This is a pure 1:1 demand to supply.
+;;- This makes the problem essentially much easier (and faster).
+
+;;It also makes calculating requirements even faster and more effecient,
+;;because we can parallelize the entire analysis into a set of n
+;;independent simulations, which only considers the supply and demand of
+;;a single type.
+
+
+;;Changes from VBA
+;;What we'll do instead of having file i/o driving this, is we'll
+;;derive any necessary i/o from the sequence we compute as we converge.
+;;Basically, using reductions, we'll derive the supply table each iteration.
 
 ;;oh, we need to be able to generate supply...
 ;;Well, we can delegate that to RA....
@@ -201,33 +136,22 @@
 ;;supply after-the-fact, and then fill again with
 ;;the next context.  So, basically, add-ghosts if
 ;;there are missed demands.
-  
-;;If we use records, we get ordered fields automatically.  Better strategy.
-;;generic supply record.  Should probably tie these to marathon.schemas
-(defrecord srecord [Type Enabled Quantity SRC Component OITitle
-                    Name Behavior CycleTime Policy Tags Spawntime Location Position Original])
-;;outstreaam/mystream is output....canonically RequirementsGeneratedSupply.csv
-;;may not use this guy...we'll see.
-(r/defrecord+ outrecord [[Iteration 0]
-                        [SRC ""]
-                        [Component ""]
-                        [Quantity 0]])
 
-;;generate a new supplyrecord.
-(defn supply-record
-  ([src component count]
-   (->srecord "SupplyRecord" true count src component (str "Generated_"  src)
-              "Auto" "Auto" 0 "Auto" "Auto" 0 "Auto" "Auto" false))
-  ([src component] (->srecord src component 0)))
-  
+(comment ;testing
+  (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
+  (require '[marathon.analysis [dummydata :as data]])
+  (def dummy-table
+    (apply-schema (marathon.schemas/get-schema :SupplyRecords)
+                  (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
+  (defn zero-field [t k]
+    (let [n (tbl/count-rows t)]
+      (tbl/conj-field  [k (vec (repeat n 0))] t)))
+  (defn zero-supply [t]
+    (zero-field t :Quantity))
+)
 
-;;import the original provided supply records (currently from excel) into the supplytable
-(defn import-supply-records [ctx]) ;;may be uncessary.
-;;we add a ghost record though
-(defn make-ghost []
-  (supply-record  "SupplyRecord"  true 1 "Ghost" "Ghost"
-                  "Anything" "Auto"  "Ghost365_45" ;default behavior...
-                  0 "Ghost365_45" "Auto"  0 "Auto" "Auto" false))
+;;Growing Supply
+;;==============
 ;;note:
 ;;the act of "creating supply" from a supply record
 ;;transforms a serialized form into a sequence of instructions
@@ -244,10 +168,6 @@
 ;;"just" varying the table, we could look into varying the
 ;;context directly....
 
-;;useful utility function...
-(defn sum-by [f init xs]
-  (transduce (map f) (completing +) init xs))
-
 ;;reads distributions from a table of [src ac rc ng]
 ;;probably a better way to do this...legacy implementation
 ;;We can also provide a way to compute this empirically right?
@@ -257,12 +177,12 @@
   [xs]
   (let [quantities (fn quantities [xs]
                      (sum-by :Quantity 0 xs))]
-    (->> (for [[src src-groups] (group-by :SRC xs)]
+    (->> (for [[src src-groups] (group-by :SRC       xs)]
            (let [compo-xs       (group-by :Component src-groups)]
              {:Type "GhostProportionsAggregateRecord"
               :Enabled true :SRC src :AC (quantities  (get compo-xs "AC"))
-              :NG (quantities  (get compo-xs "NG"))
-              :RC (quantities  (get compo-xs "RC"))})))))
+              :NG (quantities (get compo-xs "NG"))
+              :RC (quantities (get compo-xs "RC"))})))))
 
 (defn aggregate-proportions
   "Computes proportional values for each record in xs, by component, 
@@ -287,42 +207,17 @@
            :or   {distribution-table :GhostProportionsAggregate
                   dtype :bin}}]
   (let [make-distributor (fn [n] (fn [k] (* k n)))] 
-    (->> (get-or tbls distribution-table (->> (:SupplyRecords tbls)                                           
-                                              (tbl/table-records)
-                                              (filter :Enabled)
-                                              (compute-aggregate-supply)
-                                              (aggregate-proportions)))       
+    (->> (get-or tbls distribution-table
+                 (->> (:SupplyRecords tbls)                                           
+                      (tbl/table-records)
+                      (filter :Enabled)
+                      (compute-aggregate-supply)
+                      (aggregate-proportions)))       
          (reduce (fn [acc r]
                    (let [{:keys [SRC AC RC NG]} r]
-                     (assoc acc SRC {"AC" AC "RC" RC "NG" NG})))   {}))))
-  
-;;kind of lame at the moment
-;;should return a map of [compo val]
-(defprotocol IDistributor
-  (distribute- [obj n]))  
+                     (assoc acc SRC {"AC" AC "RC" RC "NG" NG})))
+                 {}))))
 
-(defn distribute-by [f n]
-  (let [tf (type f)]
-    (cond (extends? IDistributor tf)
-            (distribute- f n)
-          (extends? clojure.core.protocols/IKVReduce tf)
-            (reduce-kv (fn [acc k prop]
-                         (assoc acc k (* prop n))) {} f)
-          (fn? f) (f n)
-          :else
-          (throw (Exception. (str "unknown distributor!"))))))
-
-(comment ;testing
-  (require '[marathon.analysis [dummydata :as data]])
-  (def dummy-table
-    (apply-schema (marathon.schemas/get-schema :SupplyRecords)
-                  (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
-  (defn zero-field [t k]
-    (let [n (tbl/count-rows t)]
-      (tbl/conj-field  [k (vec (repeat n 0))] t)))
-  (defn zero-supply [t]
-    (zero-field t :Quantity))
-)
 ;;fill this in...
 ;;probably need some state.
 ;;TOM Change 19 April 2012
@@ -334,9 +229,12 @@
 ;;goal is to update the quantities incrementally.
 (defn increment-supply [reqstate src compo n]
   (update-in reqstate [:supply src compo]
-             (fn [r] (update r :Quantity (fn [q] (+ q n))))))
+             (fn [r] (update r :Quantity
+                         (fn [q] (+ q n))))))
 
-(defn compute-amounts [reqstate src n] (distribute-by (get reqstate src) n))
+(defn compute-amounts [reqstate src n]
+  (distribute-by (get reqstate src) n))
+
 ;;Replacement method for an earlier hack.  We now separate the process of calculating and applying
 ;;distributions.  Given a set of distributions, by component, apply them (whatever that means)
 ;;to the src.
@@ -350,7 +248,7 @@
               acc)) reqstate amounts))
 
 ;;So, each time we add supply, we conceptually take a growth step.
-(defn distribute      [reqstate src count]
+(defn distribute [reqstate src count]
   (let [amounts (compute-amounts reqstate src count)
         steps   (or (:steps reqstate) [])
         total   (if (empty? steps) 0
@@ -358,17 +256,19 @@
     (-> reqstate
         (apply-amounts src amounts) 
         (assoc  :steps ;;record the step we took.
-                (conj steps {:src   src
-                             :count count
-                             :total-ghosts (+ total count)
-                             :added amounts
-                             :total  (throw (Exception. "copysupply"))})))))
+           (conj steps {:src   src
+                        :count count
+                        :total-ghosts (+ total count)
+                        :added amounts
+                        :total  (throw (Exception. "copysupply"))})
+           ))))
 
 ;;I think we'll have this as part of the reqstate...
-;;rather than a separate output.  Redo this...
-(defn write-record [reqstate iteration src component quantity]
-  (update-in reqstate
-             [:iterations src] conj (->outrecord iteration src component quantity)))
+;;rather than a separate output. Redo this...
+(defn write-record
+  [reqstate iteration src component quantity]
+  (update-in reqstate  [:iterations src] conj
+      (->outrecord iteration src component quantity)))
 
 ;;This is an auxillary function to handle each run of the requirements analysis.
 ;;Given a simulation that is already primed and loaded, and possibly an initial supply of units, calculate the
@@ -524,9 +424,15 @@
     (if-let [res (calculate-requirement reqs)] ;;naive growth.
       (recur (inc iteration)
              res)
-      reqs)
-         
+      reqs)))
+
+;;Given a set of demand data, the theoretical proportion of supply by component, and policy schedules,
+;;calculate the supply required by SRC.
+(defn compute-requirements [ctx init-supply-table proportions]
+  (let [supply-table init-supply-table
+        distributions {}]
     ))
+
 
 ;; Do
 ;;     Set ghosts = sim.outputmanager.observers("Ghosts")
@@ -891,3 +797,29 @@
 ;;     search = counts(src)
 ;; End If
 ;; End Function
+
+
+
+
+
+(comment ;;possibly obe
+  ;;we add a ghost record though
+  (defn make-ghost []
+    (supply-record  "SupplyRecord"  true 1 "Ghost" "Ghost"
+                    "Anything" "Auto"  "Ghost365_45" ;default behavior...
+                    0 "Ghost365_45" "Auto"  0 "Auto" "Auto" false))
+
+  ;;import the original provided supply records (currently from excel) into the supplytable
+  (defn import-supply-records [ctx]) ;;may be uncessary.
+  (defn clear-supply
+    "Eliminate all the unit entities from the context."
+    [ctx]
+    )
+
+  #_(defn reload-supply [ctx]
+      (default-supply))
+
+  ;;allows a nice handle on 
+  #_(defn load-variable-supply-context [tbls]
+      (fn [supply-records]))
+)
