@@ -19,18 +19,23 @@
 
 ;;Given a Marathon workbook, we know that these are the tables we'll care about.
 (def marathon-workbook-schema
-  {:CompositePolicyRecords "CompositePolicyRecords",
-   :DemandRecords          "DemandRecords",
-   :SuitabilityRecords     "SuitabilityRecords",
-   :PolicyTemplates        "PolicyTemplates",
-   :SRCTagRecords          "SRCTagRecords",
-   :Parameters             "Parameters",
-   :PolicyDefs             "PolicyDefs",
-   :PolicyRecords          "PolicyRecords",
-   :SupplyRecords          "SupplyRecords",
-   :RelationRecords        "RelationRecords",
-   ;:demand-table-schema "demand-table-schema",
+  {:CompositePolicyRecords "CompositePolicyRecords"
+   :DemandRecords          "DemandRecords"
+   :SuitabilityRecords     "SuitabilityRecords"
+   :PolicyTemplates        "PolicyTemplates"
+   :SRCTagRecords          "SRCTagRecords"
+   :Parameters             "Parameters"
+   :PolicyDefs             "PolicyDefs"
+   :PolicyRecords          "PolicyRecords"
+   :SupplyRecords          "SupplyRecords"
+   :RelationRecords        "RelationRecords"
+   ;:demand-table-schema "demand-table-schema"
    :PeriodRecords          "PeriodRecords"})
+
+;;Schemas that support requirements analysis...
+(def marathon-requirements-schema
+  (merge marathon-workbook-schema
+     {:GhostProportionsAggregate "GhostProportionsAggregate"}))
 
 (def input-sheets marathon-workbook-schema)
 ;;When we parse from excel, sometimes we'll get results,
@@ -55,10 +60,10 @@
                   :int? (fn [x] (when x (int x)))                  
                   :long long
                   :long? (fn [x] (when x (long x)))
-                  :text (fn [x] (if (number? x)
-                                  ;;we need to coerce this mofo.
-                                  (str (try-long x))
-                                  x))}]
+                  :text  (fn [x] (if (number? x)
+                                   ;;we need to coerce this mofo.
+                                   (str (try-long x))
+                                   x))}]
     (spork.util.table/conj-fields 
      (for [[fld col] (tbl/enumerate-fields (tbl/table-fields tbl) (tbl/table-columns tbl))]
        (if-let [f (numtypes (s fld))]
@@ -88,8 +93,10 @@
                          (println [:missing nm])))))))
 
 ;;This is all that really matters from marathon.project...   
-(defmethod load-project "xlsm" [path & {:keys [tables]}]
-    (let [ts    (marathon-book->marathon-tables path)
+(defmethod load-project "xlsm"
+  [path & {:keys [tables]
+           :or {tables marathon-workbook-schema}}]
+    (let [ts    (marathon-book->marathon-tables path :tables tables)
         paths (reduce-kv (fn [acc nm _]
                            (assoc acc nm
                                   [path
@@ -100,8 +107,10 @@
           (assoc :tables ts)
           (update :paths merge paths))))
 
-(defmethod load-project "xlsx" [path & {:keys [tables]}]
-  (let [ts    (marathon-book->marathon-tables path)
+(defmethod load-project "xlsx"
+  [path & {:keys [tables]
+           :or {tables marathon-workbook-schema}}]
+  (let [ts    (marathon-book->marathon-tables path :tables tables)
         paths (reduce-kv (fn [acc nm _]
                            (assoc acc nm
                                   [path
@@ -113,20 +122,22 @@
       (update :paths merge paths))))
 
 (defmethod save-project "xlsx" [proj path & options]
-  (xl/tables->xlsx path (project->tables (add-path proj 
-                                           :project-path 
-                                           (io/as-directory (io/fdir path))))))
+  (xl/tables->xlsx path
+     (project->tables
+        (add-path proj :project-path 
+            (io/as-directory (io/fdir path))))))
+
 ;;this should probably go in docjure..
 (defn copy-sheet! [sheetname wb1 wb2]
   (if-let [from-sheet (docj/select-sheet sheetname wb1)]
      (let [to-sheet   (if-let [s (docj/select-sheet  sheetname wb2)]
                         (do (docj/remove-all-rows! s) s) ;this is probably slow
-                        (do (docj/add-sheet! wb2 sheetname)
+                        (do (docj/add-sheet!   wb2 sheetname)
                             (docj/select-sheet sheetname wb2)))]
        (->> (xl/contiguous-rows from-sheet) 
-            (map xl/row->vec)
-            (docj/add-rows! to-sheet)))
-     (throw (Exception. (str "Sheet " sheetname "does not exist")))))         
+            (map                xl/row->vec)
+            (docj/add-rows!     to-sheet)))
+     (throw (Exception. (str "Sheet " sheetname "does not exist")))))
 
 (defn copy-sheets! [sheetnames wb-from wb-to] 
   (doseq [sheetname sheetnames]

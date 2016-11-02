@@ -153,7 +153,16 @@
     :draw-index
     :Group
     :DemandType
-    "Title 10_32"]})
+    "Title 10_32"]
+    :GhostProportionsAggregate
+    [:Type
+     [:Enabled :boolean]
+     [:SRC :float]
+     [:AC  :float]
+     [:NG  :float]
+     [:RC  :float]
+     ]
+    })
 
 ;;optional helper function.
 ;;Allows us to print the schemas in a format readable

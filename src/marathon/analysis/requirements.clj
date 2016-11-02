@@ -1,11 +1,28 @@
 ;;Requirements Analysis implementation.
 (ns marathon.analysis.requirements
-  (:require [spork.util [record :as r]]
+  (:require [spork.util [record :as r] [table :as tbl]]
             [marathon.ces [core :as core]]
             [marathon [analysis :as a]]))
 
 ;;Utility functions
 ;;=================
+(defmacro get-or [m k & else]
+  `(if-let [res# (get ~m ~k)]
+     res#
+     ~@else))
+
+;;useful function for spork.util.table todo: move there...
+(defn apply-schema [s t]
+  (let [parse-field (fn [fld col]
+                      (if-let [f (spork.util.parsing/parse-defaults  (get-or s fld))]
+                        [fld (mapv (comp f str) col)]
+                        [fld col]))]
+    (spork.util.table/order-fields-by (spork.util.table/table-fields t)
+                                      (->  (map parse-field
+                                                (spork.util.table/table-fields  t)
+                                                (spork.util.table/table-columns t))           
+                                           (spork.util.table/conj-fields spork.util.table/empty-table)))))
+
 (defn ->supply-record [src compo n]
   {:Type       "SupplyRecord"
    :Enabled    true
@@ -40,8 +57,9 @@
   )
 
 (comment ;testing
-
   (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
+
+  
   )
 
 ;;Requirements analysis is the process of calculating some required additional supply in the face of a given
@@ -226,34 +244,85 @@
 ;;"just" varying the table, we could look into varying the
 ;;context directly....
 
+;;useful utility function...
+(defn sum-by [f init xs]
+  (transduce (map f) (completing +) init xs))
+
 ;;reads distributions from a table of [src ac rc ng]
 ;;probably a better way to do this...legacy implementation
-(defn import-aggregate-distributions [tbls & {:keys [distribution-table dtype]
-                                              :or {distribution-table "GhostProportionsAggregate"
-                                                   dtype :bin}}]
-  (reduce (fn [acc r]
-            (let [{:keys [SRC AC RC NG] r}
-                   ]
-              (assoc acc src {"AC" AC "RC" RC "NG" NG}}))
-          {}
-          (get tbls distribution-table)))
+;;We can also provide a way to compute this empirically right?
+(defn compute-aggregate-supply
+  "Given a table of supply-records, computes a sequence of 
+   records by src, compo, summing by the Quantity field."
+  [xs]
+  (let [quantities (fn quantities [xs]
+                     (sum-by :Quantity 0 xs))]
+    (->> (for [[src src-groups] (group-by :SRC xs)]
+           (let [compo-xs       (group-by :Component src-groups)]
+             {:Type "GhostProportionsAggregateRecord"
+              :Enabled true :SRC src :AC (quantities  (get compo-xs "AC"))
+              :NG (quantities  (get compo-xs "NG"))
+              :RC (quantities  (get compo-xs "RC"))})))))
 
+(defn aggregate-proportions
+  "Computes proportional values for each record in xs, by component, 
+   where the associated component value is a proportion of the sum of 
+   component values.  Retains rational precision by default."
+  [xs & {:keys [float?]}]
+  (let [divide (if float? (fn [l r] (double (/ l r)))
+               / )]
+    (into [] (map (fn [{:keys [AC NG RC] :as r}]
+                    (let [sum (+ AC NG RC)]
+                      (merge r {:AC (divide AC sum)
+                                :NG (divide NG sum)
+                                :RC (divide RC sum)}))))
+        xs)))
+                   
+(defn aggregate-distributions
+  "Given a map of tables, computes the aggregate supply proportions  
+   from the input.  User may specify alternate tables to use for the 
+   proportions.  If no table is found, will compute the proportions 
+   from the input supply."
+  [tbls & {:keys [distribution-table dtype float?]
+           :or   {distribution-table :GhostProportionsAggregate
+                  dtype :bin}}]
+  (let [make-distributor (fn [n] (fn [k] (* k n)))] 
+    (->> (get-or tbls distribution-table (->> (:SupplyRecords tbls)                                           
+                                              (tbl/table-records)
+                                              (filter :Enabled)
+                                              (compute-aggregate-supply)
+                                              (aggregate-proportions)))       
+         (reduce (fn [acc r]
+                   (let [{:keys [SRC AC RC NG]} r]
+                     (assoc acc SRC {"AC" AC "RC" RC "NG" NG})))   {}))))
+  
 ;;kind of lame at the moment
 ;;should return a map of [compo val]
 (defprotocol IDistributor
-  (distribute- [obj n]))
+  (distribute- [obj n]))  
 
 (defn distribute-by [f n]
   (let [tf (type f)]
     (cond (extends? IDistributor tf)
             (distribute- f n)
           (extends? clojure.core.protocols/IKVReduce tf)
-            (reduce-kv (fn [acc k f]
-                         (assoc acc k (f n))) {} f)
+            (reduce-kv (fn [acc k prop]
+                         (assoc acc k (* prop n))) {} f)
           (fn? f) (f n)
           :else
           (throw (Exception. (str "unknown distributor!"))))))
 
+(comment ;testing
+  (require '[marathon.analysis [dummydata :as data]])
+  (def dummy-table
+    (apply-schema (marathon.schemas/get-schema :SupplyRecords)
+                  (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
+  (defn zero-field [t k]
+    (let [n (tbl/count-rows t)]
+      (tbl/conj-field  [k (vec (repeat n 0))] t)))
+  (defn zero-supply [t]
+    (zero-field t :Quantity))
+)
 ;;fill this in...
 ;;probably need some state.
 ;;TOM Change 19 April 2012
@@ -261,8 +330,11 @@
 ;;[X,Y,Z..] units of supply, by component
 ;;Note: renamed 'ns to 'steps.  Embeding stuff in a requirements state
 ;;map.
+;;we have the supply records in reqstate/supply
+;;goal is to update the quantities incrementally.
 (defn increment-supply [reqstate src compo n]
-  (throw (Exception. (str "Not implemented!"))))
+  (update-in reqstate [:supply src compo]
+             (fn [r] (update r :Quantity (fn [q] (+ q n))))))
 
 (defn compute-amounts [reqstate src n] (distribute-by (get reqstate src) n))
 ;;Replacement method for an earlier hack.  We now separate the process of calculating and applying
@@ -273,9 +345,10 @@
             (if n
               (let [adjusted-count (double n)]
                 (if (pos? adjusted-count)
-                  (increment-supply acc src compo n)
+                  (increment-supply acc src compo adjusted-count)
                   acc))
               acc)) reqstate amounts))
+
 ;;So, each time we add supply, we conceptually take a growth step.
 (defn distribute      [reqstate src count]
   (let [amounts (compute-amounts reqstate src count)

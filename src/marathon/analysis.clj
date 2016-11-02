@@ -323,6 +323,14 @@
 
 ;;API Definition
 ;;==============
+(defn load-project [p & {:keys [tables]}]
+  (if tables 
+    (proj/load-project p :tables tables)
+    (proj/load-project p)))
+
+(defn load-requirements-project [p]
+  (proj/load-project p :tables xl/marathon-requirements-schema))
+
 ;;This is the core of doing a "run"...
 (defn load-context
   "Given a viable Marathon Project, p, we derive and initial 
