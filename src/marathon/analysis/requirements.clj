@@ -28,14 +28,33 @@
    string fieldnames will not match keyword schema names."
   [s t]
   (let [parse-field (fn [fld col]
-                      (if-let [f (spork.util.parsing/parse-defaults  (get-or s fld))]
+                      (if-let [f (spork.util.parsing/parse-defaults
+                                    (get-or s fld))]
                         [fld (mapv (comp f str) col)]
                         [fld col]))]
-    (spork.util.table/order-fields-by (spork.util.table/table-fields t)
-        (->  (map parse-field
-                  (spork.util.table/table-fields  t)
-                  (spork.util.table/table-columns t))           
-             (spork.util.table/conj-fields spork.util.table/empty-table)))))
+    (spork.util.table/order-fields-by
+     (spork.util.table/table-fields t)
+     (->  (map parse-field
+               (spork.util.table/table-fields  t)
+               (spork.util.table/table-columns t))           
+          (spork.util.table/conj-fields spork.util.table/empty-table)))))
+
+(defn set-field
+  "Replace the values associated with field k in t, with 0 values."
+  [t k v]
+  (let [n (tbl/count-rows t)]
+    (tbl/conj-field  [k (vec (repeat n v))] t)))
+
+(defn zero-supply [t] (set-field t :Quantity 0))
+
+;;use tbl/subtables-by to get this implemented.
+;;Useful for splitting up requirements states...
+;; (defn split-by-field
+;;   "Given a field to split on, creates n new databases, 
+;;    where each database contains tables (with the field) 
+;;    that have identical values for the field."
+;;   [tbls & {:keys [field tables]}]
+;;   (let [[base variable]
 
 ;;Data munging and records
 ;;========================
@@ -143,11 +162,7 @@
   (def dummy-table
     (apply-schema (marathon.schemas/get-schema :SupplyRecords)
                   (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
-  (defn zero-field [t k]
-    (let [n (tbl/count-rows t)]
-      (tbl/conj-field  [k (vec (repeat n 0))] t)))
-  (defn zero-supply [t]
-    (zero-field t :Quantity))
+
 )
 
 ;;Growing Supply
@@ -256,12 +271,11 @@
     (-> reqstate
         (apply-amounts src amounts) 
         (assoc  :steps ;;record the step we took.
-           (conj steps {:src   src
-                        :count count
+           (conj steps {:src    src
+                        :count  count
                         :total-ghosts (+ total count)
-                        :added amounts
-                        :total  (throw (Exception. "copysupply"))})
-           ))))
+                        :added  amounts
+                        :total  (throw (Exception. "copysupply"))})))))
 
 ;;I think we'll have this as part of the reqstate...
 ;;rather than a separate output. Redo this...
@@ -284,8 +298,7 @@
 ;;just move to a multipass fill, and use a ghost-fill function as
 ;;the last stage.  Easy peasy.
 (defn unconstrained-ghost-step [ctx]
-  (throw (Exception. (str "placeholder for stepping with ghost-fills.")))
-  )
+  (throw (Exception. (str "placeholder for stepping with ghost-fills."))))
 
 ;;probably want to stick this in marathon.analysis...
 ;;Given a history, compute the maximum amount of ghosts
@@ -300,15 +313,27 @@
 ;;TODO: Replace event-step-marathon with the appropriate simreducer or whatnot.
 ;;Returns the next requirement state, if we actually have a requirement.
 ;;Otherwise nil.
-(defn calculate-requirements [{:keys [ctx src ns] :as reqstate}
-                              & {:keys [step-function distance]
-                                 :or   {step-function unconstrained-ghost-step
-                                        distance history->ghosts}}]
+(defn calculate-requirement
+  [{:keys [ctx src steps] :as reqstate}  step-function distance]
   (let [dist (-> ctx (step-function) (distance))]
     (when (pos? distance)
       (do (println "Generated ghosts on iteration")
           (distribute reqstate src dist)))))
 
+;;We may be able to fold this into calculate-requirements...
+(defn iterative-convergence
+  "Given a requirements-state, searches the force structure 
+   space by varying the supply of the requirements, until 
+   it converges on a minimum feasible force structure.
+   At the low end, we'll just be performing multiple 
+   capacity analyses..."
+  [reqstate & {:keys [step-function distance]
+               :or   {step-function unconstrained-ghost-step
+                      distance history->ghosts}}]
+  (loop [reqs      reqstate]
+    (if-let [res (calculate-requirement reqs step-function distance)] ;;naive growth.
+      (recur (update res :iteration inc))
+      reqs)))
 
 ;;Compute a sequence of "empty" supply records
 ;;from the proportions indicated 
@@ -319,15 +344,7 @@
           :let [n (get r c)]
           :when (pos? n)]
       (->supply-record src c n))))
-  
-
-;;do we actually need a ghost watcher?
-;;We have ghost-specific events, like ghost spawn and the
-;;like.  May not need to scrape them..
-;;returns a map of {src src-max}, typically
-;;looks for a ghost-watcher observer...
-(defn get-ghost-counts [ctx] )
-
+ 
 ;;The iterative convergence function is a fixed-point function that implements the algorithm described in the declarations section.
 ;;During iterative convergence, we don;;t care about intermediate results, only the final fixed-point calculation.
 ;;After we determine the fixed-point, we can perform a final dynamic analysis (capacity analysis) on the output.
@@ -393,45 +410,20 @@
 ;;easier to move from ctx->ctx than otherwise...
 ;;For now, we'll just suck it up. And redo every time,
 ;;see how expensive it ends up being.
+
 (defn ->requirements-state
   "Given a map of tables (a marathon project), 
    creates a map that contains all of the state 
    we'll need for our requirements analysis."
   [tables src compo-distros]
-  (let [ctx0 (requirements-ctx tables src)
-        s    (initial-supply compo-distros)]
-    {:ctx ctx0 ;initial simulation context.
+  (let [ctx0 (requirements-ctx tables    src)
+        s    (initial-supply   compo-distros)]
+    {:ctx    ctx0 ;initial simulation context.
      :supply s  ;initial set of supply records.
      :distributions compo-distros
-     :steps []
+     :steps     []
      :iteration 0}))
 
-(defn calculate-requirement [reqstate]
-  (throw (Exception. (str "not implemented"))))
-
-(defn interative-convergence
-  "Given a requirements-state, searches the force structure 
-   space by varying the supply of the requirements, until 
-   it converges on a minimum feasible force structure.
-   At the low end, we'll just be performing multiple 
-   capacity analyses..."
-  [{:keys [ctx supply distributions] :as reqstate}]
-  ;;we need afucntion to reset the engine.
-  ;;Since we're using immutable data, it's easier...
-  ;;We don't have to reset.
-  (loop [iteration 0
-         reqs      reqstate]
-    (if-let [res (calculate-requirement reqs)] ;;naive growth.
-      (recur (inc iteration)
-             res)
-      reqs)))
-
-;;Given a set of demand data, the theoretical proportion of supply by component, and policy schedules,
-;;calculate the supply required by SRC.
-(defn compute-requirements [ctx init-supply-table proportions]
-  (let [supply-table init-supply-table
-        distributions {}]
-    ))
 
 
 ;; Do
