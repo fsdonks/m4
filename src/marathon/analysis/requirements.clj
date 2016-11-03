@@ -13,7 +13,7 @@
 
 ;;this isn't a huge deal; multiplying by ratios returns bigints...
 (defn distribute-rationally [n xs] (mapv (fn [r] (* n r)) xs))
-(defn sums-to-one?   [xs] (== 1.0 (double (reduce + xs))))
+(defn sums-to-one?   [xs] (== 1.0  (double (reduce + xs))))
 ;;useful utility function...
 (defn sum-by [f init xs]
   (transduce (map f) (completing +) init xs))
@@ -102,6 +102,78 @@
           :else
           (throw (Exception. (str "unknown distributor!"))))))
 
+;;Requirements State
+;;==================
+;;creates a "lightweight" context
+;;for requirements analysis, so we can
+;;go faster.  Basically, drop any observers that
+;;aren't useful.
+(defn requirements-ctx [tbls]
+  ;;we'll basically do the same thing we normally do.
+  ;;For now at least...
+  ;;use init-context here, but 
+  )
+
+;;Note: we need a higher-order function that wraps
+;;performing RA for multiple srcs...
+;;I think the chain of causality is...
+;;Given an SRC, some tables,
+;;  Filter the supply,demand,policy records...
+;;  Compute requirements (however, typically iterative convergence)
+;;    ;;Create a simcontext from filtered tables.
+;;This gives us the mapping of src->requirements
+;;really, src->supply-records
+
+;;if we have an initial supply, we have a floor on the
+;;supply estimates.  RA will not go below this
+;;amount.  We want to compute a supply-table
+;;that reflects the initial supply.
+;;If the supply-table is empty, then
+;;we need to build one.
+(defn initial-supply [src supply-table compo-distros
+                      & {:keys [zero?] :or {zero? true}}]
+  (let [growth-compos (set (for [[k v] compo-distros :when (pos? v)]  k))
+        known         (set (tbl/field-vals  (tbl/get-field :Component supply-table)))
+        new-compos    (clojure.set/difference growth-compos known)
+        new-records   (for [[compo distro] compo-distros
+                            :when (pos? distro)]
+                        (->supply-record src compo 0))]
+    ;;(throw (Exception. (str "not implemented")))
+    (do (println [:computing-initial-supply])    
+        (->> (concat (tbl/table-records supply-table)
+                     new-records)
+             (tbl/records->table)))))
+
+;;we'll explicitly pass in SRC as a filter for now.
+;;It'd be really nice to share the context once we've
+;;created it....although policies and stuff might change...
+;;there's a bit of overhead in the policy stuff, so it's
+;;easier to move from ctx->ctx than otherwise...
+;;For now, we'll just suck it up. And redo every time,
+;;see how expensive it ends up being.
+
+(defn ->requirements-state
+  "Given a map of tables (a marathon project), 
+   creates a map that contains all of the state 
+   we'll need for our requirements analysis."
+  [tables src compo-distros]
+  (let [ctx0 (requirements-ctx tables)
+        s    (initial-supply  src (:SupplyRecords tables) compo-distros)]
+    {:ctx    ctx0 ;initial simulation context.
+     :supply s  ;initial set of supply records.
+     :distributions compo-distros
+     :steps     []
+     :iteration 0}))
+
+;;interesting notes on machine precision and clojure's numeric tower.
+;;(def rats '(1696969696969697/4000000000000000 0N 5757575757575757/10000000000000000))
+;;(reduce + rats) => 19999999999999999/20000000000000000 
+;;(/ 19999999999999999.0 20000000000000000.0) => 1.0
+;;(long (double (reduce + rats))) => 1
+;;(double (reduce + rats)) => 1.0
+;;(long (reduce + rats)) => 0
+;;(bigint (reduce + rats)) => 0N
+
 ;;Basic Algorithm
 ;;===============
 ;;Requirements analysis is the process of calculating some required additional
@@ -156,14 +228,7 @@
 ;;the next context.  So, basically, add-ghosts if
 ;;there are missed demands.
 
-(comment ;testing
-  (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
-  (require '[marathon.analysis [dummydata :as data]])
-  (def dummy-table
-    (apply-schema (marathon.schemas/get-schema :SupplyRecords)
-                  (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
 
-)
 
 ;;Growing Supply
 ;;==============
@@ -222,7 +287,7 @@
            :or   {distribution-table :GhostProportionsAggregate
                   dtype :bin}}]
   (let [make-distributor (fn [n] (fn [k] (* k n)))] 
-    (->> (get-or tbls distribution-table
+    (->> (get-or tbls  distribution-table
                  (->> (:SupplyRecords tbls)                                           
                       (tbl/table-records)
                       (filter :Enabled)
@@ -320,6 +385,9 @@
       (do (println "Generated ghosts on iteration")
           (distribute reqstate src dist)))))
 
+;;calculate-requirement works on one requirement...
+;;to perform a requirements analysis, we want to 
+
 ;;We may be able to fold this into calculate-requirements...
 (defn iterative-convergence
   "Given a requirements-state, searches the force structure 
@@ -380,49 +448,7 @@
     ;;Given a set of no new units (i.e. zero ghosts generated), iterative convergence returns the reported supply.  The data is already on-hand for
     ;;additional analysis (namely capacity analyis), if desired.
 
-;;creates a "lightweight" context
-;;for requirements analysis, so we can
-;;go faster.  Basically, drop any observers that
-;;aren't useful.
-(defn requirements-ctx [tbls]
-  ;;we'll basically do the same thing we normally do.
-  ;;For now at least...
-  ;;use init-context here, but 
-  )
 
-;;Note: we need a higher-order function that wraps
-;;performing RA for multiple srcs...
-;;I think the chain of causality is...
-;;Given an SRC, some tables,
-;;  Filter the supply,demand,policy records...
-;;  Compute requirements (however, typically iterative convergence)
-;;    ;;Create a simcontext from filtered tables.
-;;This gives us the mapping of src->requirements
-;;really, src->supply-records
-
-(defn initial-supply [compo-distros]
-  (throw (Exception. (str "not implemented"))))
-
-;;we'll explicitly pass in SRC as a filter for now.
-;;It'd be really nice to share the context once we've
-;;created it....although policies and stuff might change...
-;;there's a bit of overhead in the policy stuff, so it's
-;;easier to move from ctx->ctx than otherwise...
-;;For now, we'll just suck it up. And redo every time,
-;;see how expensive it ends up being.
-
-(defn ->requirements-state
-  "Given a map of tables (a marathon project), 
-   creates a map that contains all of the state 
-   we'll need for our requirements analysis."
-  [tables src compo-distros]
-  (let [ctx0 (requirements-ctx tables    src)
-        s    (initial-supply   compo-distros)]
-    {:ctx    ctx0 ;initial simulation context.
-     :supply s  ;initial set of supply records.
-     :distributions compo-distros
-     :steps     []
-     :iteration 0}))
 
 
 
@@ -469,8 +495,6 @@
 
 ;; End Sub
 
-
-
 ;; Private Function zeroSupply(ns As Collection) As Dictionary
 ;; Set zeroSupply = copyDict(ns(1))
 ;; End Function
@@ -478,22 +502,35 @@
 (defn requirements-search [reqs]
   (throw (Exception. (str "not implemented"))))
 
+
+;;We have an alternate implementation....
 (defn tables->requirements
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
   [tbls & {:keys [dtype search] :or {search requirements-search
                                      dtype :proportional}}]
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
-        distros (aggregate-distributions tbls :dtype dtype) 
-        srcs    (keys distros)]
-    (for [[src compo->distros] srcs]
-      (let [_ (println [:computing-requirements src])
+        distros (aggregate-distributions tbls :dtype dtype)]
+    (for [[src compo->distros] distros] ;;for each src, we create a reqstate
+      (let [_ (println [:computing-requirements src]) 
             src-filter (a/filter-srcs [src])
             src-tables (src-filter tbls) ;alters SupplyRecords, DemandRecords
-            reqstate  (->requirements-state src-tables ;create the searchstate.
+            reqstate   (->requirements-state src-tables ;create the searchstate.
                                              src compo->distros)
             ]
         [src (search reqstate)]))))
+
+(comment ;testing
+  (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
+  (require '[marathon.analysis [dummydata :as data]])
+  (def dummy-table
+    (apply-schema (marathon.schemas/get-schema :SupplyRecords)
+                  (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
+  (def tbls (a/load-requirements-project root))
+  ;;derive a requirements-state...
+  (def res (tables->requirements (:tables tbls) :search identity))
+
+)
 
 ;; 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
 ;; 'This is meant to be performed on a single SRC, i.e. a single independent requirement.
