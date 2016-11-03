@@ -46,6 +46,7 @@
     (tbl/conj-field  [k (vec (repeat n v))] t)))
 
 (defn zero-supply [t] (set-field t :Quantity 0))
+(defn increment-key [r k n] (update r k (fn [q] (+ q n))))
 
 ;;use tbl/subtables-by to get this implemented.
 ;;Useful for splitting up requirements states...
@@ -140,9 +141,9 @@
                         (->supply-record src compo 0))]
     ;;(throw (Exception. (str "not implemented")))
     (do (println [:computing-initial-supply])    
-        (->> (concat (tbl/table-records supply-table)
-                     new-records)
-             (tbl/records->table)))))
+        (concat (tbl/table-records supply-table)
+                new-records)
+        )))
 
 ;;we'll explicitly pass in SRC as a filter for now.
 ;;It'd be really nice to share the context once we've
@@ -160,7 +161,7 @@
   (let [ctx0 (requirements-ctx tables)
         s    (initial-supply  src (:SupplyRecords tables) compo-distros)]
     {:ctx    ctx0 ;initial simulation context.
-     :supply s  ;initial set of supply records.
+     :supply s    ;initial seq of supply records.
      :distributions compo-distros
      :steps     []
      :iteration 0}))
@@ -214,7 +215,6 @@
 ;;independent simulations, which only considers the supply and demand of
 ;;a single type.
 
-
 ;;Changes from VBA
 ;;What we'll do instead of having file i/o driving this, is we'll
 ;;derive any necessary i/o from the sequence we compute as we converge.
@@ -227,8 +227,6 @@
 ;;supply after-the-fact, and then fill again with
 ;;the next context.  So, basically, add-ghosts if
 ;;there are missed demands.
-
-
 
 ;;Growing Supply
 ;;==============
@@ -307,25 +305,29 @@
 ;;map.
 ;;we have the supply records in reqstate/supply
 ;;goal is to update the quantities incrementally.
-(defn increment-supply [reqstate src compo n]
-  (update-in reqstate [:supply src compo]
-             (fn [r] (update r :Quantity
-                         (fn [q] (+ q n))))))
 
+;;this creates a map of {compo amount}
 (defn compute-amounts [reqstate src n]
   (distribute-by (get reqstate src) n))
 
 ;;Replacement method for an earlier hack.  We now separate the process of calculating and applying
 ;;distributions.  Given a set of distributions, by component, apply them (whatever that means)
-;;to the src.
-(defn apply-amounts [reqstate src amounts]
-  (reduce (fn [acc [compo n]]
-            (if n
-              (let [adjusted-count (double n)]
-                (if (pos? adjusted-count)
-                  (increment-supply acc src compo adjusted-count)
-                  acc))
-              acc)) reqstate amounts))
+;;to the src.  Our goal is to update the the supply-table.
+;;Note: it doesn't actually matter if they're a spork.util.table
+;;or records...We can just keep the supply records
+;;as a record seq now, don't have to stick with
+;;table...
+(defn apply-amounts
+  "Given a requirementstate ,reqstate, and 
+   a map of {component amount}, increments the 
+   supply records in reqstate where compo matches."
+  [reqstate compo-amounts]
+  (update reqstate :supply          
+   #(->> %
+         (map (fn [r]
+                (if-let [n (get compo-amounts (:Component r))]                        
+                  (increment-key x :Quantity n)
+                         r))))))
 
 ;;So, each time we add supply, we conceptually take a growth step.
 (defn distribute [reqstate src count]
@@ -502,6 +504,17 @@
 (defn requirements-search [reqs]
   (throw (Exception. (str "not implemented"))))
 
+;;So, need a way to apply the step-function to the
+;;current supply, compute new supply records, etc.
+;;should be keeping a running tally of the
+;;ratioal totals at any given time.
+;;Perhaps, we store the actual value
+;;in the supply records.
+;;From there, we apply the growth step
+;;by adding the rationals.
+;;Then we coerce prior to running...
+
+;;So, when we go to distribute
 
 ;;We have an alternate implementation....
 (defn tables->requirements

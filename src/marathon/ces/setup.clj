@@ -41,9 +41,16 @@
   ([name]      (get-table name *tables*))
   ([name tbls] (or (get tbls name) (get tbls (alt-name name)))))
 
+(defn as-records [t]
+  (cond (tbl/tabular? t) (tbl/table-records t)
+        (and (seq? t) (map? (first t)))  t ;;infers that the table is a sequence of recordss...
+        :else (throw (Exception. (str [:not-table-or-record-seq t])))))
+
+;;We should expand this to allow us to view tables
+;;as record
 (defn get-records
-  ([name]      (tbl/record-seq (get-table name)))
-  ([name tbls] (tbl/record-seq (get-table name tbls))))
+  ([name]      (as-records (get-table name)))
+  ([name tbls] (as-records (get-table name tbls))))
 
 ;;Automates the building of a default behavior manager, linking it to a supply store.
 
