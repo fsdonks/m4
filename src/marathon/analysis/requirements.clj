@@ -135,8 +135,8 @@
   (let [growth-compos (set (for [[k v] compo-distros :when (pos? v)]  k))
         known         (set (tbl/field-vals  (tbl/get-field :Component supply-table)))
         new-compos    (clojure.set/difference growth-compos known)
-        new-records   (for [[compo distro] compo-distros
-                            :when (pos? distro)]
+        new-records   (for [compo new-compos
+                            :when (pos? (compo-distros compo))]
                         (->supply-record src compo 0))]
     ;;(throw (Exception. (str "not implemented")))
     (do (println [:computing-initial-supply])    
