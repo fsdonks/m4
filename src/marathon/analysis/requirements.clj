@@ -145,6 +145,13 @@
                 new-records)
         )))
 
+(defn zero-supply
+  "Simple function to zero our supply records.  Replaces 
+   quantity (if any) with a value of 0."
+  [xs]
+  (mapv (fn [r] (assoc r :Quantity 0)) xs))
+
+
 ;;we'll explicitly pass in SRC as a filter for now.
 ;;It'd be really nice to share the context once we've
 ;;created it....although policies and stuff might change...
@@ -170,9 +177,9 @@
 ;;(def rats '(1696969696969697/4000000000000000 0N 5757575757575757/10000000000000000))
 ;;(reduce + rats) => 19999999999999999/20000000000000000 
 ;;(/ 19999999999999999.0 20000000000000000.0) => 1.0
-;;(long (double (reduce + rats))) => 1
+;;(long   (double (reduce + rats))) => 1
 ;;(double (reduce + rats)) => 1.0
-;;(long (reduce + rats)) => 0
+;;(long   (reduce + rats)) => 0
 ;;(bigint (reduce + rats)) => 0N
 
 ;;Basic Algorithm
@@ -326,7 +333,7 @@
    #(->> %
          (map (fn [r]
                 (if-let [n (get compo-amounts (:Component r))]                        
-                  (increment-key x :Quantity n)
+                  (increment-key r :Quantity n)
                          r))))))
 
 ;;So, each time we add supply, we conceptually take a growth step.
@@ -343,6 +350,8 @@
                         :total-ghosts (+ total count)
                         :added  amounts
                         :total  (throw (Exception. "copysupply"))})))))
+
+;;Note: Currently not in use, OBE?
 
 ;;I think we'll have this as part of the reqstate...
 ;;rather than a separate output. Redo this...
@@ -516,7 +525,14 @@
 
 ;;So, when we go to distribute
 
+;;Maybe we have search do the work of creating
+;;the context?
+;;So the context is local to the search state..
+
+
+
 ;;We have an alternate implementation....
+;;This is our entry point....
 (defn tables->requirements
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
@@ -525,12 +541,11 @@
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
         distros (aggregate-distributions tbls :dtype dtype)]
     (for [[src compo->distros] distros] ;;for each src, we create a reqstate
-      (let [_ (println [:computing-requirements src]) 
+      (let [_          (println [:computing-requirements src]) 
             src-filter (a/filter-srcs [src])
-            src-tables (src-filter tbls) ;alters SupplyRecords, DemandRecords
+            src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
             reqstate   (->requirements-state src-tables ;create the searchstate.
-                                             src compo->distros)
-            ]
+                                             src compo->distros)]
         [src (search reqstate)]))))
 
 (comment ;testing
@@ -541,7 +556,7 @@
                   (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
   (def tbls (a/load-requirements-project root))
   ;;derive a requirements-state...
-  (def res (tables->requirements (:tables tbls) :search identity))
+  (def res (tables->requirements (:tables tbls) :search identity))  
 
 )
 
