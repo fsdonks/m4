@@ -1,6 +1,8 @@
 ;;Requirements Analysis implementation.
 (ns marathon.analysis.requirements
   (:require [spork.util [record :as r] [table :as tbl]]
+            [spork.sim [simcontext :as sim]]
+            [clojure [pprint :as pprint]]
             [marathon.ces [core :as core]
                           [engine :as engine]
                           [setup :as setup]
@@ -120,12 +122,20 @@
 ;;  we only care about demand fill.  Anything else is
 ;;  incidental.
 (defn requirements-ctx [tbls & {:keys [observer-routes]
-                                :or   {observer-routes {} #_obs/default-routes}}]
+                                :or   {observer-routes obs/default-routes}}]
   ;;we'll basically do the same thing we normally do.
   ;;For now at least...
   ;;use init-context here, but
-  (-> (setup/simstate-from   tbls) 
-      (engine/initialize-sim :observer-routes observer-routes)))
+  #_(-> (setup/simstate-from   tbls)
+        (sim/add-time 1)
+        (engine/initialize-sim :observer-routes observer-routes))
+  
+  (->>  (setup/simstate-from ;;allows us to pass maps in, hackey
+         tbls
+         core/emptysim)  
+        (sim/add-time 1)
+        ;(sim/register-routes obs/default-routes)
+        ))
 
 ;;Note: we need a higher-order function that wraps
 ;;performing RA for multiple srcs...
@@ -177,10 +187,12 @@
    creates a map that contains all of the state 
    we'll need for our requirements analysis."
   [tables src compo-distros]
-  (let [ctx0 (requirements-ctx tables)
+  (let [;ctx0 (requirements-ctx tables)
         s    (initial-supply  src (:SupplyRecords tables) compo-distros)]
-    {:ctx    ctx0 ;initial simulation context.
+    {;:ctx    ctx0 ;initial simulation context.
+     :tables tables
      :supply s    ;initial seq of supply records.
+     :src src
      :distributions compo-distros
      :steps     []
      :iteration 0}))
@@ -327,7 +339,7 @@
 
 ;;this creates a map of {compo amount}
 (defn compute-amounts [reqstate src n]
-  (distribute-by (get reqstate src) n))
+  (distribute-by (:distributions reqstate) n))
 
 ;;Replacement method for an earlier hack.  We now separate the process of calculating and applying
 ;;distributions.  Given a set of distributions, by component, apply them (whatever that means)
@@ -355,13 +367,13 @@
         total   (if (empty? steps) 0
                     (:total-ghosts (last steps)))]
     (-> reqstate
-        (apply-amounts src amounts) 
+        (apply-amounts  amounts) 
         (assoc  :steps ;;record the step we took.
            (conj steps {:src    src
                         :count  count
                         :total-ghosts (+ total count)
                         :added  amounts
-                        :total  (throw (Exception. "copysupply"))})))))
+                        :total nil })))))
 
 ;;Note: Currently not in use, OBE?
 
@@ -417,7 +429,8 @@
   ;;We compute total misses on said day, and report the
   ;;number.  Simple.
   (->> h
-       (map unfilled-demand)
+       (map (comp unfilled-demand second))
+       (filter identity)
        (filter pos?)
        (first)))
 
@@ -427,15 +440,18 @@
 ;;Returns the next requirement state, if we actually have a requirement.
 ;;Otherwise nil.
 (defn calculate-requirement
-  [{:keys [ctx src steps] :as reqstate}  history-function distance]
-  (let [dist (-> ctx (history-function) (distance))]
-    (when (pos? distance)
-      (do (println "Generated ghosts on iteration")
+  [{:keys [tables src steps supply] :as reqstate} distance-function]
+  (let [ctx  (requirements-ctx (assoc tables :SupplyRecords supply))]
+    (when-let [dist (distance-function ctx)]
+      (do (println (pprint/cl-format nil "Generated ~a ghosts of SRC ~a  on iteration ~a"
+                                     dist src (:iteration reqstate)))
           (distribute reqstate src dist)))))
 
 ;;calculate-requirement works on one requirement...
 ;;to perform a requirements analysis, we want to 
+(def default-distance (comp history->ghosts a/marathon-stream))
 
+(def prior (atom nil))
 ;;We may be able to fold this into calculate-requirements...
 (defn iterative-convergence
   "Given a requirements-state, searches the force structure 
@@ -443,23 +459,14 @@
    it converges on a minimum feasible force structure.
    At the low end, we'll just be performing multiple 
    capacity analyses..."
-  [reqstate & {:keys [step-function distance]
-               :or   {step-function unconstrained-ghost-step
-                      distance history->ghosts}}]
+  [reqstate & {:keys [distance]
+               :or   {distance default-distance}}]
   (loop [reqs      reqstate]
-    (if-let [res (calculate-requirement reqs step-function distance)] ;;naive growth.
-      (recur (update res :iteration inc))
+    (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
+      (do (println [:grew])
+          (reset! prior res)
+          (recur (update res :iteration inc)))
       reqs)))
-
-;;Compute a sequence of "empty" supply records
-;;from the proportions indicated 
-(defn proportion-record->supply-records [r]
-  (let [src (:SRC r)
-        compos [:AC :RC :NG]]
-    (for [c compos
-          :let [n (get r c)]
-          :when (pos? n)]
-      (->supply-record src c n))))
  
 ;;The iterative convergence function is a fixed-point function that implements the algorithm described in the declarations section.
 ;;During iterative convergence, we don;;t care about intermediate results, only the final fixed-point calculation.
@@ -566,8 +573,6 @@
 ;;the context?
 ;;So the context is local to the search state..
 
-
-
 ;;We have an alternate implementation....
 ;;This is our entry point....
 (defn tables->requirements
@@ -577,13 +582,25 @@
                                      dtype :proportional}}]
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
         distros (aggregate-distributions tbls :dtype dtype)]
-    (for [[src compo->distros] distros] ;;for each src, we create a reqstate
-      (let [_          (println [:computing-requirements src]) 
-            src-filter (a/filter-srcs [src])
-            src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
-            reqstate   (->requirements-state src-tables ;create the searchstate.
-                                             src compo->distros)]
-        [src (search reqstate)]))))
+    (->> distros
+         (map (fn [[src compo->distros]] ;;for each src, we create a reqstate
+                (let [_          (println [:computing-requirements src]) 
+                      src-filter (a/filter-srcs [src])
+                      src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
+                      reqstate   (->requirements-state src-tables ;create the searchstate.
+                                                       src compo->distros)]
+                  [src (search reqstate)]))))))
+
+(def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
+                    :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])
+
+(defn requirements->table [rs]
+  (->> rs 
+       (mapcat (comp :supply second))       
+       (tbl/records->table)
+;       (tbl/order-fields-by supply-fields)
+       (tbl/map-field :Quantity long)))
+
 
 (comment ;testing
   (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
@@ -593,7 +610,7 @@
                   (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
   (def tbls (a/load-requirements-project root))
   ;;derive a requirements-state...
-  (def res (tables->requirements (:tables tbls) :search identity))  
+  (def res (tables->requirements (:tables tbls) :search iterative-convergence))  
 
 )
 
@@ -917,3 +934,16 @@
   #_(defn load-variable-supply-context [tbls]
       (fn [supply-records]))
 )
+
+
+;;Possibly OBE...
+
+;;Compute a sequence of "empty" supply records
+;;from the proportions indicated 
+#_(defn proportion-record->supply-records [r]
+  (let [src    (:SRC r)
+        compos [:AC :RC :NG]]
+    (for [c compos
+          :let [n (get r c)]
+          :when (pos? n)]
+      (->supply-record src c n))))
