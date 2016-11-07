@@ -583,18 +583,21 @@
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
         distros (aggregate-distributions tbls :dtype dtype)]
     (->> distros
-         (map (fn [[src compo->distros]] ;;for each src, we create a reqstate
-                (let [_          (println [:computing-requirements src]) 
-                      src-filter (a/filter-srcs [src])
-                      src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
-                      reqstate   (->requirements-state src-tables ;create the searchstate.
-                                                       src compo->distros)]
-                  [src (search reqstate)]))))))
+         (mapv (fn [[src compo->distros]] ;;for each src, we create a reqstate
+                 (let [_          (println [:computing-requirements src]) 
+                       src-filter (a/filter-srcs [src])
+                       src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
+                       reqstate   (->requirements-state src-tables ;create the searchstate.
+                                                        src compo->distros)]
+                   [src (search reqstate)]))))))
 
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])
 
-(defn requirements->table [rs]
+(defn requirements->table
+  "Computes a finalized table of supply records representing the 
+   required supply."
+  [rs]
   (->> rs 
        (mapcat (comp :supply second))       
        (tbl/records->table)

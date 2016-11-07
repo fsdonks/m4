@@ -225,14 +225,13 @@
 
 ;;we only need to capture this when demands change..
 	   
-
 ;;If we can define trends as a map
 ;;or a reduction....
 ;;this is legacy support...
 ;;Note: this should work with our 
 (defn demand-trends
   ([t ctx]
-   (let [qtr (unchecked-inc (quot t 90)) ;;1-based quarters.         
+   (let [qtr     (unchecked-inc (quot t 90)) ;;1-based quarters.         
          changes (store/gete ctx :demand-watch :demands)
          actives (store/gete ctx :DemandStore :activedemands)]
      (when (seq changes)
