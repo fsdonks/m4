@@ -1,8 +1,8 @@
 ;;Requirements Analysis implementation.
 (ns marathon.analysis.requirements
   (:require [spork.util [record :as r] [table :as tbl]]
-            [marathon.ces [core :as core]]
-            [marathon [analysis :as a]]))
+            [marathon.ces [core :as core] [engine :as engine] [setup :as setup]]
+            [marathon [analysis :as a] [observers :as obs]]))
 
 ;;Utility functions
 ;;=================
@@ -109,11 +109,20 @@
 ;;for requirements analysis, so we can
 ;;go faster.  Basically, drop any observers that
 ;;aren't useful.
-(defn requirements-ctx [tbls]
+;;For now, we don't do anything special, although
+;;ripping out some of the observer stats could be useful.
+;;  We don't need the capacity-analysis defaults for now.
+;;  I'll look into ripping them out in the future,
+;;  since they add some overhead.  But for requirements,
+;;  we only care about demand fill.  Anything else is
+;;  incidental.
+(defn requirements-ctx [tbls & {:keys [observer-routes]
+                                :or   {observer-routes {} #_obs/default-routes}}]
   ;;we'll basically do the same thing we normally do.
   ;;For now at least...
-  ;;use init-context here, but 
-  )
+  ;;use init-context here, but
+  (-> (setup/simstate-from   tbls) 
+      (engine/initialize-sim :observer-routes observer-routes)))
 
 ;;Note: we need a higher-order function that wraps
 ;;performing RA for multiple srcs...
@@ -372,8 +381,17 @@
 ;;used to fill.  This is different than the scheme in vba, where
 ;;we had "supply generators" that were a little squirrely.  We'll
 ;;just move to a multipass fill, and use a ghost-fill function as
-;;the last stage.  Easy peasy.
-(defn unconstrained-ghost-step [ctx]
+;;the last stage.  Easy peasy. [IF WE WANT TO USE GHOSTS].
+
+;;[No Ghosts]
+;;There's actually a simpler way to do this.  If we ignore ghosts,
+;;we don't need to generate ghost entities at all, just stop on the
+;;first day we miss demand(s).  Then use the quantities missed as
+;;a hueristic to generate ghosts.
+(defn unconstrained-ghost-step 
+  "Primary state transition function for Marathon Requirements Analysis. "
+  [ctx]
+  ;;At this point
   (throw (Exception. (str "placeholder for stepping with ghost-fills."))))
 
 ;;probably want to stick this in marathon.analysis...

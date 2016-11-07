@@ -356,9 +356,12 @@
         
 (defn marathon-stream
   "Create a stream of simulation states, indexed by time."
-  [path-or-ctx & {:keys [tmax table-xform] :or {tmax 5001 table-xform identity}}]
+  [path-or-ctx & {:keys [tmax table-xform step-function]
+                  :or {tmax 5001
+                       table-xform identity
+                       step-function engine/sim-step}}]
   (->> (as-context path-or-ctx :table-xform table-xform)
-       (->history-stream tmax engine/sim-step)
+       (->history-stream tmax step-function)
        (end-of-day-history)))
 
 ;;simple-project xforms               
