@@ -1,7 +1,10 @@
 ;;Requirements Analysis implementation.
 (ns marathon.analysis.requirements
   (:require [spork.util [record :as r] [table :as tbl]]
-            [marathon.ces [core :as core] [engine :as engine] [setup :as setup]]
+            [marathon.ces [core :as core]
+                          [engine :as engine]
+                          [setup :as setup]
+                          [demand :as demand]]
             [marathon [analysis :as a] [observers :as obs]]))
 
 ;;Utility functions
@@ -394,13 +397,29 @@
   ;;At this point
   (throw (Exception. (str "placeholder for stepping with ghost-fills."))))
 
+(defn unfilled-demand
+  "Computes a scalar quantity of unfilled demand from a simulation
+   context."
+  [ctx]
+  (->> ctx
+       (demand/unfilled-demand-count) 
+       (map :unfilled)
+       (reduce +)))
+
 ;;probably want to stick this in marathon.analysis...
 ;;Given a history, compute the maximum amount of ghosts
 ;;(high-water mark) over time.  We should be able to
 ;;determine this easily by selecting entities with a
 ;;"Ghost" component at the end of the simulation.
 (defn history->ghosts [h]
-  (throw (Exception. (str "placeholder for computing ghosts"))))
+  ;;The crude idea here is to traverse the history until
+  ;;we find the first time we actually miss demand.
+  ;;We compute total misses on said day, and report the
+  ;;number.  Simple.
+  (->> h
+       (map unfilled-demand)
+       (filter pos?)
+       (first)))
 
 ;;I think we'll prefer to work with the history, so probably using a marathon-stream
 ;;instead of this approach...
@@ -408,8 +427,8 @@
 ;;Returns the next requirement state, if we actually have a requirement.
 ;;Otherwise nil.
 (defn calculate-requirement
-  [{:keys [ctx src steps] :as reqstate}  step-function distance]
-  (let [dist (-> ctx (step-function) (distance))]
+  [{:keys [ctx src steps] :as reqstate}  history-function distance]
+  (let [dist (-> ctx (history-function) (distance))]
     (when (pos? distance)
       (do (println "Generated ghosts on iteration")
           (distribute reqstate src dist)))))

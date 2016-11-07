@@ -142,7 +142,16 @@
      (unfilled-demands category demandstore ctx)   
      (throw (Exception. (str [:no-context-in-meta]))))))
 
-
+(defn unfilled-demand-count
+  "Query to support requirements analysis and the like.
+   If we have unfilled demands, we report the quantity 
+   of misses by category."
+  [ctx]
+  (for [[cat d-pris] (:unfilledq (core/get-demandstore ctx))
+        [priority id] d-pris]
+    (let [{:keys [quantity src units-assigned]} (store/get-entity ctx id)]
+      {:id id :src src
+       :category cat  :unfilled (- quantity (count units-assigned))})))
 ;;Right now, we're storing demands in their entirety in the demandmap...
 ;;We really just want to store the entity's name...
 ;;Optionally, we can elevate this to a core function, using the
