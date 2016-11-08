@@ -55,7 +55,10 @@
 (defn drop-unit  [store unitname]
   (-> store
       (drop-entity unitname)
-      (update-ine  [:SupplyStore :unitmap] dissoc unitname)))
+      (update-ine  [:SupplyStore :unitmap] #(dissoc % unitname))
+      (update-ine  [:SupplyStore :tags]    #(tag/drop-tag % unitname))))
+
+(defn drop-units [store names] (reduce drop-unit store names))
 
 ;;this has changed....we no longer need the supplystore...
 (defn get-unit [store name] ;(get-in supplystore [:unitmap  name]))
@@ -170,10 +173,11 @@
 
 ;DOUBLE CHECK....do we really mean to drop the entire src? 
 (defn remove-unit [store unitname]
+  (let [tags (store/gete store :SupplyStore)]                         
   (-> store
       (drop-unit unitname)
       (update-entity :SupplyStore remove-src (gete store unitname :src))
-      ))
+      )))
 
 (defn get-buckets 
   ([supply bucket] (get (:deployable-buckets supply) bucket))

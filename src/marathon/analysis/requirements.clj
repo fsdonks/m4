@@ -2,6 +2,7 @@
 (ns marathon.analysis.requirements
   (:require [spork.util [record :as r] [table :as tbl]]
             [spork.sim [simcontext :as sim]]
+            [spork.entitysystem [store :as store]]
             [clojure [pprint :as pprint]]
             [marathon.ces [core :as core]
                           [engine :as engine]
@@ -436,10 +437,12 @@
 ;;Returns the next requirement state, if we actually have a requirement.
 ;;Otherwise nil. 
 (defn calculate-requirement
-  [{:keys [tables src steps supply] :as reqstate} distance-function]
-  (-> (assoc tables :SupplyRecords supply)
-      (requirements-ctx)
-      (distance-function)))
+  ([reqstate distance-function]
+   (calculate-requirement reqstate distance-function requirements-ctx))
+  ([{:keys [tables src steps supply] :as reqstate} distance-function tables->ctx]
+   (-> (assoc tables :SupplyRecords supply)
+       (tables->ctx)
+       (distance-function))))
 
 ;;calculate-requirement works on one requirement...
 ;;to perform a requirements analysis, we want to 
@@ -463,6 +466,30 @@
                    reqs))]
   (loop [reqs      reqstate]
     (if-let [dist (calculate-requirement reqs distance)] ;;naive growth.
+      (-> reqs
+            (echo dist)
+            (distribute (:src reqstate) dist)
+            (update :iteration inc)            
+            (recur))
+      reqs))))
+
+(defn iterative-convergence-shared
+  "Given a requirements-state, searches the force structure 
+   space by varying the supply of the requirements, until 
+   it converges on a minimum feasible force structure.
+   At the low end, we'll just be performing multiple 
+   capacity analyses...Uses a shared base context to 
+   save time on i/o."
+  [reqstate & {:keys [distance]
+               :or   {distance default-distance}}]
+  (let [tables->ctx (quick-context  (:tables reqstate))
+        echo (fn [{:keys [src iteration] :as reqs} dist]
+               (do (println
+                    (pprint/cl-format nil "Generated ~a ghosts of ~a on iteration ~a"
+                                      dist src iteration))
+                   reqs))]
+  (loop [reqs      reqstate]
+    (if-let [dist (calculate-requirement reqs distance tables->ctx)] ;;naive growth.
       (-> reqs
             (echo dist)
             (distribute (:src reqstate) dist)
@@ -537,59 +564,52 @@
     ;;additional analysis (namely capacity analyis), if desired.
 
 
+;;We can save a lot of redundant effort if
+;;we limit ourselves to only loading supply...
+;;I.e., we keep policy and demand (initial demand)
+;;in place.
 
+;;We can call this the root context.
+;;The root context then only has to build units
+;;from records....so...
 
+;;If we want to reset a requirements context....
+;;We need to drop the supply.
+;;Demand doesn't change.
+;;We could reset the demand....
 
-;; Do
-;;     Set ghosts = sim.outputmanager.observers("Ghosts")
-;;     Iteration = Iteration + 1
-    
-;;     If Not CalculateRequirement(sim, ghosts, , ns) Then
-;;         Debug.Print "No More ghosts to generate!"
-;;         Exit Do
-;;     Else
-;;         tstrt = Timer() - tstrt
-        
-;;         If noio Then 'don't bother writing to the sheet
-;;             sim.Reset_Engine_FromExcel True, supplyTable 'this will reset marathon, using the GeneratedSupply Worksheet to pull in initial supply.
-;;         Else
-;;             updateGeneratedSupply
-;;             sim.Reset_Engine_FromExcel True
-;;         End If
-        
-;;         If logevents Then
-;;             Set logger = Nothing
-;;             Set logger = New TimeStep_ObserverLogFile
-;;             logger.init "ReqEvents" & Iteration, sim.EventManager.evtstream
-;;         End If
-;;     End If
-;; Loop
+;;To create a root context...
+;;Build from a file.
+;;From wipe out the supply.
+;;Wiping supply implies
 
+(defn clear-supply
+  "Given a context, removes a unit entity from the context."
+  [ctx]
+  (let [us     (core/units ctx)
+        ids    (map :name   us)
+        pstore (reduce (fn [acc u]
+                      (marathon.ces.policy/unsubscribe-unit u (:policy u) acc))
+                   (core/get-policystore ctx)
+                   us)
+        _ (println (:subscriptions pstore))]
+    (-> (->> (marathon.ces.supply/drop-units ctx ids)
+             (sim/merge-entity {:PolicyStore pstore}))
+        (sim/drop-entity-updates (set ids)))))
 
-;; If squeeze Then 'Make sure we've found the optimal using bisection
-;;     If ns.count > 1 Then 'need to handle this corner case.
-;;         Bisect sim, ns, ns(ns.count - 1), ns(ns.count), Iteration
-;;     ElseIf ns.count = 1 Then
-;;         Bisect sim, ns, zeroSupply(ns), ns(ns.count), Iteration
-;;     End If
-;; End If
-
-;; If noio Then finalIO sim
-
-;; updateGeneratedSupply
-
-;; Set logger = Nothing
-;; Set sim = Nothing
-
-;; End Sub
-
-;; Private Function zeroSupply(ns As Collection) As Dictionary
-;; Set zeroSupply = copyDict(ns(1))
-;; End Function
-
-(defn requirements-search [reqs]
-  (throw (Exception. (str "not implemented"))))
-
+(defn quick-context
+  "Yields a function that provides a reusable context 
+   so that we don't pay i/o costs everytime we build a 
+   new supply excursion.  Strips down the initial context
+   into a simplified context that has no unit-entities or 
+   supply."
+  [tbls]
+  (let [base-ctx (requirements-ctx tbls)     
+        base-ctx (clear-supply base-ctx)]    
+    (fn [tbls]
+      (-> base-ctx
+          (setup/default-supply :records (:SupplyRecords tbls))))))
+ 
 ;;So, need a way to apply the step-function to the
 ;;current supply, compute new supply records, etc.
 ;;should be keeping a running tally of the
@@ -611,8 +631,8 @@
 (defn tables->requirements
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
-  [tbls & {:keys [dtype search] :or {search requirements-search
-                                     dtype :proportional}}]
+  [tbls & {:keys [dtype search] :or {search iterative-convergence
+                                     dtype  :proportional}}]
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
         distros (aggregate-distributions tbls :dtype dtype)]
     (->> distros
@@ -638,36 +658,6 @@
        (tbl/map-field :Quantity long)))
 
 
-;;We can save a lot of redundant effort if
-;;we limit ourselves to only loading supply...
-;;I.e., we keep policy and demand (initial demand)
-;;in place.
-
-;;We can call this the root context.
-;;The root context then only has to build units
-;;from records....so...
-
-;;If we want to reset a requirements context....
-;;We need to drop the supply.
-;;Demand doesn't change.
-;;We could reset the demand....
-
-;;To create a root context...
-;;Build from a file.
-;;From wipe out the supply.
-;;Wiping supply implies
-
-(defn clear-updates [ctx ids update-type]
-  (let [updates (get-in ctx [:updater :updates update-type])]
-    
-        
-
-(defn reset-context [ctx records]
-  (-> ctx
-      (wipe-supply)
-      (add-supply records)))
-  
-
 
 (comment ;testing
   (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
@@ -679,18 +669,20 @@
   
   ;;derive a requirements-state...
   (def icres (requirements->table
-            (tables->requirements (:tables tbls) :search iterative-convergence)))
+              (tables->requirements (:tables tbls) :search iterative-convergence)))
   (def bsres (requirements->table
-            (tables->requirements (:tables tbls) :search bisecting-convergence)))
+              (tables->requirements (:tables tbls) :search bisecting-convergence)))
   (def s1 {"AC" 1696969696969697/4000000000000000
            "RC" 0N
            "NG" 5757575757575757/10000000000000000})
   (def rootbig "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbasebig.xlsx")
-  (def tbls (a/load-requirements-project rootbig))
+  (def tbls  (a/load-requirements-project rootbig))
   (def icres (requirements->table
               (tables->requirements (:tables tbls) :search iterative-convergence)))
   (def bsres (requirements->table
               (tables->requirements (:tables tbls) :search bisecting-convergence)))
+  (def icsres  (requirements->table
+                (tables->requirements (:tables tbls) :search iterative-convergence-shared)))
   
 )
 
