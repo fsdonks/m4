@@ -320,11 +320,13 @@
                       (tbl/table-records)
                       (filter :Enabled)
                       (compute-aggregate-supply)
-                      (aggregate-proportions)))       
-         (reduce (fn [acc r]
-                   (let [{:keys [SRC AC RC NG]} r]
-                     (assoc acc SRC {"AC" AC "RC" RC "NG" NG})))
-                 {}))))
+                      (aggregate-proportions)))
+         (transduce (filter :Enabled)
+                    (completing
+                     (fn [acc r]
+                       (let [{:keys [SRC AC RC NG]} r]
+                         (assoc acc SRC {"AC" AC "RC" RC "NG" NG}))))
+                                {}))))
 
 ;;fill this in...
 ;;probably need some state.
@@ -468,8 +470,6 @@
             (recur))
       reqs))))
 
-(defn initial-guess [])
-
 ;{:src "SRC1", :count {"AC" 2.121212121212121, "RC" 0.0, "NG" 2.8787878787878785}, :total-ghosts 5, :added {"AC" 2.121212121212121, "RC" 0.0, "NG" 2.8787878787878785}, :total 0}
 
 (defn bisecting-convergence
@@ -486,7 +486,7 @@
             rtest (distribute reqs (:src reqstate) mid)
             reqs  (update reqs :iteration inc)]
         (if (= mid lower) ;need a new bound...double upper?
-          (recur reqs lower (inc upper))
+          (recur reqs lower (* upper 2))
           (do (swap! known? conj mid)
               (if-let [res (calculate-requirement rtest distance)] ;;naive growth.
                 (do (println [:guessing [lower upper] :at mid :got res])
@@ -644,13 +644,20 @@
   (def tbls (a/load-requirements-project root))
   
   ;;derive a requirements-state...
-  (def res (requirements->table
+  (def icres (requirements->table
             (tables->requirements (:tables tbls) :search iterative-convergence)))
-  (def res (requirements->table
+  (def bsres (requirements->table
             (tables->requirements (:tables tbls) :search bisecting-convergence)))
   (def s1 {"AC" 1696969696969697/4000000000000000
            "RC" 0N
            "NG" 5757575757575757/10000000000000000})
+  (def rootbig "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbasebig.xlsx")
+  (def tbls (a/load-requirements-project rootbig))
+  (def icres (requirements->table
+              (tables->requirements (:tables tbls) :search iterative-convergence)))
+  (def bsres (requirements->table
+              (tables->requirements (:tables tbls) :search bisecting-convergence)))
+  
 )
 
 ;; 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
