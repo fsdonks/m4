@@ -160,7 +160,16 @@
      (default-simstate ctx)))
   ([tables] (simstate-from tables core/emptysim)))
 
+;;We'd like to be able to reset a simstate, that is, change
+;;the supply.
 
+;;All we have to do is eliminate the updates right?
+(defn drop-supply
+  "Clears the state related to entities part of the supply, including 
+   the supply store."
+  [ctx]
+  (let [units (core/unit-names ctx)]
+  )
 
 
           

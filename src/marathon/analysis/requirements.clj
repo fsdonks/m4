@@ -638,6 +638,37 @@
        (tbl/map-field :Quantity long)))
 
 
+;;We can save a lot of redundant effort if
+;;we limit ourselves to only loading supply...
+;;I.e., we keep policy and demand (initial demand)
+;;in place.
+
+;;We can call this the root context.
+;;The root context then only has to build units
+;;from records....so...
+
+;;If we want to reset a requirements context....
+;;We need to drop the supply.
+;;Demand doesn't change.
+;;We could reset the demand....
+
+;;To create a root context...
+;;Build from a file.
+;;From wipe out the supply.
+;;Wiping supply implies
+
+(defn clear-updates [ctx ids update-type]
+  (let [updates (get-in ctx [:updater :updates update-type])]
+    
+        
+
+(defn reset-context [ctx records]
+  (-> ctx
+      (wipe-supply)
+      (add-supply records)))
+  
+
+
 (comment ;testing
   (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
   (require '[marathon.analysis [dummydata :as data]])

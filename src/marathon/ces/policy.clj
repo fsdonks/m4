@@ -456,6 +456,8 @@
         (do (drop-sub! scripts old-policy nm) 
             scripts)))))
 
+;;Note: If we want to recycle the policy store, we can
+;;by dropping subscriptions.  Resetting the period...
 (defn unsubscribe-unit 
   "Subscribes a unit to policy by establishing a relation with the policy in
    the policy store.  Rather than storing subscriptions in the policy, we now
