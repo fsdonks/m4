@@ -597,6 +597,10 @@
              (sim/merge-entity {:PolicyStore pstore}))
         (sim/drop-entity-updates (set ids)))))
 
+;;We could use a heuristic function, for the big
+;;entity runs.  Alternately, make supply updates
+;;and unit construction/registration much cheaper.
+
 (defn quick-context
   "Yields a function that provides a reusable context 
    so that we don't pay i/o costs everytime we build a 
