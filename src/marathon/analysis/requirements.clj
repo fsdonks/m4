@@ -470,8 +470,11 @@
             (recur))
       reqs))))
 
-;{:src "SRC1", :count {"AC" 2.121212121212121, "RC" 0.0, "NG" 2.8787878787878785}, :total-ghosts 5, :added {"AC" 2.121212121212121, "RC" 0.0, "NG" 2.8787878787878785}, :total 0}
-
+;;Currently 2x slower than ic....wonder if we can speed this
+;;up?  Problem is, we end up doing a lot of higher-supply
+;;runs, which hurts performance.  Doing more volume of
+;;work than IC.  IC makes many small jumps.  BS
+;;makes some large jumps, and some small jumps.
 (defn bisecting-convergence
   [reqstate & {:keys [distance init-lower init-upper]
                :or   {distance default-distance
