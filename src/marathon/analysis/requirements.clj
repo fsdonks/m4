@@ -474,17 +474,30 @@
 
 (defn bisecting-convergence
   [reqstate & {:keys [distance init-lower init-upper]
-               :or   {distance default-distance}}]
-  (loop [reqs      reqstate
-         lower init-lower
-         upper init-upper]
-    (let [hw (quot (- upper lower) 2)]          
-      (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
-        (do ;(println [:grew])
-          (reset! prior res)
-          (recur (update res :iteration inc)))
-        reqs))))
-
+               :or   {distance default-distance
+                      init-lower 0
+                      init-upper 50}}]
+  (let [known? (atom #{})]
+    (loop [reqs      reqstate
+           lower init-lower
+           upper init-upper]
+      (let [hw    (quot (- upper lower) 2)
+            mid   (+ lower hw)         
+            rtest (distribute reqs (:src reqstate) mid)
+            reqs  (update reqs :iteration inc)]
+        (if (= mid lower) ;need a new bound...double upper?
+          (recur reqs lower (inc upper))
+          (do (swap! known? conj mid)
+              (if-let [res (calculate-requirement rtest distance)] ;;naive growth.
+                (do (println [:guessing [lower upper] :at mid :got res])
+                    (recur reqs mid upper))
+                (do (println [:guessing [lower upper] :at mid :got 0])
+                    (if (== hw 1)
+                      (do (println [:converged mid])
+                          rtest)
+                      (recur reqs lower mid))
+                ))))))))
+  
 ;;The iterative convergence function is a fixed-point function that implements the algorithm described in the declarations section.
 ;;During iterative convergence, we don;;t care about intermediate results, only the final fixed-point calculation.
 ;;After we determine the fixed-point, we can perform a final dynamic analysis (capacity analysis) on the output.
@@ -632,7 +645,9 @@
   
   ;;derive a requirements-state...
   (def res (requirements->table
-              (tables->requirements (:tables tbls) :search iterative-convergence)))
+            (tables->requirements (:tables tbls) :search iterative-convergence)))
+  (def res (requirements->table
+            (tables->requirements (:tables tbls) :search bisecting-convergence)))
   (def s1 {"AC" 1696969696969697/4000000000000000
            "RC" 0N
            "NG" 5757575757575757/10000000000000000})
