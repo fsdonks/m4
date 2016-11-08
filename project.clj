@@ -22,6 +22,5 @@
                               spork.util.metaprogramming                              
                               marathon.ces.core
                               marathon.serial 
-                              marathon.core]}]}
-  )
+                              marathon.core]}]})
 

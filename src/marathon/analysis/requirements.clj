@@ -20,8 +20,7 @@
 (defn distribute-rationally [n xs] (mapv (fn [r] (* n r)) xs))
 (defn sums-to-one?   [xs] (== 1.0  (double (reduce + xs))))
 ;;useful utility function...
-(defn sum-by [f init xs]
-  (transduce (map f) (completing +) init xs))
+(defn sum-by [f init xs] (transduce (map f) (completing +) init xs))
 
 ;;useful function for spork.util.table todo: move there...
 (defn apply-schema
@@ -357,32 +356,27 @@
    #(->> %
          (map (fn [r]
                 (if-let [n (get compo-amounts (:Component r))]                        
-                  (increment-key r :Quantity n)
-                         r))))))
+                  #_(increment-key r :Quantity n)
+                  (assoc r :Quantity n)
+                  r)
+                
+                )))))
 
 ;;So, each time we add supply, we conceptually take a growth step.
-(defn distribute [reqstate src count]
-  (let [amounts (compute-amounts reqstate src count)
-        steps   (or (:steps reqstate) [])
-        total   (if (empty? steps) 0
-                    (:total-ghosts (last steps)))]
+(defn distribute [reqstate src n]
+  (let [steps   (or (:steps reqstate) [])
+        total   (if (empty? steps) n
+                     (:total-ghosts (last steps)))
+        amounts (compute-amounts reqstate src total)]
     (-> reqstate
         (apply-amounts  amounts) 
         (assoc  :steps ;;record the step we took.
            (conj steps {:src    src
-                        :count  count
-                        :total-ghosts (+ total count)
+                        :count  amounts
+                        :total-ghosts (+ total n)
                         :added  amounts
-                        :total nil })))))
-
-;;Note: Currently not in use, OBE?
-
-;;I think we'll have this as part of the reqstate...
-;;rather than a separate output. Redo this...
-(defn write-record
-  [reqstate iteration src component quantity]
-  (update-in reqstate  [:iterations src] conj
-      (->outrecord iteration src component quantity)))
+                        :total  total ;n
+                        })))))
 
 ;;This is an auxillary function to handle each run of the requirements analysis.
 ;;Given a simulation that is already primed and loaded, and possibly an initial supply of units, calculate the
@@ -438,20 +432,19 @@
 ;;instead of this approach...
 ;;TODO: Replace event-step-marathon with the appropriate simreducer or whatnot.
 ;;Returns the next requirement state, if we actually have a requirement.
-;;Otherwise nil.
+;;Otherwise nil. 
 (defn calculate-requirement
   [{:keys [tables src steps supply] :as reqstate} distance-function]
-  (let [ctx  (requirements-ctx (assoc tables :SupplyRecords supply))]
-    (when-let [dist (distance-function ctx)]
-      (do (println (pprint/cl-format nil "Generated ~a ghosts of SRC ~a  on iteration ~a"
-                                     dist src (:iteration reqstate)))
-          (distribute reqstate src dist)))))
+  (-> (assoc tables :SupplyRecords supply)
+      (requirements-ctx)
+      (distance-function)))
 
 ;;calculate-requirement works on one requirement...
 ;;to perform a requirements analysis, we want to 
 (def default-distance (comp history->ghosts a/marathon-stream))
 
 (def prior (atom nil))
+
 ;;We may be able to fold this into calculate-requirements...
 (defn iterative-convergence
   "Given a requirements-state, searches the force structure 
@@ -461,13 +454,37 @@
    capacity analyses..."
   [reqstate & {:keys [distance]
                :or   {distance default-distance}}]
+  (let [echo (fn [{:keys [src iteration] :as reqs} dist]
+               (do (println
+                    (pprint/cl-format nil "Generated ~a ghosts of ~a on iteration ~a"
+                                      dist src iteration))
+                   reqs))]
   (loop [reqs      reqstate]
-    (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
-      (do (println [:grew])
+    (if-let [dist (calculate-requirement reqs distance)] ;;naive growth.
+      (-> reqs
+            (echo dist)
+            (distribute (:src reqstate) dist)
+            (update :iteration inc)            
+            (recur))
+      reqs))))
+
+(defn initial-guess [])
+
+;{:src "SRC1", :count {"AC" 2.121212121212121, "RC" 0.0, "NG" 2.8787878787878785}, :total-ghosts 5, :added {"AC" 2.121212121212121, "RC" 0.0, "NG" 2.8787878787878785}, :total 0}
+
+(defn bisecting-convergence
+  [reqstate & {:keys [distance init-lower init-upper]
+               :or   {distance default-distance}}]
+  (loop [reqs      reqstate
+         lower init-lower
+         upper init-upper]
+    (let [hw (quot (- upper lower) 2)]          
+      (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
+        (do ;(println [:grew])
           (reset! prior res)
           (recur (update res :iteration inc)))
-      reqs)))
- 
+        reqs))))
+
 ;;The iterative convergence function is a fixed-point function that implements the algorithm described in the declarations section.
 ;;During iterative convergence, we don;;t care about intermediate results, only the final fixed-point calculation.
 ;;After we determine the fixed-point, we can perform a final dynamic analysis (capacity analysis) on the output.
@@ -584,7 +601,7 @@
         distros (aggregate-distributions tbls :dtype dtype)]
     (->> distros
          (mapv (fn [[src compo->distros]] ;;for each src, we create a reqstate
-                 (let [_          (println [:computing-requirements src]) 
+                 (let [_          (println [:computing-requirements src])
                        src-filter (a/filter-srcs [src])
                        src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
                        reqstate   (->requirements-state src-tables ;create the searchstate.
@@ -612,9 +629,13 @@
     (apply-schema (marathon.schemas/get-schema :SupplyRecords)
                   (tbl/keywordize-field-names (tbl/records->table  data/dummy-supply-records))))
   (def tbls (a/load-requirements-project root))
+  
   ;;derive a requirements-state...
-  (def res (tables->requirements (:tables tbls) :search iterative-convergence))  
-
+  (def res (requirements->table
+              (tables->requirements (:tables tbls) :search iterative-convergence)))
+  (def s1 {"AC" 1696969696969697/4000000000000000
+           "RC" 0N
+           "NG" 5757575757575757/10000000000000000})
 )
 
 ;; 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
@@ -695,18 +716,10 @@
 ;; End If
 
 ;; Debug.Print "No More ghosts to generate.  Binary search converged on " & lower & " Ghosts for src " & src
-
 ;; If noio Then finalIO sim
-
 ;; updateGeneratedSupply
-
 ;; Set sim = Nothing
-
 ;; End Sub
-
-
-
-
 
 ;; Private Sub makeghost()
 
@@ -950,3 +963,13 @@
           :let [n (get r c)]
           :when (pos? n)]
       (->supply-record src c n))))
+
+
+;;Note: Currently not in use, OBE?
+
+;;I think we'll have this as part of the reqstate...
+;;rather than a separate output. Redo this...
+#_(defn write-record
+    [reqstate iteration src component quantity]
+    (update-in reqstate  [:iterations src] conj
+               (->outrecord iteration src component quantity)))
