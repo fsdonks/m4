@@ -473,6 +473,58 @@
             (recur))
       reqs))))
 
+
+;;We can save a lot of redundant effort if
+;;we limit ourselves to only loading supply...
+;;I.e., we keep policy and demand (initial demand)
+;;in place.
+
+;;We can call this the root context.
+;;The root context then only has to build units
+;;from records....so...
+
+;;If we want to reset a requirements context....
+;;We need to drop the supply.
+;;Demand doesn't change.
+;;We could reset the demand....
+
+;;To create a root context...
+;;Build from a file.
+;;From wipe out the supply.
+;;Wiping supply implies
+
+(defn clear-supply
+  "Given a context, removes a unit entity from the context."
+  [ctx]
+  (let [us     (core/units ctx)
+        ids    (map :name   us)
+        pstore (reduce (fn [acc u]
+                      (marathon.ces.policy/unsubscribe-unit u (:policy u) acc))
+                   (core/get-policystore ctx)
+                   us)
+        _ (println (:subscriptions pstore))]
+    (-> (->> (marathon.ces.supply/drop-units ctx ids)
+             (sim/merge-entity {:PolicyStore pstore}))
+        (sim/drop-entity-updates (set ids)))))
+
+;;We could use a heuristic function, for the big
+;;entity runs.  Alternately, make supply updates
+;;and unit construction/registration much cheaper.
+
+(defn quick-context
+  "Yields a function that provides a reusable context 
+   so that we don't pay i/o costs everytime we build a 
+   new supply excursion.  Strips down the initial context
+   into a simplified context that has no unit-entities or 
+   supply."
+  [tbls]
+  (let [base-ctx (requirements-ctx tbls)     
+        base-ctx (clear-supply base-ctx)]    
+    (fn [tbls]
+      (-> base-ctx
+          (setup/default-supply :records (:SupplyRecords tbls))))))
+
+
 (defn iterative-convergence-shared
   "Given a requirements-state, searches the force structure 
    space by varying the supply of the requirements, until 
@@ -564,56 +616,7 @@
     ;;additional analysis (namely capacity analyis), if desired.
 
 
-;;We can save a lot of redundant effort if
-;;we limit ourselves to only loading supply...
-;;I.e., we keep policy and demand (initial demand)
-;;in place.
 
-;;We can call this the root context.
-;;The root context then only has to build units
-;;from records....so...
-
-;;If we want to reset a requirements context....
-;;We need to drop the supply.
-;;Demand doesn't change.
-;;We could reset the demand....
-
-;;To create a root context...
-;;Build from a file.
-;;From wipe out the supply.
-;;Wiping supply implies
-
-(defn clear-supply
-  "Given a context, removes a unit entity from the context."
-  [ctx]
-  (let [us     (core/units ctx)
-        ids    (map :name   us)
-        pstore (reduce (fn [acc u]
-                      (marathon.ces.policy/unsubscribe-unit u (:policy u) acc))
-                   (core/get-policystore ctx)
-                   us)
-        _ (println (:subscriptions pstore))]
-    (-> (->> (marathon.ces.supply/drop-units ctx ids)
-             (sim/merge-entity {:PolicyStore pstore}))
-        (sim/drop-entity-updates (set ids)))))
-
-;;We could use a heuristic function, for the big
-;;entity runs.  Alternately, make supply updates
-;;and unit construction/registration much cheaper.
-
-(defn quick-context
-  "Yields a function that provides a reusable context 
-   so that we don't pay i/o costs everytime we build a 
-   new supply excursion.  Strips down the initial context
-   into a simplified context that has no unit-entities or 
-   supply."
-  [tbls]
-  (let [base-ctx (requirements-ctx tbls)     
-        base-ctx (clear-supply base-ctx)]    
-    (fn [tbls]
-      (-> base-ctx
-          (setup/default-supply :records (:SupplyRecords tbls))))))
- 
 ;;So, need a way to apply the step-function to the
 ;;current supply, compute new supply records, etc.
 ;;should be keeping a running tally of the
@@ -662,7 +665,21 @@
        (tbl/map-field :Quantity long)))
 
 
-
+(defn requirements-run [inpath]
+  (let [inpath (clojure.string/replace inpath #"\\" "/")
+        base (->> (clojure.string/split inpath #"/")
+                  (butlast)
+                  (clojure.string/join "/"))
+        outpath (str base "/requirements.txt")]
+    (do (println ["Analyzing requirements for" inpath])        
+        (->> (-> (a/load-requirements-project rootbig)
+                  (:tables)
+                  (tables->requirements  :search iterative-convergence-shared)
+                  (requirements->table)
+                  (tbl/table->tabdelimited))
+             (spit outpath))
+        (println ["Spit requirements to " outpath]))))
+              
 (comment ;testing
   (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
   (require '[marathon.analysis [dummydata :as data]])

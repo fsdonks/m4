@@ -7,6 +7,7 @@
                                         ;[scraper :as scraper]
              ]
             [marathon.demo :as demo]
+            [marathon.analysis [requirements :as requirements]]
             [clojure       [pprint :as pprint]
                            [set :as set]]
             [spork.cljgui.components [swing :as gui]]
@@ -259,6 +260,10 @@
     (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
                   (capacity-analysis wbpath)))
 
+(defn requirements-analysis-dialogue []
+    (request-path [wbpath "Please select the location of a valid MARATHON requirements project file."]  
+                  (requirements/requirements-run wbpath)))
+
 (defn debug-run-dialogue []
   (request-path [wbpath "Please select the location of a valid MARATHON project file."]
     (let [pieces       (clojure.string/split wbpath #"\\")
@@ -295,6 +300,7 @@
             :compute-peaks      '(compute-peaks-dialogue) 
             :say-hello          '(println "hello!")
             :capacity-analysis  '(capacity-analysis-dialogue)
+            :requirements-analysis  '(requirements-analysis-dialogue)
             :debug-run          '(debug-run-dialogue)
             :examine-project    '(examine-project-dialogue)
             :search-for         '(pprint/pprint
