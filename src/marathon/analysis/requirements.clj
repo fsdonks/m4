@@ -672,7 +672,7 @@
                   (clojure.string/join "/"))
         outpath (str base "/requirements.txt")]
     (do (println ["Analyzing requirements for" inpath])        
-        (->> (-> (a/load-requirements-project rootbig)
+        (->> (-> (a/load-requirements-project inpath)
                   (:tables)
                   (tables->requirements  :search iterative-convergence-shared)
                   (requirements->table)
