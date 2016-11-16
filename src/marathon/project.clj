@@ -248,7 +248,7 @@
         (doseq [k tables]
           (let [t    (get (:tables prj) k)
                 tgt  (str outroot "AUDIT_" (name k) ".txt")
-                _    (println [:spitting t :to tgt])]
+                _    (println [:spitting k :to tgt])]
             (tbl/spit-table tgt t))))))
 
 (derive ::csv        ::table)
