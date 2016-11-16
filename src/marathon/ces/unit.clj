@@ -205,7 +205,7 @@
 
 ;End Sub
 
-(defn modifycycle [u newpolicy]
+(defn modify-cycle [u newpolicy]
   (let [vs (get-vals newpolicy [:maxBOG  :maxDwell :cyclelength :maxMOB])
         newrecord (apply modify-cyclerecord (:currentcycle u) vs)]
     (merge u {:currentcycle newrecord})))

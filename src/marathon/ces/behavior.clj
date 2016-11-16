@@ -1619,6 +1619,7 @@
 ;;___Policy Change___
 
 
+(declare apply-policy-change defer-policy-change)
 ;;hacky...
 (def infeasible-policy-change?  #{"Deployed" "Overlapping" "DeMobilizing"})      
 (defn can-change-policy? [cycle-proportion from-pos]
@@ -1659,6 +1660,7 @@
 ;; 'rotational lifecycle.
 
 ;; Function PolicyChange_State(unit As TimeStep_UnitData, deltat As Single) As TimeStep_UnitData
+;;WIP Nov 2016
 (befn policy-change-state ^behaviorenv {:keys [entity wait-time tupdate policy-change ctx]
                                         :as benv}
       (when policy-change ;;we have a change.
@@ -1690,16 +1692,16 @@
               cycletimeA (:cycletime      unit)
               PositionA  (:PositionPolicy unit)                  
               _          (assert (pos? cycletimeA) "Cycletime should not be negative!")
-              CycleProportionA  (/ cycletimeA  (protocols/cycle-length policy))
+              CycleProportionA  (/ cycletimeA  (protocols/cycle-length current-policy))
               ;;'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
               ]
           (->or [(->and [(can-change-policy? CycleProportionA PositionA)
                          (->alter #(assoc % :policy-change {:cycletime cycletimeA
-                                                            :current-policy policy
+                                                            :current-policy current-policy
                                                             :next-policy next-policy
                                                             :proportion CycleProportionA
-                                                            :current-position positionA}))
-                         convert-policy-beh])                 
+                                                            :current-position PositionA}))
+                         apply-policy-change])                 
                  defer-policy-change]
                 ))))
 
@@ -1712,48 +1714,36 @@
 ;;We also assume that the unit is not entering another cycle, merely extending or truncating.
 ;;   Its current cycle is modified.
 ;;   Does not get a cycle completion out of it.
-(befn apply-policy-change [entity policy-change]
+;;#WIP Nov 2016
+(befn apply-policy-change [tupdate entity policy-change]
       (let [unit @entity
             {:keys [cycletime current-policy next-policy proportion current-position]} policy-change
             cycletimeA     cycletime          
-            policynameA    (protocols/atomic-name current-policy) ;active atomic policy
-            policynameB    (protocols/atomic-name next-policy)    ;new atomic policy
+            policynameA    (protocols/atomic-name  current-policy) ;active atomic policy
+            policynameB    (protocols/atomic-name  next-policy)    ;new atomic policy
             cyclelengthB   (protocols/cycle-length next-policy) 
-            cycletimeB     (long (* proportion cyclelengthB)) ;coerce to a long cyclelength.
+            cycletimeB     (long   (* proportion cyclelengthB)) ;coerce to a long cyclelength.
             _              (assert (>= cycletimeB 0) "Negative cycle times are not handled...")
-            _              (assert (<=  CycleTimeB cyclelengthB) "Cyclelength is too long!")
-            wasDeployable  (protocols/deployable-by? policy cycletimeA) ;;can maybe do this faster just checking state.
+            _              (assert (<=  cycletimeB cyclelengthB) "Cyclelength is too long!")
+            wasDeployable  (protocols/deployable-by? (:policy unit) cycletimeA) ;;can maybe do this faster just checking state.
             isDeployable   (protocols/deployable-by? next-policy cycletimeB)
-            positionB      (if (unit/deployed? unit)
+            positionB      (if (u/deployed? unit)
                              (:positionpolicy unit) ;deployed units remain deployed.
                              (protocols/get-position next-policy cycletimeB))
             timeremaining  (policy-wait-time next-policy positionB)
-            timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))                               
-            _              (swap! entity #(-> (merge % {:positionpolicy positionB
-                                                        :policy         next-policy
-                                                        :cycletime      cycletimeB})
-                                              (u/modify-cycle next-policy)
-                                              (u/change-policy next-policy)))
-
-            
+            timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))           
+            unit           (-> unit
+                               (merge  {:positionpolicy positionB
+                                        :policy         next-policy
+                                        :cycletime      cycletimeB})                                              
+                               (u/change-cycle tupdate)
+                               (u/modify-cycle next-policy))
+            newduration    (- timeremaining timeinstate)
+            nextstate      (get-state  unit positionB)            
             ]
-        
-        ))                
-                
+        :NADA
+        ))                                                
 
-;;             If PositionB <> "Deployed" Then
-;;                 timeinstate = .cycletime - .policy.GetCycleTime(PositionB) 'derived time in state upon spawning.                
-;;                 unit.ChangeCycle tnow
-;;                 unit.ModifyCycle newpolicy
-                
-;;             Else 'how long have we been deployed?  Assume it's BOG for now....
-;;                 timeinstate = .CurrentCycle.bog  'TOM Note This may change.
-;;             End If
-
-        
-;;         newduration = timeremaining - timeinstate
-;;         nextstate = getState(unit, PositionB)
-        
 ;;         If PositionA <> PositionB Then
 ;;             MarathonOpSupply.LogPosition tnow, PositionA, PositionB, unit, , simstate.context
 ;;             If nextstate = "Dwelling" Or nextstate = "DeMobilizing" _
@@ -1796,13 +1786,14 @@
 ;;The unit's cycle cannot project onto another cycle.  We need to defer policy change until reset.
 ;;leave the policy on the stack.  Catch it during reset.
 ;;TOM change 2 Sep 2011 -> we modify the cyclerecord to reflect changes in expectations...
-;;This is not a replacement...                
+;;This is not a replacement...
+;;WIP Nov 2016
 (befn deferred-policy-change {:keys [entity ctx tupdate] :as benv} 
       (let [cyc (assoc (:currentcycle @entity) :tfinal tupdate)
-            _  (swap! entity (fn [unit]
-                               (->  unit
-                                    (assoc :currentcycle cyc)
-                                    (u/recordcycle tupdate))))
+            _   (swap! entity (fn [unit]
+                                (->  unit
+                                     (assoc :currentcycle cyc)
+                                     (u/recordcycle tupdate))))
             ;;notify interested parties of the event...
             _  (swap! ctx (fn [ctx]
                             (sim/trigger-event :CycleCompleted
@@ -1817,7 +1808,7 @@
       ;;         Set unit = RevertState(unit)
       ;;         'We updated the unit in the process
       ;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Policy Change Attempt Caused Supply Update for unit " & .name, , simstate.context
-      )
+      
 
 
 (comment ;old version
