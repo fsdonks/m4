@@ -148,6 +148,7 @@
 
 (defn project-dispatch [obj & options] 
   (cond (string? obj) (.toLowerCase (io/fext obj))
+        (and  (map? obj) (:tables obj)) :map-project ;already mapproject, effectively identity
         :else (class obj)))
 
 (defmulti load-project 
@@ -155,6 +156,9 @@
    If obj is a string, it will be parsed as a path, by file
    extension.  Otherwise, project-dispatches on class." 
   project-dispatch)
+
+(defmethod load-project :map-project [obj & options]
+  obj)
 
 (defmulti save-project 
   "Method for saving or persisting a Marathon project to a destination.  
@@ -178,6 +182,7 @@
   (fn [proj destination & options]
     [(project-dispatch proj) (project-dispatch destination)]))
 
+;;might be obe.  probably better to serialize this.
 (defmethod save-project "clj" [proj destination & {:keys [expanded?] 
                                                    :or {expanded? false}}]
   (let [p (add-path proj :project-path destination)]
@@ -198,7 +203,7 @@
     (->> tbl/empty-table
       (tbl/conj-fields  
         {"key"  (vec (map f (keys kvps)))
-         "val" (vec (map f (vals kvps)))}))))
+         "val"  (vec (map f (vals kvps)))}))))
             
 (defn project->tables
   "Method for converting a project representation into a map of ITabular
@@ -214,19 +219,37 @@
                                         :string-fields? 
                                         string-fields? )}
               (:tables proj))
-    (general/align-fields-by ordering)))
-
-;(defn search-project
-;  "Search a project's resources for any items in which expr 
-;   returns true."
-;  [prj expr & {:keys [exhaustive? ]
-;  (
-;  
+       (general/align-fields-by ordering)))
 
 (defn test-project
   "Perform a sequence of tests on the project to verify its integrity."
   [prj testcoll]
-  (reduce (fn [p tst] (tst p)) testcoll)) 
+  (reduce (fn [p tst] (tst p)) testcoll))
+
+;;This could be re-located to marathon.project, but that's still
+;;a bit in flux.  I'd like to anneal more before we do.  For now,
+;;we'll just do something a bit more generic.
+;;We're missing SRCsInScope and SRCsOutOfScope here...
+;;We compute scope after creating the context...
+;;So at a minimum, we'd maybe need to build up the fill network.
+(defn audit-project
+  "Creates an audit trail of all the input files for a capacity run, primarily 
+   to aid legacy post processing.  Files are stored in the same root path, 
+   prefixed by AUDIT_"
+  [prj outroot & {:keys [tables] :or
+                  {tables [:SupplyRecords
+                           :DemandRecords
+                           :PeriodRecords
+                           :RelationRecords
+                           :SRCTagRecords
+                           :Parameters]}}]
+  (do (println [:auditing-to outroot])
+      (let [prj (load-project prj)]
+        (doseq [k tables]
+          (let [t    (get (:tables prj) k)
+                tgt  (str outroot "AUDIT_" (name k) ".txt")
+                _    (println [:spitting t :to tgt])]
+            (tbl/spit-table tgt t))))))
 
 (derive ::csv        ::table)
 (derive ::json       ::map)

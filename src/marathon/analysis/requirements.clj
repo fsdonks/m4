@@ -125,11 +125,7 @@
                                 :or   {observer-routes obs/default-routes}}]
   ;;we'll basically do the same thing we normally do.
   ;;For now at least...
-  ;;use init-context here, but
-  #_(-> (setup/simstate-from   tbls)
-        (sim/add-time 1)
-        (engine/initialize-sim :observer-routes observer-routes))
-  
+  ;;use init-context here, but not setting up observers.  
   (->>  (setup/simstate-from ;;allows us to pass maps in, hackey
          tbls
          core/emptysim)  
@@ -161,11 +157,9 @@
         new-records   (for [compo new-compos
                             :when (pos? (compo-distros compo))]
                         (->supply-record src compo 0))]
-    ;;(throw (Exception. (str "not implemented")))
     (do (println [:computing-initial-supply])    
         (concat (tbl/table-records supply-table)
-                new-records)
-        )))
+                new-records))))
 
 (defn zero-supply
   "Simple function to zero our supply records.  Replaces 
@@ -359,10 +353,8 @@
    #(->> %
          (map (fn [r]
                 (if-let [n (get compo-amounts (:Component r))]                        
-                  #_(increment-key r :Quantity n)
                   (assoc r :Quantity n)
-                  r)
-                
+                  r)                
                 )))))
 
 ;;So, each time we add supply, we conceptually take a growth step.
@@ -664,8 +656,11 @@
 ;       (tbl/order-fields-by supply-fields)
        (tbl/map-field :Quantity long)))
 
-
-(defn requirements-run [inpath]
+(defn requirements-run
+  "Primary function to compute  requirements analysis.  Reads requirements 
+   project from inpath, computes requirement, and spits results to a tsv 
+   table in the same root folder as inpath, requirements.txt"
+  [inpath]
   (let [inpath (clojure.string/replace inpath #"\\" "/")
         base (->> (clojure.string/split inpath #"/")
                   (butlast)
@@ -673,10 +668,10 @@
         outpath (str base "/requirements.txt")]
     (do (println ["Analyzing requirements for" inpath])        
         (->> (-> (a/load-requirements-project inpath)
-                  (:tables)
-                  (tables->requirements  :search iterative-convergence-shared)
-                  (requirements->table)
-                  (tbl/table->tabdelimited))
+                 (:tables)
+                 (tables->requirements  :search iterative-convergence-shared)
+                 (requirements->table)
+                 (tbl/table->tabdelimited))
              (spit outpath))
         (println ["Spit requirements to " outpath]))))
               

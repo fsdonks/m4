@@ -472,6 +472,7 @@
 ;;we can have the unit behavior handle assigning policy.  From the start, we know
 ;;at least the start location, state, and duration.  We need policy to figure out
 ;;where to go next though.
+
 ;;Special extension to handle the spawn-time requirements of the SRM
 (defn srm-record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
                                     Location Position Command Duration]}]

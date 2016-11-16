@@ -505,7 +505,6 @@
 
 ;;IO  Routines
 ;;============
-
 ;;can we spit out demandtrends?
 ;;Yes....
 ;;They're basically location-samples...
@@ -529,7 +528,7 @@
         (println [:fix-memory-leak-when-serializing!])
         ;(write-history h hpath)
         (println [:spitting-locations lpath])
-        (tbl/records->file (->location-samples h) lpath )
+        (tbl/records->file (->location-samples h) lpath)
         (println [:spitting-deployed-samples dpath])
         (tbl/records->file (->deployment-samples h) dpath)
         (println [:spitting-deployments deploypath])

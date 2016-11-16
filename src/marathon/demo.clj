@@ -4,7 +4,8 @@
   (:require [marathon         [analysis :as a]]
             [marathon.ces     [core :as core]]
             [marathon.visuals [patches :as patches]]
-            [spork.util       [io :as io]]))
+            [marathon.project :as project]
+            [spork.util       [io :as io] ]))
 
 (def ep "C:\\Users\\1143108763.C\\srm\\notionalbase.xlsx")
 
@@ -58,12 +59,9 @@
   (core/visualize-entities 
    (a/load-context path)))
 
-(defn audit-project
-  ""
-  [path]
-  )
-
 (comment ;testing
+  ;;Worked without legacy records...
+  (def maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx")
   (do-run ep "C:\\Users\\1143108763.C\\srm\\newtest\\")
   (def h
     (a/load-context "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\srmbase.xlsx"))

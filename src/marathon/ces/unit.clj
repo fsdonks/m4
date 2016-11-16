@@ -384,8 +384,45 @@
 ;;===================
 
 ;TEMPORARILY ADDED for marathon.sim.demand, marathon.sim.policy
-(declare  update change-location! 
+(declare  ;update
+          change-location! 
          re-deploy-unit deploy-unit change-policy) 
+
+;;  220:   Public Sub changePolicy(newpolicy As IRotationPolicy)
+;;  221:   If Not (policy Is Nothing) Then policyStack.add newpolicy
+;;  222:  
+;;  223:   If policyStack.count = 0 Then Err.Raise 101, , "no policy on stack!"
+;;  224:  'TOM Change 21 July -> account for passage of time between updates!
+;;  225:   If newpolicy.name <> policy.name Then 
+;;  232:       ChangeState "PolicyChange", (parent.getTime - parent.lastupdate(name))
+;;  234:   End If
+;; 236:   End Sub
+
+;;Possibly OBE.
+(defn change-policy [unit newpolicy]                                        
+  (throw (Exception. "change-policy not implemented yet..."))
+  #_(change-state u :policy-change-state
+                  (- t  (get u :last-update 0))
+                  (max-boggable-time u) ctx))
+
+(defn change-cycle
+  "Update the statistics for the current cyclerecord to record 
+   a change."
+  [unit t]
+  (let [pname (pol/atomic-name (:policy unit))
+        c (-> (:currentcycle unit)
+              (update :policy-name #(str % "->" pname))
+              (update :traversals #(conj % (str t "_Policy Change to " pname))))]
+    (assoc unit :currentcycle c)))
+
+ ;;93:   Public Sub ChangeCycle(t As Single)
+ ;;94:  
+ ;;95:   With CurrentCycle
+ ;;96:       .policyname = .policyname & "->" & policy.name
+ ;;97:       .Traversals.add t & "_Policy Change to " & policy.name
+ ;;98:   End With
+ ;;99:       
+ ;;100:   End Sub
 
 ;;Copied from supply to avoid circular dependencies....
 ;;This is problematic.  Should be pulled into supply protocols.
@@ -412,6 +449,8 @@
    (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
 (def ^:dynamic *uic* nil)
+
+
 
 ;;TODO# implement change-state, so that it actually modifies the
 ;;entity.  In this case, it's tbased off of unit behavior.
@@ -705,7 +744,7 @@
 ;;This updates the unit statistics, and alters (drops) the followon
 ;;code.  re-deployment indicates followon?
 (defn  re-deploy-unit [unit demand t deployment-idx ctx] 
-  (let [c    (:current-cycle unit)
+  (let [c    (:currentcycle unit)
         deps (:deployments c)
         newlocation (:name demand)
         new-unit      (-> unit

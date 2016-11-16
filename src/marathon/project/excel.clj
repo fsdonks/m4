@@ -49,8 +49,8 @@
 ;;schema value...
 ;;or we can just read as string values...
 (defn try-long [x] (if (zero? (mod x 1) )
-                     (long x)
-                     x))
+                       (long x)
+                       x))
 
 ;;This is a little squirelly, and exists solely to
 ;;cope with excel's handling of numbers and autoparsing

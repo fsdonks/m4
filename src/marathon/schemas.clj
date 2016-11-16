@@ -17,7 +17,24 @@
 (defn schemas [& xs]
   (reduce merge (for [[n fields] xs] 
                   (schema n fields))))
-            
+
+;;we need a way to define legacy schemas, possibly
+;;versioned schemas.
+;;That is, we try to match a schema based on the fields
+;;available.  Perhaps we specify the schema class, and
+;;derive the version?
+
+;;We could use clojure.spec for our schemas.  Future adaptation.
+;;Another option is using clojure records.
+
+;;Right now, we have two different versions of supply
+;;and demand records.  So we can conceivably define
+;;a simple function to choose from one or more schemas.
+;;Perhaps we have a base schema.
+;;  If the base is satisfied, we see if any of the children
+;;  are.
+;;  Child schemas extend the base.
+
 ;;Various schemas for representing marathon related input data.
 ;;We'll add output here as well.
 ;;Where field types are not annotated, the inferred type is :text .
@@ -88,13 +105,13 @@
     [:Type :SRC :Tag]
    :DemandRecords  
     [:Type
-     [:Enabled :boolean]
-     [:Priority :int]
-     [:Quantity :int]
+     [:Enabled     :boolean]
+     [:Priority    :int]
+     [:Quantity    :int]
      [:DemandIndex :int]
-     [:StartDay :int]
-     [:Duration :int]
-     [:Overlap :int]
+     [:StartDay    :int]
+     [:Duration    :int]
+     [:Overlap     :int]
      :SRC
      :SourceFirst
      :DemandGroup
