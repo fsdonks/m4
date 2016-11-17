@@ -225,7 +225,10 @@
       :FillCount     fillcount
       :Location      locationfrom
       :DwellBeforeDeploy dwell
-      :Policy        (generic/policy-name pol)}))
+      :Policy        (generic/policy-name pol)
+      :Category	     (:category demandto)
+      :DwellYearsBeforeDeploy   (/ dwell 365.0)
+      :OITitle	      (or (:title demandto) (:src demandto))}))
   )
 
 

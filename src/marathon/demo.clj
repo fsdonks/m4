@@ -79,8 +79,9 @@
 (comment ;testing
   ;;Worked without legacy records...
   (def maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx")
-  (project/audit-project maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase\\")
-  (run-cases "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\" ["maxbase.xlsx"])
+ ; (project/audit-project maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase\\")
+;  (run-cases "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\" ["maxbase.xlsx"])
+  (do-audited-run maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase\\")
   
   (do-run ep "C:\\Users\\1143108763.C\\srm\\newtest\\")
   (def h
