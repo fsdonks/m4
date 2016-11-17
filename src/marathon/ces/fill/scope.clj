@@ -88,9 +88,6 @@
                 :parameters  (-> parameters 
                                  (update-in [:SRCs-In-Scope] merge in-scope)
                                  (update-in [:SRCs-Out-Of-Scope] merge out-of-scope))
-             ;;temporarily removed, appears vestigial
-             ;; :fillstore   (-> fillstore 
-             ;;                  (update-in [:outofscope] merge out-of-scope))
                 })))))
   ([ctx] (if-let [g (get (core/get-fillstore ctx) :fillgraph)]
            (do ;(reset! lastgraph ctx)

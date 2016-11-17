@@ -59,6 +59,23 @@
   (core/visualize-entities 
    (a/load-context path)))
 
+;;so, naively, auditing a project is provided by project/audit-project.
+;;that just spits out the so-called static tables.  We could change the
+;;order of computation and compute our fillgraph up front, rather than
+;;from context only...
+;;Another idea is to define a one-time atom.
+;;After the first deref, we free.  So, we keep the project loaded
+;;until we've loaded the context.
+(defn do-audited-run
+  "Given two paths to folders - a path to a marathon project 
+   [from-path], and a path to post results to [target-path] - 
+   computes the marathon history for the run, producing results 
+   into the target path.  Default outputs will be derived from 
+   the simulation history, including a compressed history."
+  [from-path target-path]
+  (do (a/spit-history! (a/marathon-stream from-path :audit? true) target-path)
+      (build-patches target-path)))
+
 (comment ;testing
   ;;Worked without legacy records...
   (def maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx")

@@ -226,6 +226,14 @@
   [prj testcoll]
   (reduce (fn [p tst] (tst p)) testcoll))
 
+(def default-auditing-tables
+  [:SupplyRecords
+   :DemandRecords
+   :PeriodRecords
+   :RelationRecords
+   :SRCTagRecords
+   :Parameters])
+
 ;;This could be re-located to marathon.project, but that's still
 ;;a bit in flux.  I'd like to anneal more before we do.  For now,
 ;;we'll just do something a bit more generic.
@@ -237,12 +245,7 @@
    to aid legacy post processing.  Files are stored in the same root path, 
    prefixed by AUDIT_"
   [prj outroot & {:keys [tables] :or
-                  {tables [:SupplyRecords
-                           :DemandRecords
-                           :PeriodRecords
-                           :RelationRecords
-                           :SRCTagRecords
-                           :Parameters]}}]
+                  {tables default-auditing-tables}}]
   (do (println [:auditing-to outroot])
       (let [prj (load-project prj)]
         (doseq [k tables]

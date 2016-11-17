@@ -346,20 +346,55 @@
          (sim/add-time 1)
          (sim/register-routes obs/default-routes)))
 
-(defn as-context [x & {:keys [table-xform]
+;TimeStamp	SRC	Reason
+(defn load-audited-context
+  "Like analysis/load-context, except we perform some io in the parent folder.
+   Generates 'AUDIT_...' files from raw inputs and computed input."
+  [path-or-proj & {:keys [table-xform] :or {table-xform identity}}]
+  (let [proj (proj/load-project path-or-proj)
+        root (proj/project-path proj)
+        ctx  (load-context proj :table-xform table-xform)
+        scope-table (fn [m]
+                      (let [t (System/currentTimeMillis)]
+                        (->>  (for [[src reason] (seq m)]
+                                {:TimeStamp t :SRC src :Reason reason})
+                              (tbl/records->table))))                      
+        computed-tables  (let [params   (core/get-parameters ctx) 
+                               inscope  (:SRCs-In-Scope      params)
+                               outscope (:SRCs-Out-Of-Scope  params)]
+                           {:InScope  (scope-table inscope)
+                            :OutScope (scope-table outscope)})
+        _    (proj/audit-project (proj/add-tables proj computed-tables)
+                                 root
+                                 :tables (into proj/default-auditing-tables
+                                               (keys computed-tables)))]
+    ctx))
+
+(defn as-context
+  "Coerces x to a marathon simulation context.  Optionally, 
+   will provide and audit-trail of information if x is 
+   a project and audit? is truthy."
+  [x & {:keys [table-xform audit?]
                        :or {table-xform identity}}]
-  (cond (string? x) (load-context x :table-xform table-xform)
+  (cond (string? x) (if audit?
+                      (load-audited-context x :table-xform table-xform)
+                      (load-context x :table-xform table-xform))
         (util/context? x) x
         :else (throw (Exception.
                       (str "Invalid MARATHON sim context " x)))))
         
 (defn marathon-stream
-  "Create a stream of simulation states, indexed by time."
-  [path-or-ctx & {:keys [tmax table-xform step-function]
+  "Create a stream of simulation states, indexed by time.
+   Optionally, set the maxime simulation time, define transformations 
+   on the project tables, like src filters, provide a custom step function, 
+   and choose to generate auditing information upon initializing the 
+   stream."
+  [path-or-ctx & {:keys [tmax table-xform step-function audit?]
                   :or {tmax 5001
                        table-xform identity
-                       step-function engine/sim-step}}]
-  (->> (as-context path-or-ctx :table-xform table-xform)
+                       step-function engine/sim-step
+                       audit? false}}]
+  (->> (as-context path-or-ctx :table-xform table-xform :audit? audit?)
        (->history-stream tmax step-function)
        (end-of-day-history)))
 
@@ -375,6 +410,12 @@
         tbl-filter #(spork.util.table/filter-records (fn [r]  (srcs (:SRC r))) %)]
       (fn [tbls]
         (reduce (fn [acc t] (update acc t tbl-filter)) tbls tables))))
+
+;;Another useful feature...
+;;We'd like to optionally audit our project, when we create a stream and
+;;initialize it.
+;;We can do this by hooking into the table-xforms, since this allows us
+;;to audit.
 
 ;;serializing all the snapshots is untenable...
 ;;can we compute diffs?
@@ -516,6 +557,7 @@
 ;;a patch set for 13 years.
 
 ;;this is basically the api for performing a run....
+;;We'll automatically audit when we do this...
 (defn spit-history! [h path]
   ;;hackneyed way to munge outputs and spit them to files.
   (let [hpath      (str path "history.lz4"   )
