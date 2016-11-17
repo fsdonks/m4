@@ -14,8 +14,7 @@
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
              [native :as swing-events]]
-            [piccolotest.repl :as repl]
-            [proc.example :as proc])
+            [piccolotest.repl :as repl])
   (:use [spork.util.mailbox]
         [marathon.processing.post]
         [marathon.project]
@@ -359,8 +358,7 @@
                       (doto fr
                         (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
                       identity)
-        rpl             
-                          (repl/repl-panel 800 600)
+        rpl             (repl/repl-panel 800 600)
         project-menu    (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"

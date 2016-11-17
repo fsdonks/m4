@@ -252,13 +252,14 @@
           (let [t    (get (:tables prj) k)
                 tgt  (str outroot "AUDIT_" (name k) ".txt")
                 _    (println [:spitting k :to tgt])]
-            (tbl/spit-table tgt t))))))
+            (tbl/spit-table tgt t)
+            )))))
 
 (derive ::csv        ::table)
 (derive ::json       ::map)
 (derive ::json-table ::table) 
 (derive ::worksheet  ::table)
-(derive ::workbook   ::db) 
+(derive ::workbook   ::db)
 
 (defn clear-project!
   "Clear the resources from a project."
