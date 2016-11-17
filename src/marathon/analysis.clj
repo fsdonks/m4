@@ -385,7 +385,7 @@
         
 (defn marathon-stream
   "Create a stream of simulation states, indexed by time.
-   Optionally, set the maxime simulation time, define transformations 
+   Optionally, set the maximum simulation time, define transformations 
    on the project tables, like src filters, provide a custom step function, 
    and choose to generate auditing information upon initializing the 
    stream."
