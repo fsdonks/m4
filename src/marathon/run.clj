@@ -16,7 +16,9 @@
    Excel.  The visualization looks like a unit 'patch chart'."
   [rootpath]
   (do (println [:building-patches (str rootpath "patches.htm")])
-      (patches/locations->patches rootpath)))
+      (try (patches/locations->patches rootpath)
+           (catch Exception e
+             (println [:skipping-patches :no-location-samples])))))
 
 (defn do-run
   "Given two paths to folders - a path to a marathon project 
@@ -26,6 +28,23 @@
    the simulation history, including a compressed history."
   [from-path target-path]
   (do (a/spit-history! (a/marathon-stream from-path) target-path)
+      (build-patches target-path)))
+
+;;so, naively, auditing a project is provided by project/audit-project.
+;;that just spits out the so-called static tables.  We could change the
+;;order of computation and compute our fillgraph up front, rather than
+;;from context only...
+;;Another idea is to define a one-time atom.
+;;After the first deref, we free.  So, we keep the project loaded
+;;until we've loaded the context.
+(defn do-audited-run
+  "Given two paths to folders - a path to a marathon project 
+   [from-path], and a path to post results to [target-path] - 
+   computes the marathon history for the run, producing results 
+   into the target path.  Default outputs will be derived from 
+   the simulation history, including a compressed history."
+  [from-path target-path]
+  (do (a/spit-history! (a/marathon-stream from-path :audit? true :audit-path target-path) target-path)
       (build-patches target-path)))
 
 (def root "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\")
@@ -59,22 +78,7 @@
   (core/visualize-entities 
    (a/load-context path)))
 
-;;so, naively, auditing a project is provided by project/audit-project.
-;;that just spits out the so-called static tables.  We could change the
-;;order of computation and compute our fillgraph up front, rather than
-;;from context only...
-;;Another idea is to define a one-time atom.
-;;After the first deref, we free.  So, we keep the project loaded
-;;until we've loaded the context.
-(defn do-audited-run
-  "Given two paths to folders - a path to a marathon project 
-   [from-path], and a path to post results to [target-path] - 
-   computes the marathon history for the run, producing results 
-   into the target path.  Default outputs will be derived from 
-   the simulation history, including a compressed history."
-  [from-path target-path]
-  (do (a/spit-history! (a/marathon-stream from-path :audit? true :audit-path target-path) target-path)
-      (build-patches target-path)))
+
 
 (comment ;testing
   ;;Worked without legacy records...

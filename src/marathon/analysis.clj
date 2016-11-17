@@ -593,32 +593,68 @@
 ;;file has been written.  For now, it's about 28 mb for
 ;;a patch set for 13 years.
 
+(def all-outputs #{:history
+                   :locsamples
+                   :locations
+                   :depsamples
+                   :deployment-records
+                   :demandtrends
+                   :patches})
+
+(def legacy-outputs #{:deployment-records
+                      :demandtrends
+                      :locations})
+
+(defmulti spit-output (fn [t h path] t))
+(defmethod spit-output :history [t h hpath]
+  (do  (println [:spitting-history hpath])
+       (println [:fix-memory-leak-when-serializing!])
+       (write-history h hpath)))
+
+(defmethod spit-output :location-samples [t h lpath]
+  (do (println [:spitting-location-samples lpath])
+      (tbl/records->file (->location-samples h) lpath)))
+
+(defmethod spit-output :locations [t h locspath]
+  (do (println [:spitting-locations locspath])
+      (tbl/records->file (->location-records h) locspath)))
+
+(defmethod spit-output :deployed-samples [t h dpath]
+  (do (println [:spitting-deployed-samples dpath])
+      (tbl/records->file (->deployment-samples h) dpath)))
+
+(defmethod spit-output :deployment-records [t h dpath]
+  (do (println [:spitting-deployed-samples dpath])
+      (tbl/records->file (->deployment-records h) dpath))) 
+
+(defmethod spit-output :demandtrends [t h dtrendpath]
+  (do (println [:spitting-demandtrends dtrendpath])
+      (tbl/records->file (->demand-trends h) dtrendpath
+                         :field-order schemas/demandtrend-fields)))
+
+(def ^:dynamic *outputs* legacy-outputs)
+(defmacro with-outputs [os & body]
+  `(binding [~'marathon.analysis/*outputs* ~os]
+     ~@body))
+(defmacro with-all-outputs [& body]
+  `(with-outputs ~all-outputs
+     ~@body))
+
 ;;this is basically the api for performing a run....
 ;;We'll automatically audit when we do this...
-(defn spit-history! [h path]
+(defn spit-history! [h path & {:keys [outputs] :or
+                               {outputs *outputs*}}]
   ;;hackneyed way to munge outputs and spit them to files.
-  (let [hpath      (str path "history.lz4"   )
-        lpath      (str path "locsamples.txt")
-        locspath   (str path "locations.txt")
-        dpath      (str path "depsamples.txt")
-        deploypath (str path "AUDIT_Deployments.txt")
-        dtrendpath (str path "DemandTrends.txt") ;probably easier (and lighter) to just diff this.
-        ]        
-    (do (println [:saving-history hpath])
-        (println [:fix-memory-leak-when-serializing!])
-        ;(write-history h hpath)
-        (println [:spitting-location-samples lpath])
-        (tbl/records->file (->location-samples h) lpath)
-        (println [:spitting-locations lpath])
-        (tbl/records->file (->location-records h) locspath)
-        (println [:spitting-deployed-samples dpath])
-        (tbl/records->file (->deployment-samples h) dpath)
-        (println [:spitting-deployments deploypath])
-        (tbl/records->file (->deployment-records h) deploypath
-          :field-order schemas/deployment-fields)
-        (println [:spitting-demandtrends dtrendpath])
-        (tbl/records->file (->demand-trends h) dtrendpath
-           :field-order schemas/demandtrend-fields))))
+  (let [paths {:history     (str path "history.lz4"   )
+               :location-samples      (str path "locsamples.txt")
+               :locations   (str path "locations.txt")
+               :deployed-samples      (str path "depsamples.txt")
+               :deployment-records(str path "AUDIT_Deployments.txt") 
+               :demandtrends (str path "DemandTrends.txt")} ;probably easier (and lighter) to just diff this.
+        ]    
+    (doseq [[k path] paths
+            :when (outputs k)]      
+      (spit-output k h path))))
 
 ;;spits a log of all the events passing through.
 (defn spit-log
