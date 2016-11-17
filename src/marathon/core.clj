@@ -14,7 +14,8 @@
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
              [native :as swing-events]]
-            [piccolotest.repl :as repl])
+            [piccolotest.repl :as repl]
+            [proc.example :as proc])
   (:use [spork.util.mailbox]
         [marathon.processing.post]
         [marathon.project]

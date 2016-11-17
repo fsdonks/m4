@@ -5,7 +5,7 @@
             [marathon.ces     [core :as core]]
             [marathon.visuals [patches :as patches]]
             [marathon.project :as project]
-            [spork.util       [io :as io] ]))
+            [spork.util       [io :as io]]))
 
 (def ep "C:\\Users\\1143108763.C\\srm\\notionalbase.xlsx")
 
@@ -48,7 +48,7 @@
            in  (str folder x)
            out (str folder nm "\\")
            _   (io/hock (str out "timestamp.txt") (System/currentTimeMillis))]
-       (do-run in out))))
+       (do-audited-run in out))))
   ([xs] (run-cases root xs)))
 
 (defn examine-project
