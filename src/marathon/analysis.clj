@@ -270,6 +270,43 @@
 
 (defn ->demand-trends      [h]  (->collect-samples demand-trends h))
 
+
+;;Note: locations are really "policypositions", should rephrase
+;;this....otherwise we get :locationname confused.  We actually
+;;do want policy-position changes....Another option is
+;;for us to reconcile locations with known-locations 
+;;location is easy, we just track any entities with :location-delta
+;;components...
+
+;;Note: Cloned from quilsample.bridge, temporary
+(defn delta-seq [s domain]
+   (when-let [es (seq (store/get-domain s domain))]
+     (for [[id {:keys [init current]}] es]
+       [id init current])))
+
+(defn location-changes [s] (delta-seq s :location-delta))
+(defn position-changes [s] (delta-seq s :position-delta))
+(defn state-changes    [s] (delta-seq s :state-delta))
+
+;;Ideal solution is to port the incubated stuff in quilsample.bridge,
+;;but for now, we'll stick with the dumb way.  Just get the
+;;table computed....
+
+;;replicating output for locations.txt 
+;;T, EntityFrom, EntityTo, EventName, Msg
+(defrecord location-rec [T EntityFrom EntityTo EventName Msg])
+(defn location-trends
+  ([t ctx]
+   (when-let [xs (location-changes ctx)]
+     (for [[id from to] xs]
+       (->location-rec t  id to  "Unit Moved"  ""))))
+  ([ctx] (location-trends (sim/get-time ctx) ctx)))
+
+(defn ->location-records [h]
+  (mapcat (fn [[t ctx]]
+            (location-trends t ctx)) h))
+               
+
 ;;creating legacy output from basic data..
 ;;fills are a join of unit<>demanddata<>deployments
 
@@ -350,9 +387,9 @@
 (defn load-audited-context
   "Like analysis/load-context, except we perform some io in the parent folder.
    Generates 'AUDIT_...' files from raw inputs and computed input."
-  [path-or-proj & {:keys [table-xform] :or {table-xform identity}}]
+  [path-or-proj & {:keys [table-xform root] :or {table-xform identity}}]
   (let [proj (proj/load-project path-or-proj)
-        root (proj/project-path proj)
+        root (or root (proj/project-path proj))
         ctx  (load-context proj :table-xform table-xform)
         scope-table (fn [m]
                       (let [t (System/currentTimeMillis)]
@@ -374,10 +411,10 @@
   "Coerces x to a marathon simulation context.  Optionally, 
    will provide and audit-trail of information if x is 
    a project and audit? is truthy."
-  [x & {:keys [table-xform audit?]
+  [x & {:keys [table-xform audit? audit-path]
                        :or {table-xform identity}}]
   (cond (string? x) (if audit?
-                      (load-audited-context x :table-xform table-xform)
+                      (load-audited-context x :table-xform table-xform :root audit-path)
                       (load-context x :table-xform table-xform))
         (util/context? x) x
         :else (throw (Exception.
@@ -389,12 +426,12 @@
    on the project tables, like src filters, provide a custom step function, 
    and choose to generate auditing information upon initializing the 
    stream."
-  [path-or-ctx & {:keys [tmax table-xform step-function audit?]
+  [path-or-ctx & {:keys [tmax table-xform step-function audit? audit-path]
                   :or {tmax 5001
                        table-xform identity
                        step-function engine/sim-step
                        audit? false}}]
-  (->> (as-context path-or-ctx :table-xform table-xform :audit? audit?)
+  (->> (as-context path-or-ctx :table-xform table-xform :audit? audit? :audit-path audit-path)
        (->history-stream tmax step-function)
        (end-of-day-history)))
 
@@ -562,6 +599,7 @@
   ;;hackneyed way to munge outputs and spit them to files.
   (let [hpath      (str path "history.lz4"   )
         lpath      (str path "locsamples.txt")
+        locspath   (str path "locations.txt")
         dpath      (str path "depsamples.txt")
         deploypath (str path "deployments.txt")
         dtrendpath (str path "DemandTrends.txt") ;probably easier (and lighter) to just diff this.
@@ -569,8 +607,10 @@
     (do (println [:saving-history hpath])
         (println [:fix-memory-leak-when-serializing!])
         ;(write-history h hpath)
-        (println [:spitting-locations lpath])
+        (println [:spitting-location-samples lpath])
         (tbl/records->file (->location-samples h) lpath)
+        (println [:spitting-locations lpath])
+        (tbl/records->file (->location-records h) locspath)
         (println [:spitting-deployed-samples dpath])
         (tbl/records->file (->deployment-samples h) dpath)
         (println [:spitting-deployments deploypath])
