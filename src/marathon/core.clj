@@ -6,7 +6,7 @@
                                        [io :as stokeio]
                                         ;[scraper :as scraper]
              ]
-            [marathon.demo :as demo]
+            [marathon.run :as run]
             [marathon.analysis [requirements :as requirements]]
             [clojure       [pprint :as pprint]
                            [set :as set]]
@@ -254,7 +254,7 @@
         root         (io/as-directory (clojure.string/join "\\" (butlast pieces)))
         target       (last    pieces)
         _            (println [:running :capacity-analysis :at wbpath])]
-    (demo/run-cases root [target])))
+    (run/run-cases root [target])))
 
 (defn capacity-analysis-dialogue []
     (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
@@ -285,7 +285,7 @@
 
 (defn examine-project-dialogue []
   (request-path [wbpath "Please select the location of a valid MARATHON project file."] 
-     (demo/examine-project wbpath)))
+     (run/examine-project wbpath)))
 
 ;;holy wow this is terrible.  must be a better way...
 (defn menu-handler

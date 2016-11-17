@@ -601,7 +601,7 @@
         lpath      (str path "locsamples.txt")
         locspath   (str path "locations.txt")
         dpath      (str path "depsamples.txt")
-        deploypath (str path "deployments.txt")
+        deploypath (str path "AUDIT_Deployments.txt")
         dtrendpath (str path "DemandTrends.txt") ;probably easier (and lighter) to just diff this.
         ]        
     (do (println [:saving-history hpath])
