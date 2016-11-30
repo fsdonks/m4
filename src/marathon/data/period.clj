@@ -46,8 +46,8 @@
 ;either direction, i.e. [tstart...inf], or [-inf...tfinal] are valid.  
 ;Returns false if t is inf.
 (defn intersect-1d [t tstart tfinal] 
-  (cond (= t :inf) false 
-        (and (= tstart :inf-negative) (= tfinal :inf)) true
+  (cond (identical? t :inf) false 
+        (and (identical? tstart :inf-negative) (identical? tfinal :inf)) true
         :else (and (>= t tstart) (<= t tfinal))))  
 ;Determines if time t intersects the period p
 (defn intersects-period? [t p] (intersect-1d t (:from-day p) (:to-day p)))

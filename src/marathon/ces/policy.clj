@@ -525,6 +525,9 @@
 ;sophisticated behaviors, or policy-states, for unique elements of the supply.
 ;TODO -> extend from a single-active period to multiple active periods.
 
+;;PERFORMANCE NOTE: calling find-period-in is a minor hotspot.
+;;We can explicitly schedule period changes when we read in periods,
+;;rather than scanning every day...
 (defn manage-policies
   "The policy system checks to see if we entered a new period, and changes 
    the governing policies to fit the new period.  High level entry point, 
