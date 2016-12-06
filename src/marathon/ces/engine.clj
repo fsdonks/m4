@@ -157,7 +157,8 @@
   [day ctx]
   (->> ctx
     (sim/trigger-event :begin-day :Engine :Engine
-                       (day-msg "Begin" day) [day (sim/get-next-time ctx)])))  
+                       (day-msg "Begin" day) [day (sim/get-next-time ctx)
+                                              ])))  
 
 ;##End Day Logic
 ;At the end of each "day" or discrete time step, we typically mark the passage 

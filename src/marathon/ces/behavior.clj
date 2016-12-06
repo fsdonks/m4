@@ -416,8 +416,9 @@
    (when wait-time
      (->alter
       #(if (effectively-infinite? wait-time)
-         (do (debug [(:name @entity) :waiting :infinitely]) ;skip requesting update.
-             (dissoc % :wait-time)) 
+         (do (debug [(:name @entity) :waiting :infinitely]) ;skip requesting update.             
+             (dissoc % :wait-time)
+             ) 
          (let [tfut (+ tupdate wait-time) 
                e                       (:name @entity)
                _    (debug [e :requesting-update :at tfut])]
@@ -426,7 +427,7 @@
                                               e
                                               :supply-update
                                               ctx)))
-           (dissoc % :wait-time) ;remove the wait-time from further consideration...
+           (dissoc % :wait-time) ;remove the wait-time from further consideration...           
            )))))
 
 ;;our idioms for defining behaviors will be to unpack 
@@ -877,7 +878,10 @@
 ;;if there's a location change queued, we see it in the env.
 (befn change-location {:keys [entity location-change tupdate ctx] :as benv}
    (when location-change
-     (let [{:keys [from-location to-location]} location-change]
+     (let [;#_{:keys [from-location to-location]} #_location-change ;minor improvement..
+           from-location (val-at location-change :from-loction)
+           to-location   (val-at location-change :to-location)
+           ]
        (let [_ (debug [:location-change location-change])            
              _  (reset! ctx  (supply/log-move! tupdate from-location to-location @entity nil @ctx))
              _  (reset! entity (u/push-location @entity to-location))] 

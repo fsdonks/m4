@@ -343,8 +343,17 @@
 
 ;;#Empty Simulation Contexts
 ;;altered.
-(def emptystate (simstate/->store)) ;;now using ces
+
+
+(println [:<<<<<TODO :TEST-ROWSTORE 'marathon.ces.core/emptystate :TODO>>>>>])
+#_(def emptystate    (simstate/->store)) ;;now using ces
+;;Testing purposes...
+(def emptystate    (simstate/->store :init-store store/empty-rowstore))
+
+;;temporary testing purposes...
+
 (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
+
 ;;A useful debugging context for us.  Prints out everything it sees.
 (def ^:dynamic *debug* nil)
 (def ^:dynamic *verbose* nil)

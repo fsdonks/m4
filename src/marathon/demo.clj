@@ -23,3 +23,9 @@
       (proc/run-sample! out-path    :interests test-interests)
       (proc/do-charts-from out-path :interests test-interests)))
 
+(comment
+  (def ctx (a/load-context full-path))
+  (defn run [] (last  (a/marathon-stream ctx)))
+  )
+
+          

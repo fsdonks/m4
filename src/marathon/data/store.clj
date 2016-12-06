@@ -313,17 +313,24 @@
     res
     (throw (Exception. (str "Location not found: " loc)))))
 
+;;REFACTOR: THe old width,height, etc. are no longer necessary.
+;;We aren't really using simstate like we were before, even
+;;notify is OBE.  TODO: Revert to using an empty store,
+;;no need to wrap a specific simstate type....
+
 ;;The width/height is 1095, wonder if that's screwing up our sizing.
 ;;__Entity Store Constructor__
 (defn ->store
   "Given a set of initial entities (currently units), creates and initializes the 
    default entitystore.  width and height determine the rendering canvas and the 
    size of things like the entity board."
-  [& {:keys [width height notify] :or {width 1095 height 730
-                                       notify (fn [e msg] (println [:notification e msg]))}}]
+  [& {:keys [width height notify init-store]
+      :or {width 1095 height 730
+           notify (fn [e msg] (println [:notification e msg]))
+           init-store emptystore}}]
 ;  (let [emap    (reduce (fn [m e] (assoc m (:name e) e)) {} es)
 ;        trails  (->rec '() width height)]
-    (-> (->simstate emptystore width height notify)
+    (-> (->simstate init-store width height notify)
        ; (add-entities es)
         (add-entity  (parameters   :parameters))
         (add-entity  (supplystore  :SupplyStore))

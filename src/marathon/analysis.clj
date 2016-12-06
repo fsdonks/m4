@@ -103,7 +103,9 @@
   (->> init-ctx
        (->simulator stepf)
        (map (fn [ctx] [(core/get-time ctx) ctx]))
-       (take-while #(<= (first %) tfinal))
+       (take-while
+        (fn [^clojure.lang.Indexed v]
+          (<= (.nth v 0) tfinal)))
        ))
 
 ;;Now using transducers.
