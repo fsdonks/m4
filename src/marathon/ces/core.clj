@@ -355,7 +355,7 @@
 (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
 
 ;;A useful debugging context for us.  Prints out everything it sees.
-(def ^:dynamic *debug* nil)
+(def ^:dynamic *debug*   nil)
 (def ^:dynamic *verbose* nil)
 (def ^:dynamic *ignored* #{})
 
