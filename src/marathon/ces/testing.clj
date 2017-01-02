@@ -184,7 +184,7 @@
   (is (= known-events expected-events)           
       "The only events scheduled should be time changes.")
   (is (same? (take 2 (sort activations481))
-             ["1_A11_SRC2[481...554]" "1_R29_SRC3[481...554]"])
+             ["1_A11_SRC2_[481...554]" "1_R29_SRC3_[481...554]"])
       "Should have actives on 481...")
   (is (re-find #"1_Vig-ANON-.*[481...554]" (nth (sort activations481) 2))
       "The third active on 481 should be an anonymously named vignette with a  number in the name.")
@@ -246,7 +246,7 @@
 (deftest demand-activations
   (is (empty? (keys  (:activedemands (core/get-demandstore (demand/activate-demands 0 defaultctx)))))
       "Should have no demands active at t 0")
-  (is (same?  (sort ["2_R1_SRC3[1...91]" "2_R2_SRC3[1...2521]" "1_R3_SRC3[1...2521]" "1_R25_SRC3[1...541]"])
+  (is (same?  (sort ["2_R1_SRC3_[1...91]" "2_R2_SRC3_[1...2521]" "1_R3_SRC3_[1...2521]" "1_R25_SRC3_[1...541]"])
              (sort (keys  (:activedemands (core/get-demandstore (demand/activate-demands 1 defaultctx))))))
       "Should have four demands active at t 1"))
 
@@ -304,7 +304,7 @@
 
 (deftest unfilled-demands
   (is  (same? unfilled-ds
-              '(["1_R25_SRC3[1...541]" 1] ["1_R3_SRC3[1...2521]" 1] ["2_R1_SRC3[1...91]" 2] ["2_R2_SRC3[1...2521]" 2]))
+              '(["1_R25_SRC3_[1...541]" 1] ["1_R3_SRC3_[1...2521]" 1] ["2_R1_SRC3_[1...91]" 2] ["2_R2_SRC3_[1...2521]" 2]))
       "Should have the same order and set of demands unfilled on day 1."))
 ;;Note:
 ;;simpler solution is to NOT maintain deployable buckets; Rather let
@@ -717,7 +717,7 @@
          (demand/manage-demands   1)  ;Activate/DeActiveate demands, handle affected units.         
          ))
 
-(def srmd (store/get-entity srm1nofill "1_Al's Game_Binder[1...5001]"))
+(def srmd (store/get-entity srm1nofill "1_Al's Game_Binder_[1...5001]"))
 
 (def srm-deployed
   (deployment/deploy-units srm1nofill
