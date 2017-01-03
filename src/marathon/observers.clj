@@ -275,12 +275,16 @@
 
 (defn commit-deployments! [ctx edata  _]
   (if-let [deployments (core/some-ephemeral ctx :deployment-watch :new-deployments)]
-    (do (println :blah)
-        (-> ctx
-            (store/assoce :deployment-watch :deployments  (persistent! @deployments))
-            (store/drop-domain :new-deployments)
+    (-> ctx
+          (store/assoce  :deployment-watch :deployments (persistent! @deployments))
+          (store/dissoce :deployment-watch :new-deployments)
+        ;(store/update-entity :deployment-watch (fn [m]
+        ;                                         (-> m
+        ;                                             (dissoc :new-deployments)
+         ;                                            (assoc :deployments (persistent! @deployments))
+          ;                                           )))
                                         ;(core/reset-ephemeral :deployment-watch :new-deployments (transient []))
-          ))
+        )
     ctx))
 
 ;;PERFORMANCE NOTE:

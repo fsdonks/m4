@@ -63,8 +63,6 @@
   (get-entity     [db id]  (get-entity     store id))
   (conj-entity    [db id components] 
     (simstate. (conj-entity store id components) width height notifier))
- ; shared/IEntityContainer
- ; (entity-records- [obj] (unit-entities store))
   INotification
   (notify! [obj e msg]
     (if (fn? notifier)

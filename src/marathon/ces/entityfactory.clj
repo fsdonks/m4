@@ -110,7 +110,7 @@
   ([{:keys [SRC Vignette Operation Priority StartDay Duration]}]
      (demand-key SRC Vignette Operation Priority StartDay Duration))
   ([SRC Vignette Operation Priority StartDay Duration] 
-     (clojure.string/join "" [Priority "_"  Vignette "_" SRC "["  StartDay "..."  (+ StartDay Duration) "]"])))
+     (clojure.string/join "" [Priority "_"  Vignette "_" SRC "_["  StartDay "..."  (+ StartDay Duration) "]"])))
 
 (def extra-fields
   '[Command
