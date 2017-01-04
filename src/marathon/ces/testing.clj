@@ -135,6 +135,7 @@
   (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
   (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
   (is (== (sim/get-next-time (sim/advance-time res)) tfinal) "Next event should be demand activation"))
+
 (def earliest (reduce min (map :startday ds)))
 (def latest   (reduce max (map #(+ (:startday %) (:duration %)) ds)))
 
@@ -147,16 +148,17 @@
 ;;updates at specific times.  Rather than queing many small, atomic-scale updates, we batch
 ;;updates by day and process them in bulk.  If a syste has no update, then nothing is done.
 ;;So, currently, the only event in Marathon are :time events, that serve as a clock.
-(def expected-events (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
-            {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
-            {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
-            {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
-            {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
-            {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
-            {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
-            {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
-            {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
-            {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time}))
+(def expected-events
+  (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
+        {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
+        {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
+        {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
+        {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
+        {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
+        {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
+        {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
+        {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
+        {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time}))
 
 (def activations481 (demand/get-activations m-dstore 481))
 

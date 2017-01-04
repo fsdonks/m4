@@ -34,10 +34,10 @@
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity] :as store]
             [spork.sim.simcontext :as sim]
-            [spork.ai.core :as ai]
+            [spork.ai.core        :as ai]
             [marathon.ces.basebehavior :as b]
-            [marathon.data.store :as simstate]
-            [clojure.core.reducers :as r]))
+            [marathon.data.store       :as simstate]
+            [clojure.core.reducers     :as r]))
     
 ;;This is a lifesaver...
 (def noisy            (atom true))
@@ -345,13 +345,12 @@
 ;;altered.
 
 
-(println [:<<<<<TODO :TEST-ROWSTORE 'marathon.ces.core/emptystate :TODO>>>>>])
-#_(def emptystate    (simstate/->store)) ;;now using ces
-;;Testing purposes...
-(def emptystate    (simstate/->store :init-store store/empty-rowstore))
 
+(def emptystate    (simstate/->store)) ;;now using ces
+;;Testing purposes...
 ;;temporary testing purposes...
 
+;;we could make emptysim dynamic...
 (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
 
 ;;A useful debugging context for us.  Prints out everything it sees.
@@ -401,6 +400,10 @@
                                      :data (spork.sim.data/event-data  edata)})
                     (sim/debug-msg (sim/packet-message edata)))))
        ctx))
+
+;;Note:
+;;This is the primary simulation context we use from marathon.analysis,
+;;particularly when we generate marathon-streams or histories.
 
 (def debugsim   
   (->> (-> (sim/make-debug-context 
@@ -1004,7 +1007,44 @@
 ;;path cache and see if the path exists there.  Then, we 
 ;;can apply the ops to the pathcache. 
 
-
 ;;Operations optimized for speed.  the -in and friends 
 ;;are not sufficient...
 
+
+;;<<<<<<<<<<<                                    >>>>>>>>>>>>>>>>>
+;;This was an early idea to improve perf, but the side-effects are
+;;causing simulation history to end up out-of-order...
+
+;;Aborted Performance Optimization Tests
+;;For now, we're putting row-store operations on hold.  Quite a bit of issues here...
+
+;;#_(println [:<<<<<TODO :TEST-ROWSTORE 'marathon.ces.core/emptystate :TODO>>>>>])
+;;#_(def emptystate (simstate/->store :init-store store/empty-rowstore))
+
+;;Shitty hacks.
+;; (defn row-state! []
+;;   (do ;;Testing purposes...
+;;       (throw (Exception. "Currently disabled due to changes row-store incurs against reproducibility."))
+;;       (def emptystate    (simstate/->store :init-store spork.entitysystem.store/empty-rowstore))
+;;        ;;temporary testing purposes...
+;;        ;;we could make emptysim dynamic...
+;;       (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
+;;       (def debugsim   
+;;         (->> (-> (sim/make-debug-context 
+;;                   :debug-handler  
+;;                   debug-listener)
+;;                  (assoc :state emptystate))
+;;              (sim/add-time 0)))))
+
+;; (defn col-state! []
+;;     (do ;;Testing purposes...
+;;       (def emptystate    (simstate/->store :init-store spork.entitysystem.store/emptystore))
+;;        ;;temporary testing purposes...
+;;        ;;we could make emptysim dynamic...
+;;       (def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
+;;       (def debugsim   
+;;         (->> (-> (sim/make-debug-context 
+;;                   :debug-handler  
+;;                   debug-listener)
+;;                  (assoc :state emptystate))
+;;              (sim/add-time 0)))))
