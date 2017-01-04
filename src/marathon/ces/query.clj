@@ -690,6 +690,10 @@
       (if (< lw rw) -1
           1)))
 
+;;common choke point for us to find entities.  Currently, we don't update them
+;;when we're looking for them.
+(defn find-entity [ctx nm] (store/get-entity ctx nm))
+
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
@@ -697,8 +701,8 @@
                     {src :any cat :default} :as env} ctx] 
     (let [order-by (eval-order order-by)
           where    (eval-filter where)] 
-      (with-query-env env
-        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src  (fn [nm] (store/get-entity ctx nm) ))
+      (with-query-env env                                                                           ;;NOTE: Possible updated entity here..
+        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src  (fn [nm] (store/get-entity ctx nm)))
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
                             :order-by (when order-by
                                         (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]
@@ -741,7 +745,8 @@
  ([rule constraints features ctx]  
     (find-supply (-> rule (rule->criteria) (assoc :collect-by features) (merge constraints)) ctx))  
  ([rule features ctx]  
-    (find-supply (-> rule (rule->criteria) (assoc :collect-by features)) ctx))
+  (find-supply (-> rule (rule->criteria) (assoc :collect-by features)) ctx))
+ ;;NOTE: this is the typical path we'll take through filling.
  ([rule ctx] (find-supply (rule->criteria rule) ctx)))
 
 

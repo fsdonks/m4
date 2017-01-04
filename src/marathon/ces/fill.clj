@@ -279,18 +279,20 @@
   (fn [u]
     (protocols/next-position (:policy u) st)))      
 
+;;Note: this is pretty crucial for the fill process, it provides all of
+;;the ordering and filtering context, derived from the demand record.
+
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
 (defn demand->rule [d]
   (let [category (let [c (get d :category :default)]
                    (if (restricted-categories c) c
                        :default))
-        r
-        {:src  (get d :src)
-         :cat  category
-         :name (get d :name)
-         :order-by (resolve-source-first (get d :source-first "uniform"))
-         :required (d/required d)
-         }]
+        r   {:src  (get d :src)
+             :cat  category
+             :name (get d :name)
+             :order-by (resolve-source-first (get d :source-first "uniform"))
+             :required (d/required d)
+             }]
     (if  (or (= category :default) (nil? (:StartState d)))
       r
       ;;we have a preference for startstate...
