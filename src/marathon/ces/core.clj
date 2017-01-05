@@ -626,6 +626,19 @@
 (defn unit-entities   [s]   (store/get-domain s :unit-entity))
 (defn demand-entities [s]   (store/get-domain s :DemandType))
 
+(defn current-entity
+  "Fetch the entity with it's current time interpolated as a :dt component.
+   We use this to perform lightweight updates, particularly for computing   
+   accumulated stats, so that we can interpolate statistics for things like 
+   fill criteria.  Rather than invoke the machinery to update every entity, 
+   we save time doing lightweight updates as a function of the computed 
+   :dt component."
+  ([ctx nm t]
+   (let [e  (store/get-entity ctx nm)
+         dt (- t (get e :last-update 0))]
+     (assoc e :dt dt)))
+  ([ctx nm] (current-entity ctx nm (sim/current-time ctx))))
+
 ;;this is actually using our new positional stuff.
 ;;we need to map deployed-trend to risk....
 ;;I think we just want to use demand-trends...

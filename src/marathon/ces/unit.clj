@@ -242,9 +242,30 @@
 (defn get-dwell       [u] (-> u :currentcycle :dwell))
 (defn get-cyclelength [u] (-> u :currentcycle :duration-expected))
 
+
+;;BUG NOTE: We have an issue with computing normalized dwell
+;;when the unit's last-update is not consistent with the
+;;state of the system (i.e. the current time).  This happens
+;;when units are out of sync and actions that depend on
+;;accumulated statistics pop up, in particular, ordering
+;;units for consideration in filling demand.
+
+;;Since dwell is the primary arbiter, and we can compute
+;;dwell as a function of cycletime, we can establish a
+;;quick projection of normalized dwell relative to the
+;;time elapsed since last-update.  If we add a component
+;;that indicates last-look, rather than last-update,
+;;we can have a simple means of projecting statistics like
+;;cycletime and dwell, without having to update the whole
+;;unit.
+
+;;We now have a component, :dt, which tells us if any
+;;time has elapsed for the unit entity.  :dt comes to
+;;us when we use ces.core/current-entity.
+
 ;;TODO# Verify this statistic is accurate....
 (defn normalized-dwell [u] 
- (double  (/ (get u :cycletime)
+ (double  (/ (+ (get u :cycletime) (get u :dt 0))
              (-> u :currentcycle :dwell-expected))))
 
 ;;trying to boost speed.

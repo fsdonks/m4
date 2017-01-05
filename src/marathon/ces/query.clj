@@ -698,7 +698,8 @@
 ;;hope that we'll have an interpolated entity we can use to judge fill.
 ;;Can we establish fixed rules for mapping state->stats?  Note: we already do this
 ;;inside update-entity via behaviors. 
-(defn find-entity [ctx nm] (store/get-entity ctx nm)
+
+
   ;;rather than doing the full entity update....
   ;;can we score it based on its dwell/bog state?
   ;;perhaps fall back into a full update iff we have to?
@@ -710,18 +711,71 @@
   ;;We still have the fill-data or fill promise that we can
   ;;store potential stuff in...so...
   
-  )
+
+;;BUGFIX: Non-synchronized units are considered based on their last-known
+;;dwell, rather than dwell at the time of querying.  Unit behavior updates
+;;can age the unit, but we'd need to fold the context into the update
+;;process (currently we just look at units....).
+;;Alternative is to compute an expected cycle-time based on the unit's
+;;last update and the time-of-fill.  That'll provide our criteria for
+;;the unit's normalized dwell stats, then "if" the unit is selected based
+;;on other criteria, and the fill order, we perform a full update of
+;;the unit.
+
+;;find-feasible-supply returns a reducer....
+;;we could do full updates (for now) and pack the resulting updated
+;;context as meta data.  This is much heavier than computing the
+;;cyclelength directly based off time and last-update....
+
+;;Argument for adding the component, i.e. :last-touched....
+;;unit/normalized-dwell could then use that component to determine if
+;;the entity had been examined...i.e. (max :touched :lastupdate)...
+;;unit behavior only uses :lastupdate.....lite-synched tasks like
+;;fills could use :last-touched to compute stats, iff last-update <>
+;;time-of-fill.
+
+;;So, when we query fill,
+;;a) all units with lastupdate <> time-of-fill, or last-touch <> time-of-fill,
+;;   get time-of-fill added as :last-touch (entity records pulled during query).
+
+;;b) we need a :dt to add to cycle-length stat in unit/normalized-dwell
+;;   and other interpolable statistics....
+;;   thus, our stats can be smart about interpolating when we touch an entity?
+;;   at least in the case of fill (really the only one we use I believe....)
+;;   if we have temporary-dt
+
+;;We'll just add an interpolation process....with ephemeral data
+;;for dt each time step.  alternately, we can just add to the dt
+;;every time we touch an entity?
+;;Easy enough, and general....that way, we can at least compute
+;;synchronizations for lerping.
+
+;;Formalizing interpolation allows us to do lerping for other functions
+;;as well...
+;;If/when we touch a unit, we just update the dt + last-touched.
+;;When we update a unit, part of the update can be to drop the dt + last-touched...
+;;or, we zero-out dt and make last-touched == last-update?
+
+;;probably stick this in ces.core, allow other namespaces to use it.
+;;so (defn touch [ctx id] ...)
+;;gives us an entity map with the :dt computed relative to the
+;;ctx time.  more general-purpose than fill (although fill will be
+;;what uses it initially).
+
+;;We have the current time from the context.
 
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
 (defn find-supply [{:keys [src cat order-by where collect-by] :or 
                     {src :any cat :default} :as env} ctx] 
-    (let [order-by (eval-order  order-by)
-          where    (eval-filter where)] 
+    (let [order-by (eval-order    order-by)
+          where    (eval-filter   where)
+          t        (core/get-time ctx)] 
       (with-query-env env                                                                           
         (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) 
-                                         cat src  (fn [nm] (store/get-entity ctx nm))) ;;NOTE: Possible updated entity here..
+                                         cat src  (fn [nm]                                                    
+                                                    (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
                             :order-by (when order-by
                                         (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]

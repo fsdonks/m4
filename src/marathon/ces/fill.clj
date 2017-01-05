@@ -451,10 +451,12 @@
 ;;Note: filldata == {:keys [rule fillPath pathlength followon source]}
 ;;simple....
 ;;TODO# replace with record or type.
+;;BUGFIX: we strip out the :dt here if necessary.
 (defn unit->filldata [cat src length u]
   ;;we're out of position here..
-                    ;rule ;fillPath ;pathLength
-  (filldata/->fill  cat src length nil u))
+                                        ;rule ;fillPath ;pathLength
+  (->> (dissoc u :dt)
+       (filldata/->fill  cat src length nil)))
 
 ;;all we expect from fills is that there is a quantity
 ;;if there is a key for :actions, then we have some requirement.
@@ -549,7 +551,19 @@
  "Deploys the unit identified in filldata to demand via the supply system."
   [t period demand deployment-count filldata  ctx]
   (let [;unit (or (:unit filldata) filldata)
-        unit   (:source filldata)
+        unit   (:source filldata) ;;this is not an updated unit.
+        ctx     (deployment/deploy-unit  ctx unit  t demand                                
+                                         (core/followon? unit))
+        new-unit (store/get-entity ctx (:name unit))]        
+      (supply/log-deployment! t (:locationname unit) demand new-unit   
+                              deployment-count filldata nil  period ctx)))
+
+;;temporarily changing this
+#_(defn fill!
+ "Deploys the unit identified in filldata to demand via the supply system."
+  [t period demand deployment-count filldata  ctx]
+  (let [;unit (or (:unit filldata) filldata)
+        unit   (:source filldata) ;;this is not an updated unit.
         ]
     (->> (deployment/deploy-unit  ctx unit  t demand                                
                                  (core/followon? unit))
