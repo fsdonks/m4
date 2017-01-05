@@ -692,17 +692,36 @@
 
 ;;common choke point for us to find entities.  Currently, we don't update them
 ;;when we're looking for them.
-(defn find-entity [ctx nm] (store/get-entity ctx nm))
+
+;;find-entity can be a projection, where we quickly or loosely update the entity
+;;based on its current state, then save the rest of the updates for later with the
+;;hope that we'll have an interpolated entity we can use to judge fill.
+;;Can we establish fixed rules for mapping state->stats?  Note: we already do this
+;;inside update-entity via behaviors. 
+(defn find-entity [ctx nm] (store/get-entity ctx nm)
+  ;;rather than doing the full entity update....
+  ;;can we score it based on its dwell/bog state?
+  ;;perhaps fall back into a full update iff we have to?
+
+  ;;combined with last-update, this keeps us from having to
+  ;;pay the cost of updating entirely on fill.
+  ;;If not, we need a way to retain the updated context.
+
+  ;;We still have the fill-data or fill promise that we can
+  ;;store potential stuff in...so...
+  
+  )
 
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
 (defn find-supply [{:keys [src cat order-by where collect-by] :or 
                     {src :any cat :default} :as env} ctx] 
-    (let [order-by (eval-order order-by)
+    (let [order-by (eval-order  order-by)
           where    (eval-filter where)] 
-      (with-query-env env                                                                           ;;NOTE: Possible updated entity here..
-        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src  (fn [nm] (store/get-entity ctx nm)))
+      (with-query-env env                                                                           
+        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) 
+                                         cat src  (fn [nm] (store/get-entity ctx nm))) ;;NOTE: Possible updated entity here..
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
                             :order-by (when order-by
                                         (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]
