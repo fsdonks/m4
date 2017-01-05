@@ -551,9 +551,9 @@
  "Deploys the unit identified in filldata to demand via the supply system."
   [t period demand deployment-count filldata  ctx]
   (let [;unit (or (:unit filldata) filldata)
-        unit   (:source filldata) ;;this is not an updated unit.
-        ctx     (deployment/deploy-unit  ctx unit  t demand                                
-                                         (core/followon? unit))
+        unit     (:source filldata) ;;this is not an updated unit.
+        ctx      (deployment/deploy-unit  ctx unit  t demand                                
+                                          (core/followon? unit))
         new-unit (store/get-entity ctx (:name unit))]        
       (supply/log-deployment! t (:locationname unit) demand new-unit   
                               deployment-count filldata nil  period ctx)))
