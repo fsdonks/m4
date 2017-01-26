@@ -568,7 +568,7 @@
                                                                [:name :positionstate :positionpolicy :cycletime])))
                 (beval (->seq [(echo :change-state)
                                change-state-beh
-                               (fn [benv]
+                               #_(fn [benv]
                                  (do (reset! ctx 
                                              (supply/log-move! tupdate :spawning (:positionpolicy @entity) @entity @ctx))
                                      (success benv)))]
@@ -888,7 +888,7 @@
 (befn change-location {:keys [entity location-change tupdate ctx] :as benv}
    (when location-change
      (let [;#_{:keys [from-location to-location]} #_location-change ;minor improvement..
-           from-location (val-at location-change :from-loction)
+           from-location (val-at location-change :from-location) ;;OMG, typo on location...was loction!!!
            to-location   (val-at location-change :to-location)
            ]
        (let [_ (debug [:location-change location-change])            

@@ -130,14 +130,6 @@
     (for [id  (keys (:unitmap   (get-supplystore ctx)))]
       (get-entity ctx id)))
 
-;;fetch units with appended :dt information for
-;;potential synchronization purposes.
-(defn current-units
-  ([ctx t]
-    (for [id  (keys (:unitmap   (get-supplystore ctx)))]
-      (current-entity ctx id t)))
-  ([ctx] (current-units ctx (sim/current-time ctx))))
-
 ;;Wow...this is really really easy to do now....constructing queries on the
 ;;entity store is nice...
 (defn locations
@@ -645,6 +637,15 @@
          dt (- t (get e :last-update 0))]
      (assoc e :dt dt)))
   ([ctx nm] (current-entity ctx nm (sim/current-time ctx))))
+
+
+;;fetch units with appended :dt information for
+;;potential synchronization purposes.
+(defn current-units
+  ([ctx t]
+    (for [id  (keys (:unitmap   (get-supplystore ctx)))]
+      (current-entity ctx id t)))
+  ([ctx] (current-units ctx (sim/current-time ctx))))
 
 ;;this is actually using our new positional stuff.
 ;;we need to map deployed-trend to risk....

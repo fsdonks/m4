@@ -424,8 +424,8 @@
 
 ;;(defproperty state)
 (defn state-handler [ctx edata _] 
-  (let [[name fromloc toloc] (:data edata)
-        [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
+  (let [[name fromloc toloc] (:data edata)        
+         [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
     (do (if @storage
           (swap! storage  #(push-cell % toloc))            
           (reset! storage (->cell fromloc toloc)))
