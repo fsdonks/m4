@@ -9,8 +9,15 @@
             [spork.util       [io :as io]]
             [proc.example :as proc]))
 
-(def full-path "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx")
-(def out-path  "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase\\")
+;;dumb helper....cross system deving...
+(defn hpath [p]
+  (str io/home-path p))
+
+(def full-path (hpath "\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx"))
+(def out-path  (hpath "\\Documents\\srm\\tst\\notionalv2\\maxbase\\"))
+
+;(def full-path "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx")
+;(def out-path  "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase\\")
 
 (def test-interests
   {:SRC1   ["SRC1" ["SRC1"]]

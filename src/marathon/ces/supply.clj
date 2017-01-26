@@ -249,6 +249,12 @@
 
 ;;we can just get the entity here...
 
+;;#Performance NOTE: we can possibly shift to using an
+;;atom to wrap the supplystore and the ctx, and perform
+;;updates in parallel.  Could see a significant improvement
+;;for large scale runs - iff there are multiple units updating
+;;on the same date.
+
 ;;Note: We can factor this out using filter in update-units.
 (defn apply-update
   "Ages an individual unit, based on how much time has elapsed - for the unit -
@@ -691,6 +697,10 @@
        (update-units t supply ctx today-updates)
        ctx)))
   ([ctx] (manage-supply (core/get-time ctx) ctx)))
+
+;;#Performance note: manage-supply is a relatively large bottleneck, one we could
+;;possibly alleviate with a parallel version of update-units.
+
 
 ;;A simple wrapper to unify the high level supply management.  We were calling 
 ;;this inline, it's more consistent now.

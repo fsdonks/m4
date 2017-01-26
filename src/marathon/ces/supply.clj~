@@ -2,48 +2,69 @@
 ;;All the operations for pushing supply, in the context of a simulation are 
 ;;maintained here.  Backing structure is an entitystore.  Supporting
 ;;Entity is the supply manager.
-(ns marathon.sim.supply
+(ns marathon.ces.supply
   (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
             [marathon.supply [unitdata :as udata]]
-            [marathon.sim [missing :as missing]
-                          [core :as core] [policy :as policy] 
-                          [unit :as u]]           
+            [marathon.ces    [core :as core]
+                             [policy :as policy] 
+                             [unit :as u]]
+            [marathon.data.protocols :as protocols]
+            [spork.entitysystem.store :as store
+             :refer [gete assoce mergee assoc-ine updatee get-entity add-entity drop-entity
+                     update-ine update-entity get-ine]]
+            [spork.ai.core :refer [debug]]
             [spork.sim    [simcontext :as sim] [updates :as updates]]
             [spork.util   [tags :as tag]
-                          [general :as gen]]))
+             [general :as gen]]
+            [clojure.core.reducers :as r]))
 
 ;;#Primitive Operations and Supply Queries
 ;'TODO -> formalize dependencies and pre-compilation checks....
 ;;estore version....
-(defn can-simulate? [store]
-  (-> store
-      (gete  :SupplyStore :tags) 
-      (tag/get-subjects :enabled)
+(defn can-simulate? [supply]
+  (-> supply
+      (:tags) 
+      (tag/get-tags :enabled)
       (empty?)
       (not)))
+
+(defn get-stats
+  ([nm ctx]
+   (let [e (store/get-entity ctx nm)]
+     (core/msg "Policy: "    (protocols/atomic-name (:policy e)) " "
+               "Cycletime: " (:cycletime e)))))
+
 ;;no change for estore.
-(defn unit-msg [unit]
-  (str "Updated Unit " (:name unit) " " (udata/getStats unit)))
+(defn unit-msg [unit ctx]
+  (str "Updated Unit " (:name unit) " " (get-stats (:name unit) ctx))
+  )
 
 (defn ghost?     [tags unit] (tag/has-tag? tags :ghost (:name unit)))
 ;;estore version
-(defn set-ghosts [x ctx]  (assoce :SupplyStore :has-ghosts xs))
+(defn set-ghosts [x ctx]  (assoce :SupplyStore :has-ghosts x))
 
 ;;estore version
-(defn add-unit   [store unit]
-  (-> store
-      (add-entity unit)
-      (assoc-ine :SupplyStore [:unitmap (:name unit)] (:name unit))))
+(defn add-unit
+  ([supply store unit]
+   (-> store       
+       (add-entity (:name unit) unit)
+       (store/mergee :SupplyStore (assoc-in supply [:unitmap (:name unit)] (:name unit)))))
+  ([store unit] (add-unit (get-entity store :SupplyStore) store unit))) 
 
 ;might be able to ditch the unit-map entirely.
 (defn drop-unit  [store unitname]
   (-> store
       (drop-entity unitname)
-      (update-ine  :SupplyStore [:unitmap] dissoc unitname)))
+      (update-ine  [:SupplyStore :unitmap] #(dissoc % unitname))
+      (update-ine  [:SupplyStore :tags]    #(tag/drop-tag % unitname))))
+
+(defn drop-units [store names] (reduce drop-unit store names))
 
 ;;this has changed....we no longer need the supplystore...
 (defn get-unit [store name] ;(get-in supplystore [:unitmap  name]))
   (get-entity store name))
+
+(defn unit? [store name] (get-in store [:unitmap name])) 
 
 (defn has-behavior? [unit] (not (nil? (:behavior unit))))
 
@@ -122,7 +143,7 @@
 
 ;helper function for dropping a tag from multiple units at once.
 (defn untag-units [supplystore tag units]
-  (reduce #(tag/untag-subject (:tags %1) %2 tag)) supplystore units)
+  (reduce #(tag/untag-subject (:tags %1) %2 tag) supplystore units))
 
 ;;#Supply Population Operations
 ;this might be suitable to keep in the supplymanager...
@@ -152,9 +173,11 @@
 
 ;DOUBLE CHECK....do we really mean to drop the entire src? 
 (defn remove-unit [store unitname]
+  (let [tags (store/gete store :SupplyStore)]                         
   (-> store
       (drop-unit unitname)
-      (updatee :SupplyStore remove-src (:src (get-unit supply unitname)))))
+      (update-entity :SupplyStore remove-src (gete store unitname :src))
+      )))
 
 (defn get-buckets 
   ([supply bucket] (get (:deployable-buckets supply) bucket))
@@ -183,13 +206,6 @@
 ;----FOREIGN -> THESE SHOULD BE MOVED, THEY'RE MORE GENERAL.....
 (defn conj-policy [unit policy] (update-in unit [:policy-queue] conj policy))
 
-;came from OpFactory..
-(defn create-unit [name src title component cycletime policy-id 
-                    parameters policystore & [behavior]]
-  (let [p (missing/choose-policy policy-id component parameters policystore src)]
-    (-> {:name name :src src  :oi-title title :component component 
-         :behavior behavior   :cycletime cycletime :policy p}
-        (udata/map->unitdata))))
 ;----------END FOREIGN------
 
 
@@ -219,28 +235,47 @@
   [supply unit msg ctx]
   (sim/trigger-event :supplyUpdate (:name supply) (:name unit) msg nil ctx))
 
+;;we wrap this accessor behind a entity called updates.
 (defn get-supply-updates "Get all units with pending supply updates." 
   [t ctx]
-  ;;select entities from the :supply-update component.
-                                        ;(sim/get-updates t :supply-update ctx)
-  (select-entities ctx :from [:supply update] :where  
-  )
+  ;;transition this out...
+                                        ;  (get-ine ctx [:updates t :supply-update]
+  (sim/get-updates :supply-update t ctx
+           ))
 
 (defn request-unit-update! "Schedule an update for unit at time t." 
   [t unit ctx] 
   (sim/request-update t (:name unit) :supply-update ctx))
+
+;;we can just get the entity here...
 
 ;;Note: We can factor this out using filter in update-units.
 (defn apply-update
   "Ages an individual unit, based on how much time has elapsed - for the unit -
    between time t and its last update."
   [t supplystore unitname ctx]
-  (if (core/disabled? supplystore unitname) ctx 
-      (let [unit (get-unit supplystore unitname)]
-        (->> ctx       
-          (u/update unit (updates/elapsed t (sim/last-update unitname ctx)))
-          (supply-update! supplystore unit (unit-msg unit))))))
+  (if ;(core/disabled? supplystore unitname)
+       (gete ctx unitname :disabled);lame hack
+           (do ;(println [:update unitname t :disabled])
+                ctx)
+      (let [unit (get-unit ctx unitname)
+            ;_ (println [:updating unitname])
+            ]
+          (->> ctx       
+               (u/unit-update unit) ;(updates/elapsed t (or (sim/last-update unitname ctx) 0)))
+               ((fn [ctx]
+                  (let [msg  (unit-msg unit ctx)]
+                    (supply-update! supplystore unit msg ctx))))))))
 
+;;This is an area that is ripe for parallelism.  We have an explicit
+;;synchronization point, each unit is logically independent of the
+;;other.  We should be able to split work out across multiple
+;;cores and perform updates in parallel.  The ctx is a shared
+;;resource though....Most of the unit updates will consist
+;;of modifying the unit entity atomically during the behavior,
+;;then committing the entity at the end.  So we have that
+;;behavior covered...Each unit update will create its
+;;own behavior context as well.
 (defn update-units
   "Given a sequence of unit keys, xs, brings each unit up to date according to 
    day, relative to the supply and the simulation context."
@@ -253,7 +288,7 @@
    common point in time.  Typically used prior to sampling."
   [t supply ctx & [unitnames]]
   (->> (or unitnames (keys (get supply :unitmap)))
-       (filter (partial up-to-date? t ctx))
+       (r/filter (partial up-to-date? t ctx))
        (update-units t supply ctx)))
 
 ;;#General Supply Notifications
@@ -269,7 +304,7 @@
 (defn new-deployable! [unit ctx]
   (assert (not= (:policy-position unit) :Recovery) "Recovery is not deployable")
   (sim/trigger-event :NewDeployable "SupplyManager" (:name unit) 
-      (str "Unit " (:name unit) " at position " (:position-policy unit) 
+      (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
            " is deployable") nil ctx))
 (defn new-followon! [unit ctx] 
   (sim/trigger-event :NewFollowOn "SupplyManager" (:name unit)
@@ -292,8 +327,11 @@
      (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
 
 ;Aux function for logging/recording the fact that a unit changed locations
-(defn log-move! [t fromloc toloc unit & [duration ctx]]
-  (sim/trigger-event :unitMoved (:name unit) toloc "" unit ctx))
+(defn log-move!
+  ([t fromloc toloc unit duration ctx]
+   (sim/trigger-event :unitMoved (:name unit) toloc (core/msg (:name unit) " moved from " fromloc " to " toloc)
+                      [(:name unit) fromloc toloc] ctx))
+  ([t fromloc toloc unit ctx] (log-move! t fromloc toloc unit nil ctx)))
 
 ;TODO -> This should be renamed like positionEvent or something.
 ;Main dependencies are in the unit Behaviors.
@@ -302,31 +340,38 @@
 ;Actually, unit behaviors aren't maintaining any state....
 ;So we can probably just plug them in as modules....they're all pure functions.
 ;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
-(defn log-position! [t frompos topos unit & [duration ctx]]
+(defn log-position! [t frompos topos unit  ctx]
   (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
-     (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
-     nil ctx))
+                     (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
+                     [(:name unit) frompos topos] ctx))
 
 ;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
-  [t fromname demand unit fillcount filldata deploydate  period & [ctx]]
-  (sim/trigger-event :deploy "SupplyManager" (:name unit)               
+  [t fromname demand unit fillcount filldata deploydate  period ctx]
+  (sim/trigger-event :deploy "SupplyManager" (:name unit)              
      (core/msg "Deployed unit " (:name unit) 
           " from " fromname " to demand " (:name demand))
      {:fromloc   fromname  :unit unit :demand demand :fill filldata 
       :fillcount fillcount :period period :t t :deploydate deploydate}  ctx))
 
+;;records unit changes in state....new
+(defn log-state! 
+  [t unit from to ctx]
+  (let [unitname (:name unit)]
+    (sim/trigger-event :StateChange "SupplyManager" unitname              
+                       (core/msg "Unit " unitname 
+                                 " changed state from " from " to " to)
+                       [unitname from to] ctx)))
+
 ;When a unit engages in a followon deployment, we notify the context.
-(defn unit-followon-event! [unit demand ctx]
-  (sim/trigger-event :FollowingOn  (:name unit) (:name demand) 
-     (core/msg "Unit " (:name unit) " is following on to demand " (:name demand))
+(defn unit-followon-event! [unit demandname ctx]
+  (sim/trigger-event :FollowingOn  (:name unit) demandname 
+     (core/msg "Unit " (:name unit) " is following on to demand " demandname)
         nil ctx))
 
 (defn first-deployment! [supply unit ctx]
   (sim/trigger-event :firstDeployment (:name supply) (:name supply) 
        (core/msg "Unit " (:name unit) " Deployed for the First Time") nil ctx))
-
-
 
 ;;#Supply Availability
 
@@ -337,21 +382,50 @@
 ;;interactive debugging if we just see the names (note: I can write a
 ;;view that will accomplish the same thing; in some cases it might be 
 ;;preferable to retain the name->unit info....pending.
-
 (defn update-availability [unit supply ctx]
   (if (contains? (get-buckets supply) (get unit :src))
     (more-src-available! unit ctx)
     (->> (new-src-available! (get unit :src) ctx)
       (new-deployable! unit))))
 
-;Consolidated this from update-deployability, formalized into a function.
+;;Tom hack 26 MAy 2016
+;;We discriminate between known or canonical buckets, and
+;;ad-hoc buckets (buckets that are created as ephemeral supply
+;;for followon-demands.  In contrast, we will likely always have
+;;:default and :SRM categories of supply, i.e. they never go away.
+(def known-buckets #{:default :SRM "SRM"})
+
+(defn derive-bucket [unit]
+  (let [fc  (:followoncode unit)]
+    (if (and fc (not (or (= fc "") (= fc "UnGrouped"))))
+      fc
+      (or (:default-bucket unit)                  
+          :default))))
+
+;;Rather than specifying followons manually, we let them be derived from
+;;the unit's followon code.  If it has one, it's inferred we have a
+;;followon supply.  We store this information in the unit's bucket component.
+;;Consolidated this from update-deployability, formalized into a function.
+;;We also indicate the presence of followon units at the component level,
+;;rather than storing in the supply.
 (defn add-deployable-supply 
   ([supply bucket src unit ctx]
-     (->> (sim/merge-updates 
-           {:supplystore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)} ctx)
-          (update-availability unit supply)))
-  ([supply src unit ctx] 
-     (add-deployable-supply supply :default src unit ctx)))
+   (let [components {:deployable-bucket bucket
+                     :deployable-cat    src
+                     :deployable true}
+         components (if (known-buckets bucket) components
+                        (do ;(println [:followon bucket])
+                            (assoc components :followon bucket)))
+         _ (debug [(:name unit) components :bucket bucket])
+         ]         
+   (->> ctx
+        (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)
+                           (:name unit) components ;;tacking on component data to help with queries.
+                           })
+        (update-availability unit supply))))
+  ([supply src unit ctx]                                                                  
+   (add-deployable-supply supply
+                          (derive-bucket unit) src unit ctx)))
 
 ;;follow on supply was treated as special, but now it's not.  We expected 
 ;;a function called get-followon-supply before...
@@ -361,23 +435,26 @@
 ;Consolidated this from update-deployability, formalized into a function.
 (defn remove-deployable-supply 
   ([supply bucket src unit ctx]
+   (let [ctx (store/update-entity ctx (:name unit)
+                                  (fn [m] (-> m (dissoc :deployable-bucket)
+                                                (assoc  :deployable false))))] ;no longer deployable, tracking with component data.
      (if-let [newstock (-> (get-in supply [:deployable-buckets bucket src])
                            (dissoc (get unit :name)))]
-       (sim/merge-updates 
-        {:supplystore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
-       (->> (sim/merge-updates 
-             {:supplystore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx)
-            (out-of-stock! (get unit :src)))))
-  ([supply src unit ctx] (remove-deployable-supply supply :default src unit ctx)))
+       (sim/merge-entity  {:SupplyStore (assoc-in supply [:deployable-buckets bucket src] newstock)} ctx)
+       (->>  (sim/merge-entity  {:SupplyStore (update-in supply [:deployable-buckets bucket] dissoc src)} ctx) ;we can phase this out maybe
+             (out-of-stock! (get unit :src))))))
+  ([supply src unit ctx]
+   (remove-deployable-supply supply (derive-bucket unit) src unit ctx)))
 
 (defn update-deployability
   "Sets a unit's deployable status, depending on the current context and the 
    unit's policy state."
   ([supply unit followon spawning ctx]
 ;     (assert (not (empty-position? unit)) (core/msg "invalid position!" (:positionpolicy unit)))
-     (let [position (:positionpolicy unit)
-           src      (get unit :src)]
-       (if (or followon (u/can-deploy? unit spawning))                         ;1)
+   (let [position   (:positionpolicy unit)         
+         src        (get unit :src)
+         can-deploy (u/can-deploy? unit spawning)]
+       (if (or followon can-deploy)                         ;1)
          (->> (if followon  ;notifiying of followon data...
                 (new-followon!   unit ctx) 
                 (new-deployable! unit ctx))
@@ -394,10 +471,17 @@
 ;;supply status via tags now, we don't need to partition the buckets separately.
 ;;I removed the buckets args, and this function got hollowed out.  
 ;;__DEPRECATE__
-(defn update-deploy-status [supply unit followon? spawning? ctx]
-    (update-deployability supply unit followon? spawning? ctx))
+(defn update-deploy-status
+  ([supply unit followon? spawning? ctx]
+   (update-deployability supply unit followon? spawning? ctx))
+  ([unit followon? spawning? ctx]
+   (update-deployability unit followon? spawning? ctx)))
 
 ;;#Registering New Supply
+
+;;Note: this is a current bottleneck for run setup (we spend a lot of time
+;;in here, could benefit from mutation, or anything that avoids
+;;all the associng and get calls.
 
 ;Note -> the signature for this originally returned the supply, but we're not 
 ;returning the context.  I think our other functions that use this guy will be
@@ -407,19 +491,19 @@
 ;added on-top-of the default tags derived from the unit data.
 (defn register-unit [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
-        supply (-> (add-unit supply unit)
-                   (tag-unit unit extra-tags)
-                   (add-src (get unit :src)))
-        ctx    (core/set-supplystore ctx supply) ;this happens in a
-                                                 ;pure context,
-                                                 ;cellular need not do
-                                                 ;anything here.
+        newctx    (->> (-> supply
+                           (tag-unit unit extra-tags)
+                           (add-src   (get unit :src))
+                           (add-unit  ctx unit)
+                           (store/assoce (:name unit) :supply true) ;starting to shift to component tagging.                           
+                           )
+                       (request-unit-update!  (max (:spawntime unit) 0) unit ))        
         ]
     (if ghost 
-      (->> (spawning-ghost! unit ctx)
+      (->> (spawning-ghost! unit newctx)
            (set-ghosts true))
-      (->> (spawning-unit! unit ctx)
-           (update-deployability supply unit nil nil)))))
+      (->> (spawning-unit! unit newctx)
+           (update-deployability unit nil nil)))))
 
 (defn register-unit! [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
@@ -432,6 +516,8 @@
       (->> (spawning-unit! unit ctx)
            (update-deployability supply unit nil nil)))))
 
+(defn create-unit [& args]
+  (throw (Exception. "create-unit is a stub....")))
 ;creates a new unit and stores it in the supply store...returns the supply 
 ;store.
 (defn new-unit [supplystore parameters policystore behaviors name src title 
@@ -460,8 +546,7 @@
            (should-change-policy? unit))
     (let [new-policy (get-near-max-policy (:policy unit) 
                                           (core/get-policystore ctx))]
-      (sim/merge-updates 
-        {:supplystore (add-unit supply (conj-policy unit new-policy))} ctx))                                                  
+      (update-entity ctx (:name unit) conj-policy new-policy))                                                
     ctx))
 
 ;;#Tracking Follow-On Supply
@@ -490,21 +575,31 @@
 (defn add-followon
   "Registers the unit as eligible for follow on status."
   [supply unit ctx] 
-  (-> (assoc-in supply [:followons (get unit :name)] unit)
-      (update-deploy-status unit true nil ctx)))
+                                        ;(-> ;(assoc-in supply [:followons (get unit :name)] unit)      
+      (update-deploy-status unit true nil ctx))
 
 (defn remove-followon
   "Drops the supply entity from supply store's registry of units in follow-on 
    status."
-  [store unitname]
-  (let [unit     (get-unit store unitname)
+  [unit ctx]
+  (let [unitname (:name unit) 
         fcode    (:followoncode unit)
-        src      (get unit :src)]
-    (-> store 
-        (update-in [:followons] dissoc unitname)
-        (core/prune-in  [:deployable-buckets fcode src] dissoc unitname)
-        (assoc-in  [:unitmap unitname] 
-          (assoc unit :followoncode nil)))))
+        src      (:src unit)
+        fbucket  (store/get-ine ctx [:SupplyStore :deployable-buckets fcode])
+        bucket   (get fbucket src)
+        fbucket  (if (== (count bucket) 1)
+                   (when (> (count fbucket) 1) (dissoc fbucket src))
+                   (assoc fbucket src (dissoc bucket (:name unit))))
+        unit    (dissoc :followon)
+        ]
+    (-> ctx
+        (store/update-ine  [:SupplyStore :deployable-buckets]
+                           (fn [fcodes]
+                             (if fbucket
+                               (assoc fcodes fcode fbucket)
+                               (dissoc fcodes fcode))))
+        (store/dissoce unitname :followon)
+        )))
 
 (defn followon-unit?
   "Determines if a particular unit is known to be eligible for follow-on use."
@@ -512,24 +607,40 @@
 
 ;;__TODO__Detangle release-followon-unit.
 
+;;I think we're missing something here; it doesn't look like we
+;;are unloading our followon supply from the deployable
+;;buckets...
+;;Relook this, I think we can manage the same effects much simpler.
 (defn release-followon-unit
   "Convoluted.  Need to detangle this guy. 
    Assuming a unit associated with unitname was held in follow-on status, the 
    unit is released from holding and allowed to progress back into the global 
    supply."
   [ctx unitname]
-  (let [store (core/get-supplystore ctx)
-        ctx   (->> (sim/merge-updates 
-                     {:supplystore (remove-followon store unitname)} ctx)
-                   (u/change-state (get-unit store unitname) 
-                                   :AbruptWithdraw 0 nil))]   
+  (let [;_     (println [:releasing unitname :followon])
+        ctx   (store/assoce ctx unitname :followoncode nil)
+        ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
+                   (u/change-state (store/get-entity ctx unitname)
+                                   :abrupt-withdraw 0 0))
+        ;store 
+        ]   
     (update-deploy-status 
-      (core/get-supplystore ctx) (get-unit store unitname) nil nil ctx)))
+     (core/get-supplystore ctx)
+     (store/get-entity ctx unitname)  nil nil ctx)))
 
-
+;;__Currently, we just wipe out any categories of supply that are not
+;;consistent with our default bucket, :default;  This may change in the
+;;future, especially if we just stick the :followon supply in their
+;;own nested category.  We'll need to do this for SRM and other
+;;more general remissionable supplies.
 ;;Process the unused follow-on units, changing their policy to complete cycles.
-(defn release-followons [supplystore & [ctx]]
-  (reduce release-followon-unit ctx (keys (:followons supplystore))))         
+(defn release-followons [fons ctx]
+  (->  (reduce release-followon-unit  (store/drop-domain ctx :followon) (keys fons))
+       (store/updatee :SupplyStore :deployable-buckets
+                      (fn [m]
+                        (reduce (fn [acc k]
+                                  (assoc acc k (get m k))) {} known-buckets)
+                        ))))
 
 ;;__TODO__ Deprecate release-max-utilizers
 ;;This is probably a deprecated function.  It was a corner case to ensure that 
@@ -539,18 +650,18 @@
   (let [{:keys [followons normal]} 
            (group-by #(if (followon-unit? supplystore %) :followon :normal)
                       (tag/get-subjects (:tags supplystore) :MaxUtilizer))
-         updates {:supplystore (untag-units supplystore :MaxUtilizer 
+         updates {:SupplyStore (untag-units supplystore :MaxUtilizer 
                                             (concat followons normal))}]   
-    (reduce release-followon-unit (sim/merge-updates updates ctx)
-            followons)))         
+    (reduce release-followon-unit (sim/merge-entity updates ctx)
+            followons)))
 
 ;;#Deployment Related
 
 ;;announce that the unit is in fact following on, remove it from followons.
-(defn record-followon [supply unit demand ctx]
-  (->> (sim/merge-updates 
-         {:supplystore (remove-followon supply (get unit :name))} ctx)
-       (unit-followon-event! unit demand)))
+(defn record-followon [supply unit demandname ctx]
+  (->> ctx
+       (remove-followon unit)
+       (unit-followon-event! unit demandname)))
 
 (defn get-next-deploymentid [s] (inc (:uniquedeployments s)))
 (defn tag-as-deployed [unit store] 
@@ -572,29 +683,27 @@
    updates at time t, they are brought up to date and have their changes 
    incorporated into the context.  The entity behaviors will typically 
    use some of the supply system functions defined above to alter the context."
-  [t ctx]
-  (let [supply (core/get-supplystore ctx)]
-    (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
-      (update-units t supply ctx today-updates)
-      ctx)))
-
-
-;; (defn manage-supply
-;;   "High level hook for the supply system.  For entities that have scheduled 
-;;    updates at time t, they are brought up to date and have their changes 
-;;    incorporated into the context.  The entity behaviors will typically 
-;;    use some of the supply system functions defined above to alter the context."
-;;   [t ctx]
-;;   (let [supply (core/get-supplystore ctx)]
-;;     (if-let [today-updates (map :requested-by (get-supply-updates t ctx))]
-;;       (update-units t supply ctx today-updates)
-;;       ctx)))
+  ([t ctx]
+   (let [supply (get-entity ctx :SupplyStore)
+         ;_ (println [:supply t])
+         ]
+     (if-let [today-updates (keys  (get-supply-updates t ctx))]
+       (update-units t supply ctx today-updates)
+       ctx)))
+  ([ctx] (manage-supply (core/get-time ctx) ctx)))
 
 ;;A simple wrapper to unify the high level supply management.  We were calling 
 ;;this inline, it's more consistent now.
 (defn manage-followons
   "Ensures that entities held in a temporary follow-on status are released and
    circulated back into supply.  Typically used after we try to fill demands."
-  [day ctx] 
-  (release-followons (core/get-supplystore ctx) ctx))
+  [day ctx]
+  (let [fons   (into {} (filter second) (store/get-domain ctx :followon))
+        fcount (count fons)]
+    (if (pos? fcount)
+      (do  (debug [:releasing! fcount :followon])
+           (release-followons fons ctx))
+      (do (debug [:No-followons-to-release!])
+          (store/drop-domain ctx :followon) ;;covering down on a weird issue with nil valued fons.
+          ))))
 
