@@ -114,7 +114,7 @@
 
 (defn AddBOG [u t]  
   (let [cyclerecord (-> (:currentcycle u) 
-                (inc-field :bogtime t) 
+                (inc-field :bog t)  ;;patched
                 (dec-field :bogbudget t))]   
     (add-duration (merge u {:currentcycle cyclerecord}) t)))
   

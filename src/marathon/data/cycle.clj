@@ -59,8 +59,8 @@
                            ( - policyduration (+ bogtime  MOBtime))))
       :duration-expected policyduration
       :dwell-expected  dwelltime
-      :mob-expected = MOBtime
-      :bogbudget = bogbudget)))
+      :mob-expected MOBtime
+      :bogbudget bogbudget)))
 
 (defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]
   (let [trav  [t startlocation endlocation]       

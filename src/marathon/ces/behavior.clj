@@ -674,20 +674,29 @@
       (let [t        tupdate
             u        @entity 
             frompos  (get     u      :positionpolicy) ;;look up where we're coming from.
-            wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?            
+            wt       (or (:wait-time benv) (get-wait-time  u  nextpos benv))  ;;how long will we be waiting?
+            location-based? (:location-behavior u)
             ]
         (if (= frompos nextpos)  ;;if we're already there...
           (do (debug [:no-movement frompos nextpos (type benv)])
               (success (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
           (let [_            (debug [:moving frompos nextpos])
-                newstate     (or (get-state u nextpos) nextpos)
+                newstate     (or (get-state u nextpos)
+                                 nextpos) ;;need to account for prescribed moves.
+                newstate     (if location-based?
+                               (into (->  (-> statedata :curstate)
+                                          #_(disj nextpos))
+                                      newstate)
+                               newstate)
                 _ (when (nil? newstate) (throw (Exception. (str [:undefined-transition newstate u frompos nextpos wt]))))
-                state-change {:newstate       newstate
-                              :duration       wt
-                              :followingstate nil
-                              :timeinstate 0
-                              }
-                _            (reset! entity  (traverse-unit u t frompos nextpos)) ;update the entity atom              
+                state-change  {:newstate       newstate
+                               :duration       wt
+                               :followingstate nil
+                               :timeinstate 0
+                               }
+                _            (reset! entity  (-> (if location-based? (dissoc u :location-behavior) u)
+                                                 (traverse-unit  t frompos nextpos)
+                                                 )) ;update the entity atom              
                 ;;if we already have a location change set, then we should respect it.
                 from-loc     (:locationname u)
                 to-loc       (if-let [newloc  (:next-location benv)]
@@ -1160,8 +1169,9 @@
    
    :dwelling          dwelling-beh
    protocols/Dwelling dwelling-beh
-   
-   :overlapping       bogging-beh
+
+   ;;Need to make sure we don't add bogg if we're already bogging...
+   :overlapping           bogging-beh
    protocols/Overlapping  bogging-beh
    })
 
@@ -1173,10 +1183,21 @@
 ;;and behaviortree.
 (befn do-current-state {:keys [entity statedata] :as benv}
       (let [;state (:state @entity)
-            state  (:state  (deref!! entity) ) ;;slightly faster using keyword as function call.
+            state  (:state  (deref!! entity)) ;;slightly faster using keyword as function call.
             state-map (or (:statemap entity) default-statemap)]
         (if (set? state)  ;entity has multiple effects...
-          (let [stats (r/filter identity (r/map (fn [s] (val-at state-map s)) state))]
+          ;;MEGA-HACK:This a serious hack to prevent double-counting of bog when we have
+          ;;state-sets.  Alone, either overlapping or bogging confers collecting bog time,
+          ;;and in legacy policies are mutually exclusive.  However, for SRM policies,
+          ;;we have the possibility of bogging/non-bogging, as well as being in an
+          ;;overlap state.  This leaves us with a conundrum relative to our default
+          ;;legacy meanings of bog and overlap.  What we can do is ensure that if
+          ;;bogging is present, we just skip overlapping if we ever encounter a
+          ;;state-state.  This is practical, but somewhat brittle....probably
+          ;;a better idea to encode the meaning of states better - like [:bogging :overlapping]          
+          (let [stats (r/filter identity                                 
+                                (r/map (fn [s] (val-at state-map s)) (disj state :overlapping)))
+                ]
             (->seq stats))
           (get state-map state))))
 
@@ -1429,18 +1450,27 @@
 ;;the behavior would evaluate its top-most behavior first
 ;;(i.e. do-current-state), and pop the behavior once
 ;;the time expired.
+(defn location-based-state [u state]
+  (let [s (get-state u state)
+        s (if (set? s) s #{s})]
+    s))
+
 (befn location-based-beh {:keys [entity location-based-info ctx] :as benv}
   (when  location-based-info
     (let [{:keys [name MissionLength BOG StartState EndState overlap
                   timeinstate]}
-                                  location-based-info
-          newstate (if BOG #{StartState :bogging} #{StartState})
+          location-based-info
+          ;;StartState is really a policy position....
+          start-state (location-based-state @entity StartState)          
+          newstate #_(if BOG #{StartState :bogging} #{StartState})
+                     (if BOG (conj start-state :bogging) start-state)
          ;;we need to schedule a state change.
           ;;and a location-change...
           _ (swap! entity assoc :location-behavior true)
           followingstate  (if (pos? overlap)
                             (conj newstate :overlapping)
-                            EndState)
+                            #_EndState
+                            (location-based-state @entity EndState))
           state-change {:newstate       newstate
                         :duration       (- MissionLength  overlap)
                         :followingstate followingstate
