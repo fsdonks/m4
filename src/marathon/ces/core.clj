@@ -130,6 +130,13 @@
     (for [id  (keys (:unitmap   (get-supplystore ctx)))]
       (get-entity ctx id)))
 
+;;fetch units with appended :dt information for
+;;potential synchronization purposes.
+(defn current-units
+  ([ctx t]
+    (for [id  (keys (:unitmap   (get-supplystore ctx)))]
+      (current-entity ctx id t)))
+  ([ctx] (current-units ctx (sim/current-time ctx))))
 
 ;;Wow...this is really really easy to do now....constructing queries on the
 ;;entity store is nice...
