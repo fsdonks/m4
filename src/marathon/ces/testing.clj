@@ -848,17 +848,21 @@
 
 (defn observer-seq [& {:keys [tmax] :or {tmax 5001}}]
   (analysis/->history-stream tmax
-                             engine/sim-step
-                             (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")))
+     engine/sim-step
+     (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")))
 
 (defn observer-hist [& {:keys [tmax] :or {tmax 5001}}]
  (into {} (analysis/->history-stream tmax
-                                     engine/sim-step
-                                     (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx"))))
+             engine/sim-step
+             (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx"))))
 
+;;we're sitting at around 614ms at the low-end of the run spectrum here, before
+;;any improvements are made.
+;;548ms after changing ces.supply over...
+;;Down to 504ms after.  Not bad for a search-n-replace fix...
 (defn observer-timing [& {:keys [n tmax] :or {n 1 tmax 5001}}]
   (let [ctx (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")]
     (time (dotimes [i n]
-            (into {} (analysis/->history-stream tmax
-                                                engine/sim-step                                                
-                                                ctx))))))
+            (count  (analysis/->history-stream tmax
+                                               engine/sim-step                                                
+                                               ctx))))))

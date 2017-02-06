@@ -40,16 +40,16 @@
 
 ;notify everyone that we've filled a demand...
 (defn filled-demand! [demand-name unit-name ctx] 
-  (sim/trigger-event :FillDemand demand-name unit-name "Filled Demand" nil ctx))  
+  (core/trigger-event :FillDemand demand-name unit-name "Filled Demand" nil ctx))  
 
 ;ghosts raise special attention when they deploy.
 (defn ghost-deployed! [demand-src ctx]
-  (sim/trigger-event :GhostDeployed demand-src demand-src 
+  (core/trigger-event :GhostDeployed demand-src demand-src 
        "Filled demand with  ghost"  :normal ctx))
 
 ;ghosts raise special attention if they followon.
 (defn ghost-followed! [demand-src ctx]
-  (sim/trigger-event :GhostDeployed demand-src demand-src 
+  (core/trigger-event :GhostDeployed demand-src demand-src 
      "Ghost followed on to another demand" :followon ctx))
 
 ;;Auxillary function to broadcast information about just-in-time, or "ghost" 

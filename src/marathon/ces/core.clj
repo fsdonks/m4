@@ -308,7 +308,7 @@
   ->cell]
  [spork.entitysystem.store
   entity-name]
- [spork.sim.simcontext 
+ [spork.sim.simcontext ;minimal amount of stuff pulled in..
   merge-updates
   merge-entity
   get-time])
@@ -922,6 +922,47 @@
        ;(sim/trigger-event request-type requested-by :update-manager 
        ;                   (msg requested-by " requested an " request-type " at " tupdate) nil)
        ))
+
+;;Note/TODO: Probable Performance Enhancement for generating events.
+;;We call sim/trigger-event quite a bit from the manager libraries.
+;;We basically have a call to build strings when we trigger events.
+;;If we aren't debugging or capturing output...we can just as easily
+;;skip firing off the event.
+;;So, events only matter if we want them to, thus we only pay the
+;;cost if we want to...
+;;We can make this a semi-dynamic call to sim/trigger-event
+;;using a macro.
+;;What we'd really like to do is....if there's no listener...
+;;we preclude the event from happening...
+;;We can probably save a shitload of time going this route.
+;;Alternately, we can write a macro to rip out messages...
+;;eliminate all the string building.
+;;Something like...
+
+  
+(defmacro trigger-event
+  "Macro optimization to allow messages to be stripped out 
+   if the context is not actively messaging (i.e. debugging).
+   This is a nifty cheat, since we avoid allocation for 
+   strings entirely. Behaves as a replacement for  
+   spork.sim.context/trigger-event , while restricting 
+   certain argument combinations, i.e. non-variadic."
+  ([id from to msg-form data ctx] ;;changce to strip message.
+   `(let [msg# (when ~'marathon.ces.core/*debug* ~msg-form)]  
+      (sim/trigger-event ~id ~from ~to  msg# ~data ~ctx)))
+  ([e ctx] ;event is already baked.
+   (sim/trigger-event ~e ~ctx)))
+
+#_(definline trigger-event
+  "Macro optimization to allow messages to be stripped out 
+   if the context is not actively messaging (i.e. debugging).
+   This is a nifty cheat, since we avoid allocation for 
+   strings entirely. Behaves as a replacement for  
+   spork.sim.context/trigger-event , while restricting 
+   certain argument combinations, i.e. non-variadic."
+  [id from to msg-form data ctx]
+  `(let [msg# (when ~'marathon.ces.core/*debug* ~msg-form)]  
+     (sim/trigger-event ~id ~from ~to  msg# ~data ~ctx)))
 
 ;;##Developer Notes
 

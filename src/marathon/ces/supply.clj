@@ -300,42 +300,42 @@
 ;;#General Supply Notifications
 
 (defn spawning-unit! [unit ctx]
-  (sim/trigger-event :SpawnUnit (:name unit) (:name unit)
+  (core/trigger-event :SpawnUnit (:name unit) (:name unit)
      (str "Spawned Unit " (:name unit)) nil ctx))             
 
 (defn spawning-ghost! [unit ctx]
-  (sim/trigger-event :SpawnGhost (:name unit) (:name unit)
+  (core/trigger-event :SpawnGhost (:name unit) (:name unit)
      (str "Spawned a ghost " (:name unit)) nil ctx))  
 
 (defn new-deployable! [unit ctx]
   (assert (not= (:policy-position unit) :Recovery) "Recovery is not deployable")
-  (sim/trigger-event :NewDeployable "SupplyManager" (:name unit) 
+  (core/trigger-event :NewDeployable "SupplyManager" (:name unit) 
       (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
            " is deployable") nil ctx))
 (defn new-followon! [unit ctx] 
-  (sim/trigger-event :NewFollowOn "SupplyManager" (:name unit)
+  (core/trigger-event :NewFollowOn "SupplyManager" (:name unit)
       (str "Unit " (:name unit) " able to followon for demandgroup " 
            (:followoncode unit)) nil ctx))
 (defn more-src-available! [unit ctx]
   (let [src (get unit :src)]
-    (sim/trigger-event :MoreSRCAvailable "SupplyManager" src 
+    (core/trigger-event :MoreSRCAvailable "SupplyManager" src 
        (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
             "has just been added to deployables for SRC " src) nil ctx))) 
 (defn new-src-available! [src ctx]
-  (sim/trigger-event :NewSRCAvailable "SupplyManager" src 
+  (core/trigger-event :NewSRCAvailable "SupplyManager" src 
      (str "A new category of SRC now has deployable supply " src) nil ctx))
 (defn not-deployable! [unit ctx] 
-  (sim/trigger-event :NotDeployable "SupplyManager" (:name unit) 
+  (core/trigger-event :NotDeployable "SupplyManager" (:name unit) 
      (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
           " is no longer deployable") nil ctx))
 (defn out-of-stock! [src ctx]
-  (sim/trigger-event :outofstock "SupplyManager" src 
+  (core/trigger-event :outofstock "SupplyManager" src 
      (str "SRC " src " has 0 deployable supply") (source-key src) ctx))
 
 ;Aux function for logging/recording the fact that a unit changed locations
 (defn log-move!
   ([t fromloc toloc unit duration ctx]
-   (sim/trigger-event :unitMoved (:name unit) toloc (core/msg (:name unit) " moved from " fromloc " to " toloc)
+   (core/trigger-event :unitMoved (:name unit) toloc (core/msg (:name unit) " moved from " fromloc " to " toloc)
                       [(:name unit) fromloc toloc] ctx))
   ([t fromloc toloc unit ctx] (log-move! t fromloc toloc unit nil ctx)))
 
@@ -347,14 +347,14 @@
 ;So we can probably just plug them in as modules....they're all pure functions.
 ;'TOM Change 6 June 2011 -> Added logging for unit positioning specifically..
 (defn log-position! [t frompos topos unit  ctx]
-  (sim/trigger-event :PositionUnit "SupplyManager" (:name unit) 
+  (core/trigger-event :PositionUnit "SupplyManager" (:name unit) 
                      (core/msg "UIC " (:name unit) " has repositioned from " frompos " to " topos)
                      [(:name unit) frompos topos] ctx))
 
 ;Aux function for logging/recording the fact that a unit deployed
 (defn log-deployment! 
   [t fromname demand unit fillcount filldata deploydate  period ctx]
-  (sim/trigger-event :deploy "SupplyManager" (:name unit)              
+  (core/trigger-event :deploy "SupplyManager" (:name unit)              
      (core/msg "Deployed unit " (:name unit) 
           " from " fromname " to demand " (:name demand))
      {:fromloc   fromname  :unit unit :demand demand :fill filldata 
@@ -364,19 +364,19 @@
 (defn log-state! 
   [t unit from to ctx]
   (let [unitname (:name unit)]
-    (sim/trigger-event :StateChange "SupplyManager" unitname              
+    (core/trigger-event :StateChange "SupplyManager" unitname              
                        (core/msg "Unit " unitname 
                                  " changed state from " from " to " to)
                        [unitname from to] ctx)))
 
 ;When a unit engages in a followon deployment, we notify the context.
 (defn unit-followon-event! [unit demandname ctx]
-  (sim/trigger-event :FollowingOn  (:name unit) demandname 
+  (core/trigger-event :FollowingOn  (:name unit) demandname 
      (core/msg "Unit " (:name unit) " is following on to demand " demandname)
         nil ctx))
 
 (defn first-deployment! [supply unit ctx]
-  (sim/trigger-event :firstDeployment (:name supply) (:name supply) 
+  (core/trigger-event :firstDeployment (:name supply) (:name supply) 
        (core/msg "Unit " (:name unit) " Deployed for the First Time") nil ctx))
 
 ;;#Supply Availability

@@ -459,7 +459,7 @@
   (let [nm  (:name unit) 
         loc (:locationname unit)
         msg (core/msg nm " moved from " loc " to " newlocation " on day " (sim/get-time ctx))]
-   (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
+   (core/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
 ;;CHANGE hiding unit policy 
 ;;Records the first time a unit moved.
@@ -467,7 +467,7 @@
   (let [nm  (:name unit) 
         loc (:locationname unit)
         msg (str nm " Started moving from " loc " to " newlocation " on day " (sim/get-time ctx))]
-   (sim/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
+   (core/trigger-event :UnitMoved nm newlocation  msg (short-policy unit) ctx)))
 
 (def ^:dynamic *uic* nil)
 
@@ -669,7 +669,7 @@
 
 (defn unit-update! "Notifies the context of a supply update."
   [nm msg ctx]
-  (sim/trigger-event :supplyUpdate  nm nm msg nil ctx))
+  (core/trigger-event :supplyUpdate  nm nm msg nil ctx))
 
 
 ;;Note: these are just delegating, we could probably extend the

@@ -61,7 +61,7 @@
         (if (>= (sim/get-time ctx) tlastdemand)
           (if (neg? tlastdemand) 
             (throw (Error. "No demands scheduled.  Latest deactivation never initialized!"))
-            (do (sim/trigger-event :Terminate (:name state) (:name state) 
+            (do (core/trigger-event :Terminate (:name state) (:name state) 
                                    (str "Time " (sim/current-time ctx) "is past the last deactivation: "
                                         tlastdemand " in a truncated simulation, terminating!") nil ctx)
                 false))
@@ -131,7 +131,7 @@
                        ;;relative to the final period.
                        (assoc-in [:state :parameters :work-state] :terminating) ;useless?
                        (assoc-in [:state :time-finish] (now)))]
-    (sim/trigger-event :Terminate :Engine :Engine "Simulation OVER!" nil final-ctx)))
+    (core/trigger-event :Terminate :Engine :Engine "Simulation OVER!" nil final-ctx)))
 
 ;##Begin Day Logic
 ;Prior to starting a new time inteval (currently a day), we typically want to 
@@ -143,7 +143,7 @@
    for user intervention each active day.  DEPRECATED."
   [ctx] 
   (if (-> ctx :state :pause)
-     (sim/trigger-event :pause-simulation :Engine :Engine 
+     (core/trigger-event :pause-simulation :Engine :Engine 
                   "Simulation Paused" [(sim/get-time ctx) 
                                        (sim/get-next-time ctx)] ctx)
      ctx))
@@ -156,7 +156,7 @@
    notifies listeners whether a user has paused the simulation."
   [day ctx]
   (->> ctx
-    (sim/trigger-event :begin-day :Engine :Engine
+    (core/trigger-event :begin-day :Engine :Engine
                        (day-msg "Begin" day) [day (sim/get-next-time ctx)
                                               ])))  
 
@@ -173,10 +173,10 @@
    been met."
   [day ctx]
   (->> ctx 
-    (sim/trigger-event :log-status :Engine :Engine 
+    (core/trigger-event :log-status :Engine :Engine 
        (str "Processed day " day " of " (sim/get-final-time ctx) " of Simulation") nil)
-    (sim/trigger-event :sample :Engine :Engine "Sampling" nil)
-    (sim/trigger-event :end-of-day :Engine :Engine (day-msg "End" day) nil)))
+    (core/trigger-event :sample :Engine :Engine "Sampling" nil)
+    (core/trigger-event :end-of-day :Engine :Engine (day-msg "End" day) nil)))
 
 (defn can-simulate? 
   "Simple predicate to ensure we have supply and demand in 

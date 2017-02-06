@@ -1830,7 +1830,7 @@
                                      (u/recordcycle tupdate))))
             ;;notify interested parties of the event...
             _  (swap! ctx (fn [ctx]
-                            (sim/trigger-event :CycleCompleted
+                            (core/trigger-event :CycleCompleted
                                                (:name @entity)
                                                :SupplyStore
                                                (str (:name @entity) " Completed A Cycle")
