@@ -73,7 +73,7 @@
        and thus events on the clock now.")
   (is (not (can-simulate? core/emptysim))     
       "No supply or demand should indicate as false for now.")
-  (is (zero?(sim/current-time core/emptysim)) 
+  (is (zero? (sim/current-time core/emptysim)) 
       "empty simulations have no time")
   (is (not  (sim/has-time-remaining? (sim/advance-time core/emptysim))) 
       "nothing scheduled, should be no more work."))
