@@ -170,13 +170,22 @@
 (defn policy-update! [t ctx] 
   (sim/request-update t :PolicyManager :policy-update ctx))  
 
-(defn add-period  "Registers a period data structure with the policystore."
-  [policystore per] 
-  (gen/deep-assoc policystore [:periods (:name per)] per))
+(defn add-period
+  "Registers a period data structure with the policystore."
+  [policystore per]
+  (let [{:keys [from-day to-day name]} per
+        _ (when-let [xs (get-in policystore [:periodchanges from-day])]
+            (throw (Exception. (str [:intersecting-periods! per xs]))))]            
+    (-> policystore
+        (gen/deep-assoc  [:periods name] per)
+        (gen/deep-assoc  [:periodchanges from-day] per))))
 
 (defn add-periods  "Import a sequence of periods into the policystore"  
   [periods policystore] 
   (reduce add-period policystore periods))
+
+;;a little sanity checking...
+;(defn validate-periods [store])
 
 (defn added-period!
   "Notifies interested parties of the beginning and ending of a period.
@@ -194,19 +203,28 @@
     (policy-update! (:from-day per))
     (policy-update! (:to-day per))))
 
-(defn get-periods [policystore] "Yield registered periods in the policystore." 
+(defn get-periods "Yield registered periods in the policystore."
+  [policystore] 
   (:periods policystore))
 
-(defn get-period [policystore periodname] "Find a period in the policystore."
+(defn get-period "Find a period in the policystore."
+  [policystore periodname] 
   (get (get-periods policystore) periodname))
 
-(defn schedule-periods [policystore ctx] "Schedule multiple periods."
-  (reduce (flip schedule-period) ctx (get-periods policystore))) 
+(defn schedule-periods
+  "Schedule multiple periods as policy update events.."
+  ([policystore ctx] 
+   (reduce (fn [acc p]
+                 (schedule-period p acc)) ctx (vals (get-periods policystore))))
+  ([ctx] (schedule-periods (core/get-policystore ctx) ctx)))
 
 ;;Note: Optimization
 ;;We're doing this every time, which is costing us in performance.
 ;;About 1/3 of our time in simulation is spent checking for
 ;;periods due to this function...
+
+;;One option is to schedule period changes a-priori, then
+;;execute at the appropriate time.
 
 (defn find-periods
   "Finds all periods in the policy store that intersect time t."
@@ -237,6 +255,10 @@
                  p))
              nil
              xs))
+   
+(defn get-period-change [ctx t]
+  (gen/deep-get (core/get-policystore ctx)
+                [:periodchanges t]))
 
 ;Returns the the period currently active in the policy store.  This may change 
 ;when I introduce multiple timelines....
@@ -542,10 +564,16 @@
                 (core/merge-entity {:PolicyStore (update-period day toname policystore)})
                 (period-change! fromname toname)
                 (change-policies fromname toname)))))
-  ([day ctx] (manage-policies day ctx 
-                              (find-period-in day
-                                              (store/gete ctx :PolicyStore :periods)
-                                              ))))
+  ([day ctx]
+   (if-let [new-period (get-period-change ctx day)]
+   ;;Optimizing.  We only look for periods if necessary vs. every day.
+     (manage-policies day ctx
+                      new-period
+                      #_(find-period-in day
+                                      (store/gete ctx :PolicyStore :periods)
+                                      ))
+     ctx ;;otherwise no change.
+     )))
 
 ;; (defn manage-policies
 ;;   "The policy system checks to see if we entered a new period, and changes 
@@ -721,9 +749,9 @@
        (add-policies atomic-policies)
        (add-policies composite-policies)))      
 
-;'TOM Change 10 SEP 2012
-(defn initialize-policystore [policystore ctx]
-  (schedule-periods policystore ctx))
+;'TOM Change 10 SEP 2012 OBE
+#_(defn initialize-policystore [policystore ctx]
+    (schedule-periods policystore ctx))
 
 ;Since composite policy loading is dependent on atomic policy loading, we 
 ;provide an auxillary function to ensure the order is correct, and specify 

@@ -1764,44 +1764,53 @@
 ;;   Its current cycle is modified.
 ;;   Does not get a cycle completion out of it.
 ;;#WIP Nov 2016
-(befn apply-policy-change [tupdate entity policy-change]
+;;Policy change => Movement => [state-change location-change]
+;;So, we can use policy-change to set the stage for movement, then pipeline the normal
+;;movement behavior...
+
+(befn apply-policy-change [ctx tupdate entity policy-change]
       (let [unit @entity
+            uname (:name unit)
             {:keys [cycletime current-policy next-policy proportion current-position]} policy-change
             cycletimeA     cycletime          
             policynameA    (protocols/atomic-name  current-policy) ;active atomic policy
             policynameB    (protocols/atomic-name  next-policy)    ;new atomic policy
-            cyclelengthB   (protocols/cycle-length next-policy) 
-            cycletimeB     (long   (* proportion cyclelengthB)) ;coerce to a long cyclelength.
+            cyclelengthB   (protocols/cycle-length next-policy)            
+            cycletimeB     (if (> cyclelengthB 30000) ;;effectively infinite...
+                             cycletimeA ;;use current cycletime, do NOT project.
+                             (long   (* proportion cyclelengthB))) ;coerce to a long cyclelength.
             _              (assert (>= cycletimeB 0) "Negative cycle times are not handled...")
             _              (assert (<=  cycletimeB cyclelengthB) "Cyclelength is too long!")
             wasDeployable  (protocols/deployable-by? (:policy unit) cycletimeA) ;;can maybe do this faster just checking state.
-            isDeployable   (protocols/deployable-by? next-policy cycletimeB)
-            positionB      (if (u/deployed? unit)
+            isDeployable   (protocols/deployable-by? next-policy    cycletimeB)
+            positionA      current-position
+            positionB      (if (u/deployed? unit) ;;REVIEW - Shouldn't matter, should already be non-deployed
                              (:positionpolicy unit) ;deployed units remain deployed.
                              (protocols/get-position next-policy cycletimeB))
             timeremaining  (policy-wait-time next-policy positionB)
             timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))           
-            unit           (-> unit
-                               (merge  {:positionpolicy positionB
-                                        :policy         next-policy
-                                        :cycletime      cycletimeB})                                              
-                               (u/change-cycle tupdate)
-                               (u/modify-cycle next-policy))
-            newduration    (- timeremaining timeinstate)
-            nextstate      (get-state  unit positionB)            
-            ]
-    (throw (Exception. (str [:unit (:name unit) :wants-policy-change policy-change])))))
-
-;;         If PositionA <> PositionB Then
-;;             MarathonOpSupply.LogPosition tnow, PositionA, PositionB, unit, , simstate.context
-;;             If nextstate = "Dwelling" Or nextstate = "DeMobilizing" _
-;;                     Or nextstate = Recovering Or nextstate = Recovered Then
-;;                 .changeLocation .PositionPolicy, simstate.context
-;;             End If
-;;         End If
-        
+            unit           (reset! entity
+                                   (-> unit
+                                       (merge  {:positionpolicy positionB
+                                                :policy         next-policy
+                                                :cycletime      cycletimeB})                                              
+                                       (u/change-cycle tupdate)
+                                       (u/modify-cycle next-policy)))
+            newduration    (- timeremaining timeinstate)]
+        ;;We have a move.
+        ;;Setup the movement and let the behavior execute.
+        ;(if (not= positionA positionB)
+          ;;setup the move and use existing behavior to execute (vs. legacy method that folded stuff in here).
+          (do (swap! ctx
+                     #(core/trigger-event :UnitChangedPolicy uname  policynameA
+                        (core/msg "Unit " uname " changed policies: "
+                                  policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil  %))
+              (move! positionB newduration))))
+;)
+          
+          ;;This automatically gets checked during move!...
 ;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
-        
+
 ;;         'Adopt Policy B.
 ;;         'Policy A ->
 ;;         '    Find relative CT = ct/CLengthA
@@ -1811,25 +1820,23 @@
 ;;         'Update with delta0.
 ;;         'TOM Change 2 Sep -> moved this north so that we can use the policy stack as a flag in unit's
 ;;         'ChangeCycle logic.  Check for sideeffects
+
 ;;         .policyStack.Remove 1
-        
+
 ;;         SimLib.triggerEvent UnitChangedPolicy, .name, .policy.AtomicName, "Unit " & .name & " changed policies: " & _
 ;;             policynameA & ":" & cycletimeA & "->" & policynameB & ":" & CycleTimeB, , simstate.context
-      
+          
+
+;;SET UP A STATECHANGE           
+
+;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Policy Change Caused Supply Update for unit " & .name, , simstate.context            
 ;;         Set PolicyChange_State = ChangeState(unit, nextstate, 0, newduration)
-;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Policy Change Caused Supply Update for unit " & .name, , simstate.context
+
 
 ;;         'NOTE -> I may need to consider changing location here.....
-      
-;;     Else 
-;;         SimLib.triggerEvent AwaitingPolicyChange, .name, .policy.AtomicName, "Unit " & _
-;;                 .name & " in position " & .PositionPolicy & " is waiting until reset to change policies", , simstate.context
-;;         Set unit = RevertState(unit)
-;;         'We updated the unit in the process
-;;         SimLib.triggerEvent supplyUpdate, .name, .name, "Policy Change Attempt Caused Supply Update for unit " & .name, , simstate.context
-;;     End If
-;; End With
-;; End Function
+
+            
+
                    
 ;;The unit's cycle cannot project onto another cycle.  We need to defer policy change until reset.
 ;;leave the policy on the stack.  Catch it during reset.

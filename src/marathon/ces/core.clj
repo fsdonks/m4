@@ -939,7 +939,7 @@
 ;;eliminate all the string building.
 ;;Something like...
 
-  
+;;Before: 6  
 (defmacro trigger-event
   "Macro optimization to allow messages to be stripped out 
    if the context is not actively messaging (i.e. debugging).
@@ -952,17 +952,6 @@
       (sim/trigger-event ~id ~from ~to  msg# ~data ~ctx)))
   ([e ctx] ;event is already baked.
    (sim/trigger-event ~e ~ctx)))
-
-#_(definline trigger-event
-  "Macro optimization to allow messages to be stripped out 
-   if the context is not actively messaging (i.e. debugging).
-   This is a nifty cheat, since we avoid allocation for 
-   strings entirely. Behaves as a replacement for  
-   spork.sim.context/trigger-event , while restricting 
-   certain argument combinations, i.e. non-variadic."
-  [id from to msg-form data ctx]
-  `(let [msg# (when ~'marathon.ces.core/*debug* ~msg-form)]  
-     (sim/trigger-event ~id ~from ~to  msg# ~data ~ctx)))
 
 ;;##Developer Notes
 

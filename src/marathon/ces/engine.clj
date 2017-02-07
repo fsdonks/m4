@@ -108,6 +108,7 @@
        (start-state)
        (set-time lastday)
        (supply/manage-supply   0)
+       (policy/schedule-periods)
        (policy/manage-policies 0)))
 
 ;##Simulation Termination Logic

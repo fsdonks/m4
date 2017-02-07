@@ -849,7 +849,7 @@
 (defn observer-seq [& {:keys [tmax] :or {tmax 5001}}]
   (analysis/->history-stream tmax
      engine/sim-step
-     (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")))
+                             (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")))
 
 (defn observer-hist [& {:keys [tmax] :or {tmax 5001}}]
  (into {} (analysis/->history-stream tmax
