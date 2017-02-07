@@ -1661,6 +1661,22 @@
        (not (infeasible-policy-change? from-pos))))
 
 
+;;Policy Changes
+;;==============
+;;Changing policies in legacy MARATHON involves something called the "policy stack"
+;;and a subscriber model where unit's "subscribe" to a parent policy (typically
+;;a composite policy defined over multiple simulation periods).  Changes in the
+;;period cause changes in policy, which propogate to changes in subscribers'
+;;policy.  Policy changes are typically limited to "non-deployed" states or
+;;dwelling states.  That is, units may not permissively change the structure
+;;of their policy while "in-use" by a demand.
+
+;;In this case, the policy change is tracked by keeping the policy change
+;;stack non-empty.  When the unit cycles through a state in which policy
+;;changes can occur, it finds a pending change and converts to the new
+;;atomic policy.
+
+
 ;; 'TOM Change 13 Jul 2011
 ;; 'Needed to implement the transition from one policy to another.  I chose to add a state to handle just this.
 ;; 'Visual analysis showed that PolicyChange looks a lot like Spawn, in that when a unit changes policies, it must change
@@ -1739,7 +1755,6 @@
                  defer-policy-change]
                 ))))
 
-
 ;;Assuming we have a change, let's apply it!
 ;;How long will the unit have been in this state?
 ;;    Since it's a policy change....do we zero it out?
@@ -1775,8 +1790,7 @@
             newduration    (- timeremaining timeinstate)
             nextstate      (get-state  unit positionB)            
             ]
-        :NADA
-        ))                                                
+    (throw (Exception. (str [:unit (:name unit) :wants-policy-change policy-change])))))
 
 ;;         If PositionA <> PositionB Then
 ;;             MarathonOpSupply.LogPosition tnow, PositionA, PositionB, unit, , simstate.context
