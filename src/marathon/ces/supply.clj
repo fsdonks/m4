@@ -687,6 +687,11 @@
 ;;supply updates.
 ;;From here ,it updates each entity in turn; really it invokes the
 ;;unit-update system.
+
+;;#Performance note: manage-supply is a relatively large bottleneck, one we could
+;;possibly alleviate with a parallel version of update-units.  Legacy version
+;;passed the units as a keyseq via (keys ...), new version passes the
+;;supply updates as a map and uses reduce-kv, which is marginally faster.
 (defn manage-supply
   "High level hook for the supply system.  For entities that have scheduled 
    updates at time t, they are brought up to date and have their changes 
@@ -700,24 +705,6 @@
        (update-units t supply ctx today-updates)
        ctx)))
   ([ctx] (manage-supply (core/get-time ctx) ctx)))
-
-;;legacy version.
-#_(defn manage-supply
-  "High level hook for the supply system.  For entities that have scheduled 
-   updates at time t, they are brought up to date and have their changes 
-   incorporated into the context.  The entity behaviors will typically 
-   use some of the supply system functions defined above to alter the context."
-  ([t ctx]
-   (let [supply (get-entity ctx :SupplyStore)
-         ;_ (println [:supply t])
-         ]
-     (if-let [today-updates (keys  (get-supply-updates t ctx))]
-       (update-units t supply ctx today-updates)
-       ctx)))
-  ([ctx] (manage-supply (core/get-time ctx) ctx)))
-
-;;#Performance note: manage-supply is a relatively large bottleneck, one we could
-;;possibly alleviate with a parallel version of update-units.
 
 
 ;;A simple wrapper to unify the high level supply management.  We were calling 

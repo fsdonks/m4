@@ -29,6 +29,7 @@
 (defn push-cell [^Cell cl v] (Cell. (.init cl) v))
 
 
+
 ;;identical to proc....copied from there...
 ;;deployment records
 (def deprecordschema
@@ -422,8 +423,12 @@
           (reset! storage (->cell fromloc toloc)))
         ctx)))
 
-(defmacro unrolled-let
-  [bindings & expr]
+;;Performance: Minor hotspot here, since movement gets upated a lot.
+;;We're doing clojure.lang.RT.nth instead of direct method calls.
+;;Id we unroll, it buys us a bit, uncertain "how" much for the
+;;smaller scale runs...
+(comment 
+(defmacro unrolled-let  [bindings & expr]
   `(let [~@(reduce (fn [acc bnd]
                      (into acc bnd)) []
                      (for [[xs ys] (partition 2 bindings)]
@@ -434,10 +439,6 @@
                                     `[~item (.nth ~coll ~idx)])))
                          `[~xs ~ys])))]
      ~@expr))
-
-;;Performance: Minor hotspot here, since movement gets upated a lot.
-;;We're doing clojure.lang.RT.nth instead of direct method calls.
-;;(defproperty state)
 (defn state-handler [ctx edata _] 
   (unrolled-let
    [[name fromloc toloc] (:data edata)        
@@ -446,9 +447,10 @@
          (swap! storage  #(push-cell % toloc))            
          (reset! storage (->cell fromloc toloc)))
        ctx)))
+)
 
-;legacy version
-#_(defn state-handler [ctx edata _] 
+;legacy version looks cleaner....
+(defn state-handler [ctx edata _] 
   (let [[name fromloc toloc] (:data edata)        
          [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
     (do (if @storage
