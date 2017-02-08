@@ -422,8 +422,33 @@
           (reset! storage (->cell fromloc toloc)))
         ctx)))
 
+(defmacro unrolled-let
+  [bindings & expr]
+  `(let [~@(reduce (fn [acc bnd]
+                     (into acc bnd)) []
+                     (for [[xs ys] (partition 2 bindings)]
+                       (if (vector? xs)
+                         (let [coll (with-meta (gensym "bind") {:tag 'clojure.lang.Indexed})]
+                           (apply concat `[~coll ~ys]
+                                  (for [[idx item] (map-indexed vector xs)]
+                                    `[~item (.nth ~coll ~idx)])))
+                         `[~xs ~ys])))]
+     ~@expr))
+
+;;Performance: Minor hotspot here, since movement gets upated a lot.
+;;We're doing clojure.lang.RT.nth instead of direct method calls.
 ;;(defproperty state)
 (defn state-handler [ctx edata _] 
+  (unrolled-let
+   [[name fromloc toloc] (:data edata)        
+    [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
+   (do (if @storage
+         (swap! storage  #(push-cell % toloc))            
+         (reset! storage (->cell fromloc toloc)))
+       ctx)))
+
+;legacy version
+#_(defn state-handler [ctx edata _] 
   (let [[name fromloc toloc] (:data edata)        
          [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
     (do (if @storage

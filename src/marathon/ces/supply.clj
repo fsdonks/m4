@@ -269,12 +269,12 @@
             ]
           (->> ctx       
                (u/unit-update unit) ;(updates/elapsed t (or (sim/last-update unitname ctx) 0)))
-               ((fn [ctx]
-                  (let [msg  (unit-msg unit ctx)]
-                    (supply-update! supplystore unit msg ctx))))))))
+               ((fn [ctx]  ;;inlined unit-msg to avoid eager msg creation.
+                  (supply-update! supplystore unit (unit-msg unit ctx) ctx)))))))
 
 ;;Performance: Interesting hotspot here as well. We have some overhead
-;;due to function calls.
+;;due to function calls.  Also, faster using reduce-kv, vs creating
+;;seqs using (keys ..).  In general (keys ..) is pretty performant.
 
 ;;This is an area that is ripe for parallelism.  We have an explicit
 ;;synchronization point, each unit is logically independent of the
@@ -289,8 +289,8 @@
   "Given a sequence of unit keys, xs, brings each unit up to date according to 
    day, relative to the supply and the simulation context."
   [t supply ctx xs]       
-  (reduce (fn [acc x] (apply-update t (core/get-supplystore acc) x acc))  
-          ctx xs))
+  (reduce-kv (fn update-units-r [acc x _] (apply-update t (core/get-supplystore acc) x acc))  
+             ctx xs))
 
 (defn update-all
   "Forces an update for every unit in the supply to bring all entities to a 
@@ -688,6 +688,21 @@
 ;;From here ,it updates each entity in turn; really it invokes the
 ;;unit-update system.
 (defn manage-supply
+  "High level hook for the supply system.  For entities that have scheduled 
+   updates at time t, they are brought up to date and have their changes 
+   incorporated into the context.  The entity behaviors will typically 
+   use some of the supply system functions defined above to alter the context."
+  ([t ctx]
+   (let [supply (get-entity ctx :SupplyStore)
+         ;_ (println [:supply t])
+         ]
+     (if-let [today-updates (get-supply-updates t ctx)]
+       (update-units t supply ctx today-updates)
+       ctx)))
+  ([ctx] (manage-supply (core/get-time ctx) ctx)))
+
+;;legacy version.
+#_(defn manage-supply
   "High level hook for the supply system.  For entities that have scheduled 
    updates at time t, they are brought up to date and have their changes 
    incorporated into the context.  The entity behaviors will typically 

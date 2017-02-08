@@ -207,11 +207,14 @@
 ;;either don't want this or we want to have it mean something.
 ;;Note: these are specific to unit, so could probably go into the unit
 ;;namespace; save on real estate.
+;;Performance: inlined to alleviate minor hotspot....marginal gains.
+
+;;Lol inlining hurts us a bit here, better not to inline...
 (defn get-state [unit position]
   (case position
     :abrupt-withdraw :abrupt-withdraw
     :recovery    :recovery
-    (let [s (protocols/get-state (:policy unit) position)]
+    (let [s (protocols/get-state (val-at  unit :policy) position)]
       (if (number? s)  :dwelling s) ;;wierd...
       )))
 
@@ -235,7 +238,7 @@
         res
         (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))
 
-;;would be cleaner if we memo-fned this...
+;;memoized to allevaite hotspot, marginal gains.
 (def get-next-position
   (memo-policy
    (fn get-next-position [policy position]
@@ -796,7 +799,8 @@
       (if  (prescribed? entity tupdate)
         ;;we have a move set up..
         (let [pm (:prescribed-move @entity)
-               _ (debug [:found-prescribed-move pm])]
+              _ (debug [:found-prescribed-move pm])
+              ]
                (do (swap! entity dissoc :prescribed-move)
                    (bind!! {:prescribed-move pm})))
         ;;let's derive a move...
@@ -809,7 +813,8 @@
               wt (if (and next-position wait-time) wait-time
                      (do (debug [:computing-wait (:positionpolicy e)]) ;;performance 2
                          (get-wait-time @entity (:positionpolicy e) benv)))
-              _ (debug [:found-move {:next-position p :wait-time wt}])]
+              _ (debug [:found-move {:next-position p :wait-time wt}])
+              ]
           (bind!! {:next-position  p
                    :wait-time      wt
                    }  ;;have a move scheduled...
@@ -911,6 +916,10 @@
 
 ;;used to be called check-overlap; 
 (def  check-overlap disengage)
+;;Performance: We have a mild hotspot when we actually have a mild hotspot
+;;when we eagerly update deployability via supply/update-deploy-status.
+;;Might be possible to update deployability lazily, save a little bit.
+;;We're typically "not" deploying...
 (befn check-deployable ^behaviorenv {:keys [entity position-change ctx] :as benv}
    (when position-change
      (let [{:keys [from-position to-position]} position-change
