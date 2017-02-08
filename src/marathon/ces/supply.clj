@@ -273,6 +273,9 @@
                   (let [msg  (unit-msg unit ctx)]
                     (supply-update! supplystore unit msg ctx))))))))
 
+;;Performance: Interesting hotspot here as well. We have some overhead
+;;due to function calls.
+
 ;;This is an area that is ripe for parallelism.  We have an explicit
 ;;synchronization point, each unit is logically independent of the
 ;;other.  We should be able to split work out across multiple

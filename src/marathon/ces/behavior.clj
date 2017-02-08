@@ -122,6 +122,41 @@
    (let [m (with-meta m  {:tag 'clojure.lang.ILookup})]
     `(.valAt ~m ~@args)))
 
+;;let's see if we can memoize get-next-position for big gainz yo...
+(defn memo-2 [f & {:keys [xkey ykey] :or {xkey identity ykey identity}}]
+  (let [xs (java.util.HashMap.)]
+    (fn [x1 y1]
+      (let [x (xkey x1)
+            y (ykey y1)]
+        (if-let [^java.util.HashMap ys (.get xs x)]
+          (if-let [res (.get ys y)]
+            res
+            (let [res (f x1 y1)]
+              (do (.put ys y res)
+                  res)))
+          (let [res   (f x1 y1)
+                  ys    (doto (java.util.HashMap.)
+                          (.put y res))
+                _     (.put xs x ys)]
+            res))))))
+
+;;slightly faster for memoizing policy name.
+(defn memo-policy [f]
+  (let [xs (java.util.HashMap.)]
+    (fn [^clojure.lang.ILookup x1 y]
+      (let [x (.valAt x1 :name)]
+        (if-let [^java.util.HashMap ys (.get xs x)]
+            (if-let [res (.get ys y)]
+              res
+              (let [res (f x1 y)]
+                (do (.put ys y res)
+                    res)))
+            (let [res   (f x1 y)
+                  ys    (java.util.HashMap.)
+                  _     (.put ys y res)
+                  _     (.put xs x ys)]
+              res))))))
+
 ;;an alternative idea here...
 ;;use a closure to do all this stuff, and reify to give us implementations
 ;;for the object.  We can also just us a mutable hashmap behind the
@@ -191,13 +226,28 @@
 (defn recovery-time [ctx]
   (or (store/gete ctx :parameters "DefaultRecoveryTime") 0))
 
-(defn get-next-position [policy position]
+;;original non-memoized function.
+#_(defn get-next-position [policy position]
     (case position
       :recovery   :recovered
       :recovered  :re-entry
       (if-let [res (protocols/next-position policy position)]
-          res
-          (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))
+        res
+        (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))
+
+;;would be cleaner if we memo-fned this...
+(def get-next-position
+  (memo-policy
+   (fn get-next-position [policy position]
+     (case position
+       :recovery   :recovered
+       :recovered  :re-entry
+       (if-let [res (protocols/next-position policy position)]
+         res
+         (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))))
+
+
+(def alt-position (memo-2 get-next-position :xkey :name))
 
 (defn policy-wait-time
   ([policy statedata position deltat]
@@ -309,8 +359,8 @@
 ;;aging/advancing).  Where we had direct method calls to
 ;;other state handler functions, we can now just directly
 ;;encode the transition in the tree...
-(defn special-state? [s]
-  #{:spawning :abrupt-withdraw :recovered} s)
+(definline special-state? [s]
+  `(#{:spawning :abrupt-withdraw :recovered} ~s))
 
 (defn just-spawned?
   "Determines if the entity recently spawned, indicated by a default
@@ -735,8 +785,8 @@
 
 
 (defn prescribed? [e tupdate]
-  (when-let [pm (:prescribed-move @e)]
-    (== (:t pm) tupdate)))
+  (when-let [pm (val-at @e :prescribed-move)]
+    (== (val-at pm :t) tupdate)))
 
 ;;PERFORMANCE NOTE: <HOTSPOT> - eliding debug info here saves time...
 ;;This hooks us up with a next-position and a wait-time
@@ -884,6 +934,8 @@
                  finish-cycle
                  (->alter  #(dissoc % :position-change))]))))
 
+;;Performance: Mild hotspot.  Dissocing costs us here.  Change to assoc and
+;;check.
 ;;if there's a location change queued, we see it in the env.
 (befn change-location {:keys [entity location-change tupdate ctx] :as benv}
    (when location-change
@@ -895,7 +947,7 @@
              _  (reset! ctx  (supply/log-move! tupdate from-location to-location @entity nil @ctx))
              _  (reset! entity (u/push-location @entity to-location))] 
          ;;we need to trigger a location change on the unit...
-         (success (dissoc benv :location-change))))))
+         (success (assoc benv :location-change nil))))))
 
 ;;this is a weak predicate..but it should work for now.
 (defn demand? [e] (not (nil? (:source-first e))))
@@ -1038,21 +1090,20 @@
 ;;Kind of like reset, except it's not guaranteed we go to reset.
 (befn re-entry-beh {:keys [entity ctx tupdate] :as benv}
       (let [unit   @entity
-            p      (:policy    unit)
+            p           (:policy    unit)
             current-pos (:positionpolicy unit)
-            ct     (:cycletime unit)
+            ct          (:cycletime unit)
             _      (when (< ct 0) (throw (Exception. (str "Cycle Time should not be negative!"))))
             _      (when (invalid? current-pos)
                          (throw (Exception.  "Cannot handle during deployment or overlap")))
             is-deployable  (protocols/deployable-by? p ct)
             positionA  current-pos
             positionB (protocols/get-position p ct)
-
-            _      (when (invalid? positionB)
-                         (throw (Exception.  (str "Cannot handle during deployment or overlap: " positionB))))
+            _         (when (invalid? positionB)
+                        (throw (Exception.  (str "Cannot handle during deployment or overlap: " positionB))))
             timeremaining  (protocols/transfer-time p positionB (protocols/next-position p positionB))
             timeinstate    (- ct (protocols/get-cycle-time p positionB)) ;;this ends up being 0.
-            wt     (max (- timeremaining timeinstate) 0)
+            wt     (max   (- timeremaining timeinstate) 0)
             _      (debug [:re-entry  {:cycletime ct
                                        :current-pos   current-pos
                                        :next-pos      positionB
@@ -1806,7 +1857,6 @@
                         (core/msg "Unit " uname " changed policies: "
                                   policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil  %))
               (move! positionB newduration))))
-;)
           
           ;;This automatically gets checked during move!...
 ;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
