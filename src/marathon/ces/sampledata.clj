@@ -1168,6 +1168,12 @@ DefaultDemotionPolicy	Auto
          :SupplyRecords
          (s/read-schema :SupplyRecords broken-supply-records)))
 
+;;replace the "defaults" with "Auto" for policy.
+(def auto-supply-tables
+    (update sample-tables
+            :SupplyRecords
+            #(tbl/map-field :Policy (fn [_]  "Auto") %)))
+
 (defn get-sample-records
   ([name ts]
    (if (non-tables name) 

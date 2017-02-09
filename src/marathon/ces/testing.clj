@@ -230,7 +230,7 @@
 (def defaultctx       (setup/default-simstate core/debugsim))
 
 (defn nonzero-srcs [tbl]
-  (into #{} (r/map :SRC (r/filter #(and (:Enabled %)(pos? (:Quantity %))) tbl ))))
+  (into #{} (r/map :SRC (r/filter #(and (:Enabled %)(pos? (:Quantity %))) tbl))))
 
 (def nonzero-supply-srcs  (nonzero-srcs (setup/get-table :SupplyRecords)))
 (def nonzero-demand-srcs  (nonzero-srcs (setup/get-table :DemandRecords)))
@@ -866,3 +866,47 @@
             (count  (analysis/->history-stream tmax
                                                engine/sim-step                                                
                                                ctx))))))
+
+;;Atomic policies appear to work fine.
+;;Here, we want to make sure the policy scheduling
+;;works as advertised, that is:
+;;  - units following a periodic policy either change policies
+;;    when an applicable period change occurs
+;;  - or defer the policy change until a later point in time.
+;;  - at the next available time, they update their policy to
+;;    the "most current" policy according the the period active
+;;    at the time of the policy change.
+
+;;Additionally, some key tests we need to cover:
+;;  Units transitioning between finite and "infinite"
+;;  policies like ac11 -> maxutilization,
+;;  should have a reasonable cycle projection.
+;;  Going from a finite policy to an infinite policy
+;;  does not change the cycle-length of the target policy.
+
+
+;;composite policy testing.
+;;It'd be nice to define some operations that allow us to take a
+;;unit and instantaneously change its policy.
+;;We already have that (in policy-change-behavior)
+;;Big functions to test
+;;(policy/get-changed-policies current-period new-period
+;;                                 (:composites policystore))
+
+;;note: the default testdata in marathon.ces.sampledata already
+;;has a composite policy setup that should move us through
+;;roto->maxutil->roto
+
+;;our sample context, with composite policies.
+#_(def pctx (setup/simstate-from sd/auto-supply-tables))
+
+;;this should only look at policies with actual subscriptions...
+(comment 
+  (policy/get-changed-policies "PreSurge" "Surge" (:composites (core/get-policystore pctx)))
+  )
+
+
+;;
+
+;;policy/change-policies....
+
