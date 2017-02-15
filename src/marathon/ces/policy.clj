@@ -792,7 +792,17 @@
   (if-let [xs (seq (invalid-periods (core/get-policystore ctx)))]
     (throw (Exception. (str [:non-adjacent-periods! xs])))
     true))
-                 
+
+(defn policy-at [p period]
+  (marathon.data.protocols/on-period-change p period))
+
+(defn policy-change-info [p from to]
+  (let [old (policy-at p from)
+        new (policy-at p to)]
+    [:name (marathon.data.protocols/policy-name p)
+     :from (marathon.data.protocols/atomic-name old)
+     :to   (marathon.data.protocols/atomic-name new)]))
+
 ;;it'd be nice to have a sort of policy-summary...
 ;;lay out the policy changes over time that will
 ;;be active during the simulation.
@@ -800,11 +810,11 @@
   (let [pstore  (core/get-policystore ctx)
         periods (period-schedule pstore)]
     (for [[l r] (partition 2 1  periods)]
-      (let [from (:name l)
+      (let [from (:name l)            
             to   (:name r)]
         (->> (active-policies pstore)
              (get-changed-policies from to)             
-             (map (juxt :name (comp :name  :activepolicy #(marathon.data.protocols/on-period-change % to))))
+             (map #(policy-change-info % from to))
              (sort-by first)
              (vector :from l
                      :to r

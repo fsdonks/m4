@@ -904,8 +904,6 @@
 
 (def pctx (setup/simstate-from sd/auto-supply-tables))
 
-
-
 ;;this should only look at policies with actual subscriptions...
 (deftest policy-changes
   (is (= '(["ACEnablerExcursion" "AC13_Enabler"] ["RCEnablerExcursion" "RC15_Enabler"])
