@@ -159,8 +159,9 @@
 (defprotocol IPeriodicPolicy
   (change-period [p period]))
 
+;;changed to extends? for performance.
 (defn on-period-change [p period]
-  (if (satisfies?  IPeriodicPolicy p)
+  (if (extends?  IPeriodicPolicy (class p))
     (change-period p period)
     p))
 

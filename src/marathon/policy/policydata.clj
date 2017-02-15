@@ -120,6 +120,13 @@
   (max-mob             [p]            (.max-mob activepolicy))
   (min-dwell           [p]            (.min-dwell activepolicy))
   (get-locations       [p]            (.get-locations activepolicy))
+  core/IPeriodicPolicy
+  (change-period [p period]
+                 (if-let [new-policy (get policies period)]
+                   (merge p {:activeperiod period
+                             :activepolicy new-policy})
+                   (throw (Exception. (str [:period-undefined-for-policy p period])))
+                 ))
   core/IPolicyContainer
   (add-policy          [p period policy]   (policymap. name (or activepolicy policy) (or activeperiod period) (assoc policies period policy)))
   (add-policy          [p keyval] (if (coll? keyval) 

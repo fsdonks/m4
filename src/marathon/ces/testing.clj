@@ -898,15 +898,24 @@
 ;;roto->maxutil->roto
 
 ;;our sample context, with composite policies.
-#_(def pctx (setup/simstate-from sd/auto-supply-tables))
+;;This mirrors our legacy usage of policy assignment,
+;;where we tell MARATHON to manage to policy schedule for
+;;units, typically via the 'parameters' table.
+
+(def pctx (setup/simstate-from sd/auto-supply-tables))
+
+
 
 ;;this should only look at policies with actual subscriptions...
-(comment 
-  (policy/get-changed-policies "PreSurge" "Surge" (:composites (core/get-policystore pctx)))
-  )
-
-
-;;
+(deftest policy-changes
+  (is (= '(["ACEnablerExcursion" "AC13_Enabler"] ["RCEnablerExcursion" "RC15_Enabler"])
+           (->>  (core/get-policystore pctx)
+                 (policy/active-policies)
+                 (policy/get-changed-policies "PreSurge" "Surge")
+                 (map (juxt :name (comp :name :activepolicy)))
+                 (sort-by first)))
+      "We should have a set of policy changes between periods."))
+         
 
 ;;policy/change-policies....
 

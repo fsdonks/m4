@@ -492,6 +492,14 @@
     (->> (-> s (assoc old-policy oldsubs))
          (assoc policystore :subscriptions))))
 
+;;Returns a sequence of policies that have active subscriptions.
+(defn active-policies [pstore]
+  (let [ps        (:composites pstore)]
+    (filter identity 
+       (for [[nm xs] (:subscriptions pstore)]
+         (when-let [p (ps nm)]
+           p)))))
+
 ;We define change in a composite policy by the existence of both the new period 
 ;and the old period in the composite policy.  Atomic policies are defined across 
 ;all periods.  So the only ones that should show up here are policies that 
@@ -501,11 +509,11 @@
 ;that are undefined over both periods.
 
 (defn get-changed-policies
-  "Returns a filtered sequence of all the composite policies that have changed."
+  "Returns a filtered sequence of all the composite policies that have changed.
+   We only examine policies that have active subscribers."
   [current-period new-period candidates]
-  (if (= current-period :Initialization) nil
-      (filter (fn [p] (and (policy-defined? current-period p)
-                           (policy-defined? new-period p))) candidates)))
+  (filter (fn [p] (and (policy-defined? current-period p)
+                       (policy-defined? new-period p))) candidates))
 
 ;Transcription Note -> in the original design, we delegated a lot of control 
 ;to each of the policies associated with the unit.  Now, we're going to treat
@@ -522,6 +530,12 @@
 ;Simple algorithm -> fetch the new policy associated with the period.
 ;Tell each policy to change to the new policy.
 
+;;you know, this is actually really easy in the CES system...
+;;all we have to do is pull out entities with a policy component.
+;;then send them messages to change-policy....
+;;Note: policy changes, like supply updates, can also be done in
+;;parallel / async.
+
 (defn change-policies
   "High level system that propogates policy changes all the way down to entities 
    that participate in the affected policies.  Typically called in response to 
@@ -529,10 +543,10 @@
   [current-period new-period ctx]  
   (let [policystore (core/get-policystore ctx)]
     (if (= current-period :Initialization) ctx ;short-circuit 
-        (->> (get-changed-policies current-period new-period
-                                   (:composites policystore))
-             (reduce #(change-policy current-period new-period %2 
-                                     (core/get-policystore %1) %1) ctx)))))
+        (->> (active-policies policystore)
+             (get-changed-policies current-period new-period)
+             (reduce #(change-policy current-period new-period %2
+                        (core/get-policystore %1) %1) ctx)))))
   
 (defn has-subscribers? [policy policystore] 
   (pos? (count (get (:subscribers policystore) policy))))
@@ -556,13 +570,13 @@
    typically called by the simulation engine."
   ([day ctx newperiod]
      (let [policystore (core/get-policystore ctx)
-           toname      (:name newperiod)
-           period      (:activeperiod policystore)
+           toname      (:name          newperiod)
+           period      (:activeperiod  policystore)
            fromname    (:name period)]
        (if (= fromname toname) ctx
            (->> (if (= toname :final) (final-period fromname toname ctx) ctx)
                 (core/merge-entity {:PolicyStore (update-period day toname policystore)})
-                (period-change! fromname toname)
+                (period-change!  fromname toname)
                 (change-policies fromname toname)))))
   ([day ctx]
    (if-let [new-period (get-period-change ctx day)]
@@ -762,6 +776,40 @@
        (add-policies (vals atomics))
        (add-policies (compositions->composites compositions atomics))))
 
+
+(defn period-schedule [policystore]
+  (sort-by (juxt :from-day :to-day) (vals (:periods policystore))))
+
+(defn invalid-periods [policystore]
+  (->> (period-schedule policystore)
+       (partition 2 1)
+       (filter (fn [[l r]]
+                 (let [from (:to-day l)
+                       to   (:from-day r)]
+                   (not= (- to from) 1))))))
+
+(defn validate-periods! [ctx] 
+  (if-let [xs (seq (invalid-periods (core/get-policystore ctx)))]
+    (throw (Exception. (str [:non-adjacent-periods! xs])))
+    true))
+                 
+;;it'd be nice to have a sort of policy-summary...
+;;lay out the policy changes over time that will
+;;be active during the simulation.
+(defn policy-schedule [ctx]
+  (let [pstore  (core/get-policystore ctx)
+        periods (period-schedule pstore)]
+    (for [[l r] (partition 2 1  periods)]
+      (let [from (:name l)
+            to   (:name r)]
+        (->> (active-policies pstore)
+             (get-changed-policies from to)             
+             (map (juxt :name (comp :name  :activepolicy #(marathon.data.protocols/on-period-change % to))))
+             (sort-by first)
+             (vector :from l
+                     :to r
+                     :changes))))))
+              
 
 ;#####;Redundant, replaced by protocols/add-policy 
 
