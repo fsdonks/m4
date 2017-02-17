@@ -352,22 +352,38 @@
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
   (is (same? deploynames 
-             '("29_SRC3_NG" "23_SRC3_NG" "11_SRC2_AC" "38_SRC3_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG"
-               "37_SRC3_AC" "8_SRC2_NG" "41_SRC3_AC"))
+             #_("29_SRC3_NG" "23_SRC3_NG" "11_SRC2_AC" "38_SRC3_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG"
+               "37_SRC3_AC" "8_SRC2_NG" "41_SRC3_AC")
+             '("31_SRC3_NG" "29_SRC3_NG" "5_SRC1_AC" "11_SRC2_AC" "38_SRC3_AC" "30_SRC3_NG" "39_SRC3_AC"
+               "40_SRC3_AC" "28_SRC3_NG" "27_SRC3_NG" "41_SRC3_AC" "26_SRC3_NG"))
       "Should have 12 units deployable")
   (is (same? odd-units
-      '(["24_SRC3_NG" 1601]
+      #_(["24_SRC3_NG" 1601]
         ["8_SRC2_NG"  1825]
         ["23_SRC3_NG" 1399]
         ["29_SRC3_NG" 1385]
         ["22_SRC3_NG" 1217])
+      ;;this is the "new" data after feb 2016.  Verify.
+      '(["31_SRC3_NG" 1729]
+        ["41_SRC3_AC" 657]
+        ["29_SRC3_NG" 1547]
+        ["27_SRC3_NG" 1365]
+        ["39_SRC3_AC" 511])
       ))
   (is (same? even-units
-      '(["38_SRC3_AC" 616]
+      #_(["38_SRC3_AC" 616]
         ["2_SRC1_NG" 1520]
         ["11_SRC2_AC" 912]
         ["41_SRC3_AC" 608]
-        ["37_SRC3_AC" 470]))))
+        ["37_SRC3_AC" 470])
+       ;;this is the "new" data after feb 2016.  Verify.
+      '(["30_SRC3_NG" 1638]
+        ["40_SRC3_AC" 584]
+        ["28_SRC3_NG" 1456]
+        ["26_SRC3_NG" 1274]
+        ["5_SRC1_AC"  730]
+        ["11_SRC2_AC" 730]
+        ["38_SRC3_AC" 438]))))
 
 (def supplytags (store/gete defaultctx :SupplyStore :tags))
 (def odd-tags
@@ -456,9 +472,12 @@
        (map (comp :name :source))
        sort-names))
 
-(deftest demandmatching 
-  (is (same? '("2_SRC1_NG" "8_SRC2_NG" "11_SRC2_AC" "22_SRC3_NG" "23_SRC3_NG"
-               "24_SRC3_NG" "29_SRC3_NG" "37_SRC3_AC" "38_SRC3_AC" "41_SRC3_AC")             
+(deftest demandmatching  
+  (is (same? #_("2_SRC1_NG" "8_SRC2_NG" "11_SRC2_AC" "22_SRC3_NG" "23_SRC3_NG"
+               "24_SRC3_NG" "29_SRC3_NG" "37_SRC3_AC" "38_SRC3_AC" "41_SRC3_AC")
+             ;;this is the "new" data after feb 2016.  Verify.
+             '("5_SRC1_AC" "11_SRC2_AC"  "26_SRC3_NG" "27_SRC3_NG" "28_SRC3_NG"
+               "29_SRC3_NG" "30_SRC3_NG" "31_SRC3_NG" "38_SRC3_AC" "39_SRC3_AC" "40_SRC3_AC" "41_SRC3_AC")             
              any-supply)
       "The relaxed fills actually have two more elements of supply - SRC 2 - since the 
        default preference for SRC 3 only allows substitution for SRC 1.  Thus, we 
@@ -466,8 +485,11 @@
        to include SRC2, which adds two deployable elements to our set.")
   (is (ascending? (map :priority (vals unfilled)))
       "Priorities of unfilled demand should be sorted in ascending order, i.e. low to hi")
-  (is (same? suitables 
-             '("24_SRC3_NG" "38_SRC3_AC" "41_SRC3_AC" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" "37_SRC3_AC" "2_SRC1_NG")
+  (is (same? suitables             
+             #_("24_SRC3_NG" "38_SRC3_AC" "41_SRC3_AC" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" "37_SRC3_AC" "2_SRC1_NG")
+             ;;this is the "new" data after feb 2016.  Verify.
+             '("31_SRC3_NG" "41_SRC3_AC" "30_SRC3_NG" "29_SRC3_NG" "40_SRC3_AC" "28_SRC3_NG"
+               "27_SRC3_NG" "39_SRC3_AC" "26_SRC3_NG" "38_SRC3_AC" "5_SRC1_AC")
              )
       "The feasible supply names that match the first demand should be consistent.  Since SRC1 is a lower
        order of supply via its substitution weight, it should end up last, even though the unit's cycle 
@@ -477,7 +499,9 @@
       "fill/find-supply should be synonymous with match-supply")
   (is (== needed 2)
       "First demand should require 2 units")
-  (is (same? selected  '("24_SRC3_NG" "38_SRC3_AC"))
+  (is (same? selected    #_("24_SRC3_NG" "38_SRC3_AC")
+                         ;;this is the "new" data after feb 2016.  Verify.
+                         '("31_SRC3_NG" "41_SRC3_AC"))
       "Suitability of units is dictated by the ordering.  Best first. In this case, we expect 
        the units with the greatest cycle times [most deployable] and of like type to be most 
        suited for deployment."))
@@ -902,7 +926,23 @@
 ;;where we tell MARATHON to manage to policy schedule for
 ;;units, typically via the 'parameters' table.
 
+;;currently, there's problem with our guys..
 (def pctx (setup/simstate-from sd/auto-supply-tables))
+(def pctx (core/debug! pctx))
+
+;;ensures that our initial conditions for distributing
+;;cycle times are consistent.
+(deftest policy-alignment
+  (let [name-time (map (juxt :name :cycletime)
+                       (store/select-entities pctx
+                          :from  [:src :cycletime :component :name]
+                          :where (fn [e]  (and (= (:component e) "NG")
+                                               (= (:src e) "SRC3")))))
+        
+        times  (map second (sort-by first name-time))]
+    (is (same? times  '(0 109 218 327 436 545 654 763 872 981 1090
+                          1199 1308 1417 1526 1635 1744 1853 1962 2071))
+        "Cycle times for the test data should be evenly distributed according to a constant interval.")))
 
 ;;this should only look at policies with actual subscriptions...
 (deftest policy-changes
@@ -912,8 +952,20 @@
                  (policy/get-changed-policies "PreSurge" "Surge")
                  (map (juxt :name (comp :name :activepolicy)))
                  (sort-by first)))
-      "We should have a set of policy changes between periods."))
-         
+      "We should have a set of policy changes between periods.")
+  (is (= (policy/policy-schedule pctx) 
+         '([:from {:name "Initialization", :from-day 0, :to-day 0}
+            :to   {:name "PreSurge", :from-day 1, :to-day 450} :changes ()]
+           [:from {:name "PreSurge", :from-day 1, :to-day 450}
+            :to   {:name "Surge", :from-day 451, :to-day 991}
+            :changes ([:name "RCEnablerExcursion" :from "RC15_Enabler" :to "NearMaxUtilization_Enabler"]
+             [:name "ACEnablerExcursion" :from "AC13_Enabler" :to "MaxUtilization_Enabler"])]
+           [:from {:name "Surge", :from-day 451, :to-day 991}
+            :to   {:name "PostSurge", :from-day 992, :to-day 999999999}
+            :changes ([:name "RCEnablerExcursion" :from "NearMaxUtilization_Enabler" :to "RC14Loose_Enabler"]
+                      [:name "ACEnablerExcursion" :from "MaxUtilization_Enabler" :to "AC12Loose_Enabler"])]))
+      "Policy schedule should be consistent."))
+
 
 ;;policy/change-policies....
 

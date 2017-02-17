@@ -387,30 +387,71 @@
       (quot clength unitcount)
       (quot clength (dec clength)))))
 
+;;note: we can compute the intervals directly...
+;;when distributing n units over an integer range, we want to generate
+;;where n <= clength
+;;we should be able to compute n points with an interval >= 1
+;;if n > clength, then we actually have more units than space.
+;;To minimize "stacking", we distribute units sparsely
+;;until we hit the magic #  n < clength.
+
+;;#Potential Digression from M3
+;;Replaces the inner logic 
+(defn intervals [n clength]
+  (let [remaining        (atom n)
+        uniform-interval (atom (compute-interval clength n))
+        last-interval    (atom (- @uniform-interval))        
+        next-interval    (fn [remaining]
+                           (let [nxt (long (+ @last-interval @uniform-interval))                                      
+                                 nxt (if (> nxt clength) 0 nxt)]
+                             (do (when (and (< remaining clength)
+                                            (zero? nxt))
+                                   (reset! uniform-interval 
+                                           (compute-interval clength  remaining)))
+                                 (reset! last-interval nxt)
+                                 nxt)))]
+    (map next-interval  (range n 0 -1))))
+
 ;;take the unit seq and distribute the units evenly. Pass in a
 ;;collection of unit names, as well as the appropriate counts, and the
 ;;cycles are uniformly distributed (using integer division).
+;;#Potential Digression from M3
 (defn distribute-cycle-times [units policy]
   (let [clength (generic/cycle-length policy)
-        clength (if (> clength +max-cycle-length+) +default-cycle-length+ clength)
-        uniform-interval (atom (compute-interval clength (count units)))
-        last-interval (atom (- @uniform-interval))
-        remaining     (atom (count units))
-        next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
-                                   nxt (if (> nxt clength) 0 nxt)]
-                               (do (when (< @remaining clength)
-                                     (reset! uniform-interval 
-                                             (compute-interval clength  @remaining)))
-                                   (reset! last-interval nxt)
-                                   (swap! remaining dec)
-                                   nxt)))]                                              
-    (reduce (fn [acc  unit]
-                 (let [cycletime (next-interval)
-                       unit      (assoc unit :cycletime cycletime)]
-                   (do (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")
-                       (conj acc unit))))
-           []
-           units)))
+        clength (if (> clength +max-cycle-length+) +default-cycle-length+ clength)]                                              
+    (mapv  (fn [cycletime  unit]
+             (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")                          
+             (assoc unit :cycletime cycletime)) (intervals (count units) clength)
+             units)))
+
+;;legacy
+#_(defn distribute-cycle-times [units policy]
+    (let [clength (generic/cycle-length policy)
+          clength (if (> clength +max-cycle-length+) +default-cycle-length+ clength)
+          uniform-interval (atom (compute-interval clength (count units)))
+          last-interval (atom (- @uniform-interval))
+          remaining     (atom (count units))
+          next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
+                                     nxt (if (> nxt clength) 0 nxt)]
+                                 (do (when (< @remaining clength)
+                                       (reset! uniform-interval 
+                                               (compute-interval clength  @remaining)))
+                                     (reset! last-interval nxt)
+                                     (swap! remaining dec)
+                                     nxt)))]                                              
+      (reduce (fn [acc  unit]
+                (let [cycletime (next-interval)
+                      unit      (assoc unit :cycletime cycletime)]
+                  (do (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")
+                      (conj acc unit))))
+              []
+              units)))
+
+
+    
+    
+
+
 
 ;;This is just a stub.  We currently hardwire behaviors, 
 ;;but will allow more extension in the future.  The legacy 
