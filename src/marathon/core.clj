@@ -15,7 +15,7 @@
             [spork.events  [observe :as obs]
              [native :as swing-events]]
             [piccolotest.repl :as repl])
-  (:use [spork.util.mailbox]
+  (:use [spork.util.mailbox] ;;should be able to deprecate this.
         [marathon.processing.post]
         [marathon.project]
         [clojure.repl])

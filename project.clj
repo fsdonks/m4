@@ -1,8 +1,8 @@
 (defproject marathon "4.0.9-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
-  :dependencies [[org.clojure/clojure "1.7.0"]
+  :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
-                 [spork "0.1.9.7-SNAPSHOT"]
+                 [spork "0.1.9.8-SNAPSHOT"]
                  [piccolotest  "0.1.0-SNAPSHOT"]
                  [proc         "0.2.0-SNAPSHOT"] ;;post processing.
                  ;;external libs

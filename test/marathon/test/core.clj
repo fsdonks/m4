@@ -1,6 +1,6 @@
 (ns marathon.test.core
-  (:use [marathon.core])
-  (:use [clojure.test]))
+  (:use [clojure.test])
+  (:require [marathon.ces.testing]))
 
-(deftest replace-me ;; FIXME: write
-  (is false "No tests have been written."))
+
+(run-tests 'marathon.ces.testing)
