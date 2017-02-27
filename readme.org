@@ -1,0 +1,140 @@
+* What is MARATHON?
+MARATHON (Modeling Army Rotation At Home or Not) is a mechanism for analyzing 
+the effects of Army supply, demand, and policy variations, where supply is a
+set of potentially deployable units, demand is a set of activities requiring
+a unit, and policy is a collection of rules or constraints that determine a 
+unit’s ability to fill a demand.  
+
+As a design goal, MARATHON seeks to validly simulate the physics of Army 
+supply and demand, governed by policy, to analyze both the general behavior of
+such systems and the specific effects relative to changes in supply, demand, 
+or policy. Ultimately, MARATHON is an analytic sandbox for evaluating courses 
+of action relative to the Army Force Generation domain.  
+
+* Army Force Generation
+Army Force Generation is a system for managing readiness, the ability for 
+units to deploy to meet contingencies.  In general, force generation is the 
+structured progression of increased unit readiness over time, resulting in the
+periodic availability of trained, ready and cohesive units prepared for 
+operational deployment in support of civil authorities and combatant commander
+requirements.  The domain of Army Force Generation is enormous,   encompassing
+the range of processes and resources necessary to man, equip, train, deploy, 
+and sustain the Army’s supply of units.  
+
+Out of necessity, MARATHON focuses on a subset of the Force Generation
+process, and generally holds many gross assumptions about the behavior of 
+quite complex subsystems (such as training processes, manning, equipment, 
+mobilization, etc.)  Even with the Force Generation domain scoped to the unit 
+level of detail , and with complex subsystems like equipping and manning 
+abstracted away, the variety of supply, demand, and policy options is still
+staggering.  
+
+* How Does MARATHON Work?
+MARATHON typically simulates the force generation process through a 
+coordinated set of supply, demand, and policy simulations.
+
+* Supply
+The supply system acts as a coordination point for polling unit availability, 
+a dissemination channel for simulation supply events, and a general container 
+of units.  
+Thousands  of unique unit entities follow rotational policies that are either
+global (shared)  or local (unique to the unit), and are directed by one or 
+more supply systems to execute the “supply physics” dictated by the 
+corresponding  policy.  Each unit’s simulated history can be traced, recorded,
+and reacted to within the simulation ecosystem.  
+
+Unit rotational policy generally consists of a directed sequence of states and
+durations.   Units also have a behavior, which interprets policy to implement 
+the desired supply-side and deployed actions.  Policies are entirely modular 
+and variable, as are individual unit behaviors.  The decoupling of behavior 
+and policy allows for both homogenous sets of units that appear to behave 
+identically, as well as a diaspora of independent singletons that can apply 
+similar behavior to different policies or interpret the same policies 
+(via different behavior) to simulate radically different populations.  
+
+The potential for unique entities allows MARATHON to flexibly and modularly 
+account for the legion of subtleties and corner-cases in the force generation 
+problem domain.  
+
+* Demand
+Demands are activated, and slated for filling, based on a - potentially 
+sophisticated - user-defined priority function.  A fill system matches the 
+highest priority demand to the most suitable supply as needed, and directs the
+transition of units from the supply system to deployments or other states.  
+The fill system also accounts for potentially complex unit substitution rules,
+demand preferences, and almost any value function associated with the 
+selection of units to fill demands.  
+
+* Policy
+Finally, a policy system accounts for changes to policy (such as ARFORGEN 
+suspension, variation in lifecycle length, and changes in deployment time) by 
+enacting system-wide policy changes in response to either time or event.   
+Policy changes automatically filter down to subscribing units, enabling a rich
+and diverse simulation of the supply-policy-demand dynamics.
+
+* History 
+MARATHON was incepted at the Center for Army Analysis (CAA) on/around 2003, 
+with various incarnations and ports over the years.  Since 2010, Tom Spoon 
+has served as the primary developer, maintainer, and architect for MARATHON. 
+The current version of MARATHON, 4.x, is the simulation's first port to 
+Clojure and first entry into open source software.
+
+* Differences From Traditional Simulation Implementations
+
+MARATHON 4 presents a significant departure from traditional Discrete Event
+Simulations, since the architecture embraces functional programming and 
+persistent data structures wholly, rather than focusing on mutation.  
+
+MARATHON's goal is to provide a simulation history, which is a sequence of 
+simulation contexts - or snapshots - of the entire "world" in MARATHON.  
+This history is lazily generated, yet allows us to define means for observing 
+entities - typically the domain of clunky logging facilities and mutation in 
+most simulations - that can operate on the entire stream of differential 
+changes to the initial simulation context.  MARATHON combines several novel 
+features: 
+
+- building the simulation transition functions (or step functions) 
+  as a composition of smaller functions 
+  - (as opposed to OOP-based classes or imperative mutation)
+- Optionally persistent, lazily computed stream of simulation history
+- a database layer based on the Component-Entity-System paradigm
+- Maintains the ability to have a classic observable/observer simulation
+  model without sacrificing functional purity.
+  - Where convenient (i.e. for logging, visualization, other side-effects).
+- Event-step (i.e. variable-width time-step) simulation.
+- High-level transforms on the simulation history.
+  - Familiar idioms like map, filter, reduce work out of the box, since 
+    history is merely a time-indexed stream of simulation contexts.
+  - Allows for precise reasoning about causality, tracing, debugging, etc.
+- Entity behaviors based on Behavior Trees. 
+
+* Developer Notes
+MARATHON 4.x is currently alpha software written to support research efforts.
+Consequently, it is undergoing constant verification and testing to ensure 
+compliance with legacy models.  Expect possibly significant change in the 
+coming weeks/months prior to a formal release.  
+
+MARATHON 4.x also makes exclusive use of a supporting library called SPoRK 
+(Spoon's Operations Research Kit), among other open-source dependencies.  
+SPoRk is a collection of utilities and other infrastructure (including ai, 
+generic simulation, statistics, etc.) upon which MARATHON stands.  
+
+SPoRK is an independently originated, non-government open source project 
+licensed under the EPL (to be released shortly).
+
+Additionally, several sections of the code-base are "crusty", and possibly annotated as 
+obsolete due to porting from a different language, or failed experimentation. 
+
+There are ongoing efforts to prune the codebase of noise, and to enhance the 
+documentation.  
+
+That being said, most of MARATHON is written in a somewhat literate style; 
+that is, the source code may be processed by Marginalia to produce a 
+companion set of documentation with inline prose.  
+
+Interested parties and code archeologists may visit the marathon.ces.demo 
+namespace to see high-level usage examples, or the marathon.ces.testing 
+namespace to see soup-to-nuts tests of the simulation infrastructure. 
+
+ 
+
