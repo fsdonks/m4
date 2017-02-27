@@ -8,12 +8,8 @@
             [spork.graphics2d.canvas :as canv]
             [clojure.core.reducers :as r]
             [spork.util.table :as tbl]
-            ;;temporary visualization measures...
-            [spork.graphics2d [debug :as debug]]
-            [piccolotest.sample :as picc]
-            [piccolotest.canvas :as pcanvas]
             [clojure.pprint :refer [cl-format]]
-            ))
+             ))
 
 ;;(table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
 
@@ -467,11 +463,23 @@
   (def binders     (get grps    "Binder"))  
   (def ct          (chunk-table (map clean-rec binders) (juxt :src :component :name )))
   (def ctbig       (chunk-table (map clean-rec res) (juxt :src :component :name )))
+
   
-  (defn patch-node [rowcols]  (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))
+
+  ;;temporarily ditching these, though they may be useful later.
+  ;;I'd like to have a nice piccolo node that shows the patch chart,
+  ;;with semantic zoom.  For now, we don't do that.  Just stick with html tables.
+
+  ;;elided zui-related dependencies on piccolo for now.
+  (require '[spork.graphics2d [debug :as debug]])
+  (require '[piccolotest.sample :as picc])
+  (require '[piccolotest.canvas :as pcanvas])
+
+  (defn patch-node [rowcols]
+    (pcanvas/nodify (debug/shape->nodes (sketch-history rowcols))))
   
   (defn simple-chunks [data]
-    (chunk-table (map clean-rec (mapcat val (dissoc grps "Binder"))) (juxt :src :component :name)))
-  
+    (chunk-table (map clean-rec
+                      (mapcat val (dissoc grps "Binder"))) (juxt :src :component :name)))
   (defn show! [nds] (picc/render!  (picc/->cartesian  nds)))
 )

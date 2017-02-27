@@ -14,7 +14,9 @@
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
              [native :as swing-events]]
-            [piccolotest.repl :as repl])
+            ;[piccolotest.repl :as repl]
+            [org.dipert.swingrepl.main]
+            )
   (:use [spork.util.mailbox] ;;should be able to deprecate this.
         [marathon.processing.post]
         [marathon.project]
@@ -81,6 +83,20 @@
     (gui/->swing-table (tbl/table-fields t)
                        (tbl/table-rows t) 
                        :sorted sorted))
+
+(defn repl-panel
+  "Creates a swing-repl that we can send code to for remote 
+   evaluation, or allow the user to interactively eval 
+   expressions."
+  ([opts]
+   (org.dipert.swingrepl.main/make-repl-jconsole
+    (merge org.dipert.swingrepl.main/default-opts opts)))
+  ([w h]
+   (doto (repl-panel {})
+     (.setPreferredSize (java.awt.Dimension. w h))))
+  ([w h opts]
+   (doto (repl-panel opts)
+         (.setPreferredSize (java.awt.Dimension. w h)))))
 
 ;;Probably need to modify this....
 (def project-routes 
@@ -358,7 +374,7 @@
                       (doto fr
                         (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
                       identity)
-        rpl             (repl/repl-panel 800 600)
+        rpl             (repl-panel 800 600)
         project-menu    (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"
