@@ -132,7 +132,7 @@ That being said, most of MARATHON is written in a somewhat literate style;
 that is, the source code may be processed by Marginalia to produce a 
 companion set of documentation with inline prose.  
 
-Interested parties and code archeologists may visit the marathon.ces.demo 
+Interested parties and code archeologists may visit the marathon.demo 
 namespace to see high-level usage examples, or the marathon.ces.testing 
 namespace to see soup-to-nuts tests of the simulation infrastructure. 
 
