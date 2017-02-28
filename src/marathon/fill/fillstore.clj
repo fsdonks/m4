@@ -1,3 +1,4 @@
+;;DEPRECATED.
 (ns marathon.fill.fillstore
   (:use [spork.util.record :only [defrecord+ with-record]]))
 
