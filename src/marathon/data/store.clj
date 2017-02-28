@@ -291,8 +291,12 @@
     ]})
 
 (defn get-policystore [ces] (gete ces :PolicyStore))
+
+;;Container to store all the data associated with matching supply to demand, 
+;;namely substitution rules, scoping (both in and out of scope) for the current
+;;run, and any other associated data.
 (defentity fillstore
-  "Defines a singleton container for policy information"
+  "Defines a singleton container for fill information"
   [id]
   {:components
    [:name         :FillStore 

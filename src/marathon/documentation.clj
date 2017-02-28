@@ -83,17 +83,15 @@
   
 ;;#Aggregate and primitive data used by Marathon
 (def marathon-data 
-  ["marathon.data.simstate"
+  ["marathon.data.store"
    "marathon.data.protocols" ;sketchy.
    "marathon.fill.filldata"
-   "marathon.fill.fillstore"
    "marathon.demand.demanddata"
    "marathon.demand.demandstore"
    "marathon.supply.unitdata"
    "marathon.supply.supplystore"
    "marathon.policy.policydata"
    "marathon.policy.policystore"
-   "marathon.data.behavior" ;sketchy, possibly deprecated.
    "marathon.data.cycle"
    "marathon.data.period"   ;Note, this is duplicated in marathon.sim.policy
    "marathon.data.output"])
