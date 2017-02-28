@@ -13,7 +13,7 @@
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
-             [native :as swing-events]]
+                           [native :as swing-events]]
             ;[piccolotest.repl :as repl]
             [org.dipert.swingrepl.main]
             )

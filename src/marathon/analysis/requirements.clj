@@ -1,6 +1,6 @@
 ;;Requirements Analysis implementation.
 (ns marathon.analysis.requirements
-  (:require [spork.util [record :as r] [table :as tbl]]
+  (:require [spork.util [record :as r] [table :as tbl] [io :as io]]
             [spork.sim [simcontext :as sim]]
             [spork.entitysystem [store :as store]]
             [clojure [pprint :as pprint]]
@@ -12,6 +12,9 @@
 
 ;;Utility functions
 ;;=================
+(defn hpath [p]
+  (str io/home-path p))
+
 (defmacro get-or [m k & else]
   `(if-let [res# (get ~m ~k)]
      res#
@@ -95,18 +98,30 @@
 ;;kind of lame at the moment
 ;;should return a map of [compo val]
 (defprotocol IDistributor
-  (distribute- [obj n]))  
+  (distribute- [obj n]))
+
+;;NOTE: This is a TEMPORARY HACK to get
+;;around the breaking change in clojure 1.8,
+;;extends? no longer works as God intended.
+;;Prefer satisfies? with memoization for now.
+;;inst? is coming in 1.9.
+(def inst?
+  (memoize (fn [protocol x]
+             (satisfies? protocol x))))
+
+(def bad (atom nil))
 
 (defn distribute-by [f n]
-  (let [tf (type f)]
-    (cond (extends? IDistributor tf)
+  (let [tf f #_(type f)]
+    (cond (#_extends? inst? IDistributor tf)
             (distribute- f n)
-          (extends? clojure.core.protocols/IKVReduce tf)
+          (#_extends? inst? clojure.core.protocols/IKVReduce tf)
             (reduce-kv (fn [acc k prop]
                          (assoc acc k (* prop n))) {} f)
           (fn? f) (f n)
           :else
-          (throw (Exception. (str "unknown distributor!"))))))
+          (do (reset! bad f)
+              (throw (Exception. (str "unknown distributor!" f)))))))
 
 ;;Requirements State
 ;;==================
@@ -152,7 +167,8 @@
 (defn initial-supply [src supply-table compo-distros
                       & {:keys [zero?] :or {zero? true}}]
   (let [growth-compos (set (for [[k v] compo-distros :when (pos? v)]  k))
-        known         (set (tbl/field-vals  (tbl/get-field :Component supply-table)))
+        known         (set (tbl/field-vals
+                            (tbl/get-field :Component supply-table)))
         new-compos    (clojure.set/difference growth-compos known)
         new-records   (for [compo new-compos
                             :when (pos? (compo-distros compo))]
@@ -676,7 +692,7 @@
         (println ["Spit requirements to " outpath]))))
               
 (comment ;testing
-  (def root "C:/Users/tspoon/Documents/srm/tst/notionalv2/reqbase.xlsx")
+  (def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
   (require '[marathon.analysis [dummydata :as data]])
   (def dummy-table
     (apply-schema (marathon.schemas/get-schema :SupplyRecords)
