@@ -12,7 +12,7 @@
                           [entityfactory :as ent]]
             [marathon.ces.fill [fillgraph :as fillgraph]
                                [scope :as scope]]
-            [marathon.fill [fillstore :as fillstore]]
+            [marathon.data [store :as simstate]]
             [spork.util [tags :as tags]
                         [table :as tbl]]))
 
@@ -116,7 +116,8 @@
                   (get-table :RelationRecords))
         fg (fillgraph/reduced-graph rawgraph)
         fm (fillgraph/fill-map fg)]
-    (fillstore/make-fillstore :fillgraph fg :fillmap fm :rawfillgraph rawgraph)))
+    (#_fillstore/make-fillstore
+     simstate/make-fillstore :fillgraph fg :fillmap fm :rawfillgraph rawgraph)))
 
 ;;Return a scoped set of supply and demand, based on the information in the fillgraph of the local
 ;;fillstore.

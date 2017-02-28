@@ -5,9 +5,7 @@
 ;Functions for creating, initializing, resetting, and updating state related to
 ;the demand simulation are also found here.
 (ns marathon.ces.demand
-  (:require  [marathon.demand [demanddata :as d]
-                              [demandstore :as dstore]
-                              ]
+  (:require  [marathon.demand [demanddata :as d]]
              [marathon.ces    [core :as core] 
                               [supply :as supply] 
                               [policy :as policy]

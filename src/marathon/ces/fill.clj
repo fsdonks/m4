@@ -12,7 +12,7 @@
 (ns marathon.ces.fill
   (:require [marathon.data   [protocols :as protocols]]
             [marathon.fill   [filldata :as filldata]]
-            [marathon.demand [demanddata :as d] [demandstore :as dstore]]
+            [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as udata]]
             [marathon.ces [core :as core] [demand :as dem] [supply :as supply]
                           [policy :as policy] [unit :as u] 

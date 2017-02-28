@@ -3,7 +3,7 @@
 ;;maintained here.  Backing structure is an entitystore.  Supporting
 ;;Entity is the supply manager.
 (ns marathon.ces.supply
-  (:require [marathon.demand [demanddata :as d] [demandstore :as dstore]]
+  (:require [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as udata]]
             [marathon.ces    [core :as core]
                              [policy :as policy] 

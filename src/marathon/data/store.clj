@@ -291,6 +291,8 @@
     ;schedules    
     ]})
 
+(def empty-policystore (policystore :PolicyStore))
+
 (defn get-policystore [ces] (gete ces :PolicyStore))
 
 ;;Container to store all the data associated with matching supply to demand, 
@@ -310,6 +312,12 @@
     :allgraphs    
     :rawfillgraph  nil
     ]})
+
+(defn make-fillstore [& {:keys [fillgraph fillmap rawfillgraph]}]
+  (merge (fillstore :FillStore)
+         {:fillgraph fillgraph
+          :fillmap fillmap
+          :rawfillgraph rawfillgraph}))
 
 (defentity parameters
   "Defines a entity with canonical simulation parameters for components."

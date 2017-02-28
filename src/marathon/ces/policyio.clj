@@ -2,8 +2,8 @@
   (:require [marathon.ces [policyops :as policyops]
                           [policy :as pol]]
             [marathon.data [protocols :as core]
-                           [period :as per]]
-            [marathon.policy [policystore :as pstore]]
+                           [period :as per]
+                           [store :as simstate]]
             [spork.util [table :as tbl]]))
 
 ;Data related to the policystore, is actually quite disparate.  There are
@@ -130,7 +130,7 @@
 ;much more robust, uses the generictable interface to simplify loading.
 (defn tables->policystore 
   ([relation-table period-table atomic-table composite-table]
-     (->> pstore/empty-policystore
+     (->> simstate/empty-policystore
           (pol/add-relations (table->relations relation-table))
           (pol/add-periods   (map per/record->period (tbl/table-records period-table)))
           (pol/add-dependent-policies (table->policy-map atomic-table) 

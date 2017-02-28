@@ -15,9 +15,9 @@
 ;;the policystore, and managing policies and periods during the simulation.
 (ns marathon.ces.policy
   (:require [marathon.data   [protocols   :as protocols] 
-                             [period      :as period]]
-            [marathon.policy [policydata  :as p]
-                             [policystore :as pstore]]
+                             [period      :as period]
+                             [store :as simstate]]
+            [marathon.policy [policydata  :as p]]
             [marathon.ces    [core        :as core]
                              [policyops   :as pops]
                              [unit        :as u]]            
@@ -757,7 +757,7 @@
 
 (defn make-policystore 
   [relations periods atomic-policies & [composite-policies store]]
-  (->> (or store pstore/empty-policystore)
+  (->> (or store simstate/empty-policystore)
        (add-relations relations)
        (add-periods periods)
        (add-policies atomic-policies)
