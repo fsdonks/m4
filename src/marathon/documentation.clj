@@ -87,14 +87,11 @@
    "marathon.data.protocols" ;sketchy.
    "marathon.fill.filldata"
    "marathon.demand.demanddata"
-   "marathon.demand.demandstore"
    "marathon.supply.unitdata"
-   "marathon.supply.supplystore"
    "marathon.policy.policydata"
-   "marathon.policy.policystore"
    "marathon.data.cycle"
    "marathon.data.period"   ;Note, this is duplicated in marathon.sim.policy
-   "marathon.data.output"])
+   ])
 
 ;;#High Level Simulation Functions in Marathon
 (def marathon-sim
@@ -107,6 +104,13 @@
      "supply"
      "policy"
      "policyio"]))
+
+;;#Analysis API and scripting functions
+(def marathon-analysis
+  (into ["marathon.analysis"]
+        (expand-paths "marathon.analysis"
+                      ["requirements"])))
+                
 
 ;;#Processing Tasks
 (def processing 

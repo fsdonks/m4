@@ -274,7 +274,8 @@
 (defn get-demandstore [ces] (gete ces :DemandStore))
 
 (defentity policystore
-  "Defines a singleton container for policy information"
+  "Defines a singleton container for policy information,
+   periods, and policy schedules."
   [id]
   {:components
    [:name :PolicyStore 
