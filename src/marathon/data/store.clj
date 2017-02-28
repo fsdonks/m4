@@ -1,25 +1,55 @@
-;;The entity store for Marathon.
+;;The entity store for MARATHON and some supplemental
+;;entity definitions and aux functions.
 (ns marathon.data.store
    (:require 
-;    [spork.geometry.shapes :refer :all]
-;    [spork.graphics2d.canvas :as canvas]
-;    [spork.sketch :as sketch] ;;I'd like to reconcile these at
     [spork.entitysystem.store :refer :all]
     [spork.sim.core :as sim]
     [spork.util.tags :as tag]
     [marathon.data [period :as p] [fsm :as fsm]]
-;    [quilsample.shared :as shared :refer :all]
-;    [quilsample.events :refer [notify!] :as events]
-;    [quilsample.entityevents :as entevents]
-;    [quilsample.system :as sys]
-;    [quilsample.board  :as board]
-;    [piccolotest.sample :as picc]
     ))
 
+;;Cleanup - WORK IN PROGRESS
+;;==========================
 
+;;The original implementation of the entitystore
+;;originated in a parallel, experimental build of a lightweight
+;;simulation.  Much of the functionality that now resides in
+;;spork.entitystore and marathon.ces.core was colocated with this
+;;namespace (hence the entity definitions, event "notifications"
+;;and other auxillary functions).
+
+;;As I've migrated generic things out into spork, and integrated
+;;the basic entity store into the overarching simulation infrastructure,
+;;we're left with relatively little here.  Technically, we don't need
+;;special entitystore implementation, we could use the barebones from
+;;spork.entitysystem.store in theory.
+
+;;We're also still using legacy entity definitions in other "data"
+;;namespaces.  Since the entity store will happily accept records
+;;as entities (infering keys map to components) this is no problem
+;;and allows a smooth migration to useing the entity store API
+;;for operating on our simstate.
+
+;;I'll leave the entity definitions in place for now, although they
+;;are not technically in use.
+
+;;Additionally pruning to follow....
+
+;;The only functions we "actually" use here are ->store to
+;;create the entity store....
+
+
+;;Pending DEPRECATION
+;;===================
+;;Originally a simple API to process the act of handling
+;;"events" in an entity store-based simulation.  Supplanted
+;;by the functionality in spork.sim.simcontext.
 (defprotocol INotification
   (notify! [obj e msg]
            [obj m])) 
+
+;;Pending DEPRECATION
+;;===================
 
 ;;provide a constant set of components that
 ;;will be cleared each day.
@@ -33,6 +63,8 @@
   #{:position-delta :movement-delta :state-delta})
 ;;temporary hack to abstract out entity containers...
 
+;;Pending DEPRECATION
+;;===================
 ;;defines a unit-entity selector.  This is a little
 ;;brittle, which is why I'm pushing it into a redefinable
 ;;function.  The stats stuff is dependent on the entity
@@ -40,14 +72,35 @@
 (defn unit-entities [obj]
   (all-entities obj [:state :component :icon :color :position]))
 
-;;We should probably turn this around, entity stores can be
-;;simstates, since they form a more general basis for components.
-;;We can have singletons (managers) and be happy.  We could
-;;store the layers in here...
-;;alternately, store the visible layers in the store, and pay the
-;;cost of lookup.  Note: lookup is probably dwarfed by rendering
-;;costs, so keeping it in the store is not too
-;;[Alternative simulation state]...
+
+;;Description
+;;===========
+;;simstate is a consolidation of all the simulation state required for Marathon 
+;;to do its thing.  Each of these bits used to be part of a hierarchical object 
+;;model with parent-child relationships, where each child manager could get at 
+;;the state for another child via its parent, the simulation Engine.  This worked
+;;okay in the beginning, and fit with some naive object oriented programming 
+;;notions, but ended up leading to coupling and some other phenomena. As a result
+;;I've re-organized the code base to conform to a more functional-programming 
+;;paradigm: specifically, data is maintained separate from functionality, rather 
+;;than classic OOP where data is encapsulated and bundled with 
+;;methods/properties.  The result is a simplification of the data model, as well
+;;as functions that can produce and consume bits of data necessary for the 
+;;simulation.  This simstate object really just gathers all the data in one 
+;;place, so that functions that need to access multiple components of data
+;;simultaneously CAN.  Since it's a record, and most of the elements are also 
+;;records, we get the benefit of using clojure's associative map functions and 
+;;sequence libraries to access and modify our state, rather than having to deal
+;;with a special set of one-off functions.
+
+;;Since simstate implements entity store, it can be used as the :state key of
+;;a simcontext, and simcontext will forward all entity-store-related implementation
+;;calls to it.  This gives us a fairly flexible way to manage our simulation context,
+;;specifically the entity state: use the spork.entitysystem.store API to query
+;;and update the simcontext directly.  marathon.ces.core is full of idioms that
+;;do this very thing, although many namespaces will use the spork.entitysystem.store
+;;directly.
+
 (defrecord simstate [store width height notifier]
   IEntityStore
   (add-entry [db id domain data] 
@@ -72,11 +125,12 @@
      (if (fn? notifier) (notifier m)
          (notify! notifier m))))
 
+
+;;Currently Out of Use / Possible Migration / Documention
+;;=======================================================
+
+
 ;;__Entity Definitions__
-;;if we don't care about the past, these can be simple mutable components.
-;; Note: we could make 
-;;   this 3D pretty easily, or swap out the movement definitions and components to allow for an 
-;;   extra dimension later.
 (defentity physical-entity
   "A simple entity with 2D physics information, position and velocity. "
   [id {:keys [position velocity]
@@ -167,6 +221,9 @@
     :MissionLength MissionLength ;;Defines the length of duration of a local assignment to the demand.
     ]})
 
+;;Actively In Use
+;;===============
+
 ;;not sure how much of this needs to stick around...
 ;;Since entities are dispersed now, we may not need these guys
 ;;any longer.
@@ -249,7 +306,9 @@
     :rawfillgraph  nil
     ]})
 
-(defentity parameters [id]
+(defentity parameters
+  "Defines a entity with canonical simulation parameters for components."
+  [id]
   {:components
    [:name :parameters 
     :SRCs-In-Scope     {} ;set of srcs that can be used/filled.
@@ -311,6 +370,11 @@
     res
     (throw (Exception. (str "Location not found: " loc)))))
 
+;;Only Function Currently In Active Use For MARATHON
+;;==================================================
+;;Note: we do call on the entity definitions for the various stores.
+
+
 ;;REFACTOR: THe old width,height, etc. are no longer necessary.
 ;;We aren't really using simstate like we were before, even
 ;;notify is OBE.  TODO: Revert to using an empty store,
@@ -344,6 +408,9 @@
         ;)
         ))
 
+
+;;PENDING DEPRECATION
+;;===================
 ;;WE should decouple this from the original width/height convenience.  It's not
 ;;how we render things today.
     

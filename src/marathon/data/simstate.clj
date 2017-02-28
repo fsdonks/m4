@@ -1,4 +1,5 @@
-;Data required to constitute a simulation environment.
+;;Data required to constitute a simulation environment.
+;;OBSOLETE - replaced by marathon.data.store
 (ns marathon.data.simstate
   (:use [spork.util.record :only [defrecord+]]
         [marathon.supply.supplystore]

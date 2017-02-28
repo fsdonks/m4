@@ -1,3 +1,5 @@
+;;OBSOLETE Namespace, migrated to marathon.ces.behaviorbase
+
 ;;A separate namespace for testing and prototyping behaviors in 
 ;;clojure, using a functional style instead of imperative.
 (ns marathon.data.behaviorbase)

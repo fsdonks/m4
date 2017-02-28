@@ -343,8 +343,6 @@
 ;;#Empty Simulation Contexts
 ;;altered.
 
-
-
 (def emptystate    (simstate/->store)) ;;now using ces
 ;;Testing purposes...
 ;;temporary testing purposes...
