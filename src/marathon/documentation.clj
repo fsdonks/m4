@@ -75,11 +75,9 @@
 
 ;;#Stochastic Demand PreProcessing Libraries#
 (def stochastic-demand
-  (into (expand-paths 
-          "marathon.processing.helmet" 
-          ["core" "collision" "split"])
-          #_["spork.util.sampling"
-             "spork.util.stats"]))
+  (expand-paths 
+   "marathon.processing.helmet" 
+   ["core" "collision" "split"]))
   
 ;;#Aggregate and primitive data used by Marathon
 (def marathon-data 
@@ -115,10 +113,10 @@
 ;;#Processing Tasks
 (def processing 
   (expand-paths "marathon.processing" 
-    ["deployments"
+    [
      "highwater"
      "forgereader"
-     "excel"]))
+     ]))
   
 ;;#The Main User-Facing Entry Point
 (def user-interface 
@@ -127,8 +125,7 @@
 ;;#Marathon Project Definition and Management 
 (def marathon-project 
   ["marathon.project"
-   "marathon.project.excel"
-   #_"marathon.project.projectviews"])
+   "marathon.project.excel"])
 
 ;;The rest are internal functions that build topical subsets of the Marathon 
 ;;documentation, or push out an entire compendium.
@@ -141,10 +138,11 @@
 (def build-everything 
   (build-config [user-interface 
                  marathon-project
-                 marathon-sim 
-                 stochastic-demand
+                 marathon-sim
+                 marathon-analysis
                  marathon-data
-                 processing ]))
+                 processing
+                 stochastic-demand]))
 
 (def simulation-only 
   (build-config [marathon-sim marathon-data]))
