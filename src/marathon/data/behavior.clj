@@ -1,3 +1,5 @@
+;;OBSOLETE -> migrated to marathon.ces.behavior
+
 ;;A library for defining entity behaviors.  Legacy implementation 
 ;;only covered unit entities, and used a Finite State Machine (FSM).
 ;;New implementation should be more general, and follows the Behavior 

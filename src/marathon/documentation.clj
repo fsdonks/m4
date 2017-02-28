@@ -78,8 +78,8 @@
   (into (expand-paths 
           "marathon.processing.helmet" 
           ["core" "collision" "split"])
-          ["util.sampling"
-           "util.stats"]))
+          #_["spork.util.sampling"
+             "spork.util.stats"]))
   
 ;;#Aggregate and primitive data used by Marathon
 (def marathon-data 
@@ -100,7 +100,7 @@
 
 ;;#High Level Simulation Functions in Marathon
 (def marathon-sim
-  (expand-paths "marathon.sim" 
+  (expand-paths "marathon.ces" 
     ["core" 
      "engine"
      "fill"
@@ -126,7 +126,7 @@
 (def marathon-project 
   ["marathon.project"
    "marathon.project.excel"
-   "marathon.project.projectviews"])
+   #_"marathon.project.projectviews"])
 
 ;;The rest are internal functions that build topical subsets of the Marathon 
 ;;documentation, or push out an entire compendium.
@@ -148,7 +148,7 @@
   (build-config [marathon-sim marathon-data]))
 
 (defn marge-command [xs]
-  (into ["lein.bat" "margplus"]  
+  (into ["lein.bat" "marg"]  
         (map path->file xs)))
 
 (defn build-docs

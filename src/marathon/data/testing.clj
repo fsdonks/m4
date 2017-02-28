@@ -1,3 +1,4 @@
+;;Obsolete.
 ;;A namespace for testing, currently, entity behaviors and such.
 (ns marathon.data.testing
   (:require [marathon.sim.testing :as test]
