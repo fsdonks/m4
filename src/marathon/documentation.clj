@@ -148,7 +148,7 @@
   (build-config [marathon-sim marathon-data]))
 
 (defn marge-command [xs]
-  (into ["lein.bat" "marg"]  
+  (into ["lein" "marg"]  
         (map path->file xs)))
 
 (defn build-docs
