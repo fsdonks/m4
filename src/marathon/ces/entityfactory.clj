@@ -586,6 +586,8 @@
 ;;possibly using multimethods..
 
 (defn pstore->params [pstore] (core/get-parameters (:ctx (meta pstore))))
+(defn index-unit     [idx  u] (assoc u :unit-index idx))
+
 ;;We can extract the supply dependencies, and the ghost arg, 
 ;;if we provide the behavior to be used.
 (defn create-units
@@ -602,7 +604,10 @@
           (if (== idx bound)  
             (distribute-cycle-times acc policy)
             (let [nm       (generate-name idx (:SRC base-record) (:Component base-record))
-                  new-unit (record->unitdata (assoc base-record :Name nm))]                
+                  new-unit (-> (assoc base-record :Name nm)
+                               (record->unitdata)
+                               (assoc :unit-index idx)) ;;added UnitIndex
+                  ]                
               (recur (unchecked-inc idx)
                      (conj acc new-unit))))))))
 
@@ -631,8 +636,8 @@
                      (conj-units acc
                          (create-units @unit-count  (:Quantity r) pstore r))
                      (->> (generate-name @unit-count (:SRC r) (:Component r))
-                          (assoc r :Name)
-                          (record->unitdata) ;;assign-policy handles policy wrangling.
+                          (assoc r :unit-index @unit-count :Name) ;;Add UnitIndex 3/8/2017
+                          (record->unitdata) ;;assign-policy handles policy wrangling.                          
                           (conj-unit  acc)))) (transient []))
          (persistent!))))       
 ;;we have two methods of initializing unit cycles.

@@ -5,8 +5,8 @@
 ;;replace this with something based on datascript/datomic
 ;;querying. 
 (ns marathon.ces.query
-  (:require [marathon.ces  [core :as core]
-                           [unit :as unit]
+  (:require [marathon.ces  [core   :as core]
+                           [unit   :as unit]
                            [supply :as supply]]
             [spork.entitysystem.store :as store]
             [marathon.ces.fill.fillgraph]
@@ -67,6 +67,8 @@
        (sort-by second)
        (mapv first)))
 
+;;Refactor?!
+;;Note: this seems a little bit odd, or is it elegant?
 (def srcs->prefs (memoize (fn [srcs]   
                               (into {} (map-indexed (fn [idx src] [src idx]) srcs)))))
 (defn src->prefs [srcmap src]  (srcs->prefs (src->srcs srcmap src)))
@@ -489,12 +491,13 @@
 
 ;;Basic value-based orderings.  These provide numbers we can easily
 ;;compare on.
-(key-valuations cycletime  :cycletime
+(key-valuations cycletime  :cycletime                
                 bog-budget unit/get-bog-budget
                 dwell      unit/get-dwell
                 bog        unit/get-bog 
                 proportional-dwell unit/normalized-dwell
-                relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength u)))))
+                relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength u))))
+                unit-index :unit-index)
 
 ;;predicates...
 
@@ -838,13 +841,13 @@
 ;; not_ac	(except-compo "AC")
 ;; title32	[(where-compo "NG") mindwell]
 
-(def uniform  [when-fenced when-followon max-proportional-dwell])
-(def ac-first [when-fenced when-followon AC max-proportional-dwell])
-(def rc-first [when-fenced when-followon RC max-proportional-dwell])
-(def ng-first [when-fenced when-followon NG max-proportional-dwell])
+(def uniform  [when-fenced when-followon max-proportional-dwell min-unit-index])
+(def ac-first [when-fenced when-followon AC max-proportional-dwell min-unit-index])
+(def rc-first [when-fenced when-followon RC max-proportional-dwell min-unit-index])
+(def ng-first [when-fenced when-followon NG max-proportional-dwell min-unit-index])
 ;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
 (def not-ac   #(not= (:component %) "AC"))
-(def title32 [#(= (:component %) "NG") min-proportional-dwell])
+(def title32 [#(= (:component %) "NG") min-proportional-dwell min-unit-index])
 
 
 ;;new rules....should be able to compose these...

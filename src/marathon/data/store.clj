@@ -157,7 +157,7 @@
 (defentity unit
   "Defines a specification for entities that correspond to force structure."
   [id name type component policy state icon label position velocity color home
-   & {:keys [speed location behavior] :or {speed 8}}]
+   & {:keys [speed location behavior unit-index] :or {speed 8}}]
   {:specs [(physical-entity id {:position position
                                 :velocity velocity})
            (interactive-entity id {:behavior (or behavior :default)})]
@@ -183,7 +183,8 @@
     :currentcycle nil ;the current cycle data structure for the unit.
     :cycles   []
     :oi-title "no-description" ;the description of the unit.
-    :locationhistory [] ;list of all the locations visited.  ;:dwell-time-when-deployed nil                                       
+    :locationhistory [] ;list of all the locations visited.  ;:dwell-time-when-deployed nil
+    :unit-index (or unit-index nil)
     ]
    })
 
