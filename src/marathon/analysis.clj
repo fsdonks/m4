@@ -4,7 +4,7 @@
 ;;define ways to process simulation history
 ;;and produce dynamic analysis.
 (ns marathon.analysis
-  (:require [spork.util.table       :as tbl]            
+  (:require [spork.util [table       :as tbl]]
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
@@ -416,7 +416,8 @@
   [x & {:keys [table-xform audit? audit-path]
                        :or {table-xform identity}}]
   (cond (string? x) (if audit?
-                      (load-audited-context x :table-xform table-xform :root audit-path)
+                      (do (io/make-folders! audit-path "audit.txt")
+                          (load-audited-context x :table-xform table-xform :root audit-path))
                       (load-context x :table-xform table-xform))
         (util/context? x) x
         :else (throw (Exception.
@@ -647,7 +648,7 @@
 (defn spit-history! [h path & {:keys [outputs] :or
                                {outputs *outputs*}}]
   ;;hackneyed way to munge outputs and spit them to files.
-  (let [paths {:history     (str path "history.lz4"   )
+  (let [paths {:history     (str path "history.lz4")
                :location-samples      (str path "locsamples.txt")
                :locations   (str path "locations.txt")
                :deployed-samples      (str path "depsamples.txt")
