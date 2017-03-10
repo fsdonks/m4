@@ -4,7 +4,8 @@
 ;;define ways to process simulation history
 ;;and produce dynamic analysis.
 (ns marathon.analysis
-  (:require [spork.util [table       :as tbl]]
+  (:require [spork.util [table       :as tbl]
+                        [io :as io]]
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
