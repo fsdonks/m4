@@ -629,7 +629,8 @@
 
 (defmethod spit-output :deployment-records [t h dpath]
   (do (println [:spitting-deployed-samples dpath])
-      (tbl/records->file (->deployment-records h) dpath))) 
+      (tbl/records->file (->deployment-records h) dpath
+         :field-order schemas/deployment-fields))) 
 
 (defmethod spit-output :demandtrends [t h dtrendpath]
   (do (println [:spitting-demandtrends dtrendpath])
@@ -653,7 +654,7 @@
                :location-samples      (str path "locsamples.txt")
                :locations   (str path "locations.txt")
                :deployed-samples      (str path "depsamples.txt")
-               :deployment-records(str path "AUDIT_Deployments.txt") 
+               :deployment-records (str path "AUDIT_Deployments.txt") 
                :demandtrends (str path "DemandTrends.txt")} ;probably easier (and lighter) to just diff this.
         ]    
     (doseq [[k path] paths

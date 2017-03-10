@@ -10,8 +10,7 @@
             [proc.example :as proc]))
 
 ;;dumb helper....cross system deving...
-(defn hpath [p]
-  (str io/home-path p))
+(defn hpath [p] (str io/home-path p))
 
 (def full-path (hpath "\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx"))
 (def out-path  (hpath "\\Documents\\srm\\tst\\notionalv2\\maxbase\\"))
