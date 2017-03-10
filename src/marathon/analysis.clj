@@ -417,7 +417,7 @@
   [x & {:keys [table-xform audit? audit-path]
                        :or {table-xform identity}}]
   (cond (string? x) (if audit?
-                      (do (io/make-folders! audit-path "audit.txt")
+                      (do (io/make-folders! audit-path ["audit.txt"])
                           (load-audited-context x :table-xform table-xform :root audit-path))
                       (load-context x :table-xform table-xform))
         (util/context? x) x
