@@ -365,9 +365,11 @@
 
 ;;#Changing Policies in Response to Period Changes
 
-;queue-policy-change could probably be in the unit level simulation.
-;Note -> returns unit-updates....CONSUME WITH sim/merge-updates
-
+;;queue-policy-change could probably be in the unit level simulation.
+;;Note -> returns unit-updates....CONSUME WITH sim/merge-updates
+;;We may be able to do this more elegantly.  Possibly just defer
+;;to the unit and let it figure out how to change policies?
+;;All we do is notify of a change?
 (defn queue-policy-change
   "Queues a unit's status as having a pending policy change.  Right now, status 
    is maintained in unit data.  When the unit has an opportunity to change 

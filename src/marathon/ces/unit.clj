@@ -11,9 +11,18 @@
   (:use [spork.util.record :only [defrecord+ inc-field dec-field get-vals]]))
 
 
+;;Utils
+;;=====
+;;convenience macro to help with intermittent debugging.
+(defmacro binding-when [pred binding & expr]
+  `(if ~pred
+     (binding [~@binding]
+       ~@expr)
+     ~@expr))
+
 
 ;;Operations on marathon.suppply.unitdata
-;;======================
+;;=======================================
 
 ;;Okay....
 ;;Here's where the new behavior context (and possibly messaging functions)
@@ -32,7 +41,7 @@
 ;;function.  Wrap the crap here...
 (defn unit-update [e ctx]
   (let [_     (spork.ai.core/debug [:>>>>>>>>>>Begin-Update (:name e) (:last-update e)])
-        res  (core/handle-message! ctx e
+        res   (core/handle-message! ctx e
                                    (core/->msg (:name e) (:name e)
                                                (core/get-time ctx)
                                                :update
@@ -40,9 +49,6 @@
     (spork.ai.core/debug [:<<<<<<<<<<End-Update (:name e) (store/gete res (:name e) :last-update)])
     res))
 
-;(def update unit-update)
-;; (defn update [& args] (throw (Exception. "blah"))
-;;   )
 (defn followon-code [u]
   (when-let [fc (:followoncode u)]
     (when (not (= fc ""))
@@ -73,19 +79,19 @@
 ;;in composite policies, they don't square.
 
 (defn cycle-stats [policy]  
-  {:maxbog      (pol/max-bog policy)
-   :maxdwell    (pol/max-dwell policy)
-   :cyclelength (pol/cycle-length policy)
-   :maxMOB      (pol/max-mob policy)})
+  {:max-bog      (pol/max-bog policy)
+   :max-dwell    (pol/max-dwell policy)
+   :cycle-length (pol/cycle-length policy)
+   :max-mob      (pol/max-mob policy)})
 
 ;;__TODO__ Rename this to something cleaner.
 (defn newcycle [t policy]
-  (let [{:keys [maxbog maxdwell cyclelength maxMOB]} (cycle-stats policy)]    
+  (let [{:keys [max-bog max-dwell cycle-length max-mob]} (cycle-stats policy)]    
     (cyc/make-cyclerecord :tstart t 
-                          :bogbudget maxbog 
-                          :dwell-expected maxdwell 
-                          :duration-expected cyclelength 
-                          :mob-expected maxMOB)))
+                          :bogbudget max-bog 
+                          :dwell-expected max-dwell 
+                          :duration-expected cycle-length 
+                          :mob-expected max-mob)))
 
 ;;Note: this is causing problems, we're dropping the
 ;;currentcycle...
@@ -218,9 +224,12 @@
 
 ;End Sub
 
+;;Modified to correspond with new cycle-stats wrapper function.
 (defn modify-cycle [u newpolicy]
-  (let [vs (get-vals newpolicy [:maxBOG  :maxDwell :cyclelength :maxMOB])
-        newrecord (apply modify-cyclerecord (:currentcycle u) vs)]
+  (let [;vs #_(get-vals newpolicy [:maxBOG  :maxDwell :cyclelength :maxMOB])
+        {:keys [max-bog max-dwell cycle-length max-mob]} (cycle-stats newpolicy)
+        newrecord #_(apply modify-cyclerecord (:currentcycle u) vs)
+                    (modify-cyclerecord (:currentcycle u) max-bog max-dwell cycle-length max-mob)]
     (merge u {:currentcycle newrecord})))
 
 ;Public Sub ChangeState(newstate As String, deltat As Single, Optional duration As Single)
@@ -433,11 +442,18 @@
 ;; 236:   End Sub
 
 ;;Possibly OBE.
-(defn change-policy [unit newpolicy]                                        
-  (throw (Exception. "change-policy not implemented yet..."))
-  #_(change-state u :policy-change-state
-                  (- t  (get u :last-update 0))
-                  (max-boggable-time u) ctx))
+(defn change-policy [unit newpolicy entity ctx]
+  (let [t (core/get-time ctx)]
+    (change-state unit :policy-change-state
+                  (- t  (get unit :last-update 0))
+                  (max-boggable-time unit) ctx)))
+
+(defn change-policy [e newpolicy ctx]
+  (core/handle-message! ctx e
+       (core/->msg (:name e) (:name e)
+                   (core/get-time ctx)
+                   :change-policy
+                   {:policy-change nil})))
 
 (defn change-cycle
   "Update the statistics for the current cyclerecord to record 
@@ -485,7 +501,8 @@
 (def ^:dynamic *uic* nil)
 
 
-
+    
+    
 ;;TODO# implement change-state, so that it actually modifies the
 ;;entity.  In this case, it's tbased off of unit behavior.
 ;;Typically resides in unit/change-state, but we probably 
@@ -503,17 +520,12 @@
 ;;what to do more often, and let the behavior be decoupled via messaging.
 ;;we may no longer need the deltat arg...
 (defn change-state [entity newstate deltat duration ctx]
-  (if (or *uic* (= newstate :abrupt-withdraw))
-    (binding [spork.ai.core/*debug* (or spork.ai.core/*debug* (= (:name entity) *uic*) (= newstate :abruptwithdraw))]
-  ;;how about handle-message? 
-            (core/handle-message! ctx entity
-                                  (core/->msg (:name entity) (:name entity)
-                                              (core/get-time ctx)
-                                              :change-state
-                                              {:newstate newstate
-                                               :deltat deltat
-                                               :duration duration
-                                               }))))
+  (binding-when (or *uic* (= newstate :abrupt-withdraw))
+    ;;conditional binds for debugging info
+    [spork.ai.core/*debug* (or spork.ai.core/*debug*
+                               (= (:name entity) *uic*)
+                               (= newstate :abruptwithdraw))]
+    ;;affect change-state by message passing evaluation.
     (core/handle-message! ctx entity
                           (core/->msg (:name entity) (:name entity)
                                       (core/get-time ctx)
@@ -521,30 +533,22 @@
                                       {:newstate newstate
                                        :deltat deltat
                                        :duration duration
-                                       })))
+                                       }))))
 
 ;;instructs the entity to execute a logical move; possibly changing
 ;;the physical location, and changing the state.
 (defn move-to [entity location position duration ctx]
-  (if  *uic*
-    (binding [spork.ai.core/*debug* (or spork.ai.core/*debug* (= (:name entity) *uic*) )]
-      (core/handle-message! ctx entity
-                            (core/->msg (:name entity) (:name entity)
-                                        (core/get-time ctx)
-                                        :move
-                                        {:next-location location
-                                         :next-position position
-                                         :wait-time duration
-                                         })))
-      (core/handle-message! ctx entity
-                            (core/->msg (:name entity) (:name entity)
-                                        (core/get-time ctx)
-                                        :move
-                                        {:next-location location
-                                         :next-position position
-                                         :wait-time duration
-                                         }))))
-                        
+  (binding-when *uic*
+    [spork.ai.core/*debug* (or spork.ai.core/*debug*
+                               (= (:name entity) *uic*))]
+    (core/handle-message! ctx entity
+      (core/->msg (:name entity) (:name entity)
+                  (core/get-time ctx)
+                  :move
+                  {:next-location location
+                   :next-position position
+                   :wait-time duration
+                   }))))
 
 ;;wrapper around our spawning functionality.
 (defn spawn [ent ctx]
@@ -566,6 +570,7 @@
                (assoc unit :moved true)
                unit)
              (push-location newlocation)))))
+
 ;;#TODO Figure out a way more effecient way to express this, 
 ;;we're going to have lots of location changes.  I have a feeling 
 ;;the associng is going to kill us when we have a lot of movement.
