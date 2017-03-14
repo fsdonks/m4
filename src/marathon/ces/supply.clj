@@ -501,7 +501,7 @@
 (defn register-unit [supply behaviors unit ghost extra-tags ctx]
   (let [unit   (if (has-behavior? unit) unit (assign-behavior behaviors unit))
         newctx    (->> (-> supply
-                           (tag-unit unit extra-tags)
+                           (tag-unit unit extra-tags)  ;;Performance Note: we can probably elide tags..
                            (add-src   (get unit :src))
                            (add-unit  ctx unit)
                            (store/assoce (:name unit) :supply true) ;starting to shift to component tagging.                           

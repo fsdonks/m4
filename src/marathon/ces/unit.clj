@@ -67,15 +67,28 @@
 
 ;End Sub
 
+;;Note: This fails with composite policies.
+;;Problem is we use key destructuring to access the
+;;maxbog,maxdwell, cyclength, maxMOB vals, but
+;;in composite policies, they don't square.
+
+(defn cycle-stats [policy]  
+  {:maxbog      (pol/max-bog policy)
+   :maxdwell    (pol/max-dwell policy)
+   :cyclelength (pol/cycle-length policy)
+   :maxMOB      (pol/max-mob policy)})
+
 ;;__TODO__ Rename this to something cleaner.
 (defn newcycle [t policy]
-  (let [{:keys [maxbog maxdwell cyclelength maxMOB]} policy]    
+  (let [{:keys [maxbog maxdwell cyclelength maxMOB]} (cycle-stats policy)]    
     (cyc/make-cyclerecord :tstart t 
                           :bogbudget maxbog 
                           :dwell-expected maxdwell 
                           :duration-expected cyclelength 
                           :mob-expected maxMOB)))
 
+;;Note: this is causing problems, we're dropping the
+;;currentcycle...
 (defn initCycles [u t]
   (let [policy (:policy u)
         c (merge (newcycle 0 policy) 

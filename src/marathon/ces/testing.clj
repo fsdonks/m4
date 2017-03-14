@@ -929,6 +929,12 @@
 (def pctx (setup/simstate-from sd/auto-supply-tables))
 (def pctx (core/debug! pctx))
 
+(comment
+  (def pctx (core/debugging
+             (->> (core/debug! core/emptysim)
+                  (setup/simstate-from sd/auto-supply-tables))))
+  )
+
 ;;ensures that our initial conditions for distributing
 ;;cycle times are consistent.
 (deftest policy-alignment
@@ -967,4 +973,5 @@
 
 
 ;;policy/change-policies....
-
+;;We currently have a problem with initializing units with composite policies.
+;;Upon spawn, they appear to be screwy...
