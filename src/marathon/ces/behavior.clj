@@ -56,8 +56,116 @@
             )
   (:import [marathon.ces.basebehavior behaviorenv]))
 
+;;Overview
+;;========
+;;The general idea behind how we motivate entities to do things is to use
+;;composeable behaviors - as defined in spork.ai.behavior - composed into
+;;behavior "trees".  These trees simplify the typical state-transition
+;;model we find in finite-state machines. Where the FSM has zero or more
+;;edges - or transitions - between states,  behavior trees focus on a
+;;small set of composition operations - called internal or intermediate
+;;nodes - that define how to traverse the tree.  So, rather than
+;;evaluating the next state to transition to - along with the pre,
+;;executing, and post conditions for the state - we walk a tree
+;;of behaviors, where nodes along the path dictate consistent
+;;idiomatic ways to evaluate child nodes. 
+
+;;Besides composition, the other core concept is that behaviors
+;;may return success, failure, or (in other implementations)
+;;run to indicate that a behavior node has not yet finished
+;;evaluating.  This implementation - focused on unit entity
+;;behaviors - takes a fairly naive view and ignores the
+;;run evaluation.  Rather, we always succeed or fail.
+
+;;Evaluation in the Behavior Context
+;;==================================
+;;Unlike traditional entity "update" or "step" functions,
+;;we maintain an explicit context in which the behavior is
+;;evaluated - the behavior context (marathon.ces.basebehavior).
+;;This context provides a consistent accumulation of state
+;;through which we can view evaluation of the behavior tree
+;;as a reduction, with the behavior context being the
+;;accumulated result.  Thus, we traverse the tree with an
+;;initial behavior context [reified as  a map with useful
+;;keys referencing the simulation context/entity store, the
+;;entity being processed, the simulated time of the evaluation,
+;;and any additional keys useful to evaluation].  Taken as
+;;a lexical environment, the keys of the behavior context
+;;form a working set of "variables" or properties that we
+;;can either query, update, redefine, add to, or otherwise
+;;use to guide behavior evaluation.
+
+;;When evaluating a behavior tree, we start from the root behavior
+;;and use its evaluation rules to proceed with the reduction (i.e.
+;;compute a resulting behavior context).  The reduced behavior
+;;context is then - typically - processed by merging the
+;;entity reference into the simulation context reference, returning
+;;the simulation context.  The function that encapsulates this
+;;functional form of entity  behavior processing is
+;;marathon.ces.behaviorbase/step-entity .
+
+;;Behavior evaluation occurs using the spork.ai.behavior/beval
+;;function, which operates similarly to eval in the domain
+;;of behavior trees.  The evaluation rules are fairly simple:
+;;If the item is a vector pair that matches [:success|fail|run ctx],
+;;the vector is returned as the output for beval.
+
+;;If the item to be evaluated is a function, then it
+;;is applied to the current accumulated context to determine
+;;the next behavior to beval.  This means that
+;;functions may return a final result ala [:success|fail|run ctx]
+;;or they may return another behavior (function or node) which
+;;will continue to be evaluated against the context.
+
+;;If the item to be evaluated is a behavior node, then it
+;;is beval'd with the current accumulated context
+;;(delegating to the behave function of the IBehaviorTree).
+
+;;The current implementation assumes that the highest-level
+;;of evaluation - as in marathon.ces.behaviorbase/step-entity
+;;will always be successful.  Anything else is an error (even
+;;returning [:fail ...].
+
+;;Convenient Idioms
+;;=================
+;;Most of the behavior nodes are described at length in
+;;spork.ai.behavior.  These lead to a natural means for
+;;composing sophisticated behaviors using familiar idioms
+;;like ->and, ->or, ->if and more.  Also, callers may
+;;define functions that operate on the behavior context
+;;directly; in some cases this is a useful - if
+;;low level - approach to defining behaviors.
+;;Arbitrary functions that map a context to a [:success ...]
+;;or a [:fail ...] may be used as behaviors.
+
+;;For convenience, and to focus on behavior tree
+;;traversal as an "evaluation", the  spork.ai.behavior/befn
+;;macro provides a convenient way to define aforementioned
+;;behavior functions with convenient destructuring and
+;;behavior result packing built in.  Using the befn
+;;macro - to define behavior functions - is similar to
+;;the standard clojure.core/defn form, with a change
+;;the context:  The function arguments correspond to
+;;a map-destructing of the behavior context, and
+;;where specified by a type hint, will compile to
+;;fast field-based accessors for the specific
+;;behavior context.  To elide repetitive use of
+;;(success ...) and the like, and to align with
+;;clojure's idiom of using nil for failure,
+;;nil results are automatically converted to
+;;(failure ...) evaluations.  Otherwise,
+;;behavior evaluation continues as per beval -
+;;the caller can immediately return from the behavior
+;;using (success ctx) or yield another behavior
+;;as a return value - which will effectively
+;;continue evaluation using the new behavior.
+
+;;Canonical Unit Behavior
+;;=======================
+
 ;;__utils__
 (def ^:constant +inf+ Long/MAX_VALUE)
+(def ^:constant +twenty-years+ 7300)
 
 (defn non-neg!
   ([lbl x]
@@ -656,8 +764,7 @@
                        (do (debug [:dt<=timeleft :updating-for dt])
                            ;;this is intended to be the last update...
                            ;;as if we're send the unit an update message
-                           ;;for the last amount of time...
-                           
+                           ;;for the last amount of time...                           
                            (beval (->seq [update-state-beh
                                           process-messages-beh]) ;we  suspend message processing until we're current.
                                   (assoc benv :deltat dt)))
@@ -682,9 +789,9 @@
 (befn should-move? ^behaviorenv {:keys [next-position statedata] :as benv}
       (do (debug [:should?
                   {:next-position next-position
-                   :remaining (fsm/remaining statedata)
-                   :spawning? (spawning? statedata)
-                   :wait-time (:wait-time benv)}])
+                   :remaining     (fsm/remaining statedata)
+                   :spawning?     (spawning? statedata)
+                   :wait-time     (:wait-time benv)}])
           (when (or next-position
                     (zero? (fsm/remaining statedata)) ;;time is up...
                     (spawning? statedata))
@@ -837,11 +944,10 @@
 (befn start-cycle {:keys [entity deltat tupdate] :as benv}
    (let [unit   @entity
          pstack (:policystack unit)]
-     (do  (swap! entity #(merge % {:cycletime 0
+     (do  (swap! entity #(merge % {:cycletime     0
                                    :date-to-reset tupdate}))
           (if (pos? (count pstack))
-            (bind!! {:next-policy (first pstack)
-                     :policy-change true})
+            (bind!! {:policy-change {:next-policy (first pstack)}})
             (success benv)))))
 
 ;;We may not care about cycles....
@@ -1318,8 +1424,15 @@
            (beval change-state-beh (assoc benv :state-change state-change
                                                :next-position (or (:next-position state-change)
                                                                   (:newstate state-change)))))
+         :change-policy
+         ;;Policy-changes are handled by updating the unit, then
+         ;;executing the  change-policy behavior.
+         ;;Note: we could tie in change-policy at a lower echelon....so we check for
+         ;;policy changes after updates.
+         (beval change-policy-beh (assoc benv :policy-change (:data msg)))
+         
          :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
-                   (do (success benv)) ;entity is current
+                   (success benv) ;entity is current
                    (->and [(echo :update)
                                         ;roll-forward-beh ;;See if we can replace this with update-state...
                            update-state-beh
@@ -1836,7 +1949,7 @@
             policynameA    (protocols/atomic-name  current-policy) ;active atomic policy
             policynameB    (protocols/atomic-name  next-policy)    ;new atomic policy
             cyclelengthB   (protocols/cycle-length next-policy)            
-            cycletimeB     (if (> cyclelengthB 30000) ;;effectively infinite...
+            cycletimeB     (if (> cyclelengthB +twenty-years+) ;;effectively infinite...
                              cycletimeA ;;use current cycletime, do NOT project.
                              (long   (* proportion cyclelengthB))) ;coerce to a long cyclelength.
             _              (assert (>= cycletimeB 0) "Negative cycle times are not handled...")
@@ -1862,9 +1975,10 @@
         ;(if (not= positionA positionB)
           ;;setup the move and use existing behavior to execute (vs. legacy method that folded stuff in here).
           (do (swap! ctx
-                     #(core/trigger-event :UnitChangedPolicy uname  policynameA
-                        (core/msg "Unit " uname " changed policies: "
-                                  policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil  %))
+                     #(->> (assoc % :policy-change nil)
+                           (core/trigger-event :UnitChangedPolicy uname  policynameA
+                             (core/msg "Unit " uname " changed policies: "
+                                policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil)))
               (move! positionB newduration))))
           
           ;;This automatically gets checked during move!...
@@ -1893,10 +2007,7 @@
 
 
 ;;         'NOTE -> I may need to consider changing location here.....
-
-            
-
-                   
+                             
 ;;The unit's cycle cannot project onto another cycle.  We need to defer policy change until reset.
 ;;leave the policy on the stack.  Catch it during reset.
 ;;TOM change 2 Sep 2011 -> we modify the cyclerecord to reflect changes in expectations...

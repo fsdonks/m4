@@ -442,18 +442,26 @@
 ;; 236:   End Sub
 
 ;;Possibly OBE.
-(defn change-policy [unit newpolicy entity ctx]
-  (let [t (core/get-time ctx)]
-    (change-state unit :policy-change-state
-                  (- t  (get unit :last-update 0))
-                  (max-boggable-time unit) ctx)))
+#_(defn change-policy [unit newpolicy entity ctx]
+    (let [t (core/get-time ctx)]
+      (change-state unit :policy-change-state
+                    (- t  (get unit :last-update 0))
+                    (max-boggable-time unit) ctx)))
 
-(defn change-policy [e newpolicy ctx]
+#_(defn change-policy [e next-policy ctx]
   (core/handle-message! ctx e
        (core/->msg (:name e) (:name e)
                    (core/get-time ctx)
                    :change-policy
-                   {:policy-change nil})))
+                   {:policy-change {:next-policy next-policy}})))
+
+;;refactored to use send!! wrapper.
+
+;;Sends the entity a message that queues up handling policy
+;;changes.
+(defn change-policy [e next-policy ctx]
+  (core/send!! e :change-policy
+     {:policy-change {:next-policy next-policy}}))
 
 (defn change-cycle
   "Update the statistics for the current cyclerecord to record 

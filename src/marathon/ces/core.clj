@@ -330,6 +330,19 @@
   (b/step-entity! ctx e msg)
   )
 
+
+;;Conveneince function for abstractly sending messages to
+;;entities and synchronously computing the result.
+;;Double-bang convention is consistent with synchronous
+;;send.  Note: we can easily extend this if we have a
+;;communication channel, then we can do async comms.
+(defn send!! [e type data ctx]
+  (handle-message! ctx e
+     (->msg (:name e) (:name e)
+            (core/get-time ctx)
+            type
+            data)))
+
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
 (defn merge-parameters [s ps]  (mergee  s :parameters  ps))
 ;;Operations for recording new units in the context.
