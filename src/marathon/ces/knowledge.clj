@@ -1,3 +1,5 @@
+;;DISCLAIMER EXPLORATORY NS
+
 ;; For compatibility purposes, we need to allow legacy categories to hold.
 ;; For instance, Title32, NonBog, and Rotational are all categories that had
 ;; meaning in legacy marathon...We can either define categories as rules that

@@ -485,7 +485,9 @@
                topos    (get-next-position policy frompos)]
            (if-let [t (protocols/transfer-time policy frompos topos)]
              (- t (- deltat (fsm/remaining statedata)))
-             (throw (Exception. (str [:undefined-transfer position]))) ;if it's not defined in policy...instant?
+             (throw (Exception. (str [:undefined-transfer :from frompos :to topos
+                                      :in [(protocols/policy-name policy)
+                                           (protocols/atomic-name policy)]]))) ;if it's not defined in policy...instant?
              )))
    )
   ;;weak, I just copied this down.  Ugh.
@@ -499,7 +501,10 @@
                topos    (get-next-position policy frompos)]
            (if-let [t (protocols/transfer-time policy frompos topos)]
              t
-             (throw (Exception. (str [:undefined-transfer position]))))))))
+             (throw (Exception. (str [:undefined-transfer :from frompos :to topos
+                                      :in [(protocols/policy-name policy)
+                                           (protocols/atomic-name policy)]
+                                       ]))))))))
 
 ;(def instants #{:abrupt-withdraw})
 
@@ -1096,6 +1101,8 @@
 (defn new-cycle? [unit frompos topos]
   (= (protocols/start-state (:policy unit)) topos))
 
+(declare policy-change-state)
+
 ;;We check to see if there was a position change, and if so, if that
 ;;change caused us to finish a policy cycle.  Note: this only applies
 ;;in cyclical policies.
@@ -1547,7 +1554,7 @@
          ;;executing the  change-policy behavior.
          ;;Note: we could tie in change-policy at a lower echelon....so we check for
          ;;policy changes after updates.
-         (beval change-policy-beh (assoc benv :policy-change (:data msg)))
+         (beval policy-change-state (assoc benv :policy-change (:data msg)))
          
          :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
                    (success benv) ;entity is current
@@ -1974,20 +1981,19 @@
               ;;'of the relative time in the unit's current policy.
               ;;'TOM Change 20 April 2012
               cycletimeA (:cycletime      unit)
-              PositionA  (:PositionPolicy unit)                  
+              PositionA  (:positionpolicy unit)                  
               _          (assert (pos? cycletimeA) "Cycletime should not be negative!")
               CycleProportionA  (/ cycletimeA  (protocols/cycle-length current-policy))
               ;;'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
               ]
-          (->or [(->and [(can-change-policy? CycleProportionA PositionA)
+          (->or [(->and [(->pred (fn [_] (can-change-policy? CycleProportionA PositionA)))
                          (->alter #(assoc % :policy-change {:cycletime cycletimeA
                                                             :current-policy current-policy
                                                             :next-policy next-policy
                                                             :proportion CycleProportionA
                                                             :current-position PositionA}))
                          apply-policy-change])                 
-                 defer-policy-change]
-                ))))
+                 defer-policy-change]))))
 
 ;;Assuming we have a change, let's apply it!
 ;;How long will the unit have been in this state?
@@ -2021,6 +2027,13 @@
             positionB      (if (u/deployed? unit) ;;REVIEW - Shouldn't matter, should already be non-deployed
                              (:positionpolicy unit) ;deployed units remain deployed.
                              (protocols/get-position next-policy cycletimeB))
+            _ (println [:preparing-apply {:cycletimeA cycletimeA
+                                          :policynameA policynameA
+                                          :positionA positionA                                          
+                                          :policynameB policynameB
+                                          :cycletimeB cycletimeB
+                                          :positionB positionB
+                                           }])
             timeremaining  (policy-wait-time next-policy positionB)
             timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))           
             unit           (reset! entity

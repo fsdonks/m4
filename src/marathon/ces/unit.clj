@@ -461,7 +461,7 @@
 ;;changes.
 (defn change-policy [e next-policy ctx]
   (core/send!! e :change-policy
-    {:next-policy next-policy}))
+    {:next-policy next-policy} ctx))
 
 (defn change-cycle
   "Update the statistics for the current cyclerecord to record 

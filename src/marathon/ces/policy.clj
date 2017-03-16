@@ -365,24 +365,28 @@
 
 ;;#Changing Policies in Response to Period Changes
 
+
+;;OBE - DEPRECATED.
 ;;queue-policy-change could probably be in the unit level simulation.
 ;;Note -> returns unit-updates....CONSUME WITH sim/merge-updates
 ;;We may be able to do this more elegantly.  Possibly just defer
 ;;to the unit and let it figure out how to change policies?
 ;;All we do is notify of a change?
-(defn queue-policy-change
+#_(defn queue-policy-change
   "Queues a unit's status as having a pending policy change.  Right now, status 
    is maintained in unit data.  When the unit has an opportunity to change 
    policies, if it can't change immediately, it retains the policy change until
    the opportuntity arises."
   [unit newpolicy period ctx]
-  (let [current-policy (protocols/get-active-policy (:policy unit))
+  (let [;current-policy (protocols/get-active-policy (:policy unit))
         atomic-policy  (protocols/get-policy newpolicy period)
-        unit           (u/change-policy atomic-policy ctx)]
-    (if (= (:name (:policy unit)) (:name atomic-policy))
-           {:unit-update (assoc unit :policy newpolicy)}
-           {:unit-update (-> (assoc unit :policy current-policy)
-                             (assoc  :policystack [newpolicy]))})))        
+        ;unit           (u/change-policy atomic-policy ctx)
+        ]
+    #_(if (= (:name (:policy unit)) (:name atomic-policy))
+        {:unit-update (assoc unit :policy newpolicy)}
+        {:unit-update (-> (assoc unit :policy current-policy)
+                          (assoc  :policystack [newpolicy]))})
+    (u/change-policy unit atomic-policy period)))        
 
 (defn update-policy [policystore p] 
   (gen/deep-assoc policystore [:policies (:name p)] p))
@@ -390,10 +394,14 @@
 (defn alter-unit-policies
   "Affects a change in policy.  This is currently only caused when periods 
    change in a composite policy.  I'd really like to get more reactive behavior 
-   involved."
+   involved. Queues a unit's status as having a pending policy change.  Right now, status 
+   is maintained in unit data.  When the unit has an opportunity to change 
+   policies, if it can't change immediately, it retains the policy change until
+   the opportuntity arises."
   [subscribers period newpolicy ctx]
-  (->> (map #(queue-policy-change %1 newpolicy period) subscribers) 
-       (reduce #(sim/merge-updates %1 %2) ctx)))
+  (reduce (fn [acc id]
+            (u/change-policy (store/get-entity acc id)  newpolicy acc))
+          ctx subscribers))
 
 (defn policy-name [p] (if (keyword? p) p (:name p)))
 (defn get-subscribers [policy policystore] 
@@ -414,7 +422,7 @@
   [current-period new-period policy policystore ctx]
   (let [subscribers (get-subscribers policy policystore)
         new-policy  (protocols/on-period-change policy new-period)]
-        (->> (alter-unit-policies subscribers new-period policy ctx)
+        (->> (alter-unit-policies subscribers new-period new-policy ctx)
              (core/merge-entity 
                {:PolicyStore (update-policy policystore new-policy)}))))
 
