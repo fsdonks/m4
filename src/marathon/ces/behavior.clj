@@ -190,18 +190,93 @@
 ;;behavior nodes where possible to utilize their expressive
 ;;power, readability, and re-use..
 
-;;Updating Units
-;;==============
+;;Updating Units by Sending Messages
+;;==================================
 ;;Technically, a unit entity update is any application of
 ;;marathon.ces.behaviorbase/step-entity!, in which the
 ;;entity, the simulation context, and a behavior - either
 ;;a unique behavior associated with the entity's :behavior
 ;;component, or a default global behavior defined in
 ;;marathon.ces.behaviorbase/default-behavior - are munged
-;;into a behavior environment - marathon.ces.basebehavior/behaviorenv
-;;- 
+;;into a marathon.ces.basebehavior/behaviorenv.
 
+;;Thus, stepping entities requires the simulation context/entity
+;;store, the entity to update, and a message to send it.
+;;The result will be a simulation context / entity store reflecting
+;;and committed changes in response to how the entity "behaved"
+;;in response to the message.
 
+;;We use messages - as defined in marathon.ces.core/->msg,
+;;as an entry-point to initiate behavior and provide initial bindings
+;;for the behavior environemnt.  For instance, the convenience function 
+;;marathon.ces.core/handle-message! merely wraps step-entity!, while
+;;marathon.ces.core/send!! provides a simple API for defining messages
+;;to send to the entity in addition to computing the result of a send /
+;;behavior.
+
+;;When are Messages Sent, or When do Updates Happen?
+;;=======================
+;;Currently, entities send themselves messages typically in reponse to
+;;"organic" events such as following a rotational policy.  Once the
+;;entity is initialized, it will likely request an update at a later
+;;time, the span of which is predicated based on the amount of time
+;;the unit is supposed to wait in a particular state according to
+;;its rotational policy.  Absent any "outside" interference, this
+;;message will be propogated to the entity at the scheduled time,
+;;with the entity living in eventless stasis (retaining the state
+;;from its last known update) until the message is delivered.
+;;For unit entities, message delivery is dispatched during invocation
+;;of marathon.ces.supply/manage-supply, at which point any
+;;units scheduled for updating are notified.
+
+;;Inorganic messages occur when external forces exert unexpected
+;;control over the unit entity.  These typically manifest
+;;in events like filling demand, sending units home, changing policies,
+;;or any number of things that are unexplained by the unit's
+;;rotational policy - yet necessary for simulation.
+
+;;How Are Messages Processed?
+;;=====================================
+;;Messages may occur out-of-sync with the unit's current status.
+;;That is, on the timeline the unit follows, the entity is not
+;;guaranteed to have been "updated" at the same time step as
+;;the new message is received.
+
+;;Consequently, we need to synchronize, or roll the unit forward
+;;in time to account for any pending updates and to bring the
+;;entity into a synchronized state at the time of the message.
+;;Unit entity behavior is defined to account for an elapsed
+;;time, represented by deltat in the behavior environment,
+;;which allows us to accomplish rolling forward.  For instance,
+;;if a unit arrives at a dwelling state, and needs to wait there
+;;for 365 days until the next update, with the implication that
+;;the dwelling behavior merely adds 1 unit of dwell to a dwell
+;;statistic for every elapsed day, the entity will have an
+;;update scheduled 365 days later - at which point the deltat
+;;will indicate the need to roll forward 365 days and thus add
+;;365 days to the dwell stat.
+
+;;If an update or similar message arrives earlier than the next
+;;scheduled update, such as from an inorganic message - say a
+;;deployment 18 days later, then the unit must be "aged" or
+;;rolled forward 18 days to account for the elapsed time.
+;;From that synchronization point, the unit may process the
+;;pending message and accomplish its deployment, initiating
+;;another scheduled update.
+
+;;Message processing always occurs after synchronizing the
+;;unit with the time frame that the message was sent.  In
+;;terms of behavior trees, message processing and "rolling
+;;forward" are merely behavior functions that can be composed
+;;like any other.  This opens up a raft of flexible options
+;;for "communicating" with entities, as well as offering the
+;;possibility for either centralizing and synchronously
+;;updating entity state for all entities, or using
+;;Erlang-style message-passing concurrency (or other
+;;asynchronous communication and state management like
+;;clojure's software transactional memory or channels) to
+;;perform asychronous updates, possibly in parallel.  Currently,
+;;the default implementation is synchronous and centralized.
 
 ;;__utils__
 (def ^:constant +inf+ Long/MAX_VALUE)
