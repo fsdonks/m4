@@ -80,7 +80,7 @@
 ;;succeed or fail.
 
 ;;Evaluation in the Behavior Environment
-;;==================================
+;;=====================================
 
 ;;Unlike traditional entity "update" or "step" functions, we maintain
 ;;an explicit context in which the behavior is evaluated - the
@@ -154,7 +154,13 @@
 ;;behavior evaluation continues as per beval - the caller can
 ;;immediately return from the behavior using (success ctx) or yield
 ;;another behavior as a return value - which will effectively continue
-;;evaluation using the new behavior
+;;evaluation using the new behavior.
+
+;;Additional operations available in a behavior function include:
+;;(bind!! {:a 1 :b 2}) => (success (merge benv {:a 1 :b 2}))
+
+;;(return! ^MapEntry [:success x]) => x
+;;(return! ^MapEntry [:fail x]) => (Throw (Exeption. ...))
 
 ;;Behavior Nodes
 ;;==============
@@ -210,6 +216,7 @@
 
 ;;When are Messages Sent, or When do Updates Happen?
 ;;=======================
+
 ;;Currently, entities send themselves messages typically in reponse to
 ;;"organic" events such as following a rotational policy.  Once the
 ;;entity is initialized, it will likely request an update at a later
@@ -1046,6 +1053,9 @@
       (do (debug [:waiting  wt])
           (update-after  benv)))))
 
+;;Note: start-cycle looks somewhat weak.  Can we fold this into
+;;another behavior?
+
 ;;Units starting cycles will go through a series of procedures.
 ;;Possibly log this as an event?
 (befn start-cycle {:keys [entity deltat tupdate] :as benv}
@@ -1081,7 +1091,7 @@
 ;;dunno, just making this up at the moment until I can find a
 ;;definition of new-cycle.  This might change since we have local
 ;;demand effects that can cause units to stop cycling.
-;;Wow...just got burned on this..  strings are no good for identity
+;;Wow...just got burned on this..strings are no good for identity
 ;;checks....since some are interned and some ore instances.  wow....
 (defn new-cycle? [unit frompos topos]
   (= (protocols/start-state (:policy unit)) topos))
@@ -1100,7 +1110,8 @@
                  new-cyc?)
         (do (debug [:finishing-cycle (:name @entity) from-position])
             (->seq [start-cycle
-                    end-cycle]))))))
+                    end-cycle
+                    policy-change-state]))))))
 
 ;;Now that we have prescribed moves, the entities are going into
 ;;an overlapping state, but it's a state set..
@@ -1524,8 +1535,8 @@
          ;;allow the entity to invoke a state-change-behavior
          ;;We can always vary this by modifying the message-handler         
          :change-state           
-           ;;generic update function.  Temporally dependent.
-         ;;we're already stepping the entity.  Can we just invoke the change-state behavior?
+         ;;generic update function.  Temporally dependent.
+         ;;we're already stepping the entity. Can we just invoke the change-state behavior?
          (let [state-change (:data msg)
                _            (debug [:state-change-message state-change msg])]
            (beval change-state-beh (assoc benv :state-change state-change
@@ -1546,7 +1557,7 @@
                            
                            ]))
          :spawn  (->and [(echo :spawn)
-                         (push! entity :state :spawning)                        
+                         (push! entity :state :spawning)
                          spawning-beh]
                         )
          ;;Allow the entity to apply location-based information to its movement, specifically
@@ -1806,63 +1817,6 @@
            "SRM" roll-forward-beh ;same thing.
            ;srm-beh
            ))
-
-(comment ;OBE
-
-(defn update-unit 
-  "Computes a new simulation context given a specific unit to update, 
-   an elapsed time, and an optional time of update.  tupdate is inferred
-   to be the current simulation time if none is supplied."
-  ([unit deltat ctx]        
-     (update-unit unit deltat (sim/current-time ctx) ctx))
-  ([unit deltat tupdate ctx]
-     (->>  ctx  
-           (load-entity! unit deltat tupdate)
-           (roll-forward-beh) ;update the unit according to the change in
-                                        ;time.
-           (error-on-fail)    ;unit updates should never fail.       
-           (second  ;result is in terms of [:success|:fail ctx], pull out
-                                        ;the ctx
-            )
-           (commit-entity!)
-;           (clear-bb)
-           )))
-
-;;We'll replace these; for now the units will automatically
-;;try to update themselves if possible.
-
-;;Debatable...just invokes roll-forward-beh; I think we can ensure that
-;;roll-forward is always invoked first...
-
-;;Re-evaluate the need for this....can we synchronize from outside?
-;;ideally, we just keep track of the unit's last update....
-(defn sync
-  "Utility function.  Synchronize the unit to the current simulation time.  
-   If the last update occured before the current time, we roll the unit forward 
-   by the delta between the last update and the current time."
-  [unit ctx]
-  (let [tprev (or (sim/last-update (:name unit) ctx) 0)
-        tnow  (sim/current-time ctx)]
-    (if (= tprev tnow)
-      (log! (str "unit " (:name unit) "is up to date") ctx)
-      (log! (str "Synchronizing unit " (:name unit) " from " tprev " to " tnow)
-            (update-unit unit (- tnow tprev) tprev ctx)))))
-
-;;Synchronizes the unit to the current time, then applies a time 
-;;delta, then processes/records the unit's time of update.
-(defn update 
-  "Entry point for computing behavior-based unit updates.  Fundamental 
-   API function for processing unit entities.  Synchronizes the unit to 
-   the current simulation time, then computes the new simulation context 
-   resulting from the entity behavior over an elapsed deltat (from current
-   simulation time)."
-  [unit deltat ctx]
-  (let [nm (get unit :name)]
-    (->> (sync unit ctx)
-         (update-unit unit deltat)
-         (u/unit-update! nm (core/msg "Updated " nm)))))
-)
-
 
 ;;__CanRecover__
 
@@ -2152,4 +2106,62 @@
           (let [stats (r/filter identity (r/map (fn [s] (get state-map s)) state))]
             (->seq stats))
           (get state-map state))))
+)
+
+
+
+(comment ;OBE
+
+(defn update-unit 
+  "Computes a new simulation context given a specific unit to update, 
+   an elapsed time, and an optional time of update.  tupdate is inferred
+   to be the current simulation time if none is supplied."
+  ([unit deltat ctx]        
+     (update-unit unit deltat (sim/current-time ctx) ctx))
+  ([unit deltat tupdate ctx]
+     (->>  ctx  
+           (load-entity! unit deltat tupdate)
+           (roll-forward-beh) ;update the unit according to the change in
+                                        ;time.
+           (error-on-fail)    ;unit updates should never fail.       
+           (second  ;result is in terms of [:success|:fail ctx], pull out
+                                        ;the ctx
+            )
+           (commit-entity!)
+;           (clear-bb)
+           )))
+
+;;We'll replace these; for now the units will automatically
+;;try to update themselves if possible.
+
+;;Debatable...just invokes roll-forward-beh; I think we can ensure that
+;;roll-forward is always invoked first...
+
+;;Re-evaluate the need for this....can we synchronize from outside?
+;;ideally, we just keep track of the unit's last update....
+(defn sync
+  "Utility function.  Synchronize the unit to the current simulation time.  
+   If the last update occured before the current time, we roll the unit forward 
+   by the delta between the last update and the current time."
+  [unit ctx]
+  (let [tprev (or (sim/last-update (:name unit) ctx) 0)
+        tnow  (sim/current-time ctx)]
+    (if (= tprev tnow)
+      (log! (str "unit " (:name unit) "is up to date") ctx)
+      (log! (str "Synchronizing unit " (:name unit) " from " tprev " to " tnow)
+            (update-unit unit (- tnow tprev) tprev ctx)))))
+
+;;Synchronizes the unit to the current time, then applies a time 
+;;delta, then processes/records the unit's time of update.
+(defn update 
+  "Entry point for computing behavior-based unit updates.  Fundamental 
+   API function for processing unit entities.  Synchronizes the unit to 
+   the current simulation time, then computes the new simulation context 
+   resulting from the entity behavior over an elapsed deltat (from current
+   simulation time)."
+  [unit deltat ctx]
+  (let [nm (get unit :name)]
+    (->> (sync unit ctx)
+         (update-unit unit deltat)
+         (u/unit-update! nm (core/msg "Updated " nm)))))
 )
