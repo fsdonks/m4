@@ -1,9 +1,30 @@
+;;Definitions of general entity behavior concepts,
+;;including behavior environments for evaluating
+;;entity behaviors in a functional manner.
 (ns marathon.ces.basebehavior
   (:require [spork.ai.core :as ai]
             [spork.ai.behavior :refer :all]
             [spork.entitysystem.store :refer :all]
             [spork.sim.simcontext :as sim]))
 
+;;Implementation of an evaluation context for entity behaviors.  Specifically,
+;;we capture the current entity behing "updated" via its behavior, the
+;;target behavior (as in spork.ai.behavior or compatible), some message state,
+;;and other relevant context - currently the spork.sim.simcontext simulation
+;;context/entitystore, the current message being processed - if any - the
+;;time of update, elapsed time delta, and any state data associated with the entity.
+;;Some of these are captured as references via atoms, and are amenable to side-effecting
+;;updates during evaluation.
+
+;;Since it acts as a map (via defrecord) the behavior environment allows us to add or
+;;update additional "lexical vars" for use in the evaluation of behavior functions
+;;by associng things onto the environment.  This works nicely with the behavior function
+;;(befn) idiom, which when coupled with map destructuring, allows us to define which
+;;"bindings" from the behavior environment the behavior function cares about, and to
+;;trivially modify the environment for other "downstream" behavior evaluation.
+;;The end result is that the behavior environment acts as a state accumulator, and as
+;;a blackboard for communicating information across behaviors - all in a data-driven and
+;;idiomatic manner with "optional" side-effects.
 (defrecord behaviorenv [entity behavior current-messages new-messages ctx current-message
                         tupdate deltat statedata]
   ai/IEntityMessaging
@@ -12,9 +33,9 @@
     (let [t        (.valAt ^clojure.lang.ILookup  msg :t)
           _        (ai/debug [:add-new-messages-to new-messages])
           additional-messages (spork.ai.behavior/swap!! (or new-messages  (atom []))
-                                        (fn [^clojure.lang.IPersistentCollection xs]
-                                          (.cons  xs
-                                             (.assoc ^clojure.lang.Associative msg :from from))))]                            
+                                 (fn [^clojure.lang.IPersistentCollection xs]
+                                   (.cons  xs
+                                      (.assoc ^clojure.lang.Associative msg :from from))))]                            
       (behaviorenv. entity
                     behavior
                     current-messages
@@ -42,10 +63,14 @@
        (mergee ctx (:name ent) ent)
        new-messages))))
 
+;;debugging info for the behavior environment
+;;constructor.
 (def args  (atom  nil))
 
 ;;global var...
+;;The default global entity behavior.
 (def default-behavior (atom nil))
+;;NOTE: currently not used, DEPRECATE?
 (def behaviors (atom nil))
 
 ;;note: if we change over to a set of coroutines running the ECS,
@@ -56,9 +81,17 @@
 ;;send-message, which uses step-entity! to handle the message.
 
 
-;;we could go ahead and extend-protocol to simcontext.
+;;Note: we could go ahead and extend-protocol to simcontext.
 
-(defn ->benv [ctx e msg default]
+(defn ->benv
+  "Default constructor for preparing behavior environment(s) and 
+   loading the appropriate information relative to the entity 
+   in question.  Provides a convenient way to create lexical 
+   behavior environments for entities behaving in response to 
+   discrete messages.  Takes an optional default behavior - default -
+   which if not provided defers to
+   @marathon.basebehavior/default-behavior ."
+  [ctx e msg default]
     (let [^clojure.lang.ILookup  e  (if (map? e) e (get-entity ctx e))
          ent    (atom e)
          beh   (.valAt e :behavior default)
@@ -85,11 +118,21 @@
           _ (reset! args benv)]
       benv))
 
+;;Marker used to determine if an entity is being actively observed
+;;for debugging.
 (def ^:dynamic *observed* nil)
 
 ;;immediate steps happen with no time-delta.
 ;;like ai/step-entity!, we should find a way to reuse it.
+
+
 (defn step-entity!
+  "High-level API for functionally stepping an entity via an optional behavior - default - , under 
+   the context of receiving a 'message' in a simulation context. If the behavior is not provided
+   the default-behavior reference is used.  Encapsulates the process of creating the behavior 
+   environment, computing the reduction using spork.ai.behavior/beval in the context of the 
+   behavior environment, commits the entity into the reduced simcontext, and returns the 
+   simcontext."
   ([ctx e msg default]
    ;;TODO Check this for performance hits...
    (binding [spork.ai.core/*debug* (or spork.ai.core/*debug*  (= (:name e) *observed*))]

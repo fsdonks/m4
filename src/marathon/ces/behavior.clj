@@ -1,5 +1,6 @@
-;;A namespace for simple entity behaviors.
-;;We'll define core behaviors here.
+;;A namespace for defining and composing entity behaviors.
+;;We'll define core behaviors here, leveraging the
+;;behavior tree approach defined by spork.ai.behavior .
 (ns marathon.ces.behavior
   (:require [spork.ai.core :as ai :refer
              [deref! fget fassoc  push-message- map->entityctx debug ->msg]]
@@ -77,27 +78,27 @@
 ;;behaviors - takes a fairly naive view and ignores the
 ;;run evaluation.  Rather, we always succeed or fail.
 
-;;Evaluation in the Behavior Context
+;;Evaluation in the Behavior Environment
 ;;==================================
 ;;Unlike traditional entity "update" or "step" functions,
 ;;we maintain an explicit context in which the behavior is
-;;evaluated - the behavior context (marathon.ces.basebehavior).
+;;evaluated - the behavior environment (marathon.ces.basebehavior).
 ;;This context provides a consistent accumulation of state
 ;;through which we can view evaluation of the behavior tree
-;;as a reduction, with the behavior context being the
+;;as a reduction, with the behavior environment being the
 ;;accumulated result.  Thus, we traverse the tree with an
-;;initial behavior context [reified as  a map with useful
+;;initial behavior environment [reified as  a map with useful
 ;;keys referencing the simulation context/entity store, the
 ;;entity being processed, the simulated time of the evaluation,
 ;;and any additional keys useful to evaluation].  Taken as
-;;a lexical environment, the keys of the behavior context
+;;a lexical environment, the keys of the behavior environment
 ;;form a working set of "variables" or properties that we
 ;;can either query, update, redefine, add to, or otherwise
 ;;use to guide behavior evaluation.
 
 ;;When evaluating a behavior tree, we start from the root behavior
 ;;and use its evaluation rules to proceed with the reduction (i.e.
-;;compute a resulting behavior context).  The reduced behavior
+;;compute a resulting behavior environment).  The reduced behavior
 ;;context is then - typically - processed by merging the
 ;;entity reference into the simulation context reference, returning
 ;;the simulation context.  The function that encapsulates this
@@ -105,38 +106,37 @@
 ;;marathon.ces.behaviorbase/step-entity .
 
 ;;Behavior evaluation occurs using the spork.ai.behavior/beval
-;;function, which operates similarly to eval in the domain
+;;function, which operates similarly to eval but in the domain
 ;;of behavior trees.  The evaluation rules are fairly simple:
+
 ;;If the item is a vector pair that matches [:success|fail|run ctx],
 ;;the vector is returned as the output for beval.
 
 ;;If the item to be evaluated is a function, then it
 ;;is applied to the current accumulated context to determine
 ;;the next behavior to beval.  This means that
-;;functions may return a final result ala [:success|fail|run ctx]
+;;functions may return a final result ala [:success|:fail|:run ctx]
 ;;or they may return another behavior (function or node) which
 ;;will continue to be evaluated against the context.
 
-;;If the item to be evaluated is a behavior node, then it
+;;If the item to be evaluated is a behavior node - anything
+;;implemented the spork.ai.IBehaviorTree protocol - then it
 ;;is beval'd with the current accumulated context
 ;;(delegating to the behave function of the IBehaviorTree).
 
 ;;The current implementation assumes that the highest-level
-;;of evaluation - as in marathon.ces.behaviorbase/step-entity
+;;of evaluation - as in marathon.ces.behaviorbase/step-entity!
 ;;will always be successful.  Anything else is an error (even
 ;;returning [:fail ...].
 
-;;Convenient Idioms
+;;Behavior Functions
 ;;=================
-;;Most of the behavior nodes are described at length in
-;;spork.ai.behavior.  These lead to a natural means for
-;;composing sophisticated behaviors using familiar idioms
-;;like ->and, ->or, ->if and more.  Also, callers may
-;;define functions that operate on the behavior context
-;;directly; in some cases this is a useful - if
-;;low level - approach to defining behaviors.
+;;Callers may define functions that operate on the
+;;behavior environment directly; in some cases this is a useful
+;;- if low level - approach to defining behaviors.  
 ;;Arbitrary functions that map a context to a [:success ...]
-;;or a [:fail ...] may be used as behaviors.
+;;or a [:fail ...] may be used as behaviors, and will
+;;operate correctly under beval.
 
 ;;For convenience, and to focus on behavior tree
 ;;traversal as an "evaluation", the  spork.ai.behavior/befn
@@ -146,10 +146,10 @@
 ;;macro - to define behavior functions - is similar to
 ;;the standard clojure.core/defn form, with a change
 ;;the context:  The function arguments correspond to
-;;a map-destructing of the behavior context, and
+;;a map-destructing of the behavior environment, and
 ;;where specified by a type hint, will compile to
 ;;fast field-based accessors for the specific
-;;behavior context.  To elide repetitive use of
+;;behavior environment.  To elide repetitive use of
 ;;(success ...) and the like, and to align with
 ;;clojure's idiom of using nil for failure,
 ;;nil results are automatically converted to
@@ -158,10 +158,50 @@
 ;;the caller can immediately return from the behavior
 ;;using (success ctx) or yield another behavior
 ;;as a return value - which will effectively
-;;continue evaluation using the new behavior.
+;;continue evaluation using the new behavior
 
-;;Canonical Unit Behavior
-;;=======================
+;;Behavior Nodes
+;;==============
+;;Aside from encoding custom functionality with raw functions,
+;;pre-existing behavior nodes provide an expressive domain
+;;specific language for defining behavioral "flow control"
+;;in a composeable manner.  They effectively define
+;;custom behavior functions - again returning
+;;[:success|:fail|:run ctx] behind a unified protocol.
+;;The magic lies in how a behavior node executes and
+;;interprets the traversal of its children.  For example,
+;;the ->or behavior corresponds to a logical or of all
+;;child nodes (or clauses).  Upon evaluation, ->or will
+;;reduce its children - in order - returning on the first
+;;[:success ctx] it finds, else [:fail ctx].  This is
+;;similar to the 'or macro in clojure.  Similarly, the
+;;->and will return at the first sign of a failed child
+;;node, else return [:success ctx] as its behavior reduction.
+;;In-order, i.e. left-to-right node traversal is a common
+;;idiom (although not a constraint) in behavior trees, and
+;;allows one to follow the behavior "logic" in a simple,
+;;consistent manner by following the traversal.
+
+;;These nodes provide a simple way to compose behaviors
+;;and to communicate success/failure throughout the traversal.
+;;These trees may be embedded as children of like nodes,
+;;creating sophisticatd behaviors with a declarative
+;;specification.  Callers are advised to use the canonical
+;;behavior nodes where possible to utilize their expressive
+;;power, readability, and re-use..
+
+;;Updating Units
+;;==============
+;;Technically, a unit entity update is any application of
+;;marathon.ces.behaviorbase/step-entity!, in which the
+;;entity, the simulation context, and a behavior - either
+;;a unique behavior associated with the entity's :behavior
+;;component, or a default global behavior defined in
+;;marathon.ces.behaviorbase/default-behavior - are munged
+;;into a behavior environment - marathon.ces.basebehavior/behaviorenv
+;;- 
+
+
 
 ;;__utils__
 (def ^:constant +inf+ Long/MAX_VALUE)
