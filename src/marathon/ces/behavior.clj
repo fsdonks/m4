@@ -281,11 +281,29 @@
 (def ^:constant +inf+ Long/MAX_VALUE)
 (def ^:constant +twenty-years+ 7300)
 
-(defn non-neg!
+(defmacro ensure-pos!
+  "Ensures n is a positive, non-zero value, else throws an
+   exception."
+  [n]
+  `(if (pos? ~n) ~n
+       (throw (Exception. (str [:non-positive-value ~n])))))
+
+(defmacro non-neg!
+  "Ensures n is a positive or zero value, else throws an
+   exception."
+  ([lbl x]
+   `(if (not (neg? ~x)) ~x
+        (throw (Exception. (str [~lbl  :negative-value ~x])))))
+  ([x]    `(if (not (neg? ~x)) ~x
+               (throw (Exception. (str [:negative-value ~x]))))))
+
+#_(defn non-neg!
   ([lbl x]
    (if (not (neg? x)) x
        (throw (Exception. (str lbl " " x " cannot be negative!")))))
   ([x] (non-neg! "" x)))
+
+
          
 (defmacro try-get [m k & else]
   `(if-let [res# (get ~m ~k)]
@@ -460,7 +478,7 @@
         res
         (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))
 
-;;memoized to allevaite hotspot, marginal gains.
+;;memoized to alleviate hotspot, marginal gains.
 ;;NOTE: this causes a problem with composite policies...
 ;;We need to memoize based on a finer criteria, based on the
 ;;active policy name...
@@ -474,9 +492,9 @@
          res
          (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))))
 
-
-;;(def alt-position (memo-2 get-next-position :xkey :name))
-
+;;We're getting too far ahead of ourselves during policy change calcs.
+;;Jumping the position we're "in"...for max/nearmax policies, this leaves
+;;us with 
 (defn policy-wait-time
   ([policy statedata position deltat]
    (cond (identical? position :recovery)
@@ -491,8 +509,7 @@
              (throw (Exception. (str [:undefined-transfer :from frompos :to topos
                                       :in [(protocols/policy-name policy)
                                            (protocols/atomic-name policy)]]))) ;if it's not defined in policy...instant?
-             )))
-   )
+             ))))
   ;;weak, I just copied this down.  Ugh.
   ([policy position]
    (cond (identical? position :recovery)
@@ -501,25 +518,51 @@
          0
          :else
          (let [frompos  (get-next-position policy position)
-               topos    (get-next-position policy frompos)]
+               topos    (get-next-position policy frompos)
+               ;_ (println [frompos topos])
+               ]
            (if-let [t (protocols/transfer-time policy frompos topos)]
              t
              (throw (Exception. (str [:undefined-transfer :from frompos :to topos
                                       :in [(protocols/policy-name policy)
                                            (protocols/atomic-name policy)]
-                                       ]))))))))
+                                      ]))))))))
 
-;(def instants #{:abrupt-withdraw})
+;;aux function to help with policy transfers.
+(defn immediate-policy-wait-time [policy frompos]
+  (protocols/transfer-time policy frompos
+      (get-next-position policy frompos)))
+
+;;Pulled out to address concerns in get-wait-time.
+;;Computes the wait time - i.e. transfer time - between
+;;frompos and topos relative to a unit's policy and statedata.
+(defn immediate-wait-time
+  [unit frompos topos {:keys [deltat statedata] :as benv}]
+  (let [wt     (protocols/transfer-time (:policy unit) frompos topos)
+        deltat (or  deltat 0) ;allow the ctx to override us...
+        ]
+    (- wt (fsm/remaining statedata))))
 
 ;;Could be a cleaner way to unpack our data, but this is it for now...
 ;;need to fix this...let's see where we use it.
+;;Note: this depends on policy-wait-time, which is great, but the
+;;use-case is intended for a future, planned wait.  In other words,
+;;this fails us when we want to compute the wait time from a current
+;;policy position - ala during a policy change.
 (defn get-wait-time
-  ([unit frompos topos {:keys [deltat statedata] :as benv}]
-     (let [wt (protocols/transfer-time (:policy unit) frompos topos)
+  ;;WARNING: we define an inconsistency here in the 4-arity version.
+  ;;If we specifcy the from,to positions, the wait-time is computed using
+  ;;frompos as the the starting position.  The other arities compute
+  ;;using policy-wait-time, which uses the successor wait time of the
+  ;;current position - i.e. how long will I have to wait in the next position.
+  ;;Current usage appears correct - namely the 3-arity version, but that
+  ;;could throw us off - as it did for initial policy-change implementation!
+  #_([unit frompos topos {:keys [deltat statedata] :as benv}]
+     (let [wt     (protocols/transfer-time (:policy unit) frompos topos)
            deltat (or  deltat 0) ;allow the ctx to override us...
            ]
        (- wt (fsm/remaining statedata))))
-  ([unit position {:keys [deltat statedata] :as benv}]
+  ([unit position {:keys [deltat statedata] :as benv}] ;;uses position after current...
    (policy-wait-time (:policy unit) statedata position (or deltat 0)))
   ([position {:keys [entity] :as benv}] (get-wait-time @entity position benv))
   ([{:keys [wait-time] :as benv}] wait-time))
@@ -692,9 +735,12 @@
   (or (== x +inf+ )
       (>= x (* 365 100))))
 
+
 ;;note-we have a wait time in the context, under :wait-time
 ;;updates an entity after a specified duration, relative to the 
 ;;current simulation time + duration.
+;;Note: Added the invariant that we cannot have negative wait-times.
+;;ensure-pos! throws an exception if we encounter negative wait times.
 (befn update-after  ^behaviorenv [entity wait-time tupdate ctx]
    (when wait-time
      (->alter
@@ -702,7 +748,7 @@
          (do (debug [(:name @entity) :waiting :infinitely]) ;skip requesting update.             
              (dissoc % :wait-time)
              ) 
-         (let [tfut (+ tupdate wait-time) 
+         (let [tfut (+ tupdate (ensure-pos! wait-time))
                e                       (:name @entity)
                _    (debug [e :requesting-update :at tfut])]
            (swap! ctx (fn [ctx] 
@@ -1041,6 +1087,10 @@
                          (get-next-position (:policy e)  currentpos)))                   
               wt (if (and next-position wait-time) wait-time
                      (do (debug [:computing-wait (:positionpolicy e)]) ;;performance 2
+                         ;;WARNING: This may be using the following wait time...is that what we mean?
+                         ;;Given the current position, it's determining how long to wait in the next position.
+                         ;;I think we're good...should rename get-wait-time to something more appropriate.
+                         ;;get-next-wait-time?
                          (get-wait-time @entity (:positionpolicy e) benv)))
               _ (debug [:found-move {:next-position p :wait-time wt}])
               ]
@@ -1558,8 +1608,9 @@
          ;;Note: we could tie in change-policy at a lower echelon....so we check for
          ;;policy changes after updates.
          #_(do (println [:skipping-policy-change msg])
-             (success benv))
-         (beval policy-change-state (assoc benv :policy-change (:data msg)))
+               (success benv))
+         (beval policy-change-state
+                (assoc benv :policy-change (:data msg)))
          
          :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
                    (success benv) ;entity is current
@@ -1987,8 +2038,8 @@
               ;;'TOM Change 20 April 2012
               cycletimeA (:cycletime      unit)
               PositionA  (:positionpolicy unit)
-              _ (println [:name (:name unit) :cycletimeA cycletimeA :positionA PositionA (assoc benv :ctx nil)
-                          ])
+              ;; _          (println [:name (:name unit) :cycletimeA cycletimeA
+              ;;                      :positionA PositionA (assoc benv :ctx nil)])                         
               _          (assert (pos? cycletimeA) "Cycletime should not be negative!")
               CycleProportionA  (/ cycletimeA  (protocols/cycle-length current-policy))
               ;;'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
@@ -2034,15 +2085,9 @@
             positionB      (if (u/deployed? unit) ;;REVIEW - Shouldn't matter, should already be non-deployed
                              (:positionpolicy unit) ;deployed units remain deployed.
                              (protocols/get-position next-policy cycletimeB))
-            _ (println [:preparing-apply {:cycletimeA cycletimeA
-                                          :policynameA policynameA
-                                          :positionA positionA                                          
-                                          :policynameB policynameB
-                                          :cycletimeB cycletimeB
-                                          :positionB positionB
-                                           }])
-            timeremaining  (policy-wait-time next-policy positionB)
-            timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))           
+
+            timeremaining  (immediate-policy-wait-time next-policy positionB)
+            timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))    
             unit           (reset! entity
                                    (-> unit
                                        (merge  {:positionpolicy positionB
@@ -2050,7 +2095,19 @@
                                                 :cycletime      cycletimeB})                                              
                                        (u/change-cycle tupdate)
                                        (u/modify-cycle next-policy)))
-            newduration    (- timeremaining timeinstate)]
+            newduration    (- timeremaining timeinstate)
+            ;; _              (println [:preparing-apply
+            ;;                          {:cycletimeA cycletimeA
+            ;;                           :policynameA policynameA
+            ;;                           :positionA positionA                                          
+            ;;                           :policynameB policynameB
+            ;;                           :cycletimeB cycletimeB
+            ;;                           :positionB positionB
+            ;;                           :timeremaining timeremaining
+            ;;                                            :timeinstate timeinstate
+            ;;                           :newduration newduration
+            ;;                           }])
+            ]
         ;;We have a move.
         ;;Setup the movement and let the behavior execute.
         ;(if (not= positionA positionB)
@@ -2059,8 +2116,11 @@
                      #(->> (assoc % :policy-change nil)
                            (core/trigger-event :UnitChangedPolicy uname  policynameA
                              (core/msg "Unit " uname " changed policies: "
-                                policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil)))
-              (move! positionB newduration))))
+                                       policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil)))
+              
+              (->and [(move! positionB newduration) ;;movement behavior
+                      (->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
+                       ]))))
           
           ;;This automatically gets checked during move!...
 ;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
@@ -2094,7 +2154,7 @@
 ;;TOM change 2 Sep 2011 -> we modify the cyclerecord to reflect changes in expectations...
 ;;This is not a replacement...
 ;;WIP Nov 2016
-(befn deferred-policy-change {:keys [entity ctx tupdate] :as benv} 
+(befn defer-policy-change {:keys [entity ctx tupdate] :as benv} 
       (let [cyc (assoc (:currentcycle @entity) :tfinal tupdate)
             _   (swap! entity (fn [unit]
                                 (->  unit

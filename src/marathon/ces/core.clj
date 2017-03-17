@@ -336,6 +336,9 @@
 ;;Double-bang convention is consistent with synchronous
 ;;send.  Note: we can easily extend this if we have a
 ;;communication channel, then we can do async comms.
+;;We need to make sure we update the entity prior.
+;;Either handle that in the message processing
+;;or handle it elsewhere...
 (defn send!! [e type data ctx]
   (handle-message! ctx e
      (->msg (:name e) (:name e)

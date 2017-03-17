@@ -1000,7 +1000,22 @@
        (:proportion policy-change) (:current-position policy-change))
       "Policy should be able to change at cycletime 327..."))
 
+(defn policy-history []
+  (analysis/marathon-stream pctx))
 
+;;We can check to ensure that every unit following a policy schedule is
+;;actually progressing through said schedule.
+;;For evey unit that follows a composite policy, when there is a period
+;;change, we just make sure that the non-deferred units actually have
+;;updated policies.
+
+;;Units that are deferred must have policy changes - to the current policy
+;;at their next available opportunity.
+;;[WIP]
+(defn policy-schedules? [h]  )
+
+
+(comment ;original policy debugging session, ephemeral 
 (def application {:cycletimeA 332
                   :policynameA "RC15_Enabler"
                   :positionA "Reset"
@@ -1031,4 +1046,26 @@
   (marathon.ces.basebehavior/->benv pctx e15
     (core/->msg "15_SRC3_NG" "15_SRC3_NG" 0 :change-policy {:next-policy p2})
     @marathon.ces.basebehavior/default-behavior))
+
+;;This is the last successfull transition before our problematic policy change.  When we
+;;initiate a policy change here, we run into problems - apparently stepping back in time?
+;;Get a negative result for t, negative cycletime as a consequence...
+(def p446 (some (fn [[t ctx]] (when (== t 446) ctx))  (analysis/marathon-stream pctx)))
+;;ready for exploration, primed for the day of catastrophe.
+(def p451  (sim/advance-time (engine/sim-step p446)))
+;;our entity at day 451 start.
+(def e29 (store/get-entity p451 "29_SRC3_NG"))
+;;31 is actually tripping us up, causing us to have an update
+;;request that sets the earliest event to a time before the
+;;beginning of the simulation.  That sets us up for problems
+;;with e29, at which point the "current time" of the simulation
+;;is t=119 vs. t=451 where it's supposed to be.
+(def e31 (store/get-entity p451 "31_SRC3_NG"))
+;;This is an interesting forensics trail for us to follow, provides
+;;forensic info.
+(def res (core/debug-entity "31_SRC3_NG" (engine/sim-step p451)))
+;;We're working now.  Let's verify our policy changes work..
+
+)
+
 
