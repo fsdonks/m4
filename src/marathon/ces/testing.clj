@@ -975,3 +975,60 @@
 ;;policy/change-policies....
 ;;We currently have a problem with initializing units with composite policies.
 ;;Upon spawn, they appear to be screwy...
+
+;;working on testing problematic policies.
+;;we're getting problems with supposedly invalid transfers between
+;;policy changes.
+(def p1
+  (marathon.ces.policy/get-policy "RCEnablerExcursion"
+     (core/get-policystore pctx)))
+
+;;shifts the composite policy into a different period, uses a different
+;;atomic policy.
+(def p2 (marathon.data.protocols/on-period-change p1 "Surge"))
+
+(deftest policy-tests
+  (is (= (marathon.data.protocols/get-position p1 327) "Reset")
+      "Should have consistent positions between two tested policies")
+  (is (= (marathon.data.protocols/get-position p2 327) "Reset")
+      "Should have consistent positions between two tested policies")
+  (is (= (marathon.ces.behavior/get-next-position p1 "Reset") "Train")
+      "Composite policy should reflect atomic policy for period.")
+  (is (= (marathon.ces.behavior/get-next-position p2 "Reset") :deployable)
+      "Composite policy should reflect different atomic policy for different period.")
+  (is (marathon.ces.behavior/can-change-policy?
+       (:proportion policy-change) (:current-position policy-change))
+      "Policy should be able to change at cycletime 327..."))
+
+
+(def application {:cycletimeA 332
+                  :policynameA "RC15_Enabler"
+                  :positionA "Reset"
+                  :policynameB "NearMaxUtilization_Enabler"
+                  :cycletimeB 332
+                  :positionB "Reset"})
+
+
+(def policy-change  
+            {:cycletime 332
+             :current-policy p1
+             :next-policy    p2
+             :proportion
+             (/ 332  (marathon.data.protocols/cycle-length p1))
+             :current-position  "Reset"})
+
+ (let [^behaviorenv benv 
+           _    (ai/debug [:stepping (:name e) :last-update (:last-update e)  msg])]
+       (-> (beval (.behavior benv) benv)
+           (return!)
+           (ai/commit-entity-)))
+
+(def e15 (store/get-entity pctx "15_SRC3_NG"))
+
+;;creating a behavior environment the hard way, this is equivalent to
+;;unit/change-policy and the env it creates.
+(def benv
+  (marathon.ces.basebehavior/->benv pctx e15
+    (core/->msg "15_SRC3_NG" "15_SRC3_NG" 0 :change-policy {:next-policy p2})
+    @marathon.ces.basebehavior/default-behavior))
+

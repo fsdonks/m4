@@ -366,7 +366,7 @@
 (defn memo-policy [f]
   (let [xs (java.util.HashMap.)]
     (fn [^clojure.lang.ILookup x1 y]
-      (let [x (.valAt x1 :name)]
+      (let [x (marathon.data.protocols/atomic-name x1)  #_(.valAt x1 :name)]
         (if-let [^java.util.HashMap ys (.get xs x)]
             (if-let [res (.get ys y)]
               res
@@ -461,6 +461,9 @@
         (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))
 
 ;;memoized to allevaite hotspot, marginal gains.
+;;NOTE: this causes a problem with composite policies...
+;;We need to memoize based on a finer criteria, based on the
+;;active policy name...
 (def get-next-position
   (memo-policy
    (fn get-next-position [policy position]
@@ -472,7 +475,7 @@
          (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))))
 
 
-(def alt-position (memo-2 get-next-position :xkey :name))
+;;(def alt-position (memo-2 get-next-position :xkey :name))
 
 (defn policy-wait-time
   ([policy statedata position deltat]
@@ -1554,6 +1557,8 @@
          ;;executing the  change-policy behavior.
          ;;Note: we could tie in change-policy at a lower echelon....so we check for
          ;;policy changes after updates.
+         #_(do (println [:skipping-policy-change msg])
+             (success benv))
          (beval policy-change-state (assoc benv :policy-change (:data msg)))
          
          :update (if (== (get (deref! entity) :last-update -1) (.tupdate benv))
@@ -1981,7 +1986,9 @@
               ;;'of the relative time in the unit's current policy.
               ;;'TOM Change 20 April 2012
               cycletimeA (:cycletime      unit)
-              PositionA  (:positionpolicy unit)                  
+              PositionA  (:positionpolicy unit)
+              _ (println [:name (:name unit) :cycletimeA cycletimeA :positionA PositionA (assoc benv :ctx nil)
+                          ])
               _          (assert (pos? cycletimeA) "Cycletime should not be negative!")
               CycleProportionA  (/ cycletimeA  (protocols/cycle-length current-policy))
               ;;'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
