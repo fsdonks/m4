@@ -987,6 +987,14 @@
 ;;atomic policy.
 (def p2 (marathon.data.protocols/on-period-change p1 "Surge"))
 
+(def policy-change  
+            {:cycletime 327
+             :current-policy p1
+             :next-policy    p2
+             :proportion
+             (/ 327  (marathon.data.protocols/cycle-length p1))
+             :current-position  "Reset"})
+
 (deftest policy-tests
   (is (= (marathon.data.protocols/get-position p1 327) "Reset")
       "Should have consistent positions between two tested policies")
@@ -1024,13 +1032,7 @@
                   :positionB "Reset"})
 
 
-(def policy-change  
-            {:cycletime 332
-             :current-policy p1
-             :next-policy    p2
-             :proportion
-             (/ 332  (marathon.data.protocols/cycle-length p1))
-             :current-position  "Reset"})
+
 
  (let [^behaviorenv benv 
            _    (ai/debug [:stepping (:name e) :last-update (:last-update e)  msg])]
