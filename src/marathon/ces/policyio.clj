@@ -113,14 +113,17 @@
 (defn add-composition [acc r]
   (if (contains? r :Composition)
     (conj acc (record->composition r))
-    (let [{:keys [CompositeName CompositionType]} r]
+    (let [{:keys [CompositeName CompositionType]} r
+          ;;For legacy support, if composition type is
+          ;;absent, implies it's a periodic
+          CompositionType (or CompositionType "Periodic")]
       (case CompositionType 
         "Periodic" (update-in acc [CompositeName] assoc (:Period r) (:Policy r))
         "Sequential" (do (assert (not (contains? acc CompositeName)))
                          (assoc-in acc [CompositeName]
                              (ensure-vec (read-composition (:Policy r)))))
         (throw (Exception. "Error parsing composition policy!" 
-                           CompositeName))))))
+                           r))))))
 
 ;Generates a map of composition rules from a table.
 (defn table->compositions [t]

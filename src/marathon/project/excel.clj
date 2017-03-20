@@ -52,13 +52,32 @@
                        (long x)
                        x))
 
+(def ^:const +blank+ "")
+(defn blank? [x] (identical? x +blank+))
+
+(defn maybe-int [x]
+  (if (and x (not (blank? x)))
+    (int x)
+    0))
+
+(defn maybe-long [x]
+  (if (and x (not (blank? x)))
+    (long x)
+    0))
+
+(def string->boolean (:boolean spork.util.parsing/parse-defaults))
+(defn as-boolean [x]
+  (if (instance? java.lang.Boolean x) x
+      (string->boolean x)))
+
 ;;This is a little squirelly, and exists solely to
 ;;cope with excel's handling of numbers and autoparsing
 ;;text wierdness.
 (defn coerce [s tbl]
-  (let [numtypes {:int int
+  (let [numtypes {:boolean as-boolean
+                  :int maybe-int #_int
                   :int? (fn [x] (when x (int x)))                  
-                  :long long
+                  :long maybe-long #_long
                   :long? (fn [x] (when x (long x)))
                   :text  (fn [x] (if (number? x)
                                    ;;we need to coerce this mofo.
@@ -67,7 +86,9 @@
     (spork.util.table/conj-fields 
      (for [[fld col] (tbl/enumerate-fields (tbl/table-fields tbl) (tbl/table-columns tbl))]
        (if-let [f (numtypes (s fld))]
-         [fld (mapv f col)]
+         (try [fld (mapv f col)]
+              (catch Exception e (do (println [:error-in fld])
+                                     (throw e))))
          [fld col]))
      spork.util.table/empty-table)))
 
@@ -82,15 +103,16 @@
   (let [wb   (xl/as-workbook wbpath)]
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
-                       (if-let [sht (xl/as-sheet sheetname wb)]
-                         (let [tab (spork.util.table/keywordize-field-names
-                                    (xl/sheet->table sht))
-                               tab (if-let [s (schemas/get-schema nm)]
-                                     (coerce s tab)
-                                     tab)]
-                           (do (println nm)                   
-                               [(keyword nm)  tab]))
-                         (println [:missing nm])))))))
+                       (do (println [:loading nm])
+                           (if-let [sht (xl/as-sheet sheetname wb)]
+                             (let [tab (spork.util.table/keywordize-field-names
+                                        (xl/sheet->table sht))
+                                   tab (if-let [s (schemas/get-schema nm)]
+                                         (coerce s tab)
+                                         tab)]
+                               (do (println [:loaded nm])
+                                   [(keyword nm)  tab]))
+                             (println [:missing nm]))))))))
 
 ;;This is all that really matters from marathon.project...   
 (defmethod load-project "xlsm"

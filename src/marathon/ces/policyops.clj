@@ -344,6 +344,15 @@
    Overlapping overlap
    demobilization 95})
 
+;;RC13 Template, missing from legacy port.
+(defn rc13-waits [{:keys [overlap]}]
+  {reset 365 
+   train (* 365 2) 
+   available 365
+   deployed (- 270 overlap)
+   Overlapping overlap
+   demobilization 95})
+
 (defn rc14-waits [{:keys [overlap]}]
   {reset 365 
    train 365 
@@ -556,7 +565,10 @@
   [rc11           "RC 1:1 template for MCU"       (route-by rc11-waits  rc-routing)  :overlap 45]
   [rc11-enabler   "RC 1:1 template for enablers"  (route-by rc11-waits  rc-routing)  :overlap 30]   
   [rc12           "RC 1:2 template for MCU"       (route-by rc12-waits  rc-routing)  :overlap 45]
-  [rc12-enabler   "RC 1:2 template for enablers"  (route-by rc12-waits  rc-routing)  :overlap 30]     
+  [rc12-enabler   "RC 1:2 template for enablers"  (route-by rc12-waits  rc-routing)  :overlap 30]
+  ;;Added missing legacy templates.
+  [rc13           "RC 1:3 template for MCU"       (route-by rc13-waits  rc-routing)  :overlap 45]
+  [rc13-enabler   "RC 1:3 template for enablers"  (route-by rc13-waits  rc-routing)  :overlap 30]     
   [rc14           "RC 1:4 template for MCU"       (route-by rc14-waits  rc-routing)  :overlap 45]
   [rc14-enabler   "RC 1:4 template for enablers"  (route-by rc14-waits  rc-routing)  :overlap 30]
   [rc15           "RC 1:5 template for MCU"       (route-by rc15-waits  rc-routing)  :overlap 45]
@@ -669,12 +681,15 @@
 (def aliases
   {"AC12"  ac12
    "AC13"  ac13
-   "AC11"  ac11
-   "RC14" rc14
-   "RC15" rc15 
-   "RC12" rc12 
+   "AC11"  ac11       
+   "RC11"  rc11 ;added missing template
+   "RC12"  rc12   
+   "RC13"  rc13 ;added missing template
+   "RC14"  rc14
+   "RC15"  rc15   
    "Ghost" ghost
    "RC14ReMob"      rc14-remob
+   "RC14Remob"      rc14-remob ;added alias for compatibility
    "MaxUtilization" max-utilization
    "NearMaxUtilization" near-max-utilization
    ;temporarily aliased until I get them ported....
