@@ -169,7 +169,7 @@
         ]
     (apply concat
        (->> pairs
-            (mapcat (fn [[ [l ctx] [r nxt] ]]
+            (mapcat (fn [[[l ctx] [r nxt]]]
                       ;;sample in between...
                       (for [t (range l r)]
                         (f t ctx))))))))
@@ -636,6 +636,23 @@
   (do (println [:spitting-demandtrends dtrendpath])
       (tbl/records->file (->demand-trends h) dtrendpath
                          :field-order schemas/demandtrend-fields)))
+
+;;Rather than writing out multiple sequences, we'd like to diverge,
+;;and incrementally write stuff out....
+;;How do we do that?  We have a history generated as sequence of
+;;[t ctx] pairs.
+;;Legacy implementation of output collection created derivative
+;;sequences from this history, which meant multiple traversals
+;;of the history, serial production of output, and signifcant
+;;memory requirements.
+
+;;If we take a channel-based approach, we can leverage abstraction
+;;and get the same functionality in an incremental fashion.
+;;We end up inverting the flow of control a bit.
+;;It'd be nice to take a sequence, like we have, and
+;;coerce it to a channel.  This channel then conceptually
+;;broadcasts the history sequence to any interested subscribers.
+(defn writer [] )
 
 (def ^:dynamic *outputs* legacy-outputs)
 (defmacro with-outputs [os & body]

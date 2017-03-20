@@ -2,10 +2,8 @@
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
-                 [spork "0.1.9.8-SNAPSHOT"]
-                 ;;elided piccolo dependencies for the moment.
-                 ;[piccolotest  "0.1.1-SNAPSHOT"]
-                 [proc         "0.2.0-SNAPSHOT"] ;;post processing.
+                 [spork "0.1.9.9-SNAPSHOT"]
+                 [proc         "0.2.1-SNAPSHOT"] ;;post processing.
                  ;;external libs
                  [com.taoensso/nippy "2.11.0-RC1"] ;temporarily added to tes serialization.
                  ;;temporarily added to explore possible uses of inference...
