@@ -7,7 +7,10 @@
             [marathon.project :as project]
             [spork.util       [io :as io]]))
 
-(def ep "C:\\Users\\1143108763.C\\srm\\notionalbase.xlsx")
+(defn hpath [p] (str io/home-path p))
+
+(def ep (hpath "\\srm\\notionalbase.xlsx"))
+
 
 (defn build-patches
   "Given a path to a processed run directory, renders the 
@@ -49,6 +52,18 @@
        target-path)
       (build-patches target-path)))
 
+(defn do-incremental-run
+  "Given two paths to folders - a path to a marathon project 
+   [from-path], and a path to post results to [target-path] - 
+   computes the marathon history for the run, producing results 
+   into the target path.  Default outputs will be derived from 
+   the simulation history, including a compressed history."
+  [from-path target-path]
+  (do (a/spit-history-incrementally!
+       (a/marathon-stream from-path :audit? true :audit-path target-path)
+       target-path)
+      (build-patches target-path)))
+
 (def root "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\")
 (def root "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\")
 
@@ -84,14 +99,16 @@
 
 (comment ;testing
   ;;Worked without legacy records...
-  (def maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx")
+  (def maxbase (hpath "\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx"))
  ; (project/audit-project maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase\\")
 ;  (run-cases "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\" ["maxbase.xlsx"])
-  (do-audited-run maxbase "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\maxbase\\")
+  (do-audited-run maxbase (hpath "\\Documents\\srm\\tst\\notionalv2\\maxbase\\"))
   
-  (do-run ep "C:\\Users\\1143108763.C\\srm\\newtest\\")
+  (do-run ep (hpath "\\srm\\newtest\\"))
   (def h
-    (a/load-context "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\srmbase.xlsx"))
+    (a/load-context (hpath "\\Documents\\srm\\cleaninput\\runs\\srmbase.xlsx")))
+
+  
 
 ;;This is just a helper to translate from craig's encoding for
 ;;srm policy positions.

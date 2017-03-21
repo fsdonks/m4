@@ -209,8 +209,8 @@
       :FollowOn      (:followon fill)
       :UnitType      (:src  unitfrom)
       :Component     (:component unitfrom)
-      ;;INCONSISTENT: This data doesn't exist in unitdata at the moment.
-      :DeploymentID  (:deploymentindex unitfrom)
+      ;;note this is coming up empty...
+      :DeploymentID  (:deployment-index unitfrom)
       :DeployDate     deploydate
       :FollowOnCount  followons
       :AtomicPolicy  (generic/atomic-name pol)

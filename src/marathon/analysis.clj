@@ -5,7 +5,8 @@
 ;;and produce dynamic analysis.
 (ns marathon.analysis
   (:require [spork.util [table       :as tbl]
-                        [io :as io]]
+                        [io :as io]
+                        [stream :as stream]]
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
@@ -34,6 +35,12 @@
     `(defn ~name ~doc ~meta
        (~cargs (fn [x#] (~name ~@cargs x#)))
        (~args ~@body))))
+
+(defmacro juxt-map [m]
+  `(fn [v#]
+      (reduce-kv (fn [acc# k# f#]
+                   (assoc acc# k# (f# v#)))  {}
+                   ~m)))
 
 (defmacro  defcurried
   "Builds another arity of the fn that returns a fn awaiting the last
@@ -204,21 +211,29 @@
 ;;dumb sampler...probably migrate this to
 ;;use spork.trends sampling.
 (defn ->location-samples   [h]  (->collect-samples core/locations   h))
+
 ;;I think this is similar to demand-trends.
 (defn ->deployment-samples [h]  (->collect-samples core/deployments h))
+
+;;Note: these change daily potentially.
+(defn frame->location-samples [[t ctx]]
+  (core/locations t ctx))
+(defn frame->location-samples [[t ctx]]
+  (core/deployments t ctx))
+
 ;;compute the deployments table
 
 ;;so, we basically just pipe th deployments component
 ;;to out and concat....
-
+(defn frame->deployment-records [[t ctx]]
+  (when-let [deps (store/get-domain ctx :deployments)]
+    (first (vals deps))))
 ;;derives a stream of deployments across the history.
 ;;daily deployments are stored in the :deployments component.
 ;;so we just extract that and boom.
 (defn ->deployment-records  [h]
   (->> h 
-       (mapcat (fn [[t ctx]]
-                 (when-let [deps (store/get-domain ctx :deployments)]
-                    (first (vals deps)))))
+       (mapcat frame->deployment-records)
        (filter identity)
        (map-indexed (fn [idx d] (assoc d :DeploymentID idx)))))
 
@@ -273,6 +288,11 @@
 
 (defn ->demand-trends      [h]  (->collect-samples demand-trends h))
 
+;;this compute the demand-trends frame from the current frame.
+;;useful idiom...This is a keyframe fyi.
+(defn frame->demand-trends [[t ctx]]
+  (demand-trends t ctx))
+
 
 ;;Note: locations are really "policypositions", should rephrase
 ;;this....otherwise we get :locationname confused.  We actually
@@ -305,9 +325,9 @@
        (->location-rec t  id to  "Unit Moved"  ""))))
   ([ctx] (location-trends (sim/get-time ctx) ctx)))
 
+(defn frame->location-records [[t ctx]] (location-trends t ctx))
 (defn ->location-records [h]
-  (mapcat (fn [[t ctx]]
-            (location-trends t ctx)) h))
+  (mapcat frame->location-records h))
                
 
 ;;creating legacy output from basic data..
@@ -609,6 +629,7 @@
                       :demandtrends
                       :locations})
 
+;;These are our canonical output funcitons.
 (defmulti spit-output (fn [t h path] t))
 (defmethod spit-output :history [t h hpath]
   (do  (println [:spitting-history hpath])
@@ -637,14 +658,76 @@
       (tbl/records->file (->demand-trends h) dtrendpath
                          :field-order schemas/demandtrend-fields)))
 
-;;Rather than writing out multiple sequences, we'd like to diverge,
-;;and incrementally write stuff out....
-;;How do we do that?  We have a history generated as sequence of
-;;[t ctx] pairs.
-;;Legacy implementation of output collection created derivative
-;;sequences from this history, which meant multiple traversals
-;;of the history, serial production of output, and signifcant
-;;memory requirements.
+
+;;Immediate, i.e. frame-by-frame outputs.
+;;This is more efficient than our initial hack at
+;;traversing the entire history for each output.
+;;This way, we support incremental outputs built
+;;over time.
+(defmulti emit-frame (fn [t frm] t))
+
+;;default frame emission does nothing.
+(defmethod emit-frame :default [t frm] nil)
+
+;; (defmethod emit-frame :history [t frm]
+;;   (do  (println [:spitting-history hpath])
+;;        (println [:fix-memory-leak-when-serializing!])
+;;        (write-history h hpath)))
+
+;; (defmethod emit-frame :location-samples [t frm]
+;;   (do (println [:spitting-location-samples lpath])
+;;       (tbl/records->file (->location-samples h) lpath)))
+
+(defmethod emit-frame :locations [t frm]
+  (frame->location-records frm))
+
+;; (defmethod emit-frame :deployed-samples [t h dpath]
+;;   (do (println [:spitting-deployed-samples dpath])
+;;       (tbl/records->file (->deployment-samples h) dpath)))
+
+(defmethod emit-frame :deployment-records [t frm]
+  (frame->deployment-records frm))
+
+(defmethod emit-frame :demandtrends [t frm]
+  (frame->demand-trends frm))
+
+;;so, now we have the ability to manage multiple
+;;record writers via stream/record-writer
+
+;;We thus maintain some state that manages
+;;traversing our history.
+;;It should contain all the record-writers
+;;we need for each type of frame.
+
+(def field-orderings
+  {:deployment-records schemas/deployment-fields
+   :demandtrends       schemas/demandtrend-fields
+   ;;location records?   
+   })  
+
+;;Given a source of emitted frames, we can
+;;record the frames to an output file...
+(defmulti init-frame-saver (fn [t path & {:keys [field-order]}] t))
+;;Our default frame-saver is a record writer.  If we have
+;;a field-order provided in field-orderings that matches the
+;;type t, we'll use it.
+(defmethod init-frame-saver :default [t path & {:keys [field-order strict?]}]
+  (let [_ (println [:spitting t path])
+        field-order (or field-order
+                        (get field-orderings t))]
+     (if strict?
+       (stream/->strict-record-writer  path field-order)
+       (stream/->record-writer path :field-order field-order))))
+
+;;Following the idiom of providing "frames", we have frame->blah
+;;functions to provide snapshot sampling, providing implementations
+;;for emit-frame multimethods (for now).  Rather than traversing
+;;the entire (unnecessarily cached) history, we instead build
+;;history frame-by-frame.
+
+;;We need targets to emit to...
+;;And a specification of how to emit.
+
 
 ;;If we take a channel-based approach, we can leverage abstraction
 ;;and get the same functionality in an incremental fashion.
@@ -652,19 +735,6 @@
 ;;It'd be nice to take a sequence, like we have, and
 ;;coerce it to a channel.  This channel then conceptually
 ;;broadcasts the history sequence to any interested subscribers.
-
-;;Marathon History ->
-;;onto-chan
-;;processors
-;; DemandTrends
-;; Locations
-;; Deployments
-(defn writer    [])
-;;dumbest thing to do is to just strobe over a sequence of
-;;output functions, letting them know that we have output for
-;;processing...
-(defn processor [xs] )
-
 
 (def ^:dynamic *outputs* legacy-outputs)
 (defmacro with-outputs [os & body]
@@ -674,22 +744,39 @@
   `(with-outputs ~all-outputs
      ~@body))
 
-;;this is basically the api for performing a run....
-;;We'll automatically audit when we do this...
-(defn spit-history! [h path & {:keys [outputs] :or
-                               {outputs *outputs*}}]
-  ;;hackneyed way to munge outputs and spit them to files.
-  (let [paths {:history     (str path "history.lz4")
+(defn spit-history!
+  "Spits h - sequence of [t ctx] frames of simulation history - 
+   to path using establish output criteria via emit-frame, 
+   and init-frame-saver.  Incrementally writes history 
+   vs caching and traversing everything in memory."
+  [h path & {:keys [outputs]
+             :or   {outputs *outputs*}}]
+  (let [paths {:history               (str path "history.lz4")
                :location-samples      (str path "locsamples.txt")
-               :locations   (str path "locations.txt")
+               :locations             (str path "locations.txt")
                :deployed-samples      (str path "depsamples.txt")
-               :deployment-records (str path "AUDIT_Deployments.txt") 
-               :demandtrends (str path "DemandTrends.txt")} ;probably easier (and lighter) to just diff this.
-        ]    
-    (doseq [[k path] paths
-            :when (outputs k)]      
-      (spit-output k h path))))
-
+               :deployment-records    (str path "AUDIT_Deployments.txt") 
+               :demandtrends          (str path "DemandTrends.txt")}
+        ;;collect all of our frame-grabbers into one state.
+        frame-state (vec (for [[k path] paths
+                                  :when (outputs k)]                         
+                              (let [saver (init-frame-saver k path)]
+                                {:name k
+                                 :grab (fn grab [frm]                                      
+                                         (when-let [res (emit-frame k frm)]
+                                           (if (and (not (map? res))
+                                                    (coll? res))                                            
+                                               (doseq [r res] (saver r))
+                                               (saver res))))
+                                 :saver saver})))
+        grab-frames!  (fn [frm] (reduce (fn [acc {:keys [name grab]}]
+                                          (grab frm))                                                                                                  
+                                        nil frame-state))]
+    (with-open [savers (io/->closer (map :saver frame-state))]
+      (doseq [frm h]
+        (do (println [:day (first frm)])
+            (grab-frames! frm))))))                         
+                
 ;;spits a log of all the events passing through.
 (defn spit-log
   ([h root nm]
@@ -783,4 +870,26 @@
                   :NGFilled	   
                   :GhostFilled	   
                   :OtherFilled])
+)
+
+
+(comment
+;;legacy stream-based, naive version of spitting
+;;history.  Now we grab frames.
+  
+;;this is basically the api for performing a run....
+;;We'll automatically audit when we do this...
+#_(defn spit-history! [h path & {:keys [outputs] :or
+                               {outputs *outputs*}}]
+  ;;hackneyed way to munge outputs and spit them to files.
+  (let [paths {:history     (str path "history.lz4")
+               :location-samples      (str path "locsamples.txt")
+               :locations   (str path "locations.txt")
+               :deployed-samples      (str path "depsamples.txt")
+               :deployment-records (str path "AUDIT_Deployments.txt") 
+               :demandtrends (str path "DemandTrends.txt")} ;probably easier (and lighter) to just diff this.
+        ]    
+    (doseq [[k path] paths
+            :when (outputs k)]      
+      (spit-output k h path))))
 )
