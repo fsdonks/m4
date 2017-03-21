@@ -652,7 +652,19 @@
 ;;It'd be nice to take a sequence, like we have, and
 ;;coerce it to a channel.  This channel then conceptually
 ;;broadcasts the history sequence to any interested subscribers.
-(defn writer [] )
+
+;;Marathon History ->
+;;onto-chan
+;;processors
+;; DemandTrends
+;; Locations
+;; Deployments
+(defn writer    [])
+;;dumbest thing to do is to just strobe over a sequence of
+;;output functions, letting them know that we have output for
+;;processing...
+(defn processor [xs] )
+
 
 (def ^:dynamic *outputs* legacy-outputs)
 (defmacro with-outputs [os & body]
