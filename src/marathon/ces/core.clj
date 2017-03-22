@@ -516,6 +516,10 @@
 (defn some-ephemeral [ctx id component]
   (when-let [atm (store/gete ctx id component)]    
     (when (pos? (count @atm)) atm)))
+;;Ephemeral Counter
+;;=================
+;;Typically used for storing append-only daily logging
+;;information.
 
 ;;Associate an entity with a unique numerical value.
 ;;Provides an efficient way to get "global" numerical
@@ -538,25 +542,22 @@
   (or (store/gete ctx id :counter) 0))
 
 (defn persist-counters [ctx]
-  (map-component ctx :counter deref))
+  (store/filter-map-component ctx :counter
+      (fn [_ x] (atom? x)) ;filter
+      deref))                              
 
-;;persistent, pure version of aforementioned ops.
-;;much slower due to associng all over.
-(comment
-  (defn get-count
-    [ctx id]
-    (or (store/gete ctx id :counter) 0))
-  
-  (defn inc-count [ctx id]
-    (store/assoce ctx id :counter                
-        (unchecked-inc (get-count ctx id)))))
+(defn get-count
+  [ctx id]
+  (if-let [cnt (get-counter ctx id)]
+    (if (number? cnt) cnt
+        (deref cnt))
+    0))
 
 ;;common counters
 (defn deployment-count [ctx]
-  (get-counter ctx :deployment-count))
+  (get-count ctx :deployment-count))
 (defn inc-deployment-count [ctx]
   (inc-counter ctx :deployment-count))
-
 
 
 ;;Acts like juxt, except it returns the results in a map.

@@ -177,8 +177,9 @@
     (core/trigger-event :log-status :Engine :Engine 
        (str "Processed day " day " of " (sim/get-final-time ctx) " of Simulation") nil)
     (core/trigger-event :sample :Engine :Engine "Sampling" nil)
-    (core/trigger-event :end-of-day :Engine :Engine (day-msg "End" day) nil)
-    (core/persist-counters)))
+    (core/trigger-event :end-of-day :Engine :Engine (day-msg "End" day) nil)    
+    (core/persist-counters) ;convert atomic counters to numeric components.
+    ))
 
 (defn can-simulate? 
   "Simple predicate to ensure we have supply and demand in 
