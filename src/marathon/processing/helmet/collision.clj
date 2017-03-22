@@ -127,8 +127,8 @@
                p         (:Priority class-rec)
                space     (:MinTime class-rec)]
            (assert (and p space)
-                   (str "Could not find Priority or MinTime fields for "
-                        group-key))
+                   (str ["Could not find Priority or MinTime fields for "
+                         group-key :in class-rec]))
            {:Priority p
             :space    space
             :records  (fix-group space (map #(assoc % :Priority p) recs))}))
