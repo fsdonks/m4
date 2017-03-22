@@ -790,7 +790,7 @@
 
 ;;This updates the unit statistics, and alters (drops) the followon
 ;;code.  re-deployment indicates followon?
-(defn  re-deploy-unit [unit demand t deployment-idx ctx] 
+(defn  re-deploy-unit [unit demand t ctx] 
   (let [c    (:currentcycle unit)
         deps (:deployments c)
         newlocation (:name demand)
@@ -803,9 +803,14 @@
 
 ;;We can probably combine these into a unit behavior.
 ;;For instance, notice we update the deployments.
-(defn  deploy-unit [unit demand t deployment-idx ctx]
-  (let [newlocation (:name demand)]
-    (keep-bogging-until-depleted (increment-deployments unit) newlocation ctx)))
+(defn  deploy-unit [unit demand t ctx]
+  (let [newlocation (:name demand)
+        cnt  (core/deployment-count ctx)
+        ctx  (core/inc-deployment-count ctx)]
+    (-> unit
+        (assoc :deployment-index cnt)
+        (increment-deployments)
+        (keep-bogging-until-depleted newlocation ctx))))
 
 
 ;'Probably pull unit's changelocation into here as well.

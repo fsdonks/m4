@@ -116,6 +116,10 @@
   (get-entity     [db id]  (get-entity     store id))
   (conj-entity    [db id components] 
     (simstate. (conj-entity store id components) width height notifier))
+  IColumnStore
+  (swap-domain [db c x]
+    (simstate. (swap-domain store c x)
+               width height notifier))
   INotification
   (notify! [obj e msg]
     (if (fn? notifier)

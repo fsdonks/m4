@@ -44,9 +44,9 @@
     (cond (location-based-policy? demand)  (u/location-based-deployment unit demand ctx) ;;allow location to override policy.
           followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
                              newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
-                         (u/re-deploy-unit  newunit  demand t (or (:deployment-index unit) 0) newctx))
+                         (u/re-deploy-unit  newunit  demand t newctx))
           :else 
-          (u/deploy-unit unit demand  t (or (:deployment-index unit) 0) ctx))))
+          (u/deploy-unit unit demand  t ctx))))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  

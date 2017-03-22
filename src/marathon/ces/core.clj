@@ -479,6 +479,8 @@
   (let [f (if (coll? fs) (apply juxt fs) fs)]
     (map f xs)))
 
+(defn atom? [x] (instance? clojure.lang.Atom x))
+
 ;;Ephemeral Data
 ;;==============
 ;;Typically used for storing append-only daily logging
@@ -486,7 +488,10 @@
 (defn get-ephemeral
   ([ctx id component default]
    (if-let [state (store/gete ctx id component)]
-     [ctx state]
+     (if (atom? state)
+       [ctx state] 
+       (let [new-state (atom state)]
+         [(store/assoce ctx id component new-state) new-state]))
      (let [atm (atom default)
            ctx (store/assoce ctx id component atm)]
        [ctx atm])))
@@ -502,14 +507,57 @@
     (reset! state v)
     ctx))
 
-(defn swap-ephemeral [ctx id component f]
-  (let [[ctx state] (get-ephemeral ctx id component)]
-    (swap! state f)
-    ctx))
+(defn swap-ephemeral
+  [ctx id component f]
+   (let [[ctx state] (get-ephemeral ctx id component)]
+     (swap! state f)
+     ctx))
 
 (defn some-ephemeral [ctx id component]
   (when-let [atm (store/gete ctx id component)]    
     (when (pos? (count @atm)) atm)))
+
+;;Associate an entity with a unique numerical value.
+;;Provides an efficient way to get "global" numerical
+;;counters while maintaining the ability to persistent
+;;at the end of the day.
+(defn swap-counter
+  [ctx id f]
+   (let [[ctx state] (get-ephemeral ctx id :counter 0)]
+     (swap! state f)
+     ctx))
+
+(defn inc-counter
+  ([ctx id]
+   (let [[ctx storage] (get-ephemeral ctx id :counter 0)]         
+     (swap-counter ctx id #(unchecked-inc %))))
+  ([ctx id n] 
+   (swap-counter ctx  id #(unchecked-add % n))))
+
+(defn get-counter [ctx id]
+  (or (store/gete ctx id :counter) 0))
+
+(defn persist-counters [ctx]
+  (map-component ctx :counter deref))
+
+;;persistent, pure version of aforementioned ops.
+;;much slower due to associng all over.
+(comment
+  (defn get-count
+    [ctx id]
+    (or (store/gete ctx id :counter) 0))
+  
+  (defn inc-count [ctx id]
+    (store/assoce ctx id :counter                
+        (unchecked-inc (get-count ctx id)))))
+
+;;common counters
+(defn deployment-count [ctx]
+  (get-counter ctx :deployment-count))
+(defn inc-deployment-count [ctx]
+  (inc-counter ctx :deployment-count))
+
+
 
 ;;Acts like juxt, except it returns the results in a map.
 ;;The map is implied by the args in kvps, where simple keys - numbers,

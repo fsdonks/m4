@@ -52,18 +52,6 @@
        target-path)
       (build-patches target-path)))
 
-(defn do-incremental-run
-  "Given two paths to folders - a path to a marathon project 
-   [from-path], and a path to post results to [target-path] - 
-   computes the marathon history for the run, producing results 
-   into the target path.  Default outputs will be derived from 
-   the simulation history, including a compressed history."
-  [from-path target-path]
-  (do (a/spit-history-incrementally!
-       (a/marathon-stream from-path :audit? true :audit-path target-path)
-       target-path)
-      (build-patches target-path)))
-
 (def root "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\")
 (def root "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\")
 
