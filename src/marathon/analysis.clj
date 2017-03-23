@@ -65,14 +65,14 @@
           @ret
           (let [next (f seed)]
             (recur (f1 ret next) next)))))
-    
+
     clojure.lang.Seqable
     (seq [this]
       (seq (clojure.core/iterate f seed)))))
 
 
 ;;#Move these into core...#
-(defn ->simreducer [stepf init]  
+(defn ->simreducer [stepf init]
   (r/take-while identity (r-iterate (fn [ctx]
                                        (when  (engine/keep-simulating? ctx)
                                           (let [init ctx
@@ -91,10 +91,10 @@
 ;;simulation states; reducible.
 (defn ->simulator [stepf seed]
   (let [simred (->simreducer stepf seed)]
-    (reify     
-      clojure.lang.Seqable 
-      (seq [this]  
-        (take-while identity (iterate (fn [ctx] 
+    (reify
+      clojure.lang.Seqable
+      (seq [this]
+        (take-while identity (iterate (fn [ctx]
                                         (when  (engine/keep-simulating? ctx)
                                           (let [init       ctx
                                                 t          (sim/get-time     ctx)
@@ -119,12 +119,12 @@
 ;;Now using transducers.
 (defn ->history [tfinal stepf init-ctx]
   (into {} (comp (map (fn [ctx] [(core/get-time ctx) ctx]))
-                 (take-while #(<= (first %) tfinal)))        
+                 (take-while #(<= (first %) tfinal)))
         (->simulator stepf init-ctx)))
 
 (defn ending [h t] (get (meta (get h t) :end  )))
 (defn start  [h t] (get (meta (get h t) :start)))
-                    
+
 ;;most metrics should be collected at the end of the
 ;;day.  For debugging and verification purposes, we'd
 ;;like to have the history at the beginning of each day.
@@ -134,7 +134,7 @@
   (->> h
        (map #(first (meta (second %))))
        (filter identity)
-       (map (fn [[t {:keys [start end]}]] 
+       (map (fn [[t {:keys [start end]}]]
               [t end]))))
 
 (defn expanded-history [h]
@@ -207,7 +207,7 @@
 ;;Some samples are event-based...
 ;;like dwell-before deployment stats...
 
-;;Can we just append a deployment record? 
+;;Can we just append a deployment record?
 ;;dumb sampler...probably migrate this to
 ;;use spork.trends sampling.
 (defn ->location-samples   [h]  (->collect-samples core/locations   h))
@@ -232,7 +232,7 @@
 ;;daily deployments are stored in the :deployments component.
 ;;so we just extract that and boom.
 (defn ->deployment-records  [h]
-  (->> h 
+  (->> h
        (mapcat frame->deployment-records)
        (filter identity)
        (map-indexed (fn [idx d] (assoc d :DeploymentID idx)))))
@@ -242,14 +242,14 @@
 ;;sake....this should be fairly easy...it's simple io stuff.
 
 ;;we only need to capture this when demands change..
-	   
+
 ;;If we can define trends as a map
 ;;or a reduction....
 ;;this is legacy support...
-;;Note: this should work with our 
+;;Note: this should work with our
 (defn demand-trends
   ([t ctx]
-   (let [qtr     (unchecked-inc (quot t 90)) ;;1-based quarters.         
+   (let [qtr     (unchecked-inc (quot t 90)) ;;1-based quarters.
          changes (store/gete ctx :demand-watch :demands)
          actives (store/gete ctx :DemandStore :activedemands)]
      (when (seq changes)
@@ -267,7 +267,7 @@
                                                    (store/gete ctx nm :component)))
                                             (frequencies))
                         {:strs [AC RC NG Ghost]
-                         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]                      
+                         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]
                       {:t             t
                        :Quarter       qtr
                        :SRC           (:src      d)
@@ -297,7 +297,7 @@
 ;;Note: locations are really "policypositions", should rephrase
 ;;this....otherwise we get :locationname confused.  We actually
 ;;do want policy-position changes....Another option is
-;;for us to reconcile locations with known-locations 
+;;for us to reconcile locations with known-locations
 ;;location is easy, we just track any entities with :location-delta
 ;;components...
 
@@ -315,7 +315,7 @@
 ;;but for now, we'll stick with the dumb way.  Just get the
 ;;table computed....
 
-;;replicating output for locations.txt 
+;;replicating output for locations.txt
 ;;T, EntityFrom, EntityTo, EventName, Msg
 (defrecord location-rec [T EntityFrom EntityTo EventName Msg])
 (defn location-trends
@@ -328,7 +328,7 @@
 (defn frame->location-records [[t ctx]] (location-trends t ctx))
 (defn ->location-records [h]
   (mapcat frame->location-records h))
-               
+
 
 ;;creating legacy output from basic data..
 ;;fills are a join of unit<>demanddata<>deployments
@@ -369,7 +369,7 @@
 ;;                  :FillCount :int
 ;;                  :Location :text
 ;;                  :location :text
-;;                  :compo :text     
+;;                  :compo :text
 ;;                  :DwellBeforeDeploy :int
 ;;                  :Policy :text
 ;;                  :sampled :boolean
@@ -383,7 +383,7 @@
 ;;API Definition
 ;;==============
 (defn load-project [p & {:keys [tables]}]
-  (if tables 
+  (if tables
     (proj/load-project p :tables tables)
     (proj/load-project p)))
 
@@ -392,17 +392,17 @@
 
 ;;This is the core of doing a "run"...
 (defn load-context
-  "Given a viable Marathon Project, p, we derive and initial 
+  "Given a viable Marathon Project, p, we derive and initial
    simulation context, from which we can create a simulation
-   history.  An optional function table-xform may be supplied 
-   to pre-process the project tables, to implement options 
-   like filtering, etc.  The project may be a path to a string, 
+   history.  An optional function table-xform may be supplied
+   to pre-process the project tables, to implement options
+   like filtering, etc.  The project may be a path to a string,
    "
    [p & {:keys [table-xform] :or {table-xform identity}}]
    (->>  (setup/simstate-from ;;allows us to pass maps in, hackey
           (table-xform (or-get p :tables
                          (:tables (proj/load-project p))))
-          core/debugsim)  
+          core/debugsim)
          (sim/add-time 1)
          (sim/register-routes obs/default-routes)))
 
@@ -418,8 +418,8 @@
                       (let [t (System/currentTimeMillis)]
                         (->>  (for [[src reason] (seq m)]
                                 {:TimeStamp t :SRC src :Reason reason})
-                              (tbl/records->table))))                      
-        computed-tables  (let [params   (core/get-parameters ctx) 
+                              (tbl/records->table))))
+        computed-tables  (let [params   (core/get-parameters ctx)
                                inscope  (:SRCs-In-Scope      params)
                                outscope (:SRCs-Out-Of-Scope  params)]
                            {:InScope  (scope-table inscope)
@@ -431,8 +431,8 @@
     ctx))
 
 (defn as-context
-  "Coerces x to a marathon simulation context.  Optionally, 
-   will provide and audit-trail of information if x is 
+  "Coerces x to a marathon simulation context.  Optionally,
+   will provide and audit-trail of information if x is
    a project and audit? is truthy."
   [x & {:keys [table-xform audit? audit-path]
                        :or {table-xform identity}}]
@@ -443,12 +443,12 @@
         (util/context? x) x
         :else (throw (Exception.
                       (str "Invalid MARATHON sim context " x)))))
-        
+
 (defn marathon-stream
   "Create a stream of simulation states, indexed by time.
-   Optionally, set the maximum simulation time, define transformations 
-   on the project tables, like src filters, provide a custom step function, 
-   and choose to generate auditing information upon initializing the 
+   Optionally, set the maximum simulation time, define transformations
+   on the project tables, like src filters, provide a custom step function,
+   and choose to generate auditing information upon initializing the
    stream."
   [path-or-ctx & {:keys [tmax table-xform step-function audit? audit-path]
                   :or {tmax 5001
@@ -459,11 +459,11 @@
        (->history-stream tmax step-function)
        (end-of-day-history)))
 
-;;simple-project xforms               
+;;simple-project xforms
 (defn filter-srcs
-  "Given a sequence of srcs to keep, pre-processes the project tables 
-   to retain only records with an associated :SRC value, where the value 
-   is in the set defined by srcs.  Defaults to filtering supply and demand 
+  "Given a sequence of srcs to keep, pre-processes the project tables
+   to retain only records with an associated :SRC value, where the value
+   is in the set defined by srcs.  Defaults to filtering supply and demand
    records."
   [srcs & {:keys [tables]
                              :or {tables [:SupplyRecords :DemandRecords]}}]
@@ -523,7 +523,7 @@
                      (if-let [rv (get rcomps lk)]
                        (if (not (identical? lv rv))
                          (conj acc lk) acc) (conj acc lk))) [] lcomps))))
-    
+
 ;;since components are maps...we can recursively diff to see which
 ;;entities changed.
 
@@ -590,7 +590,7 @@
 (defn string->history [path]
   (println [:warning 'read-history "you're using read-string, vs. clojure.edn/read-string"])
   (read-string (slurp path)))
-  
+
 (defn read-history! [path]
   (let [{:keys [init patches]} (ser/thaw-from path)
         store  (atom (second init))]
@@ -651,7 +651,7 @@
 (defmethod spit-output :deployment-records [t h dpath]
   (do (println [:spitting-deployed-samples dpath])
       (tbl/records->file (->deployment-records h) dpath
-         :field-order schemas/deployment-fields))) 
+         :field-order schemas/deployment-fields)))
 
 (defmethod spit-output :demandtrends [t h dtrendpath]
   (do (println [:spitting-demandtrends dtrendpath])
@@ -702,8 +702,8 @@
 (def field-orderings
   {:deployment-records schemas/deployment-fields
    :demandtrends       schemas/demandtrend-fields
-   ;;location records?   
-   })  
+   ;;location records?
+   })
 
 ;;Given a source of emitted frames, we can
 ;;record the frames to an output file...
@@ -745,38 +745,38 @@
      ~@body))
 
 (defn spit-history!
-  "Spits h - sequence of [t ctx] frames of simulation history - 
-   to path using establish output criteria via emit-frame, 
-   and init-frame-saver.  Incrementally writes history 
+  "Spits h - sequence of [t ctx] frames of simulation history -
+   to path using establish output criteria via emit-frame,
+   and init-frame-saver.  Incrementally writes history
    vs caching and traversing everything in memory."
   [h path & {:keys [outputs]
              :or   {outputs *outputs*}}]
-  (let [paths {:history               (str path "history.lz4")
-               :location-samples      (str path "locsamples.txt")
-               :locations             (str path "locations.txt")
-               :deployed-samples      (str path "depsamples.txt")
-               :deployment-records    (str path "AUDIT_Deployments.txt") 
-               :demandtrends          (str path "DemandTrends.txt")}
+  (let [paths {:history            (str (io/as-directory path) "history.lz4")
+               :location-samples   (str (io/as-directory path) "locsamples.txt")
+               :locations          (str (io/as-directory path) "locations.txt")
+               :deployed-samples   (str (io/as-directory path) "depsamples.txt")
+               :deployment-records (str (io/as-directory path) "AUDIT_Deployments.txt")
+               :demandtrends       (str (io/as-directory path) "DemandTrends.txt")}
         ;;collect all of our frame-grabbers into one state.
         frame-state (vec (for [[k path] paths
-                                  :when (outputs k)]                         
+                                  :when (outputs k)]
                               (let [saver (init-frame-saver k path)]
                                 {:name k
-                                 :grab (fn grab [frm]                                      
+                                 :grab (fn grab [frm]
                                          (when-let [res (emit-frame k frm)]
                                            (if (and (not (map? res))
-                                                    (coll? res))                                            
+                                                    (coll? res))
                                                (doseq [r res] (saver r))
                                                (saver res))))
                                  :saver saver})))
         grab-frames!  (fn [frm] (reduce (fn [acc {:keys [name grab]}]
-                                          (grab frm))                                                                                                  
+                                          (grab frm))
                                         nil frame-state))]
     (with-open [savers (io/->closer (map :saver frame-state))]
       (doseq [frm h]
         (do (println [:day (first frm)])
-            (grab-frames! frm))))))                         
-                
+            (grab-frames! frm))))))
+
 ;;spits a log of all the events passing through.
 (defn spit-log
   ([h root nm]
@@ -803,7 +803,7 @@
   ([h root] (spit-log! h root "events.txt")))
 
 
-(comment 
+(comment
 ;;testing
 (def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
 ;;local diff.
@@ -816,8 +816,8 @@
 (def r (second h))
 
 
-    
-    
+
+
 )
 
 ;;We can compare the event logs too...
@@ -828,7 +828,7 @@
 ;;          (core/locations l)
 ;;          (core/location  r)
 ;;           (seq lh) (seq rh)
-  
+
 ;;we need to create a pipeline that allows us
 
 ;;Right now, we're looking
@@ -855,20 +855,20 @@
    :GhostFilled	   :int
    :OtherFilled	   :int})
 
-(def dt-fields   [:t  	           
-                  :Quarter	   
-                  :SRC	           
-                  :TotalRequired   
-                  :TotalFilled	   
-                  :Overlapping	   
-                  :Deployed	   
-                  :DemandName	   
-                  :Vignette 	   
-                  :DemandGroup	   
-                  :ACFilled	   
-                  :RCFilled	   
-                  :NGFilled	   
-                  :GhostFilled	   
+(def dt-fields   [:t
+                  :Quarter
+                  :SRC
+                  :TotalRequired
+                  :TotalFilled
+                  :Overlapping
+                  :Deployed
+                  :DemandName
+                  :Vignette
+                  :DemandGroup
+                  :ACFilled
+                  :RCFilled
+                  :NGFilled
+                  :GhostFilled
                   :OtherFilled])
 )
 
@@ -876,7 +876,7 @@
 (comment
 ;;legacy stream-based, naive version of spitting
 ;;history.  Now we grab frames.
-  
+
 ;;this is basically the api for performing a run....
 ;;We'll automatically audit when we do this...
 #_(defn spit-history! [h path & {:keys [outputs] :or
@@ -886,10 +886,10 @@
                :location-samples      (str path "locsamples.txt")
                :locations   (str path "locations.txt")
                :deployed-samples      (str path "depsamples.txt")
-               :deployment-records (str path "AUDIT_Deployments.txt") 
+               :deployment-records (str path "AUDIT_Deployments.txt")
                :demandtrends (str path "DemandTrends.txt")} ;probably easier (and lighter) to just diff this.
-        ]    
+        ]
     (doseq [[k path] paths
-            :when (outputs k)]      
+            :when (outputs k)]
       (spit-output k h path))))
 )
