@@ -95,14 +95,14 @@
 (defn coerce [s tbl]
   (let [numtypes {:boolean as-boolean
                   :int as-int
-                  :int? (fn [x] (when x (int x)))                  
+                  :int? (fn [x] (when x (int x)))
                   :long as-long
                   :long? (fn [x] (when x (long x)))
                   :text  (fn [x] (if (number? x)
                                    ;;we need to coerce this mofo.
                                    (str (try-long x))
                                    x))}]
-    (spork.util.table/conj-fields 
+    (spork.util.table/conj-fields
      (for [[fld col] (tbl/enumerate-fields (tbl/table-fields tbl) (tbl/table-columns tbl))]
        (if-let [f (numtypes (s fld))]
          (try [fld (mapv f col)]
@@ -114,10 +114,10 @@
 ;;Another option is to keep everything in tsv....and
 ;;edit/update from excel.  There are advantages and
 ;;disadvantages to this...
-(defn marathon-book->marathon-tables 
-  [wbpath & {:keys [tables] :or {tables 
+(defn marathon-book->marathon-tables
+  [wbpath & {:keys [tables] :or {tables
                                  marathon-workbook-schema}}]
-  "Extract a map of canonical tables to a map with the same name.  Caller can 
+  "Extract a map of canonical tables to a map with the same name.  Caller can
    supply additional tables, or supply the :all keyword to get all tables."
   (let [wb (xl/as-workbook wbpath)]
     (into {} (filter identity
@@ -133,7 +133,7 @@
                                [(keyword nm) tab])
                              (println "(missing)."))))))))
 
-;;This is all that really matters from marathon.project...   
+;;This is all that really matters from marathon.project...
 (defmethod load-project "xlsm"
   [path & {:keys [tables]
            :or {tables marathon-workbook-schema}}]
@@ -141,10 +141,10 @@
         paths (reduce-kv (fn [acc nm _]
                            (assoc acc nm
                                   [path
-                                   (name nm)])) {} ts)]    
+                                   (name nm)])) {} ts)]
       (-> (make-project
            (clojure.string/replace (io/fname path) #".xlsm" "")
-           (io/as-directory (io/fdir path))) 
+           (io/as-directory (io/fdir path)))
           (assoc :tables ts)
           (update :paths merge paths))))
 
@@ -158,14 +158,14 @@
                                    (name nm)])) {} ts)]
   (-> (make-project
         (clojure.string/replace (io/fname path) #".xlsx" "")
-        (io/as-directory (io/fdir path))) 
+        (io/as-directory (io/fdir path)))
       (assoc :tables ts)
       (update :paths merge paths))))
 
 (defmethod save-project "xlsx" [proj path & options]
   (xl/tables->xlsx path
      (project->tables
-        (add-path proj :project-path 
+        (add-path proj :project-path
             (io/as-directory (io/fdir path))))))
 
 ;;this should probably go in docjure..
@@ -175,39 +175,39 @@
                         (do (docj/remove-all-rows! s) s) ;this is probably slow
                         (do (docj/add-sheet!   wb2 sheetname)
                             (docj/select-sheet sheetname wb2)))]
-       (->> (xl/contiguous-rows from-sheet) 
+       (->> (xl/contiguous-rows from-sheet)
             (map                xl/row->vec)
             (docj/add-rows!     to-sheet)))
      (throw (Exception. (str "Sheet " sheetname "does not exist")))))
 
-(defn copy-sheets! [sheetnames wb-from wb-to] 
+(defn copy-sheets! [sheetnames wb-from wb-to]
   (doseq [sheetname sheetnames]
     (copy-sheet! sheetname wb-from wb-to)))
 
 ;;This is to support cloning from legacy projects to new projects.
-;;The intent is to make higher order operations like case setups and design 
+;;The intent is to make higher order operations like case setups and design
 ;;of experiments a lot easier to do.
 (defmethod derive-project ["xlsm" "xlsm"] [proj destination & {:keys [tables]}])
 
 ;;clone tables from one workbook to another.
-(defmethod migrate-project ["xlsm" "xlsm"] 
-  [proj destination & {:keys [sheetnames] :or {sheetnames 
+(defmethod migrate-project ["xlsm" "xlsm"]
+  [proj destination & {:keys [sheetnames] :or {sheetnames
                                                 (vals input-sheets)}}]
     (let [wb-from  (docj/load-workbook proj)
-          wb-to    (if (io/fexists? destination) 
+          wb-to    (if (io/fexists? destination)
                      (docj/load-workbook destination)
                      (docj/create-workbook "MigrationInfo" [["Source"]
                                                             [proj]]))]
       (do (copy-sheets! sheetnames wb-from wb-to)
           (docj/save-workbook! destination wb-to ))))
-  
+
 
 ;;I don't like copy and pasting...
-(defmethod migrate-project ["xlsx" "xlsx"] 
+(defmethod migrate-project ["xlsx" "xlsx"]
   [proj destination & {:keys [sheetnames] :or {sheetnames
                                                (vals input-sheets)}}]
       (let [wb-from  (docj/load-workbook proj)
-            wb-to    (if (io/fexists? destination) 
+            wb-to    (if (io/fexists? destination)
                      (docj/load-workbook destination)
                      (docj/create-workbook "MigrationInfo" [["Source"]
                                                             [proj]]))]
@@ -223,9 +223,9 @@
 
 (migrate-project wbpath2 destpath)
 
-;; (comment 
+;; (comment
 ;; (def input-sheets
-;;   (select-keys marathon-workbook-schema  
+;;   (select-keys marathon-workbook-schema
 ;;                [:supply-records
 ;;                 :demand-records
 ;;                 :period-records
@@ -233,12 +233,12 @@
 ;;                 :src-tag-records
 ;;                 :parameters]))
 
-;; ;These are canonical outputs from a VBA Marathon run for capacity analysis. 
-;; (def marathon-text-file-output 
-;;   {:cycle-records  "cycles.txt" 
+;; ;These are canonical outputs from a VBA Marathon run for capacity analysis.
+;; (def marathon-text-file-output
+;;   {:cycle-records  "cycles.txt"
 ;;    :event-log      "EventLog.csv"
 ;;    :demand-trends  "DemandTrends.txt"
 ;;    :sand-trends    "SandTrends.txt"
-;;    :locations      "locations.txt"})       
+;;    :locations      "locations.txt"})
 ;; )
-)  
+)
