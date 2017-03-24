@@ -105,9 +105,13 @@
     (spork.util.table/conj-fields
      (for [[fld col] (tbl/enumerate-fields (tbl/table-fields tbl) (tbl/table-columns tbl))]
        (if-let [f (numtypes (s fld))]
-         (try [fld (mapv f col)]
-              (catch Exception e (do (println [:error-in fld])
-                                     (throw e))))
+         [fld (mapv (fn [row val]
+                      (try (f val)
+                           (catch Exception e
+                             (do (println [:error-in fld :row row :value val])
+                                 (throw e)))))
+                    (iterate inc 0)
+                    col)]
          [fld col]))
      spork.util.table/empty-table)))
 
