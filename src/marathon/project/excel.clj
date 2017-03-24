@@ -55,15 +55,34 @@
 (def ^:const +blank+ "")
 (defn blank? [x] (identical? x +blank+))
 
-(defn maybe-int [x]
-  (if (and x (not (blank? x)))
-    (int x)
-    0))
+(defn =word [s1 s2]
+  "Like `=` for strings, except that the arguments are first
+  case-folded before comparison with `=`."
+  (= (clojure.string/lower-case s1) (clojure.string/lower-case s2)))
 
-(defn maybe-long [x]
-  (if (and x (not (blank? x)))
-    (long x)
-    0))
+(defn as-int [x]
+  "Try to find an int representation for `x`."
+  (cond (string? x) (cond (=word "-inf" x) Integer/MIN_VALUE
+                          (=word "inf"  x) Integer/MAX_VALUE
+                          :else (let [thing (clojure.edn/read-string x)]
+                                  (if (number? thing)
+                                    (int thing)
+                                    (do (println "(Replacing" x "with 0.)")
+                                        0))))
+        (number? x) (int x)
+        :else       0))
+
+(defn as-long [x]
+  "Try to find a long representation for `x`."
+  (cond (string? x) (cond (=word "-inf" x) Long/MIN_VALUE
+                          (=word "inf"  x) Long/MAX_VALUE
+                          :else (let [thing (clojure.edn/read-string x)]
+                                  (if (number? thing)
+                                    (long thing)
+                                    (do (println "(Replacing" x "with 0.)")
+                                        0))))
+        (number? x) (long x)
+        :else       0))
 
 (def string->boolean (:boolean spork.util.parsing/parse-defaults))
 (defn as-boolean [x]
@@ -75,9 +94,9 @@
 ;;text wierdness.
 (defn coerce [s tbl]
   (let [numtypes {:boolean as-boolean
-                  :int maybe-int #_int
+                  :int as-int
                   :int? (fn [x] (when x (int x)))                  
-                  :long maybe-long #_long
+                  :long as-long
                   :long? (fn [x] (when x (long x)))
                   :text  (fn [x] (if (number? x)
                                    ;;we need to coerce this mofo.
