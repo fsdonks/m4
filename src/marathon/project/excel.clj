@@ -119,19 +119,19 @@
                                  marathon-workbook-schema}}]
   "Extract a map of canonical tables to a map with the same name.  Caller can 
    supply additional tables, or supply the :all keyword to get all tables."
-  (let [wb   (xl/as-workbook wbpath)]
+  (let [wb (xl/as-workbook wbpath)]
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
-                       (do (println [:loading nm])
+                       (do (print "Loading" sheetname ". . . ")
                            (if-let [sht (xl/as-sheet sheetname wb)]
                              (let [tab (spork.util.table/keywordize-field-names
                                         (xl/sheet->table sht))
                                    tab (if-let [s (schemas/get-schema nm)]
                                          (coerce s tab)
                                          tab)]
-                               (do (println [:loaded nm])
-                                   [(keyword nm)  tab]))
-                             (println [:missing nm]))))))))
+                               (println "done.")
+                               [(keyword nm) tab])
+                             (println "(missing)."))))))))
 
 ;;This is all that really matters from marathon.project...   
 (defmethod load-project "xlsm"
