@@ -122,8 +122,8 @@
         "Sequential" (do (assert (not (contains? acc CompositeName)))
                          (assoc-in acc [CompositeName]
                              (ensure-vec (read-composition (:Policy r)))))
-        (throw (Exception. "Error parsing composition policy!" 
-                           r))))))
+        (throw (Exception. (str ["Error parsing composition policy!" 
+                                 r])))))))
 
 ;Generates a map of composition rules from a table.
 (defn table->compositions [t]

@@ -55,18 +55,19 @@
 ;;runtime....function invocation is weak.
 ;;THis is a pretty weak port....
 (defn keep-simulating? [ctx]
-  (let [state (:state ctx)]
-    (if (-> state :truncat-time)
-      (let [tlastdemand (-> state :demandstore :tlastdeactivation)]        
-        (if (>= (sim/get-time ctx) tlastdemand)
+    (if (store/gete ctx :parameters :truncate-time)
+      (let [tlastdemand (or (store/gete ctx :DemandStore :tlastdeactivation)
+                            -1)
+            t (sim/get-time ctx)]        
+        (if (>= t tlastdemand)
           (if (neg? tlastdemand) 
             (throw (Error. "No demands scheduled.  Latest deactivation never initialized!"))
-            (do (core/trigger-event :Terminate (:name state) (:name state) 
-                                   (str "Time " (sim/current-time ctx) "is past the last deactivation: "
+            (do (core/trigger-event :Terminate "Simstate" "Simstate"
+                                   (str "Time " t "is past the last deactivation: "
                                         tlastdemand " in a truncated simulation, terminating!") nil ctx)
                 false))
           true))
-      (sim/has-time-remaining? ctx))))        
+      (sim/has-time-remaining? ctx)))
 
 ;##Simulation Initialization
 (defn set-time
