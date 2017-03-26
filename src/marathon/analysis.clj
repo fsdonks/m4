@@ -472,6 +472,11 @@
       (fn [tbls]
         (reduce (fn [acc t] (update acc t tbl-filter)) tbls tables))))
 
+(defn frame-at
+  "Fetch the simulation frame at or nearest (after) time t from a 
+   sequence of [t ctx] frames xs."
+  [t xs] (some (fn [[tc ctx]] (when (>= tc t) ctx)) xs)) 
+
 ;;Entity Tracing and Debugging
 ;;============================
 ;;Migrated from quilsample.bridge

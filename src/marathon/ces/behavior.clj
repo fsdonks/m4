@@ -1653,8 +1653,7 @@
 (befn handle-messages ^behaviorenv {:keys [entity current-messages ctx] :as benv}
       (when current-messages
         (reduce (fn [acc msg]                  
-                  (do (debug [:handling msg])
-                    (message-handler msg (val! acc))))
+                  (message-handler msg (val! acc)))
                 (success (assoc benv :current-messages nil))
                 current-messages)))
 
@@ -1666,9 +1665,10 @@
           (echo :aged)
           moving-beh]))
 
-(befn up-to-date {:keys [entity] :as benv}
-      (let [e @entity]
-        (echo [:up-to-date (:name e) :cycletime (:cycletime e)])))
+(befn up-to-date {:keys [entity tupdate] :as benv}
+      (let [_ (push! entity :last-update tupdate) 
+            e @entity]
+        (echo [:up-to-date (:name e) :cycletime (:cycletime e) :last-update (:last-update e)])))
 
 (def process-messages-beh
   (->or [(->and [(echo :check-messages)
@@ -2089,24 +2089,24 @@
             timeremaining  (immediate-policy-wait-time next-policy positionB)
             timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))    
             unit           (reset! entity
-                                   (-> unit
-                                       (merge  {:positionpolicy positionB
+                                   (-> unit ;;we change positionpolicy here....bad move?
+                                       (merge  {;:positionpolicy positionB
                                                 :policy         next-policy
                                                 :cycletime      cycletimeB})                                              
                                        (u/change-cycle tupdate)
                                        (u/modify-cycle next-policy)))
             newduration    (- timeremaining timeinstate)
-            ;; _              (println [:preparing-apply
-            ;;                          {:cycletimeA cycletimeA
-            ;;                           :policynameA policynameA
-            ;;                           :positionA positionA                                          
-            ;;                           :policynameB policynameB
-            ;;                           :cycletimeB cycletimeB
-            ;;                           :positionB positionB
-            ;;                           :timeremaining timeremaining
-            ;;                                            :timeinstate timeinstate
-            ;;                           :newduration newduration
-            ;;                           }])
+            _              (debug [:preparing-apply-policy-change
+                                     {:cycletimeA cycletimeA
+                                      :policynameA policynameA
+                                      :positionA positionA                                          
+                                      :policynameB policynameB
+                                      :cycletimeB cycletimeB
+                                      :positionB positionB
+                                      :timeremaining timeremaining
+                                      :timeinstate timeinstate
+                                      :newduration newduration
+                                      }])
             ]
         ;;We have a move.
         ;;Setup the movement and let the behavior execute.

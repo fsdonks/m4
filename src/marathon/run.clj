@@ -95,7 +95,7 @@
   (do-run ep (hpath "\\srm\\newtest\\"))
   (def h
     (a/load-context (hpath "\\Documents\\srm\\cleaninput\\runs\\srmbase.xlsx")))
-  (def sdata (hpath "\\testdata-v0.xlsx"))
+  (def sdata (hpath "\\testdata-v2.xlsx"))
   
 
 ;;This is just a helper to translate from craig's encoding for
