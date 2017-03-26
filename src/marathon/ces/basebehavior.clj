@@ -125,21 +125,23 @@
 ;;immediate steps happen with no time-delta.
 ;;like ai/step-entity!, we should find a way to reuse it.
 
-
 (defn step-entity!
-  "High-level API for functionally stepping an entity via an optional behavior - default - , under 
-   the context of receiving a 'message' in a simulation context. If the behavior is not provided
-   the default-behavior reference is used.  Encapsulates the process of creating the behavior 
-   environment, computing the reduction using spork.ai.behavior/beval in the context of the 
-   behavior environment, commits the entity into the reduced simcontext, and returns the 
+  "High-level API for functionally stepping an entity via an optional
+   behavior - default - , under the context of receiving a 'message' in
+   a simulation context. If the behavior is not provided the
+   default-behavior reference is used.  Encapsulates the process of
+   creating the behavior environment, computing the reduction using
+   spork.ai.behavior/beval in the context of the behavior environment,
+   commits the entity into the reduced simcontext, and returns the
    simcontext."
   ([ctx e msg default]
    ;;TODO Check this for performance hits...
    (binding [spork.ai.core/*debug* (or spork.ai.core/*debug*  (= (:name e) *observed*))]
      (let [^behaviorenv benv (->benv ctx e msg default)
-           _    (ai/debug [:stepping (:name e) :last-update (:last-update e)  msg])]
-       (-> (beval (.behavior benv) benv)
-           (return!)
-           (ai/commit-entity-)))))
+           _    (ai/debug  [:<<<<<< :STEPPING (:name e) :last-update (:last-update e)  msg :>>>>>>])]
+           (-> (beval (.behavior benv) benv)
+               (return!)
+               (ai/commit-entity-))
+           )))
   ([ctx e msg] (step-entity! ctx e msg @default-behavior)))
 

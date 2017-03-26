@@ -472,6 +472,60 @@
       (fn [tbls]
         (reduce (fn [acc t] (update acc t tbl-filter)) tbls tables))))
 
+;;Entity Tracing and Debugging
+;;============================
+;;Migrated from quilsample.bridge
+
+;;can we take a discrete entity history and create a
+;;continuous entity history?  That's what the cycle-lerper
+;;is supposed to be doing, but currently is failing a bit at.
+(defn discrete-entity-history
+  "Given a context and an entity id to follow, returns a 
+   map of the discrete values of the entity's history 
+   as a function of time.  Ensures that only inflections 
+   where the entity history changes are captured. 
+   Caller may supply an optional sample? function  
+   to determine if frames should be dropped."
+  [ctx id & {:keys [sample?] :or {sample?
+                                  (fn [x] true)}}]
+  (let [tfinal (when (and (coll? sample?)
+                          (every? number? sample?))
+                 (reduce max sample?))
+        sample? (if tfinal (let [time?  (set sample?)]
+                             (fn [ctx]
+                               (time? (:t ctx))))
+                    sample?)]
+  (->>  (as-context  ctx)
+        (marathon-stream)
+        ;;(raw-frames) elided for now.
+        (map (fn [[t ctx :as f]]
+               (let [;ctx (:ctx f)
+                     ;t   (:t   f)
+                     e   (store/get-entity ctx id)]
+                 (assoc e :t t))))
+        (take-while (if tfinal (fn [f] (<= (:t f) tfinal))
+                        (fn [x] true)))
+        (filter #(and (sample? %)
+                      (== (:last-update %) (:t %))))
+        )))
+
+(defn entity-trace
+  "High level function for directing entity event and behavior 
+   traces to *out*.  Allows us to walk through the entity's 
+   behavior as it changes and see fine-grained event and 
+   behavior messages about the entity, as well as its 
+   discrete state changes."
+  [ctx e & {:keys [debug? sample?]
+                             :or {debug? true sample? (fn [_] true)}}] 
+  (let [eh (if debug?
+             (core/debug-entity e
+                (doall (discrete-entity-history ctx e :sample? sample?)))
+             (doall (discrete-entity-history ctx e :sample? sample?)))]
+    (println [:<<<<<<<<<<<<<<<<TRACE>>>>>>>>>>>>>])
+    (doseq [x (map (juxt :t :locationname :positionpolicy
+                         :state marathon.supply.unitdata/unit-stats :location-delta) eh)]
+      (println x))))
+
 ;;Another useful feature...
 ;;We'd like to optionally audit our project, when we create a stream and
 ;;initialize it.

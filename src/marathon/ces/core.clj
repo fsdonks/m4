@@ -313,6 +313,22 @@
   merge-entity
   get-time])
 
+;;Error Raising Convenience Functions
+;;===================================
+(defmacro watching-error
+  "Acts like a pass-through version of try-catch, 
+   where an automatic generic exception handler - 
+   body - is defined and called prior to simply 
+   re-throwing the original error.  Used for 
+   supplying debugging forensics."
+  [body handler & {:keys [err-symbol]
+                   :or {err-symbol 'e}}]
+  `(try ~body
+        (catch ~'Exception ~err-symbol
+          (do ~handler
+              (throw ~err-symbol)))))
+              
+
 ;;probably deprecate in near future.
 (defmacro ->msg
    ([t msg]              `(sim/->packet ~t :message (:from ~msg) (:to ~msg) ~msg))
@@ -325,13 +341,17 @@
 ;;need to push this into simcontext...
 ;;Message handling is equivalent to stepping the entity
 ;;immediately.
-(defn handle-message! [ctx e msg]  
-  ;(println [:handling (:name e) msg])
-  (b/step-entity! ctx e msg)
-  )
+(defn handle-message! [ctx ent msg]  
+  (watching-error
+   (b/step-entity! ctx ent msg)
+   ;if we observe an error, we'll print out handy forensics before throwing.
+   (println [:ERROR
+             :messaging-entity!
+             {:t    (get-time ctx)
+              :name (:name ent)}])))
 
 
-;;Conveneince function for abstractly sending messages to
+;;Convenience function for abstractly sending messages to
 ;;entities and synchronously computing the result.
 ;;Double-bang convention is consistent with synchronous
 ;;send.  Note: we can easily extend this if we have a

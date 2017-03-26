@@ -58,7 +58,7 @@
                                       (let [tnxt (+ t   (long (graph/arc-weight positiongraph pos nxt)))]
                                         (if (>= tnxt cycletime) pos
                                             (if (= nxt startstate) ;we looped around without finding it..
-                                              (throw (Exception. (str ["Cycletime exceeds policy, looped! " t name])))
+                                              (throw (Exception. (str ["Cycletime exceeds policy length, looped! " {:cycletime cycletime :t t :name name}])))
                                               (recur nxt tnxt))))
                                       (throw (Exception. "Cycletime exceeds policy!")))))                                    
   (get-state        [p position]   (graph/get-node positiongraph position))

@@ -29,7 +29,8 @@
             [marathon.ces.policy :as policy :refer [manage-policies]]
             [marathon.data [store :as simstate]]
             [marathon      [observers :as obs]]
-            [spork.sim     [simcontext :as sim]]))
+            [spork.sim     [simcontext :as sim]]
+            [spork.entitysystem [store :as store]]))
 
 
 ;#Auxillary functions, and legacy functions
@@ -59,12 +60,12 @@
       (let [tlastdemand (or (store/gete ctx :DemandStore :tlastdeactivation)
                             -1)
             t (sim/get-time ctx)]        
-        (if (>= t tlastdemand)
+        (if (> t tlastdemand)
           (if (neg? tlastdemand) 
             (throw (Error. "No demands scheduled.  Latest deactivation never initialized!"))
             (do (core/trigger-event :Terminate "Simstate" "Simstate"
-                                   (str "Time " t "is past the last deactivation: "
-                                        tlastdemand " in a truncated simulation, terminating!") nil ctx)
+                   (str "Time " t "is past the last deactivation: "
+                        tlastdemand " in a truncated simulation, terminating!") nil ctx)
                 false))
           true))
       (sim/has-time-remaining? ctx)))
