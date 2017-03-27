@@ -63,6 +63,8 @@
        (mergee ctx (:name ent) ent)
        new-messages))))
 
+;;WARNING: Could be a memory leak here!
+
 ;;debugging info for the behavior environment
 ;;constructor.
 (def args  (atom  nil))

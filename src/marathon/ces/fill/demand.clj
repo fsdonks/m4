@@ -40,6 +40,8 @@
 (def lastfill (atom nil))
 
 
+;;this is [cat|src|rule groups|buckets], or ["somesrc" #{"SomeDemandGroup"}]
+;;the simple translation is, fill the demands useing these buckets.
 (defn fill-category [demandstore category ctx & {:keys [stop-early? pending] 
                                                  :or   {stop-early? true}}]
   ;We use our UnfilledQ to quickly find unfilled demands. 
@@ -129,7 +131,13 @@
 
 ;;#High Level Demand Fill
 
+;;Note: in this connotation, categories are actually
+;;srcs....
+
 ;;Higher-order function for filling demands.
+;;note: dem/unfilled-categories returns a sequence of
+;;"some src", in this context, the category of
+;;demand is a demand for an SRC.
 (defn fill-demands-with [f ctx]
   (reduce (fn [acc c]
             (do (debug [:filling (type acc) c])
@@ -141,6 +149,13 @@
   (fill-demands-with fill-category ctx))
 
 ;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
+;;get-followon-keys returns a set of "buckets" in the supply that correspond
+;;to units tagged as follown-eligible  supply for demands witha corresponding
+;;followon-key, where the default is the demandgroup.  We want to pass this
+;;information on as a set of followon-tags to use when screening supply
+;;for a particular demand.  Since each demand in the category has a
+;;demandgroup, it stands to reason that we use the groups to filter
+;;on only supply with compatible demand.
 (defn fill-followons [ctx]
   (if-let [groups (core/get-followon-keys ctx)]   
     (fill-demands-with

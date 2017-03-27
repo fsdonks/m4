@@ -242,7 +242,8 @@
          src-selector  (cond any-src?  identity 
                              (fn? src) src
                              :else     (is? src))
-         category-selector (cond any-category?  identity 
+         category-selector (cond any-category?  identity
+                                 (set? category) (fn [x] (category x))
                                  (fn? category) category
                                  :else          (is? category))
          ;_ (println [:finding-supply src category])

@@ -96,8 +96,29 @@
   (def h
     (a/load-context (hpath "\\Documents\\srm\\cleaninput\\runs\\srmbase.xlsx")))
   (def sdata (hpath "\\testdata-v2.xlsx"))
-  
 
+  (require '[marathon.ces [engine :as engine]])
+  (require '[spork.sim.simcontext :as sim])
+  (in-ns 'marathon.ces.engine)
+  (defn partial-step
+  "Primary state transition function for Marathon.  Threads the next day and
+   an initial state through a series of transfer functions that address 
+   high-level state transfers for supply, policy, demand, filling, and more. 
+   Computes the resulting state - either the final state, or the initial state
+   for the next step."
+  ([day ctx]
+   (->> ctx 
+        (begin-day        day)  ;Trigger beginning-of-day logic and notifications.
+        (manage-supply    day)  ;Update unit positions and policies.
+        (manage-policies  day)  ;Apply policy changes, possibly affecting supply.
+        (manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.      
+       ; (fill-demands     day)  ;Try to fill unfilled demands in priority order. 
+       ; (manage-followons day)  ;Resets unused units from follow-on status. 
+       ; (end-day day)           ;End of day logic and notifications.
+        ))
+  ([ctx] (partial-step (sim/get-time ctx) ctx)))
+  (in-ns 'marathon.run)
+  
 ;;This is just a helper to translate from craig's encoding for
 ;;srm policy positions.
 (def translation

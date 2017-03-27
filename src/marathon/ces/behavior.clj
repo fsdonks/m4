@@ -636,7 +636,7 @@
 ;;other state handler functions, we can now just directly
 ;;encode the transition in the tree...
 (definline special-state? [s]
-  `(#{:spawning :abrupt-withdraw :recovered} ~s))
+  `(#{:spawning :abrupt-withdraw :recovered :recovery} ~s))
 
 (defn just-spawned?
   "Determines if the entity recently spawned, indicated by a default
@@ -785,7 +785,8 @@
                                                          :timeinstate timeinstate
                                                          :wait-time wt})
              _       (reset! ctx (supply/log-state! (:tupdate benv) @entity (:state @entity) newstate @ctx)) 
-             _       (swap! entity #(assoc % :state newstate )) ;;update the entity state, currently redundant.
+             _       (swap! entity #(assoc % :state newstate :statedata newdata)) ;;update the entity state, currently redundant.
+             _       (debug [:statedata statedata :newdata newdata :newstate newstate])
              ]
          (beval update-state-beh benv))))
 
@@ -1081,7 +1082,7 @@
         ;;let's derive a move...
         (let [e  @entity                
               currentpos (:positionpolicy e)
-              _  (when (= currentpos :re-entry)  (println (:tupdate benv)))
+              ;_  (when (= currentpos :re-entry)  (println (:tupdate benv)))
               p  (or next-position
                      (do (debug [:computing-position currentpos]) ;;performance 1
                          (get-next-position (:policy e)  currentpos)))                   
@@ -1102,14 +1103,16 @@
 ;;We know how to wait.  If there is an established wait-time, we
 ;;request an update after the time has elapsed using update-after.
 (befn wait ^behaviorenv {:keys [wait-time] :as benv}          
-  (when-let [wt wait-time] ;;if we have an established wait time...    
-    (if (zero? wt)
-       ;skip the wait, instantaneous.  No need to request an
-       ;update.
-      (do (debug [:instantly-updating])
-          update-state-beh) 
-      (do (debug [:waiting  wt])
-          (update-after  benv)))))
+      (when-let [wt wait-time] ;;if we have an established wait time...
+        (do  (debug [:sdb (:statedata benv)
+                     :sde (:statedata @(:entity benv))])
+            (if (zero? wt)
+            ;;skip the wait, instantaneous.  No need to request an
+            ;;update.
+              (do (debug [:instantly-updating])
+                  update-state-beh) 
+              (do (debug [:waiting  wt])
+                  (update-after  benv))))))
 
 ;;Note: start-cycle looks somewhat weak.  Can we fold this into
 ;;another behavior?
@@ -1235,12 +1238,12 @@
      (let [;#_{:keys [from-location to-location]} #_location-change ;minor improvement..
            from-location (val-at location-change :from-location) ;;OMG, typo on location...was loction!!!
            to-location   (val-at location-change :to-location)
-           ]
-       (let [_ (debug [:location-change location-change])            
-             _  (reset! ctx  (supply/log-move! tupdate from-location to-location @entity nil @ctx))
-             _  (reset! entity (u/push-location @entity to-location))] 
+           _ (debug [:location-change location-change])
+           _  (reset! entity (u/push-location @entity to-location))
+           _  (reset! ctx    (supply/log-move! tupdate from-location to-location @entity nil @ctx))
+           ] 
          ;;we need to trigger a location change on the unit...
-         (success (assoc benv :location-change nil))))))
+       (success (assoc benv :location-change nil)))))
 
 ;;this is a weak predicate..but it should work for now.
 (defn demand? [e] (not (nil? (:source-first e))))
@@ -1356,15 +1359,22 @@
 (befn followon-beh {:keys [entity ctx] :as benv}
       (let [fc (u/followon-code @entity)
             _  (debug [:trying-followon (:name @entity) fc])]
-        (when-let [fc (u/followon-code @entity)] ;if the unit has a followon code
+        (when fc ;if the unit has a followon code
           (do ;register the unit as a possible followOn
-            ;(println [(:name @entity) :added-followon :for [fc]])
+                                        ;(println [(:name @entity) :added-followon :for [fc]])
             (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
-            (swap! entity #(assoc % :state :followon))
+            (swap! entity #(merge % {:state :followon}))
                                         ;age-unit
-            ;(println [:successfully-followoing-on])
-            (success (merge benv {:wait-time +inf+
-                                  :next-position :followon})) ;?
+            (debug [:waiting-in-followon-status fc])
+            #_(success (merge benv {:wait-time +inf+
+                                    :next-position :followon}))
+            (->seq [(->alter (fn [b]
+                               (merge b {:wait-time +inf+
+                                          :next-position :followon ;(:positionpolicy @entity) ;:followon
+                                          :next-state  :followon;:abruptwithdraw
+                                            })))
+                    moving-beh])
+                                        ;?
             ))))
       
 ;;way to get the unit back to reset.  We set up a move to the policy's start state,
@@ -1467,9 +1477,11 @@
 ;;and the demand would not be considered filled....It does nothing to alleviate the demand pressure,
 ;;which is the intent of followon deployments.  Conversely, if overlap is 0, as in typical surge
 ;;periods, then units will always followon.  I take back my earlier assessment, this is accurate.
+;;Note: We need to ensure this behavior fails if called from incompatible circumstances...
+;;We can only call this on units that are actually deployed/bogging.
 (befn abrupt-withdraw-beh {:keys [entity deltat] :as benv}
       (let [_    (when (pos? deltat) (swap! entity #(u/add-bog % deltat)))
-            unit @entity            
+            unit @entity
             ;1)
             bogremaining (- (:bogbudget (:currentcycle unit))  
                             (protocols/overlap (:policy unit)) ;;note: this overlap assumption may not hold...
@@ -1498,6 +1510,8 @@
   {:reset            reset-beh
 ;   :global          
    :abrupt-withdraw  abrupt-withdraw-beh
+   :recovery         recovery-beh
+   :followon         age-unit
 ;   :recovered        (echo :recovered-beh)
    ;:end-cycle
 ;   :spawning        spawning-beh   
@@ -1537,7 +1551,7 @@
           ;;overlap state.  This leaves us with a conundrum relative to our default
           ;;legacy meanings of bog and overlap.  What we can do is ensure that if
           ;;bogging is present, we just skip overlapping if we ever encounter a
-          ;;state-state.  This is practical, but somewhat brittle....probably
+          ;;state-state.  This is practical, but somewhat brittle....probabtately
           ;;a better idea to encode the meaning of states better - like [:bogging :overlapping]          
           (let [stats (r/filter identity                                 
                                 (r/map (fn [s] (val-at state-map s)) (disj state :overlapping)))
@@ -1666,9 +1680,8 @@
           moving-beh]))
 
 (befn up-to-date {:keys [entity tupdate] :as benv}
-      (let [_ (push! entity :last-update tupdate) 
-            e @entity]
-        (echo [:up-to-date (:name e) :cycletime (:cycletime e) :last-update (:last-update e)])))
+      (let [e (reset! entity (assoc @entity :last-update tupdate))]
+        (echo [:up-to-date (:name e) :cycletime (:cycletime e) :last-update (:last-update e) :tupdate tupdate])))
 
 (def process-messages-beh
   (->or [(->and [(echo :check-messages)

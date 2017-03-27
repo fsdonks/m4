@@ -282,21 +282,30 @@
 ;;Note: this is pretty crucial for the fill process, it provides all of
 ;;the ordering and filtering context, derived from the demand record.
 
+;;compute a compatible supply category based on the demand.
+(defn derive-category [d supply-category]
+  (if (vector? supply-category)
+    (let [[src groups] supply-category]
+      (groups (:demandgroup d)))
+    (let [c (get d :category :default)]
+      (if (restricted-categories c) c
+          :default))))
+
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
-(defn demand->rule [d]
-  (let [category (let [c (get d :category :default)]
-                   (if (restricted-categories c) c
-                       :default))
-        r   {:src  (get d :src)
-             :cat  category
-             :name (get d :name)
-             :order-by (resolve-source-first (get d :source-first "uniform"))
-             :required (d/required d)
-             }]
-    (if  (or (= category :default) (nil? (:StartState d)))
-      r
-      ;;we have a preference for startstate...
-      (assoc r :where  (has-transition? (:StartState d))))))
+(defn demand->rule
+  ([d supply-category]
+   (let [category (derive-category d supply-category)
+         r   {:src  (get d :src)
+              :cat   category ;;
+              :name (get d :name)
+              :order-by (resolve-source-first (get d :source-first "uniform"))
+              :required (d/required d)
+              }]
+     (if  (or (= category :default) (nil? (:StartState d)))
+       r
+       ;;we have a preference for startstate...
+       (assoc r :where  (has-transition? (:StartState d))))))
+  ([d] (demand->rule d :default)))
       
 
 ;;##Finding and Ordering Supply  
@@ -622,12 +631,16 @@
 (def last-sel (atom nil))
 
 ;;Filling in batch now.  Should be mo betta.
-(defn satisfy-demand  "Attempts to satisfy the demand by finding supply and applying promised 
+;;We need to account for category values that are potentially
+;;vectors like [src #{SomeDemandGroup}] that specify a desire to
+;;use a follow-on category.
+(defn satisfy-demand
+  "Attempts to satisfy the demand by finding supply and applying promised 
    fills to the demand.  Returns a result pair of 
    [:filled|:unfilled updated-context], where :filled indicates the demand is 
    satisifed, and updated-context is the resulting simulation context."
   [demand category ctx]
-  (let [rule        (demand->rule demand)
+  (let [rule        (demand->rule demand category)
         period      (:name (policy/get-active-period (core/get-policystore ctx)))
         t           (core/get-time ctx)
         demand-name (:name demand)  

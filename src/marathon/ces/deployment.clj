@@ -43,7 +43,7 @@
         ]
     (cond (location-based-policy? demand)  (u/location-based-deployment unit demand ctx) ;;allow location to override policy.
           followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
-                             newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
+                             newunit (store/get-entity newctx (:name unit))])] ;;we've updated the unit at this point...               
                          (u/re-deploy-unit  newunit  demand t newctx))
           :else 
           (u/deploy-unit unit demand  t ctx))))

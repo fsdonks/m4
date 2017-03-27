@@ -627,16 +627,20 @@
    supply."
   [ctx unitname]
   (let [;_     (println [:releasing unitname :followon])
-        ctx   (store/assoce ctx unitname :followoncode nil)
-        ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
-                   (u/change-state (store/get-entity ctx unitname)
-                                   :abrupt-withdraw 0 0))
-        ;store 
-        ]   
-    (update-deploy-status 
-     (core/get-supplystore ctx)
-     (store/get-entity ctx unitname)  nil nil ctx)))
-
+        waiting? (store/gete ctx unitname :followon)
+                    
+        ;_     (if (= unitname "21_43429R000_NG")
+        ;        (println [:releasing unitname :followons]))
+        ]
+    (if (not waiting?) ctx
+        (let [ctx      (store/assoce ctx unitname :followoncode nil)
+              ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
+                         (u/change-state (store/get-entity ctx unitname)
+                                         :abrupt-withdraw 0 0))]
+          (update-deploy-status 
+           (core/get-supplystore ctx)
+           (store/get-entity ctx unitname)  nil nil ctx)))))
+  
 ;;__Currently, we just wipe out any categories of supply that are not
 ;;consistent with our default bucket, :default;  This may change in the
 ;;future, especially if we just stick the :followon supply in their
