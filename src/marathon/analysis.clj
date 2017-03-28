@@ -514,6 +514,10 @@
                       (== (:last-update %) (:t %))))
         )))
 
+(def unit-entity-summary
+  (juxt :t :locationname :positionpolicy
+            :state marathon.supply.unitdata/unit-stats :location-delta))
+
 (defn entity-trace
   "High level function for directing entity event and behavior 
    traces to *out*.  Allows us to walk through the entity's 
@@ -527,8 +531,7 @@
                 (doall (discrete-entity-history ctx e :sample? sample?)))
              (doall (discrete-entity-history ctx e :sample? sample?)))]
     (println [:<<<<<<<<<<<<<<<<TRACE>>>>>>>>>>>>>])
-    (doseq [x (map (juxt :t :locationname :positionpolicy
-                         :state marathon.supply.unitdata/unit-stats :location-delta) eh)]
+    (doseq [x (map unit-entity-summary eh)]
       (println x))))
 
 ;;Another useful feature...

@@ -345,7 +345,6 @@
 (defn policy? [obj]
   (extends? IRotationPolicy (class obj)))
 
-
 ;;#TODO# add inspection services to visualize the entity state.
 ;;I'd like to add in some useful visuals to inspect the repl state in
 ;;a friendly manner.

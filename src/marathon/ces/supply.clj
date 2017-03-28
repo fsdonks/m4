@@ -710,7 +710,6 @@
        ctx)))
   ([ctx] (manage-supply (core/get-time ctx) ctx)))
 
-
 ;;A simple wrapper to unify the high level supply management.  We were calling 
 ;;this inline, it's more consistent now.
 (defn manage-followons

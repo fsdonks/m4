@@ -556,6 +556,8 @@
 
 (def ^:dynamic *fill-testing* true)
 
+(def fd (atom nil))
+
 (defn fill!
  "Deploys the unit identified in filldata to demand via the supply system."
   [t period demand deployment-count filldata  ctx]

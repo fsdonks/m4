@@ -464,10 +464,7 @@
 ;; Similarly, we account for units with policies that do not have an explicit recovered state.
 ;; In this case, we inject the equivalent of a fake state, with 0 wait time, to allow for recovery
 ;; processing to occur.
-
-;;this'll get called quite a bit...
-(defn recovery-time [ctx]
-  (or (store/gete ctx :parameters "DefaultRecoveryTime") 0))
+  
 
 ;;original non-memoized function.
 #_(defn get-next-position [policy position]
@@ -490,7 +487,8 @@
        :recovered  :re-entry
        (if-let [res (protocols/next-position policy position)]
          res
-         (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))))))
+         (throw (Exception. (str [:dont-know-following-position position :in (:name policy)]))))
+       ))))
 
 ;;We're getting too far ahead of ourselves during policy change calcs.
 ;;Jumping the position we're "in"...for max/nearmax policies, this leaves
@@ -557,12 +555,7 @@
   ;;current position - i.e. how long will I have to wait in the next position.
   ;;Current usage appears correct - namely the 3-arity version, but that
   ;;could throw us off - as it did for initial policy-change implementation!
-  #_([unit frompos topos {:keys [deltat statedata] :as benv}]
-     (let [wt     (protocols/transfer-time (:policy unit) frompos topos)
-           deltat (or  deltat 0) ;allow the ctx to override us...
-           ]
-       (- wt (fsm/remaining statedata))))
-  ([unit position {:keys [deltat statedata] :as benv}] ;;uses position after current...
+  ([unit position {:keys [deltat statedata ctx] :as benv}] ;;uses position after current...
    (policy-wait-time (:policy unit) statedata position (or deltat 0)))
   ([position {:keys [entity] :as benv}] (get-wait-time @entity position benv))
   ([{:keys [wait-time] :as benv}] wait-time))
@@ -858,7 +851,8 @@
 (befn spawning-beh ^behaviorenv {:keys [to-position cycletime tupdate statedata entity ctx]
                                  :as  benv}
       (when (spawning? statedata)     
-        (let [ent @entity              
+        (let [ent @entity
+              ;;we're now tracking default recovery in our context.
               {:keys [positionpolicy policy]} ent
               {:keys [curstate prevstate nextstate timeinstate 
                       timeinstateprior duration durationprior 
@@ -874,7 +868,8 @@
                       position-time]}
                  (compute-state-stats entity cycletime policy positionpolicy)
               spawned-unit  (-> ent
-                                (assoc :cycletime cycletime)
+                                (assoc :cycletime cycletime
+                                       :default-recovery (core/default-recovery))
                                 (u/initCycles tupdate)
                                 (u/add-dwell cycletime)
                                 (assoc :last-update tupdate)
@@ -1455,7 +1450,7 @@
 (def non-recoverable #{"SRMAC" "SRMRC" "SRMRC13"})
 
 ;;We need to modify this to prevent any srm units from recovering.
-(defn can-recover? [unit]
+(defn can-recover? [unit ctx]
   (let [cyc (:currentcycle unit)
         p   (:policy unit)]
     (and  (not (non-recoverable (protocols/policy-name p)))
@@ -1465,7 +1460,10 @@
 (befn recovery-beh {:keys [entity deltat ctx] :as benv}
   (let [unit @entity]
     (if (can-recover? unit)
-      (move! :recovery 90) ;;currently moving to recovery for 90 days.
+      (move! :recovery
+             90
+             
+             ) ;;currently moving to recovery for 90 days.
       (do (swap! ctx
                  #(sim/trigger-event :supplyUpdate (:name unit) (:name unit) (core/msg "Unit " (:name unit) " Skipping Recovery with "
                                                                                        (:bogbudget (:currentcycle unit)) " BOGBudget") nil %))

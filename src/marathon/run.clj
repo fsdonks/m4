@@ -11,7 +11,6 @@
 
 (def ep (hpath "\\srm\\notionalbase.xlsx"))
 
-
 (defn build-patches
   "Given a path to a processed run directory, renders the 
    processed history into a stylized HTML file.  The styling 

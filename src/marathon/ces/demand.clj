@@ -826,7 +826,7 @@
 	    (and demandgroup (not= "" demandgroup) (not (ungrouped? demandgroup)))
             (do  (debug :abw1)
                  (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
-                       _ (debug [:pre-abw unitname (store/gete ctx unitname :last-update)])]
+                       _   (debug [:pre-abw unitname (store/gete ctx unitname :last-update)])]
                    (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
             (not (ghost? unit))
             (do  (debug :abw2)

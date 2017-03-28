@@ -98,6 +98,20 @@
   (do (println (str *ns*) "start-state is a stub.  Should be setting entities to their starting states.")
       ctx))
 
+(defn check-parameters
+  "Ensures our numeric parameters are parsed/initialized.  
+   Currently only here to provide a consistent default recovery 
+   parameter."
+  [ctx]
+  (if-let [res (store/gete ctx :parameters :DefaultRecoveryTime)]
+    (if (number? res)
+      ctx
+      (store/assoce ctx
+          :parameters
+          :DefaultRecoveryTime
+          (or res (long (clojure.edn/read-string res)))
+          ))))
+
 (defn initialize-sim
   "Given an initial - presumably empty state - and an optional upper bound on 
    on the simulation time - lastday - returns a simulation context that is 
@@ -107,6 +121,7 @@
           :or {observer-routes obs/default-routes}}]
   (->> ctx
        (sim/register-routes observer-routes)
+       (check-parameters)
        (start-state)
        (set-time lastday)
        (supply/manage-supply   0)

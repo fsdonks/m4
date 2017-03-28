@@ -726,7 +726,7 @@
 ;;the original rotational policies.
 ;;When we deploy units now, we actually have a hook to determine
 ;;if they should assume the demand's behavior, duration, etc.
-
+  
 (defn keep-bogging-until-depleted
   [u new-location ctx]
   (move-to u new-location "Deployed" (boggable-time u) ctx))

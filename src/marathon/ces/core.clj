@@ -579,7 +579,6 @@
 (defn inc-deployment-count [ctx]
   (inc-counter ctx :deployment-count))
 
-
 ;;Acts like juxt, except it returns the results in a map.
 ;;The map is implied by the args in kvps, where simple keys - numbers,
 ;;strings, keywords, are assumed to be field names. A map is built 
@@ -707,6 +706,7 @@
 (defn unit-names      [ctx] (keys (gete ctx :SupplyStore :unitmap)))
 (defn unit-entities   [s]   (store/get-domain s :unit-entity))
 (defn demand-entities [s]   (store/get-domain s :DemandType))
+
 
 (defn current-entity
   "Fetch the entity with it's current time interpolated as a :dt component.
@@ -846,7 +846,10 @@
 
 (defn ghost? [unit] (= (clojure.string/upper-case (:src unit)) "GHOST"))
 (defn followon? [u] (:followoncode u))
-(defn ghost-followon? [u] (and (ghost? u) (followon? u)))
+(defn ghost-followon?  [u] (and (ghost? u) (followon? u)))
+(defn default-recovery [ctx]
+  (or (:DefaultRecoveryTime (get-parameters ctx))
+      0))
 
 ;;#TODO get this working like it used to, right now it's not important.
 ;; (defn interval->date  [t ctx]
