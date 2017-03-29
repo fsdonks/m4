@@ -459,6 +459,16 @@
        (->history-stream tmax step-function)
        (end-of-day-history)))
 
+(defn day-before-error [xs]
+  (let [frm (atom nil)]
+    (try (doseq [x xs]
+           (reset! frm x))
+         (catch Exception e
+           (do (println [:error-occurs-in-next-frame])
+               @frm)))))
+    
+                
+
 ;;simple-project xforms
 (defn filter-srcs
   "Given a sequence of srcs to keep, pre-processes the project tables

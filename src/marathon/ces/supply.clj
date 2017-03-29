@@ -722,10 +722,11 @@
   "Ensures that entities held in a temporary follow-on status are released and
    circulated back into supply.  Typically used after we try to fill demands."
   [day ctx]
-  (let [fons   (into {} (filter second) (store/get-domain ctx :followon))
+  (let [
+        fons   (into {} (filter second) (store/get-domain ctx :followon))
         fcount (count fons)]
     (if (pos? fcount)
-      (do  #break (debug [:releasing! fcount :followon])
+      (do  (debug [:releasing! fcount :followon])
            (release-followons fons ctx))
       (do (debug [:No-followons-to-release!])
           (store/drop-domain ctx :followon) ;;covering down on a weird issue with nil valued fons.

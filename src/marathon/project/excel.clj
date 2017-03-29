@@ -55,13 +55,15 @@
 (def ^:const +blank+ "")
 (defn blank? [x] (identical? x +blank+))
 
-(defn =word [s1 s2]
+(defn =word
   "Like `=` for strings, except that the arguments are first
   case-folded before comparison with `=`."
+  [s1 s2]  
   (= (clojure.string/lower-case s1) (clojure.string/lower-case s2)))
 
-(defn as-int [x]
+(defn as-int
   "Try to find an int representation for `x`."
+  [x]
   (cond (string? x) (cond (=word "-inf" x) Integer/MIN_VALUE
                           (=word "inf"  x) Integer/MAX_VALUE
                           :else (let [thing (clojure.edn/read-string x)]
@@ -72,8 +74,9 @@
         (number? x) (int x)
         :else       0))
 
-(defn as-long [x]
+(defn as-long
   "Try to find a long representation for `x`."
+  [x]
   (cond (string? x) (cond (=word "-inf" x) Long/MIN_VALUE
                           (=word "inf"  x) Long/MAX_VALUE
                           :else (let [thing (clojure.edn/read-string x)]
@@ -119,10 +122,10 @@
 ;;edit/update from excel.  There are advantages and
 ;;disadvantages to this...
 (defn marathon-book->marathon-tables
-  [wbpath & {:keys [tables] :or {tables
-                                 marathon-workbook-schema}}]
   "Extract a map of canonical tables to a map with the same name.  Caller can
    supply additional tables, or supply the :all keyword to get all tables."
+  [wbpath & {:keys [tables] :or {tables
+                                 marathon-workbook-schema}}]
   (let [wb (xl/as-workbook wbpath)]
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
