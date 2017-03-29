@@ -60,7 +60,6 @@
 ;; Set defaultBehaviorManager = bm
 ;; End Function
 
-
 ;;Function to read in data from the existing table of [ParameterName
 ;;Value] records.  Produces a map of parameters with the param names keyworded.
 (defn table->parameters [paramtbl]
