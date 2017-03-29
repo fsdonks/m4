@@ -52,7 +52,8 @@
 
 ;;we're having similar problems at 1821->1825 now.
 (def ctxpre (->> (a/marathon-stream ctx)
-                 (a/frame-at        1821)
+                 (a/day-before-error)
+                 (second)
                  (sim/advance-time)))
 
 ;;time at 1825, begin-day now.

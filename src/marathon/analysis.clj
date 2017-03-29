@@ -459,13 +459,33 @@
        (->history-stream tmax step-function)
        (end-of-day-history)))
 
-(defn day-before-error [xs]
+(defn day-before-error
+  "Given a sequence of frames, returns "
+  [xs]
   (let [frm (atom nil)]
     (try (doseq [x xs]
            (reset! frm x))
          (catch Exception e
            (do (println [:error-occurs-in-next-frame])
                @frm)))))
+
+(defn day-before
+  "Given a sequence of frames, returns the closest context prior  
+   to time t."
+  [t xs]
+  (->> xs
+       (take-while (fn [[tf ctx]]
+                     (< tf t)))
+       (last)
+       (second)))
+
+(defn day-of
+  "Given a sequence of frames, returns the context prior to 
+   evaluating the step-function at t."
+  [t xs]
+  (->> xs
+       (day-before t)
+       (sim/advance-time)))
     
                 
 

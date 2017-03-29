@@ -633,20 +633,14 @@
                     (store/gete ctx unitname :state)
                     :followon)]
     (if (not waiting?) ctx
-        (let [ctx   (store/assoce ctx unitname :followoncode nil)
-              ;; _     (when (= unitname "23_43429R000_NG")
-              ;;         (let [cnt (inc @rfu)
-              ;;               _   (reset! rfu cnt)]
-              ;;           (if (> cnt 1)
-              ;;             (throw (Exception. (str [:too-many-calls])))
-              ;;             (println [:sending-recovery (core/get-time ctx) unitname]))))
-              ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
+        (let [ctx   (store/assoce ctx unitname :followoncode nil)           
+              ctx   (->> ctx 
                        (u/change-state (store/get-entity ctx unitname)
-                           :recovery #_:abrupt-withdraw 0 0))]
+                           :recovery  0 0))]
           (update-deploy-status 
            (core/get-supplystore ctx)
            (store/get-entity ctx unitname)  nil nil ctx)))))
-  
+
 ;;__Currently, we just wipe out any categories of supply that are not
 ;;consistent with our default bucket, :default;  This may change in the
 ;;future, especially if we just stick the :followon supply in their
@@ -654,18 +648,20 @@
 ;;more general remissionable supplies.
 ;;Process the unused follow-on units, changing their policy to complete cycles.
 (defn release-followons [fons ctx]
-  (->  (reduce release-followon-unit  (store/drop-domain ctx :followon) (keys fons))
-       (store/updatee :SupplyStore :deployable-buckets
-                      (fn [m]
-                        (reduce (fn [acc k]
-                                  (assoc acc k (get m k))) {} known-buckets)
-                        ))))
+  (let [newctx (reduce (fn [acc k]                      
+                         (release-followon-unit acc k))
+                       ctx (keys fons))]
+    (store/updatee  newctx :SupplyStore :deployable-buckets
+       (fn [m]
+         (reduce (fn [acc k]
+                   (assoc acc k (get m k)))
+                 {} known-buckets)))))
 
 ;;__TODO__ Deprecate release-max-utilizers
 ;;This is probably a deprecated function.  It was a corner case to ensure that 
 ;;we handled a special class of follow on units, who followed a special max 
 ;;utilization policy.  We can probably replace it with something more general.
-(defn release-max-utilizers [supplystore & [ctx]]
+#_(defn release-max-utilizers [supplystore & [ctx]]
   (let [{:keys [followons normal]} 
            (group-by #(if (followon-unit? supplystore %) :followon :normal)
                       (tag/get-subjects (:tags supplystore) :MaxUtilizer))
@@ -722,13 +718,13 @@
   "Ensures that entities held in a temporary follow-on status are released and
    circulated back into supply.  Typically used after we try to fill demands."
   [day ctx]
-  (let [
-        fons   (into {} (filter second) (store/get-domain ctx :followon))
-        fcount (count fons)]
+  (let [fons   (into {} (filter second) (store/get-domain ctx :followon))
+        fcount (count fons)
+        newctx (store/drop-domain ctx :followon)]
     (if (pos? fcount)
-      (do  (debug [:releasing! fcount :followon])
-           (release-followons fons ctx))
+      (do  (debug [:releasing! fcount :followon])         
+           (release-followons fons newctx))
       (do (debug [:No-followons-to-release!])
-          (store/drop-domain ctx :followon) ;;covering down on a weird issue with nil valued fons.
+          newctx ;;covering down on a weird issue with nil valued fons.
           ))))
 
