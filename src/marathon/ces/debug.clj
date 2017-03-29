@@ -47,7 +47,7 @@
            ctxfill
            (store/get-entity ctxfill uic)
            446
-           (store/get-entity ctxfill "1_Tangerine_43429R000_[746...754]")                
+           (store/get-entity ctxfill "1_Tangerine_43429R000_[746...754]")      
            (core/followon? (store/get-entity ctxfill uic))))
 
 ;;we're having similar problems at 1821->1825 now.
@@ -55,4 +55,14 @@
                  (a/frame-at        1821)
                  (sim/advance-time)))
 
+;;time at 1825, begin-day now.
+;;we are not filling followon demands, specifically
+;;for dg moke, even though we have supply.
+;;we're stopping when trying to fill violet, then
+;;just leaving everything else on the table.
+;;we should be able to fill moke 
 (def ctxfill (engine/partial-step ctxpre))
+
+(def uic23 "23_43429R000_NG")
+;;unit 23 is apparently stuck at coco up until
+;;703, even by 1825...
