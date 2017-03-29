@@ -98,26 +98,6 @@
   (do (println (str *ns*) "start-state is a stub.  Should be setting entities to their starting states.")
       ctx))
 
-(defn check-parameters
-  "Ensures our numeric parameters are parsed/initialized.  
-   Currently only here to provide a consistent default recovery 
-   parameter."
-  [ctx]
-  (let [res (store/gete ctx :parameters :DefaultRecoveryTime)]
-    (if (integer? res) ctx
-      (let [n   (if (number? res)  res ;already an int
-                    (case res
-                      ("" nil) 0
-                      (if (string? res)
-                        (clojure.edn/read-string res)
-                        (throw (Exception.
-                                (str ["Non-integer recovery time "
-                                      res]))))))]
-      (store/assoce ctx
-          :parameters
-          :DefaultRecoveryTime
-          (long n))))))
-
 (defn initialize-sim
   "Given an initial - presumably empty state - and an optional upper bound on 
    on the simulation time - lastday - returns a simulation context that is 
@@ -127,7 +107,6 @@
           :or {observer-routes obs/default-routes}}]
   (->> ctx
        (sim/register-routes observer-routes)
-       (check-parameters)
        (start-state)
        (set-time lastday)
        (supply/manage-supply   0)

@@ -616,6 +616,8 @@
 
 ;;__TODO__Detangle release-followon-unit.
 
+(def rfu (atom 0))
+
 ;;I think we're missing something here; it doesn't look like we
 ;;are unloading our followon supply from the deployable
 ;;buckets...
@@ -626,17 +628,21 @@
    unit is released from holding and allowed to progress back into the global 
    supply."
   [ctx unitname]
-  (let [;_     (println [:releasing unitname :followon])
-        waiting? (store/gete ctx unitname :followon)
-                    
-        ;_     (if (= unitname "21_43429R000_NG")
-        ;        (println [:releasing unitname :followons]))
-        ]
+  (let [;_        (println [:releasing unitname :followon])
+        waiting?  (identical?
+                    (store/gete ctx unitname :state)
+                    :followon)]
     (if (not waiting?) ctx
-        (let [ctx      (store/assoce ctx unitname :followoncode nil)
+        (let [ctx   (store/assoce ctx unitname :followoncode nil)
+              ;; _     (when (= unitname "23_43429R000_NG")
+              ;;         (let [cnt (inc @rfu)
+              ;;               _   (reset! rfu cnt)]
+              ;;           (if (> cnt 1)
+              ;;             (throw (Exception. (str [:too-many-calls])))
+              ;;             (println [:sending-recovery (core/get-time ctx) unitname]))))
               ctx   (->> ctx ;(update-entity ctx :SupplyStore remove-followon unitname)                   
-                         (u/change-state (store/get-entity ctx unitname)
-                                         :abrupt-withdraw 0 0))]
+                       (u/change-state (store/get-entity ctx unitname)
+                           :recovery #_:abrupt-withdraw 0 0))]
           (update-deploy-status 
            (core/get-supplystore ctx)
            (store/get-entity ctx unitname)  nil nil ctx)))))
@@ -719,7 +725,7 @@
   (let [fons   (into {} (filter second) (store/get-domain ctx :followon))
         fcount (count fons)]
     (if (pos? fcount)
-      (do  (debug [:releasing! fcount :followon])
+      (do  #break (debug [:releasing! fcount :followon])
            (release-followons fons ctx))
       (do (debug [:No-followons-to-release!])
           (store/drop-domain ctx :followon) ;;covering down on a weird issue with nil valued fons.

@@ -643,7 +643,7 @@
 ;;other state handler functions, we can now just directly
 ;;encode the transition in the tree...
 (definline special-state? [s]
-  `(#{:spawning :abrupt-withdraw :recovered :recovery} ~s))
+  `(#{:spawning :abrupt-withdraw :recovered #_:recovery} ~s))
 
 (defn just-spawned?
   "Determines if the entity recently spawned, indicated by a default
@@ -783,11 +783,7 @@
              _ (when (not duration) (throw (Exception.  (str "nil value for duration in state change behavior!"))))
              followingstate (or followingstate newstate)
              ;;we change statedata here...
-             wt  (core/watching-error
-                  (- duration timeinstate)
-                  (pprint/pprint {:duration duration
-                          :timeinstate timeinstate}))
-
+             wt   (- duration timeinstate)
              _  (when (neg? wt) (throw (Exception. (str [:negative-wait-time])))) 
              _  (debug [:changing-state state-change :wait-time wt])
              newdata (assoc (fsm/change-statedata statedata newstate duration followingstate)
@@ -798,7 +794,7 @@
                                                          :wait-time wt})
              _       (reset! ctx (supply/log-state! (:tupdate benv) @entity (:state @entity) newstate @ctx)) 
              _       (swap! entity #(assoc % :state newstate :statedata newdata)) ;;update the entity state, currently redundant.
-             _       (debug [:statedata statedata :newdata newdata :newstate newstate])
+             ;_       (debug [:statedata statedata :newdata newdata :newstate newstate])
              ]
          (beval update-state-beh benv))))
 
@@ -1118,8 +1114,8 @@
 ;;request an update after the time has elapsed using update-after.
 (befn wait ^behaviorenv {:keys [wait-time] :as benv}          
       (when-let [wt wait-time] ;;if we have an established wait time...
-        (do  (debug [:sdb (:statedata benv)
-                     :sde (:statedata @(:entity benv))])
+        (do  #_(debug [:sdb (:statedata benv)
+                       :sde (:statedata @(:entity benv))])
             (if (zero? wt)
             ;;skip the wait, instantaneous.  No need to request an
             ;;update.
@@ -1242,7 +1238,8 @@
          (reset! entity (assoc @entity :positionpolicy (:to-position change)))
          (->seq [check-deployable                 
                  finish-cycle
-                 (->alter  #(dissoc % :position-change))]))))
+                 (->alter  #(assoc % :position-change nil
+                                     :next-position nil))]))))
 
 ;;Performance: Mild hotspot.  Dissocing costs us here.  Change to assoc and
 ;;check.
@@ -1355,6 +1352,7 @@
         :spawning spawning-beh
         :abrupt-withdraw (do (debug [:<special-state-abw>])
                              abrupt-withdraw-beh)
+        :recovery      moving-beh ;;setup the move to recovered.
         :recovered     (->and [(echo :recovered-beh)
                                re-entry-beh
                                ;reset-beh
