@@ -5,8 +5,8 @@
   (:require [spork.util.io :as io]
             [clojure.java.io :as jio]
             [spork.cljgraph.core :as graph]
-            [spork.cljgraph.jungapi :as jung]
-            [spork.sketch :as sketch]
+;            [spork.cljgraph.jungapi :as jung]
+;            [spork.sketch :as sketch]
             [clojure.pprint :as pprint]))
 
 (defn context? [x]

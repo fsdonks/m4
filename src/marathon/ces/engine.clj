@@ -103,14 +103,20 @@
    Currently only here to provide a consistent default recovery 
    parameter."
   [ctx]
-  (if-let [res (store/gete ctx :parameters :DefaultRecoveryTime)]
-    (if (number? res)
-      ctx
+  (let [res (store/gete ctx :parameters :DefaultRecoveryTime)]
+    (if (integer? res) ctx
+      (let [n   (if (number? res)  res ;already an int
+                    (case res
+                      ("" nil) 0
+                      (if (string? res)
+                        (clojure.edn/read-string res)
+                        (throw (Exception.
+                                (str ["Non-integer recovery time "
+                                      res]))))))]
       (store/assoce ctx
           :parameters
           :DefaultRecoveryTime
-          (or res (long (clojure.edn/read-string res)))
-          ))))
+          (long n))))))
 
 (defn initialize-sim
   "Given an initial - presumably empty state - and an optional upper bound on 

@@ -381,7 +381,8 @@
             res))))))
 
 ;;slightly faster for memoizing policy name.
-(defn memo-policy [f]
+;;This should be a concurent hashmap...
+(defn memo2-policy [f]
   (let [xs (java.util.HashMap.)]
     (fn [^clojure.lang.ILookup x1 y]
       (let [x (marathon.data.protocols/atomic-name x1)  #_(.valAt x1 :name)]
@@ -396,6 +397,16 @@
                   _     (.put ys y res)
                   _     (.put xs x ys)]
               res))))))
+
+(defn memo1-policy [f]
+  (let [xs (java.util.HashMap.)]
+    (fn [^clojure.lang.ILookup x1]
+      (let [x (marathon.data.protocols/atomic-name x1)  #_(.valAt x1 :name)]
+        (if-let [res (.get xs x)]
+          res
+          (let [res (f x1)]
+            (do (.put xs x res)
+                res)))))))
 
 ;;an alternative idea here...
 ;;use a closure to do all this stuff, and reify to give us implementations
@@ -480,7 +491,7 @@
 ;;We need to memoize based on a finer criteria, based on the
 ;;active policy name...
 (def get-next-position
-  (memo-policy
+  (memo2-policy
    (fn get-next-position [policy position]
      (case position
        :recovery   :recovered
@@ -492,11 +503,12 @@
 
 ;;We're getting too far ahead of ourselves during policy change calcs.
 ;;Jumping the position we're "in"...for max/nearmax policies, this leaves
-;;us with 
+;;us with.
+;;Patched to allow specified recovery times.
 (defn policy-wait-time
-  ([policy statedata position deltat]
+  ([policy statedata position deltat recovery-time]
    (cond (identical? position :recovery)
-         0  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.
+         recovery-time  ;;this is a weak default.  We'll either fix the policies or wrap the behavior later.
          (identical? position :recovered)
          0
          :else
@@ -508,6 +520,8 @@
                                       :in [(protocols/policy-name policy)
                                            (protocols/atomic-name policy)]]))) ;if it's not defined in policy...instant?
              ))))
+  ([policy statedata position deltat]
+   (policy-wait-time policy statedata position deltat 0))
   ;;weak, I just copied this down.  Ugh.
   ([policy position]
    (cond (identical? position :recovery)
@@ -556,7 +570,7 @@
   ;;Current usage appears correct - namely the 3-arity version, but that
   ;;could throw us off - as it did for initial policy-change implementation!
   ([unit position {:keys [deltat statedata ctx] :as benv}] ;;uses position after current...
-   (policy-wait-time (:policy unit) statedata position (or deltat 0)))
+   (policy-wait-time (:policy unit) statedata position (or deltat 0) (or (:default-recovery unit) 0)))
   ([position {:keys [entity] :as benv}] (get-wait-time @entity position benv))
   ([{:keys [wait-time] :as benv}] wait-time))
 
@@ -752,6 +766,7 @@
            (dissoc % :wait-time) ;remove the wait-time from further consideration...           
            )))))
 
+(require '[clojure.pprint :as pprint])
 ;;our idioms for defining behaviors will be to unpack 
 ;;vars we're expecting from the context.  typically we'll 
 ;;just be passing around the simulation context, perhaps 
@@ -768,7 +783,11 @@
              _ (when (not duration) (throw (Exception.  (str "nil value for duration in state change behavior!"))))
              followingstate (or followingstate newstate)
              ;;we change statedata here...
-             wt (- duration timeinstate)
+             wt  (core/watching-error
+                  (- duration timeinstate)
+                  (pprint/pprint {:duration duration
+                          :timeinstate timeinstate}))
+
              _  (when (neg? wt) (throw (Exception. (str [:negative-wait-time])))) 
              _  (debug [:changing-state state-change :wait-time wt])
              newdata (assoc (fsm/change-statedata statedata newstate duration followingstate)
@@ -858,7 +877,7 @@
                       timeinstateprior duration durationprior 
                       statestart statehistory]} statedata
               cycletime (or cycletime (:cycletime ent) 0)
-              topos     (if  (not (or to-position positionpolicy))
+              topos     (if (not (or to-position positionpolicy))
                             (protocols/get-position (u/get-policy ent) cycletime)
                             positionpolicy)
               nextstate (position->state policy positionpolicy)
@@ -868,11 +887,11 @@
                       position-time]}
                  (compute-state-stats entity cycletime policy positionpolicy)
               spawned-unit  (-> ent
-                                (assoc :cycletime cycletime
-                                       :default-recovery (core/default-recovery))
+                                (assoc  :cycletime cycletime
+                                        :default-recovery (core/default-recovery @ctx))
                                 (u/initCycles tupdate)
-                                (u/add-dwell cycletime)
-                                (assoc :last-update tupdate)
+                                (u/add-dwell  cycletime)
+                                (assoc  :last-update tupdate)
                                 (dissoc :spawn-info) ;eliminate spawning data.
                                 ) ;;may not want to do this..
               _             (reset! entity spawned-unit)
@@ -1445,25 +1464,41 @@
 ;;TOM note 18 july 2012 -> this is erroneous.  We were check overlap....that's not the definition of
 ;;a unit's capacity to re-enter the available pool.
 
-(def +recovery-time+ 90)
 ;;uuuuuuuge hack....gotta get this out the door though.
 (def non-recoverable #{"SRMAC" "SRMRC" "SRMRC13"})
 
+;;we no longer use the default +recovery-time+ shim,
+;;now we consult policy or fallback to the :DefaultRecoveryTime
+;;parameter.
+(def policy-recovery-time
+  (memo1-policy
+   (fn policy-rec [p]
+     (or (:recovery p) ;;srm policies have a :recovery field.
+         (marathon.data.protocols/transfer-time p
+          :recovery :recovered)))))
+
+(defn recovery-time
+  ([unit p]
+   (or (policy-recovery-time p)
+       (:default-recovery unit)))
+  ([unit] (recovery-time unit (:policy unit))))
+
 ;;We need to modify this to prevent any srm units from recovering.
-(defn can-recover? [unit ctx]
+(defn can-recover?
+  [unit]
   (let [cyc (:currentcycle unit)
-        p   (:policy unit)]
-    (and  (not (non-recoverable (protocols/policy-name p)))
-          (pos? (:bogbudget cyc))
-          (< (+ (:cycletime unit) +recovery-time+) (:duration-expected cyc)))))
+        p   (:policy unit)
+        rt  (recovery-time unit p)]
+    (when
+        (and  (not (non-recoverable (protocols/policy-name p)))
+              (pos? (:bogbudget cyc))
+              (< (+ (:cycletime unit) rt) (:duration-expected cyc)))
+      rt)))
 
 (befn recovery-beh {:keys [entity deltat ctx] :as benv}
   (let [unit @entity]
-    (if (can-recover? unit)
-      (move! :recovery
-             90
-             
-             ) ;;currently moving to recovery for 90 days.
+    (if-let [t (can-recover? unit)]
+      (move! :recovery t) ;;recovery is now determined by policy or parameters.
       (do (swap! ctx
                  #(sim/trigger-event :supplyUpdate (:name unit) (:name unit) (core/msg "Unit " (:name unit) " Skipping Recovery with "
                                                                                        (:bogbudget (:currentcycle unit)) " BOGBudget") nil %))

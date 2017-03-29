@@ -49,14 +49,10 @@
            446
            (store/get-entity ctxfill "1_Tangerine_43429R000_[746...754]")                
            (core/followon? (store/get-entity ctxfill uic))))
-  
 
-                                        ;(a/entity-trace ctx "21_43429R000_NG"  )
-
-
-;;we're having similar problems at 1817 now.
+;;we're having similar problems at 1821->1825 now.
 (def ctxpre (->> (a/marathon-stream ctx)
-                 (a/frame-at 1821)
+                 (a/frame-at        1821)
                  (sim/advance-time)))
 
 (def ctxfill (engine/partial-step ctxpre))
