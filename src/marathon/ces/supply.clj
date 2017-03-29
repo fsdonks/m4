@@ -657,19 +657,6 @@
                    (assoc acc k (get m k)))
                  {} known-buckets)))))
 
-;;__TODO__ Deprecate release-max-utilizers
-;;This is probably a deprecated function.  It was a corner case to ensure that 
-;;we handled a special class of follow on units, who followed a special max 
-;;utilization policy.  We can probably replace it with something more general.
-#_(defn release-max-utilizers [supplystore & [ctx]]
-  (let [{:keys [followons normal]} 
-           (group-by #(if (followon-unit? supplystore %) :followon :normal)
-                      (tag/get-subjects (:tags supplystore) :MaxUtilizer))
-         updates {:SupplyStore (untag-units supplystore :MaxUtilizer 
-                                            (concat followons normal))}]   
-    (reduce release-followon-unit (sim/merge-entity updates ctx)
-            followons)))
-
 ;;#Deployment Related
 
 ;;announce that the unit is in fact following on, remove it from followons.
@@ -728,3 +715,19 @@
           newctx ;;covering down on a weird issue with nil valued fons.
           ))))
 
+
+;;DEPRECATED
+;;==========
+
+;;__TODO__ Deprecate release-max-utilizers
+;;This is probably a deprecated function.  It was a corner case to ensure that 
+;;we handled a special class of follow on units, who followed a special max 
+;;utilization policy.  We can probably replace it with something more general.
+#_(defn release-max-utilizers [supplystore & [ctx]]
+  (let [{:keys [followons normal]} 
+           (group-by #(if (followon-unit? supplystore %) :followon :normal)
+                      (tag/get-subjects (:tags supplystore) :MaxUtilizer))
+         updates {:SupplyStore (untag-units supplystore :MaxUtilizer 
+                                            (concat followons normal))}]   
+    (reduce release-followon-unit (sim/merge-entity updates ctx)
+            followons)))

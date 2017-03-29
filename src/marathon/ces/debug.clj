@@ -67,3 +67,6 @@
 (def uic23 "23_43429R000_NG")
 ;;unit 23 is apparently stuck at coco up until
 ;;703, even by 1825...
+(def uic31 "31_43429R000_NG")
+;;Looks like his problems arise at t=1825, after his deployment ends.
+;;Policy change happens around 1801, he's probably deferred.

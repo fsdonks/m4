@@ -1652,8 +1652,6 @@
          ;;executing the  change-policy behavior.
          ;;Note: we could tie in change-policy at a lower echelon....so we check for
          ;;policy changes after updates.
-         #_(do (println [:skipping-policy-change msg])
-               (success benv))
          (beval policy-change-state
                 (assoc benv :policy-change (:data msg)))
          
@@ -2199,7 +2197,8 @@
 ;;This is not a replacement...
 ;;WIP Nov 2016
 (befn defer-policy-change {:keys [entity ctx tupdate] :as benv} 
-      (let [cyc (assoc (:currentcycle @entity) :tfinal tupdate)
+      (let [_   (debug [:deferring-policy-change])
+            cyc (assoc (:currentcycle @entity) :tfinal tupdate)
             _   (swap! entity (fn [unit]
                                 (->  unit
                                      (assoc :currentcycle cyc)
