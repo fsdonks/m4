@@ -709,7 +709,7 @@
         fcount (count fons)
         newctx (store/drop-domain ctx :followon)]
     (if (pos? fcount)
-      (do  (debug [:releasing! fcount :followon])         
+      (do  (debug [:releasing! fcount :followon])
            (release-followons fons newctx))
       (do (debug [:No-followons-to-release!])
           newctx ;;covering down on a weird issue with nil valued fons.

@@ -70,3 +70,7 @@
 (def uic31 "31_43429R000_NG")
 ;;Looks like his problems arise at t=1825, after his deployment ends.
 ;;Policy change happens around 1801, he's probably deferred.
+
+;;Problem appears to be re-entry.
+(def p (marathon.ces.policy/get-policy "TAA19-23_RC12" (core/get-policystore ctxpre) ))
+;;we "can-recover?" because our cycletime is less than duration expected...

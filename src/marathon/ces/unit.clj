@@ -213,6 +213,25 @@
               :DwellExpected dwelltime
               :MOBExpected MOBtime}))))
 
+;;This is from data.cycle, we need to swap this out for modify-cyclerecord,
+;;or delegate to it, since we're using data.cycle upon instantiation.
+;;Currently the fields don't match up, which maybe causing us some problems
+;;down the line when doing thing like deployability checks.
+#_(defn ^cyclerecord cycle-modify 
+  "Modifies oldcycle, assumably in the context of a policy change.  Returns the 
+   result of the modification, as a new cycle."
+  [cyclerec bogtime dwelltime policyduration & [MOBtime bogbudget]]
+  (if (and (> dwelltime 1095)  (zero? MOBtime) (not (= :inf dwelltime))
+           (throw (Exception. "Expected dwell time is abnormal...")))     
+    (with-record cyclerec
+      :bog-expected  bogtime
+      :bog-to-dwell-expected (/ 1 (/ (+ bogtime MOBtime) 
+                                     ( - policyduration (+ bogtime  MOBtime))))
+      :duration-expected policyduration
+      :dwell-expected    dwelltime
+      :mob-expected      MOBtime
+      :bogbudget         bogbudget)))
+
 ;'TOM Change 2 Sep 2011
 ;Public Sub ModifyCycle(plcy As IRotationPolicy)
 
@@ -231,6 +250,9 @@
         newrecord #_(apply modify-cyclerecord (:currentcycle u) vs)
                     (modify-cyclerecord (:currentcycle u) max-bog max-dwell cycle-length max-mob)]
     (merge u {:currentcycle newrecord})))
+
+
+
 
 ;Public Sub ChangeState(newstate As String, deltat As Single, Optional duration As Single)
 ;Call behavior.ChangeState(Me, newstate, deltat, duration)
