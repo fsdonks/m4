@@ -1167,7 +1167,7 @@
 (defn new-cycle? [unit frompos topos]
   (= (protocols/start-state (:policy unit)) topos))
 
-(declare policy-change-state)
+(declare policy-change-state try-deferred-policy-change)
 
 ;;We check to see if there was a position change, and if so, if that
 ;;change caused us to finish a policy cycle.  Note: this only applies
@@ -1184,7 +1184,7 @@
         (do (debug [:finishing-cycle (:name @entity) from-position])
             (->seq [start-cycle
                     end-cycle
-                    policy-change-state]))))))
+                    try-deferred-policy-change]))))))
 
 ;;Now that we have prescribed moves, the entities are going into
 ;;an overlapping state, but it's a state set..
@@ -1352,7 +1352,7 @@
         :spawning spawning-beh
         :abrupt-withdraw (do (debug [:<special-state-abw>])
                              abrupt-withdraw-beh)
-        :recovery      moving-beh ;;setup the move to recovered.
+        :recovery      recovery-beh ;moving-beh ;;setup the move to recovered.
         :recovered     (->and [(echo :recovered-beh)
                                re-entry-beh
                                ;reset-beh
@@ -1496,12 +1496,19 @@
 (befn recovery-beh {:keys [entity deltat ctx] :as benv}
   (let [unit @entity]
     (if-let [t (can-recover? unit)]
-      (move! :recovery t) ;;recovery is now determined by policy or parameters.
-      (do (swap! ctx
-                 #(sim/trigger-event :supplyUpdate (:name unit) (:name unit) (core/msg "Unit " (:name unit) " Skipping Recovery with "
-                                                                                       (:bogbudget (:currentcycle unit)) " BOGBudget") nil %))
-          (reset! entity (assoc-in unit [:currentcycle :bogbudget] 0))
-          moving-beh))))
+      (do (debug [:unit-can-recover (:name unit)])
+          (move! :recovered t)) ;;recovery is now determined by policy or parameters.
+      (let [cyc (:currentcycle unit)
+            ct  (:cycletime unit)
+            dur (:duration-expected cyc)]        
+        (swap! ctx
+               #(sim/trigger-event :supplyUpdate (:name unit) (:name unit)
+                                   (core/msg "Unit " (:name unit) " Skipping Recovery with "
+                                             (:bogbudget (:currentcycle unit)) " BOGBudget "
+                                             ct "/" dur " CycleTime " ) nil %))
+        (reset! entity (assoc-in unit [:currentcycle :bogbudget] 0))
+        #_moving-beh
+        reset-beh))))
 
 ;;On second thought, this is sound.  If the unit is already in overlap, it's in a terminal state..
 ;;For followon eligibility, it means another unit would immediately be overlapping this one anyway,
@@ -2158,8 +2165,7 @@
                      #(->> (assoc % :policy-change nil)
                            (core/trigger-event :UnitChangedPolicy uname  policynameA
                              (core/msg "Unit " uname " changed policies: "
-                                       policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil)))
-              
+                                       policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil)))              
               (->and [(move! positionB newduration) ;;movement behavior
                       (->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
                        ]))))
@@ -2196,21 +2202,27 @@
 ;;TOM change 2 Sep 2011 -> we modify the cyclerecord to reflect changes in expectations...
 ;;This is not a replacement...
 ;;WIP Nov 2016
-(befn defer-policy-change {:keys [entity ctx tupdate] :as benv} 
+(befn defer-policy-change {:keys [entity ctx tupdate policy-change] :as benv} 
       (let [_   (debug [:deferring-policy-change])
-            cyc (assoc (:currentcycle @entity) :tfinal tupdate)
-            _   (swap! entity (fn [unit]
-                                (->  unit
-                                     (assoc :currentcycle cyc)
-                                     (u/recordcycle tupdate))))
-            ;;notify interested parties of the event...
-            _  (swap! ctx (fn [ctx]
-                            (core/trigger-event :CycleCompleted
-                                               (:name @entity)
-                                               :SupplyStore
-                                               (str (:name @entity) " Completed A Cycle")
-                                               nil ctx)))]
-        (success benv)))
+            {:keys [cycletime current-policy next-policy proportion current-position]} policy-change
+            uname (:name @entity)
+            _     (swap! ctx                       
+                         #(core/trigger-event %
+                               :AwaitingPolicyChange uname  (marathon.data.protocols/atomic-name
+                                                             current-policy)
+                               (core/msg "Unit " uname " in position " current-position
+                                         " is waiting until reset to change policies")
+                               nil))
+            ;;marked the deferred policy change.
+            _     (swap! entity #(assoc % :deferred-policy-change
+                                        (select-keys  policy-change [:next-policy])))]            
+        (->alter (fn [benv] (assoc benv :policy-change nil)))))
+
+(befn try-deferred-policy-change {:keys [entity ctx tupdate] :as benv}
+      (when-let [pc (:deferred-policy-change @entity)]
+        (let [_ (swap! entity assoc :deferred-policy-change)]
+          (->seq [(->alter (fn [benv] (assoc benv :policy-change pc)))
+                  policy-change-state]))))
             
       ;;         SimLib.triggerEvent AwaitingPolicyChange, .name, .policy.AtomicName, "Unit " & _
       ;;                 .name & " in position " & .PositionPolicy & " is waiting until reset to change policies", , simstate.context

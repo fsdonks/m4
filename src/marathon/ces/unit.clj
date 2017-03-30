@@ -207,11 +207,11 @@
   ([cyclerec bogtime dwelltime policyduration MOBtime] 
     (let [bogmob (+ bogtime MOBtime)]
       (merge cyclerec 
-             {:bogexpected bogtime 
-              :BDRExpected (/ 1 (/ bogmob (- policyduration bogmob)))
-              :DurationExpected policyduration
-              :DwellExpected dwelltime
-              :MOBExpected MOBtime}))))
+             {:bog-expected bogtime 
+              :bog-to-dwell-expected (/ 1 (/ bogmob (- policyduration bogmob)))
+              :duration-expected policyduration
+              :dwell-expected  dwelltime
+              :mob-expected MOBtime}))))
 
 ;;This is from data.cycle, we need to swap this out for modify-cyclerecord,
 ;;or delegate to it, since we're using data.cycle upon instantiation.
@@ -246,10 +246,10 @@
 ;;Modified to correspond with new cycle-stats wrapper function.
 (defn modify-cycle [u newpolicy]
   (let [;vs #_(get-vals newpolicy [:maxBOG  :maxDwell :cyclelength :maxMOB])
-        {:keys [max-bog max-dwell cycle-length max-mob]} (cycle-stats newpolicy)
-        newrecord #_(apply modify-cyclerecord (:currentcycle u) vs)
-                    (modify-cyclerecord (:currentcycle u) max-bog max-dwell cycle-length max-mob)]
-    (merge u {:currentcycle newrecord})))
+        {:keys [max-bog max-dwell cycle-length max-mob]} (cycle-stats newpolicy)       
+        newrecord ;#_(apply modify-cyclerecord (:currentcycle u) vs)
+                    (cyc/modify-cyclerecord (:currentcycle u) max-bog max-dwell cycle-length max-mob)]
+    (assoc u :currentcycle newrecord)))
 
 
 

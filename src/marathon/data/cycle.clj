@@ -47,20 +47,22 @@
       :tstart t
       :tfinal (+ t policyduration)))
 
-(defn ^cyclerecord cycle-modify 
+(defn ^cyclerecord modify-cyclerecord
   "Modifies oldcycle, assumably in the context of a policy change.  Returns the 
    result of the modification, as a new cycle."
-  [cyclerec bogtime dwelltime policyduration & [MOBtime bogbudget]]
-  (if (and (> dwelltime 1095)  (zero? MOBtime) (not (= :inf dwelltime))
-           (throw (Exception. "Expected dwell time is abnormal...")))     
-    (with-record cyclerec
-      :bog-expected  bogtime
-      :bog-to-dwell-expected (/ 1 (/ (+ bogtime MOBtime) 
-                           ( - policyduration (+ bogtime  MOBtime))))
-      :duration-expected policyduration
-      :dwell-expected  dwelltime
-      :mob-expected MOBtime
-      :bogbudget bogbudget)))
+  [cyclerec bogtime dwelltime policyduration MOBtime]
+  (if (and (> dwelltime 1095)  (zero? MOBtime) (not (= :inf dwelltime)))
+    (throw (Exception. "Expected dwell time is abnormal..."))
+    (let [bogmob (+ bogtime MOBtime)]
+      (merge cyclerec
+        {:bog-expected  bogtime
+         :bog-to-dwell-expected (/ 1 (/ bogmob
+                                        ( - policyduration bogmob)))
+         :duration-expected policyduration
+         :dwell-expected  dwelltime
+         :mob-expected MOBtime
+         ;:bogbudget bogbudget
+         }))))
 
 (defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]
   (let [trav  [t startlocation endlocation]       

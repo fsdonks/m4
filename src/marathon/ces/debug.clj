@@ -74,3 +74,4 @@
 ;;Problem appears to be re-entry.
 (def p (marathon.ces.policy/get-policy "TAA19-23_RC12" (core/get-policystore ctxpre) ))
 ;;we "can-recover?" because our cycletime is less than duration expected...
+;;Also, the policy template for RC15,  upon which policy p is bas
