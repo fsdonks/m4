@@ -690,7 +690,7 @@
    "Ghost" ghost
    "RC14ReMob"      rc14-remob
    "RC14Remob"      rc14-remob ;added alias for compatibility
-   "MaxUtilization" max-utilization
+   "MaxUtilization"     max-utilization
    "NearMaxUtilization" near-max-utilization
    ;temporarily aliased until I get them ported....
    "ACFFG" ac13

@@ -9,7 +9,7 @@
 
 (defn hpath [p] (str io/home-path p))
 (def sdata (hpath "\\testdata-v2.xlsx"))
-(def uic "21_43429R000_NG")
+
 
 (in-ns 'marathon.ces.engine)
 (defn partial-step
@@ -32,7 +32,12 @@
 (in-ns 'marathon.ces.debug)
 
 
+
 (def ctx (a/load-context sdata))
+
+(comment 
+(def uic "21_43429R000_NG")
+
 ;;brings us up to t 746, beginning
 (def ctxpre (->> (a/marathon-stream ctx)
                  (a/frame-at 743)
@@ -75,3 +80,7 @@
 (def p (marathon.ces.policy/get-policy "TAA19-23_RC12" (core/get-policystore ctxpre) ))
 ;;we "can-recover?" because our cycletime is less than duration expected...
 ;;Also, the policy template for RC15,  upon which policy p is bas
+
+)
+;;We're getting invalid deployer errors here:
+(def uic "1_30715R200_AC" )
