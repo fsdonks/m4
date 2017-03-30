@@ -2089,7 +2089,11 @@
               PositionA  (:positionpolicy unit)
               ;; _          (println [:name (:name unit) :cycletimeA cycletimeA
               ;;                      :positionA PositionA (assoc benv :ctx nil)])                         
-              _          (assert (pos? cycletimeA) "Cycletime should not be negative!")
+              _          (assert (not (neg? cycletimeA))
+                                 (str {:msg "Cycletime should not be negative!"
+                                       :cycletime cycletimeA
+                                       :unit (:name unit)
+                                       :t tupdate}))
               CycleProportionA  (/ cycletimeA  (protocols/cycle-length current-policy))
               ;;'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
               ]
@@ -2204,15 +2208,16 @@
 ;;WIP Nov 2016
 (befn defer-policy-change {:keys [entity ctx tupdate policy-change] :as benv} 
       (let [_   (debug [:deferring-policy-change])
-            {:keys [cycletime current-policy next-policy proportion current-position]} policy-change
-            uname (:name @entity)
+            {:keys [next-policy]} policy-change
+            unit @entity
+            uname (:name unit)
             _     (swap! ctx                       
-                         #(core/trigger-event %
+                         #(core/trigger-event 
                                :AwaitingPolicyChange uname  (marathon.data.protocols/atomic-name
-                                                             current-policy)
-                               (core/msg "Unit " uname " in position " current-position
+                                                             (:policy unit))
+                               (core/msg "Unit " uname " in position " (:positionpolicy unit)
                                          " is waiting until reset to change policies")
-                               nil))
+                               nil %))
             ;;marked the deferred policy change.
             _     (swap! entity #(assoc % :deferred-policy-change
                                         (select-keys  policy-change [:next-policy])))]            
@@ -2220,7 +2225,8 @@
 
 (befn try-deferred-policy-change {:keys [entity ctx tupdate] :as benv}
       (when-let [pc (:deferred-policy-change @entity)]
-        (let [_ (swap! entity assoc :deferred-policy-change)]
+        (let [_ (debug [:applying-deferred-policy-change])
+              _ (swap! entity assoc :deferred-policy-change nil)]
           (->seq [(->alter (fn [benv] (assoc benv :policy-change pc)))
                   policy-change-state]))))
             
