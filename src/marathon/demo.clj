@@ -31,7 +31,43 @@
 
 (comment
   (def ctx (a/load-context full-path))
+  (def basepath
+    "Documents\\FromCAA\\testdatacheck\\")
   (defn run [] (last  (a/marathon-stream ctx)))
+
+  (def taa-ints
+    {:BCTS    ["BCTS"
+               ["47112K000"
+                "77202K000"
+                "77202K100"
+                "87312K000"]] 
+     :GSAB    ["GSAB"
+               ["01225K000"]] 
+     :CAB     ["CAB"
+               ["01302K000"]]   
+     :CSSB    ["CSSB"
+               ["63426K000"]] 
+     :QMSUPP  ["QM Supply Co"
+               ["10473R100"]] 
+;     :QMWATER ["QM Water Supp Co"
+ ;              ["10460R000"]] 
+     :QMPOL   ["QM Pol"
+               ["10527RA00"
+                "10527RC00"
+                "10527RF00"
+                "10527RG00"]] 
+     :PATRIOT ["ADA Patriot"
+               ["44635K000"]] ;in scope
+   ;  :AVENGER ["ADA Avenger"
+   ;            ["44615R600"]
+               }) ;in scope
+  (def basepath (hpath "\\Documents\\FromCAA\\testdatacheck\\"))
+  (def fourpath (hpath "\\testdata-v3\\"))
+  (defn sample-charts [path & {:keys [interests]
+                               :or   {interests taa-ints}}]
+    (do (proc/run-sample! path :interests interests)
+        (proc/do-charts-from path :interests interests)))
+  
   )
 
           

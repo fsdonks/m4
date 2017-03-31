@@ -11,7 +11,7 @@
                  [org.clojure/core.logic "0.8.10"]
                  [joinr/swingrepl "1.4.2-SNAPSHOT"]
                  ]
-  :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m"]
+  :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :profiles {:uberjar {:aot  [marathon.main]
                        :main  marathon.main
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
