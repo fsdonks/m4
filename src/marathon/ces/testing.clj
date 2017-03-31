@@ -312,7 +312,7 @@
 ;;demand sort supply as needed....
 (def  deployables  (filter unit/can-deploy? (core/units defaultctx)))
 (defn deployable-units [ctx] (filter unit/can-deploy?   (core/units ctx)))
-(def  deploynames  (map :name deployables))
+(def  deploynames  (map :name (sort-by :unit-index deployables)))
 
 ;;Every demand has a corresponding supply rule that indicates its preference for unit
 ;;types among other things.
@@ -323,7 +323,8 @@
 ;;We need to ensure that the demand categories are consistent (i.e. difference between Foundational and Foundation...)
 ;;probably could use better pre-processing checks when we're reading in data.
 
-;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
+;; ([:fillrule "SRC3"] [:fillrule "SRC3"] [:fillrule "SRC2"] [:fillrule "SRC1"] [:fillrule "SRC3"]
+;;  [:fillrule "SRC3"] [:fillrule "SRC1"] [:fillrule "SRC3"] [:fillrule "SRC2"])
 
 ;;These are analogous to entity queries btw...
 
@@ -351,38 +352,23 @@
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
   (is (same? deploynames 
-             #_("29_SRC3_NG" "23_SRC3_NG" "11_SRC2_AC" "38_SRC3_AC" "2_SRC1_NG" "24_SRC3_NG" "22_SRC3_NG"
-               "37_SRC3_AC" "8_SRC2_NG" "41_SRC3_AC")
-             '("31_SRC3_NG" "29_SRC3_NG" "5_SRC1_AC" "11_SRC2_AC" "38_SRC3_AC" "30_SRC3_NG" "39_SRC3_AC"
-               "40_SRC3_AC" "28_SRC3_NG" "27_SRC3_NG" "41_SRC3_AC" "26_SRC3_NG"))
+        '("6_SRC1_AC" "12_SRC2_AC" "27_SRC3_NG" "28_SRC3_NG" "29_SRC3_NG" "30_SRC3_NG"
+          "31_SRC3_NG" "32_SRC3_NG" "39_SRC3_AC" "40_SRC3_AC" "41_SRC3_AC" "42_SRC3_AC"))
       "Should have 12 units deployable")
   (is (same? odd-units
-      #_(["24_SRC3_NG" 1601]
-        ["8_SRC2_NG"  1825]
-        ["23_SRC3_NG" 1399]
-        ["29_SRC3_NG" 1385]
-        ["22_SRC3_NG" 1217])
-      ;;this is the "new" data after feb 2016.  Verify.
-      '(["31_SRC3_NG" 1729]
-        ["41_SRC3_AC" 657]
-        ["29_SRC3_NG" 1547]
-        ["27_SRC3_NG" 1365]
-        ["39_SRC3_AC" 511])
-      ))
+      '(["32_SRC3_NG" 1729]
+        ["42_SRC3_AC" 657]
+        ["30_SRC3_NG" 1547]
+        ["28_SRC3_NG" 1365]
+        ["40_SRC3_AC" 511])))
   (is (same? even-units
-      #_(["38_SRC3_AC" 616]
-        ["2_SRC1_NG" 1520]
-        ["11_SRC2_AC" 912]
-        ["41_SRC3_AC" 608]
-        ["37_SRC3_AC" 470])
-       ;;this is the "new" data after feb 2016.  Verify.
-      '(["30_SRC3_NG" 1638]
-        ["40_SRC3_AC" 584]
-        ["28_SRC3_NG" 1456]
-        ["26_SRC3_NG" 1274]
-        ["5_SRC1_AC"  730]
-        ["11_SRC2_AC" 730]
-        ["38_SRC3_AC" 438]))))
+      '(["31_SRC3_NG" 1638]
+        ["41_SRC3_AC" 584]
+        ["29_SRC3_NG" 1456]
+        ["27_SRC3_NG" 1274]
+        ["6_SRC1_AC" 730]
+        ["12_SRC2_AC" 730]
+        ["39_SRC3_AC" 438]))))
 
 (def supplytags (store/gete defaultctx :SupplyStore :tags))
 (def odd-tags
@@ -472,11 +458,9 @@
        sort-names))
 
 (deftest demandmatching  
-  (is (same? #_("2_SRC1_NG" "8_SRC2_NG" "11_SRC2_AC" "22_SRC3_NG" "23_SRC3_NG"
-               "24_SRC3_NG" "29_SRC3_NG" "37_SRC3_AC" "38_SRC3_AC" "41_SRC3_AC")
-             ;;this is the "new" data after feb 2016.  Verify.
-             '("5_SRC1_AC" "11_SRC2_AC"  "26_SRC3_NG" "27_SRC3_NG" "28_SRC3_NG"
-               "29_SRC3_NG" "30_SRC3_NG" "31_SRC3_NG" "38_SRC3_AC" "39_SRC3_AC" "40_SRC3_AC" "41_SRC3_AC")             
+  (is (same? '("6_SRC1_AC" "12_SRC2_AC" "27_SRC3_NG" "28_SRC3_NG" "29_SRC3_NG"
+               "30_SRC3_NG" "31_SRC3_NG" "32_SRC3_NG" "39_SRC3_AC" "40_SRC3_AC"
+               "41_SRC3_AC" "42_SRC3_AC")
              any-supply)
       "The relaxed fills actually have two more elements of supply - SRC 2 - since the 
        default preference for SRC 3 only allows substitution for SRC 1.  Thus, we 
@@ -485,11 +469,8 @@
   (is (ascending? (map :priority (vals unfilled)))
       "Priorities of unfilled demand should be sorted in ascending order, i.e. low to hi")
   (is (same? suitables             
-             #_("24_SRC3_NG" "38_SRC3_AC" "41_SRC3_AC" "23_SRC3_NG" "29_SRC3_NG" "22_SRC3_NG" "37_SRC3_AC" "2_SRC1_NG")
-             ;;this is the "new" data after feb 2016.  Verify.
-             '("31_SRC3_NG" "41_SRC3_AC" "30_SRC3_NG" "29_SRC3_NG" "40_SRC3_AC" "28_SRC3_NG"
-               "27_SRC3_NG" "39_SRC3_AC" "26_SRC3_NG" "38_SRC3_AC" "5_SRC1_AC")
-             )
+             '("32_SRC3_NG" "42_SRC3_AC" "31_SRC3_NG" "30_SRC3_NG" "41_SRC3_AC" "29_SRC3_NG"
+               "28_SRC3_NG" "40_SRC3_AC" "27_SRC3_NG" "39_SRC3_AC" "6_SRC1_AC"))
       "The feasible supply names that match the first demand should be consistent.  Since SRC1 is a lower
        order of supply via its substitution weight, it should end up last, even though the unit's cycle 
        time is actually pretty good.")
@@ -498,9 +479,7 @@
       "fill/find-supply should be synonymous with match-supply")
   (is (== needed 2)
       "First demand should require 2 units")
-  (is (same? selected    #_("24_SRC3_NG" "38_SRC3_AC")
-                         ;;this is the "new" data after feb 2016.  Verify.
-                         '("31_SRC3_NG" "41_SRC3_AC"))
+  (is (same? selected  '("32_SRC3_NG" "42_SRC3_AC"))
       "Suitability of units is dictated by the ordering.  Best first. In this case, we expect 
        the units with the greatest cycle times [most deployable] and of like type to be most 
        suited for deployment."))
