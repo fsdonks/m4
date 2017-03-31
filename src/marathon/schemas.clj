@@ -351,6 +351,9 @@
    :FollowOn
    :FollowOnCount
    :DeploymentCount
+   ;;Added to account for improper ordering.
+   :Category
+   :DwellYearsBeforeDeploy
    ])
 
 (def demandtrend-fields

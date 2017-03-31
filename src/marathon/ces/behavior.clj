@@ -985,7 +985,7 @@
     (reduce (fn [acc x]
               (if (r x)
                 (reduced x)
-                acc)) nil r)))
+                acc)) nil l)))
 
 (defn position=location? [newstate]
   (if (not (set? newstate))
@@ -1130,13 +1130,19 @@
 ;;Units starting cycles will go through a series of procedures.
 ;;Possibly log this as an event?
 (befn start-cycle {:keys [entity deltat tupdate] :as benv}
-   (let [unit   @entity
-         pstack (:policystack unit)]
-     (do  (swap! entity #(merge % {:cycletime     0
-                                   :date-to-reset tupdate}))
-          (if (pos? (count pstack))
-            (bind!! {:policy-change {:next-policy (first pstack)}})
-            (success benv)))))
+      (do  (swap! entity #(merge % {:cycletime     0
+                                    :date-to-reset tupdate}))
+           (success benv)))
+
+;;legacy implemenation.  no longer using policystack.
+;; (befn start-cycle {:keys [entity deltat tupdate] :as benv}
+;;    (let [unit   @entity
+;;          pstack (:policystack unit)]
+;;      (do  (swap! entity #(merge % {:cycletime     0
+;;                                    :date-to-reset tupdate}))
+;;           (if (pos? (count pstack))
+;;               (bind!! {:policy-change {:next-policy (first pstack)}})
+;;               (success benv)))))
 
 ;;We may not care about cycles....
 ;;Should be able to specify this in our collections logic, go faster...

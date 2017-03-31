@@ -529,12 +529,14 @@
                                 :duration Duration 
                                 }
                    :default-bucket "SRM"}))))
+
+;;Changed to 1-based indexing for compatibility with M3.
 (defn generate-name 
   "Generates a conventional name for a unit, given an index."
   ([idx unit]
-     (core/msg idx "_" (:SRC unit) "_" (:component unit)))
+     (core/msg (inc idx) "_" (:SRC unit) "_" (:component unit)))
   ([idx src compo]
-     (core/msg idx "_" src "_" compo)))
+     (core/msg (inc idx) "_" src "_" compo)))
       
 (defn check-name 
   "Ensures the unit is uniquely named, unless non-strictness rules are 

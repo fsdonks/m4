@@ -107,7 +107,7 @@
           :or {observer-routes obs/default-routes}}]
   (->> ctx
        (sim/register-routes observer-routes)
-       (start-state)
+       ;(start-state)
        (set-time lastday)
        (supply/manage-supply   0)
        (policy/schedule-periods)

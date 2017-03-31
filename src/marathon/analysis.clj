@@ -390,8 +390,26 @@
 (defn load-requirements-project [p]
   (proj/load-project p :tables xl/marathon-requirements-schema))
 
+;;Should we be running engine/initialize-sim here?
 ;;This is the core of doing a "run"...
 (defn load-context
+  "Given a viable Marathon Project, p, we derive and initial
+   simulation context, from which we can create a simulation
+   history.  An optional function table-xform may be supplied
+   to pre-process the project tables, to implement options
+   like filtering, etc.  The project may be a path to a string,
+   "
+  [p & {:keys [table-xform lastday observer-routes]
+        :or {table-xform identity
+             observer-routes obs/default-routes}}]
+   (->  (setup/simstate-from ;;allows us to pass maps in, hackey
+         (table-xform (or-get p :tables
+                              (:tables (proj/load-project p))))
+         core/debugsim)
+        (engine/initialize-sim :observer-routes observer-routes
+                               :lastday lastday)))
+
+#_(defn load-context
   "Given a viable Marathon Project, p, we derive and initial
    simulation context, from which we can create a simulation
    history.  An optional function table-xform may be supplied

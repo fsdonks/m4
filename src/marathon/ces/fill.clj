@@ -463,9 +463,9 @@
 ;;BUGFIX: we strip out the :dt here if necessary.
 (defn unit->filldata [cat src length u]
   ;;we're out of position here..
-                                        ;rule ;fillPath ;pathLength
+  ;;rule ;fillPath ;pathLength
   (->> (dissoc u :dt)
-       (filldata/->fill  cat src length nil)))
+       (filldata/->fill  cat src length (if (:followon u) "TRUE" "FALSE"))))
 
 ;;all we expect from fills is that there is a quantity
 ;;if there is a key for :actions, then we have some requirement.
