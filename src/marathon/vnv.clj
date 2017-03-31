@@ -1,14 +1,16 @@
 ;;Ns for convenient vnv operations for comparing
 ;;marathon runs and general scripting.
 (ns marathon.vnv
-  (:require [marathon         [analysis :as a]
-                              [demo :refer :all]]
+  (:require [marathon
+             [analysis :as a]
+             [demo :refer :all]
+             [run :as run]]
             [marathon.ces     [core :as core]]
             [spork.util       [io :as io] [table :as tbl]]
             [proc.example :as proc]))
 
 (def threepath (hpath "\\Documents\\marv\\vnv\\m3-testdata-v5\\"))
-(def fourpath (hpath "\\Documents\\marv\\vnv\\m4-testdata-v5\\"))
+(def fourpath  (hpath "\\Documents\\marv\\vnv\\m4-testdata-v5\\"))
 
 (def taa-ints
   {:BCTS    ["BCTS"
@@ -63,7 +65,7 @@
       (proc/do-charts-from path :interests interests)))
 
 (defn re-run4 []
-  (do-audited-run (str fourpath "testdata-v5.xlsx") fourpath)
+  (run/do-audited-run (str fourpath "testdata-v5.xlsx") fourpath)
   (proc/run-sample! fourpath :interests (src :BCTS)))
 
 (defn re-run3 []
