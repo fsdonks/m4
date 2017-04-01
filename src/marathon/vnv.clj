@@ -46,22 +46,22 @@
   (do (proc/run-sample! path :interests interests)
       (proc/do-charts-from path :interests interests)))
 
+(comment 
 (in-ns 'proc.util)
-(defn read-tsv-dataset [path]
+(defn read-tsv-dataset
+  [path]
   (let [fields (atom nil)
         rs     (into []
-                     (spork.util.table/tabdelimited->records
-                      path
-                      ))
-        ]
+                 (spork.util.table/tabdelimited->records
+                  path))]
     (incanter.core/dataset (vec (keys (first rs))) rs)))
         
 (in-ns 'marathon.vnv)
-
+)
 
 (defn sample-charts [path & {:keys [interests]
                              :or   {interests taa-ints}}]
-  (do (proc/run-sample! path :interests interests)
+  (do (proc/run-sample! path    :interests interests)
       (proc/do-charts-from path :interests interests)))
 
 (defn re-run4 []
@@ -74,7 +74,5 @@
 (defn re-run [] (do (re-run4) (re-run3)))
 
 (defn compare-bcts []
-  (proc/do-charts-from  threepath :interests   (src :BCTS))
-  (proc/do-charts-from fourpath   :interests   (src :BCTS))
-                                              
-  )
+  (proc/do-charts-from  threepath  :interests   (src :BCTS))
+  (proc/do-charts-from  fourpath   :interests   (src :BCTS)))

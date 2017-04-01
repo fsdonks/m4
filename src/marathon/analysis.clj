@@ -397,41 +397,37 @@
    simulation context, from which we can create a simulation
    history.  An optional function table-xform may be supplied
    to pre-process the project tables, to implement options
-   like filtering, etc.  The project may be a path to a string,
+   like filtering, etc.  The project may be a path - a string.  
+   Additionally, an initial context may be supplied, perhaps 
+   with custom observes for logging or graphics.  Otherwise 
+   the typical debug simulation context will received any 
+   setup and initialization.
    "
-  [p & {:keys [table-xform lastday observer-routes]
+  [p & {:keys [table-xform lastday observer-routes init-ctx]
         :or {table-xform identity
-             observer-routes obs/default-routes}}]
+             observer-routes obs/default-routes
+             init-ctx core/debugsim}}]
    (->  (setup/simstate-from ;;allows us to pass maps in, hackey
          (table-xform (or-get p :tables
                               (:tables (proj/load-project p))))
-         core/debugsim)
+         init-ctx)
         (engine/initialize-sim :observer-routes observer-routes
                                :lastday lastday)))
-
-#_(defn load-context
-  "Given a viable Marathon Project, p, we derive and initial
-   simulation context, from which we can create a simulation
-   history.  An optional function table-xform may be supplied
-   to pre-process the project tables, to implement options
-   like filtering, etc.  The project may be a path to a string,
-   "
-   [p & {:keys [table-xform] :or {table-xform identity}}]
-   (->>  (setup/simstate-from ;;allows us to pass maps in, hackey
-          (table-xform (or-get p :tables
-                         (:tables (proj/load-project p))))
-          core/debugsim)
-         (sim/add-time 1)
-         (sim/register-routes obs/default-routes)))
 
 ;TimeStamp	SRC	Reason
 (defn load-audited-context
   "Like analysis/load-context, except we perform some io in the parent folder.
    Generates 'AUDIT_...' files from raw inputs and computed input."
-  [path-or-proj & {:keys [table-xform root] :or {table-xform identity}}]
+  [path-or-proj & {:keys [root table-xform lastday observer-routes init-ctx]
+                   :or {table-xform identity
+                        observer-routes obs/default-routes
+                        init-ctx core/debugsim}}]
   (let [proj (proj/load-project path-or-proj)
         root (or root (proj/project-path proj))
-        ctx  (load-context proj :table-xform table-xform)
+        ctx  (load-context proj :table-xform table-xform
+                                :lastday lastday
+                                :observer-routes observer-routes
+                                :init-ctx init-ctx)
         scope-table (fn [m]
                       (let [t (System/currentTimeMillis)]
                         (->>  (for [[src reason] (seq m)]
@@ -733,11 +729,17 @@
                    :depsamples
                    :deployment-records
                    :demandtrends
-                   :patches})
+                   :patches
+                   :event-log})
 
 (def legacy-outputs #{:deployment-records
                       :demandtrends
                       :locations})
+
+(def debug-outputs #{:deployment-records
+                     :demandtrends
+                     :locations
+                     :event-log})
 
 ;;These are our canonical output funcitons.
 (defmulti spit-output (fn [t h path] t))
@@ -812,6 +814,7 @@
 (def field-orderings
   {:deployment-records schemas/deployment-fields
    :demandtrends       schemas/demandtrend-fields
+   :event-log         [:t :type :from :to :msg] 
    ;;location records?
    })
 
@@ -866,7 +869,8 @@
                :locations          (str (io/as-directory path) "locations.txt")
                :deployed-samples   (str (io/as-directory path) "depsamples.txt")
                :deployment-records (str (io/as-directory path) "AUDIT_Deployments.txt")
-               :demandtrends       (str (io/as-directory path) "DemandTrends.txt")}
+               :demandtrends       (str (io/as-directory path) "DemandTrends.txt")
+               :event-log          (str (io/as-directory path) "eventlog.txt")}
         ;;collect all of our frame-grabbers into one state.
         frame-state (vec (for [[k path] paths
                                   :when (outputs k)]
