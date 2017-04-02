@@ -272,8 +272,10 @@
   ([t ctx]
    (let [qtr     (unchecked-inc (quot t 90)) ;;1-based quarters.
          changes (store/gete ctx :demand-watch :demands)
+         finals  (store/gete ctx :DemandStore :finals)
          actives (store/gete ctx :DemandStore :activedemands)]
-     (when (seq changes)
+     (when (or (seq changes)
+               (finals t))
        (->> actives
             (keys)
             (map #(store/get-entity ctx %))

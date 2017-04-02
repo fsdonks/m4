@@ -318,7 +318,10 @@
     (-> (assoc demandstore :tlastdeactivation tlast)
         (set-deactivations t (conj inactives demandname)))))
 
-;Schedule activation and deactivation for demand. -> Looks fixed.
+;;Schedule activation and deactivation for demand. -> Looks fixed.
+;;Prior to deactivation, we want to ensure the demand gets
+;;scheduled.  For now, we schedule the day prior to ensure
+;;a sampling of the demand, iff duration > 1
 (defn schedule-demand [demand demandstore ctx]
   (let [{:keys [startday name duration]} demand
         endday (+ startday duration)
@@ -437,10 +440,33 @@
   ([demand ctx] (register-demand demand (core/get-demandstore ctx)
                                  (core/get-policystore ctx) ctx)))
 
+(defn register-finals
+  "Ensure final active day information is present to include 
+   sampling for the demand."
+  [ts ctx]
+  (reduce (fn [acc t]
+            (core/add-time  t acc))
+          (store/assoce ctx :DemandStore :finals ts)
+          ts))
+  
 ;;persistent version is back for now...
+;;ensure we have enough information to sample demands, that is,
+;;we make sure that the end-points of the demands are registered
+;;as valid times, otherwise we miss them in demandtrends.
 (defn register-demands
-  [xs ctx] (reduce (fn [acc d] (register-demand d acc) ) ctx xs))
-
+  [xs ctx]
+  (let [final-samples (atom (transient #{}))
+        add-final! (fn [d]
+                     (let [{:keys [startday duration]} d
+                           final (+ startday duration -1)]
+                       (swap! final-samples conj! final)
+                       d))
+        newctx  (->> xs
+                     (map add-final!)
+                     (reduce (fn [acc d]
+                               (register-demand d acc)) ctx))]
+    (register-finals (persistent! @final-samples) newctx)))
+  
 ;;another way to look at this guy is that we're modifying disparate
 ;;domains via a transaction.  Specifically, we're working on multiple
 ;;things simultaneously.
@@ -994,7 +1020,7 @@
   [store]
   (temporal/active-intervals 
    (temporal/activity-profile (vals (:demandmap store)) :start-func :startday :duration-func :duration)))
-
+  
 ;;##Demand Management
 (defn manage-demands
   "High level demand management API.  The primary system service used by the 
@@ -1004,4 +1030,4 @@
   [t ctx]
   (->> ctx
     (activate-demands t)
-    (deactivate-demands t))) 
+    (deactivate-demands t)))

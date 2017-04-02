@@ -311,7 +311,8 @@
  [spork.sim.simcontext ;minimal amount of stuff pulled in..
   merge-updates
   merge-entity
-  get-time])
+  get-time
+  add-time])
 
 ;;Error Raising Convenience Functions
 ;;===================================

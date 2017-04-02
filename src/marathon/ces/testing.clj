@@ -148,16 +148,28 @@
 ;;updates by day and process them in bulk.  If a syste has no update, then nothing is done.
 ;;So, currently, the only event in Marathon are :time events, that serve as a clock.
 (def expected-events
-  (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
-        {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
-        {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
-        {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
-        {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
-        {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
-        {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
-        {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
-        {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
-        {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time}))
+  '({:time 0, :type :time} {:time 1, :type :time} {:time 90, :type :time}
+    {:time 91, :type :time} {:time 180, :type :time} {:time 181, :type :time}
+    {:time 271, :type :time} {:time 360, :type :time} {:time 361, :type :time}
+    {:time 451, :type :time} {:time 466, :type :time} {:time 467, :type :time}
+    {:time 481, :type :time} {:time 522, :type :time} {:time 523, :type :time}
+    {:time 540, :type :time} {:time 541, :type :time} {:time 553, :type :time}
+    {:time 554, :type :time} {:time 562, :type :time} {:time 563, :type :time}
+    {:time 594, :type :time} {:time 595, :type :time} {:time 617, :type :time}
+    {:time 618, :type :time} {:time 630, :type :time} {:time 631, :type :time}
+    {:time 665, :type :time} {:time 666, :type :time} {:time 720, :type :time}
+    {:time 721, :type :time} {:time 777, :type :time} {:time 778, :type :time}
+    {:time 811, :type :time} {:time 900, :type :time} {:time 901, :type :time}
+    {:time 962, :type :time} {:time 963, :type :time} {:time 991, :type :time}
+    {:time 1047, :type :time} {:time 1048, :type :time} {:time 1050, :type :time}
+    {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time}
+    {:time 1329, :type :time} {:time 1330, :type :time} {:time 1350, :type :time}
+    {:time 1351, :type :time} {:time 1440, :type :time} {:time 1441, :type :time}
+    {:time 1530, :type :time} {:time 1531, :type :time} {:time 1620, :type :time}
+    {:time 1621, :type :time} {:time 1711, :type :time} {:time 1800, :type :time}
+    {:time 1801, :type :time} {:time 1980, :type :time} {:time 1981, :type :time}
+    {:time 2071, :type :time} {:time 2094, :type :time} {:time 2095, :type :time}
+    {:time 2341, :type :time} {:time 2520, :type :time} {:time 2521, :type :time}))
 
 (def activations481 (demand/get-activations m-dstore 481))
 
@@ -179,8 +191,11 @@
 
 (deftest scheduled-demands-correctly
   (is (= times
-         '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
-             778 811 901 963 991 1048 1051 1081 1261 1330 1351 1441 1531 1621 1711 1801 1981 2071 2095 2341 2521))
+         '(0 1 90 91 180 181 271 360 361 451 466 467 481 522 523 540 541
+             553 554 562 563 594 595 617 618 630 631 665 666 720 721 777
+             778 811 900 901 962 963 991 1047 1048 1050 1051 1081 1261
+             1329 1330 1350 1351 1440 1441 1530 1531 1620 1621 1711 1800
+             1801 1980 1981 2071 2094 2095 2341 2520 2521))
       "Scheduled times from sampledata should be consistent, in sorted order.")
   (is (= known-events expected-events)           
       "The only events scheduled should be time changes.")
