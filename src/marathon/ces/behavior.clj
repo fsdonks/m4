@@ -1008,7 +1008,7 @@
 ;;downstream behaviors can pick up on the wait-time, and 
 ;;apply it.
 (befn move->statechange ^behaviorenv {:keys [entity next-position location-change
-                                             tupdate statedata ctx] :as benv}
+                                             tupdate statedata state-change  ctx] :as benv}
     (when-let [nextpos next-position] ;we must have a position computed, else we fail.                                       
       (let [t        tupdate
             u        @entity 
@@ -1017,8 +1017,11 @@
             location-based? (:location-behavior u)
             ]
         (if (= frompos nextpos)  ;;if we're already there...
-          (do (debug [:no-movement frompos nextpos (type benv)])
-              (success (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
+          (do (debug [:no-movement frompos nextpos {:wt wt :state-change state-change}])
+              (success 
+               (if state-change
+                 (assoc benv :wait-time nil :next-position nil)
+                 (dissoc benv :next-position)))) ;do nothing, no move has taken place.  No change in position.
           (let [_            (debug [:moving frompos nextpos])
                 newstate     (or (get-state u nextpos)
                                  nextpos) ;;need to account for prescribed moves.
@@ -2146,7 +2149,8 @@
                              (protocols/get-position next-policy cycletimeB))
 
             timeremaining  (immediate-policy-wait-time next-policy positionB)
-            timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))    
+            timeinstate    (- cycletimeB (protocols/get-cycle-time next-policy positionB))
+            oldstate       (protocols/get-state current-policy positionB)
             unit           (reset! entity
                                    (-> unit ;;we change positionpolicy here....bad move?
                                        (merge  {;:positionpolicy positionB
@@ -2155,6 +2159,8 @@
                                        (u/change-cycle tupdate)
                                        (u/modify-cycle next-policy)))
             newduration    (- timeremaining timeinstate)
+            ;;added...
+            newstate      (protocols/get-state next-policy positionB)      
             _              (debug [:preparing-apply-policy-change
                                      {:cycletimeA cycletimeA
                                       :policynameA policynameA
@@ -2165,6 +2171,8 @@
                                       :timeremaining timeremaining
                                       :timeinstate timeinstate
                                       :newduration newduration
+                                      :oldstate oldstate
+                                      :newstate newstate
                                       }])
             ]
         ;;We have a move.
@@ -2176,7 +2184,16 @@
                            (core/trigger-event :UnitChangedPolicy uname  policynameA
                              (core/msg "Unit " uname " changed policies: "
                                        policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil)))              
-              (->and [(move! positionB newduration) ;;movement behavior
+              (->and [(->alter (fn [benv] ;(if (= oldstate newstate)
+                                          ;  (do (debug [:no-state-change])
+                                          ;      benv)
+                                              (assoc benv :state-change
+                                                     {:newstate newstate
+                                                      :duration newduration
+                                                      :timeinstate 0})
+                                              ))
+                                              ;)))
+                      (move! positionB newduration) ;;movement behavior
                       (->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
                        ]))))
           
