@@ -65,7 +65,7 @@
       (proc/do-charts-from path :interests interests)))
 
 (defn re-run4 []
-  (run/do-audited-run (str fourpath "testdata-v5.xlsx") fourpath)
+  (run/do-audited-run (str fourpath "testdata-v6.xlsx") fourpath)
   (proc/run-sample! fourpath :interests (src :BCTS)))
 
 (defn re-run3 []

@@ -421,7 +421,10 @@
         clength (if (> clength +max-cycle-length+) +default-cycle-length+ clength)]                                              
     (mapv  (fn [cycletime  unit]
              (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")                          
-             (assoc unit :cycletime cycletime)) (intervals (count units) clength)
+             (assoc unit :cycletime cycletime))
+           ;;Added for consistency with legacy eversion....not technically incorrect.
+           (->> (intervals (count units) clength)
+                (map inc))
              units)))
 
 ;;legacy
