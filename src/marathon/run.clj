@@ -46,10 +46,11 @@
    into the target path.  Default outputs will be derived from 
    the simulation history, including a compressed history."
   [from-path target-path]
-  (do (a/spit-history!
-       (a/marathon-stream from-path :audit? true :audit-path target-path)
-       target-path)
-      (build-patches target-path)))
+  (core/debugging 
+   (do (a/spit-history!
+        (a/marathon-stream from-path :audit? true :audit-path target-path :events? true)
+        target-path)
+       (build-patches target-path))))
 
 (def root "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\")
 (def root "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\")

@@ -451,6 +451,14 @@
     ctx
     (sim/add-listener :debugger debug-listener [:all] ctx)))
 
+(defn debug-by!
+  "Replace the :debugger listener with a function f."
+  [ctx f]
+  (sim/add-listener :debugger
+     (fn [ctx edata _]
+       (do (f edata)
+           ctx)) [:all] ctx))
+
 ;;#State-wide queries...
 ;;tbd
 (defn features [ctx & {:keys [where] :or {where identity}}]

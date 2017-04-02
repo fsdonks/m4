@@ -70,6 +70,8 @@
     (seq [this]
       (seq (clojure.core/iterate f seed)))))
 
+(defn merge-meta [obj m]
+  (with-meta obj (merge (get meta obj) m)))
 
 ;;#Move these into core...#
 (defn ->simreducer [stepf init]
@@ -79,8 +81,9 @@
                                                 t  (sim/get-time ctx)
                                                 processed  (stepf t  ctx)
                                                 nxt        (sim/advance-time processed)]
-                                            (with-meta nxt {t {:start init
-                                                               :end processed}}))))
+                                            (merge-meta nxt {:start-end {:t t
+                                                                        :start init
+                                                                        :end processed}}))))
                                     init)))
 
 ;;I think we want to convert this into a stream with the simulation
@@ -100,8 +103,9 @@
                                                 t          (sim/get-time     ctx)
                                                 processed  (stepf t          ctx)
                                                 nxt        (sim/advance-time processed)]
-                                            (with-meta nxt {t {:start init
-                                                               :end processed}}))))
+                                            (merge-meta nxt {:start-end {:t t
+                                                                        :start init
+                                                                        :end processed}}))))
                                       seed)))
       clojure.core.protocols/CollReduce
       (coll-reduce [this f1]   (reduce f1 simred))
@@ -132,14 +136,14 @@
 ;;we embed the previous day's sample in the meta.
 (defn end-of-day-history [h]
   (->> h
-       (map #(first (meta (second %))))
+       (map #(:start-end (meta (second %))))
        (filter identity)
-       (map (fn [[t {:keys [start end]}]]
+       (map (fn [{:keys [t start end]}]
               [t end]))))
 
 (defn expanded-history [h]
   (mapcat (fn [[t ctx]]
-            (let [{:keys [start end]} (get (meta ctx) t)]
+            (let [{:keys [start end]} (get (meta ctx) :start-end)]
               [[t start  :start]
                [t end :end]])) h))
 
@@ -185,6 +189,23 @@
   (cond (seq? h) (->seq-samples f h)
         (map? h) (->map-samples f h)
         :eles (throw (Exception. (str "Dunno how to do samples with " (type h))))))
+
+
+;;Multimethods for Emitting Frames and Saving them to Output
+;;==========================================================
+;;Given a source of emitted frames, we can
+;;record the frames to an output file...
+(defmulti init-frame-saver (fn [t path & {:keys [field-order]}] t))
+
+;;Immediate, i.e. frame-by-frame outputs.
+;;This is more efficient than our initial hack at
+;;traversing the entire history for each output.
+;;This way, we support incremental outputs built
+;;over time.
+(defmulti emit-frame (fn [t frm] t))
+
+;;Implementations follow later...
+
 
 ;;Canonical Sampling Functions
 ;;============================
@@ -418,16 +439,23 @@
 (defn load-audited-context
   "Like analysis/load-context, except we perform some io in the parent folder.
    Generates 'AUDIT_...' files from raw inputs and computed input."
-  [path-or-proj & {:keys [root table-xform lastday observer-routes init-ctx]
+  [path-or-proj & {:keys [root table-xform lastday observer-routes init-ctx events?]
                    :or {table-xform identity
                         observer-routes obs/default-routes
-                        init-ctx core/debugsim}}]
+                        }}]
   (let [proj (proj/load-project path-or-proj)
         root (or root (proj/project-path proj))
+        event-saver (when events?
+                      (init-frame-saver
+                       :event-log (str root "eventlog.txt") :strict? true)) 
         ctx  (load-context proj :table-xform table-xform
                                 :lastday lastday
                                 :observer-routes observer-routes
-                                :init-ctx init-ctx)
+                                :init-ctx (or init-ctx
+                                              (if event-saver
+                                                (core/debug-by! core/debugsim
+                                                                event-saver)
+                                                core/debugsim)))
         scope-table (fn [m]
                       (let [t (System/currentTimeMillis)]
                         (->>  (for [[src reason] (seq m)]
@@ -442,17 +470,20 @@
                                  root
                                  :tables (into proj/default-auditing-tables
                                                (keys computed-tables)))]
-    ctx))
+    (if events?
+      (with-meta ctx {:savers {:event-log event-saver}})
+      ctx)))
 
 (defn as-context
   "Coerces x to a marathon simulation context.  Optionally,
    will provide and audit-trail of information if x is
    a project and audit? is truthy."
-  [x & {:keys [table-xform audit? audit-path]
+  [x & {:keys [table-xform audit? audit-path events?]
                        :or {table-xform identity}}]
   (cond (string? x) (if audit?
                       (do (io/make-folders! audit-path ["audit.txt"])
-                          (load-audited-context x :table-xform table-xform :root audit-path))
+                          (load-audited-context x :table-xform table-xform :root audit-path
+                                                :events? events?))
                       (load-context x :table-xform table-xform))
         (util/context? x) x
         :else (throw (Exception.
@@ -464,14 +495,17 @@
    on the project tables, like src filters, provide a custom step function,
    and choose to generate auditing information upon initializing the
    stream."
-  [path-or-ctx & {:keys [tmax table-xform step-function audit? audit-path]
+  [path-or-ctx & {:keys [tmax table-xform step-function audit? audit-path events?]
                   :or {tmax 5001
                        table-xform identity
                        step-function engine/sim-step
                        audit? false}}]
-  (->> (as-context path-or-ctx :table-xform table-xform :audit? audit? :audit-path audit-path)
-       (->history-stream tmax step-function)
-       (end-of-day-history)))
+  (let [ctx (as-context path-or-ctx :table-xform table-xform :audit? audit?
+                   :audit-path audit-path :events? events?)] 
+  (-> (->> ctx
+           (->history-stream tmax step-function)
+           (end-of-day-history))
+       (merge-meta (meta ctx)))))
 
 (defn day-before-error
   "Given a sequence of frames, returns "
@@ -734,12 +768,8 @@
 
 (def legacy-outputs #{:deployment-records
                       :demandtrends
-                      :locations})
-
-(def debug-outputs #{:deployment-records
-                     :demandtrends
-                     :locations
-                     :event-log})
+                      :locations
+                      :event-log})
 
 ;;These are our canonical output funcitons.
 (defmulti spit-output (fn [t h path] t))
@@ -771,12 +801,7 @@
                          :field-order schemas/demandtrend-fields)))
 
 
-;;Immediate, i.e. frame-by-frame outputs.
-;;This is more efficient than our initial hack at
-;;traversing the entire history for each output.
-;;This way, we support incremental outputs built
-;;over time.
-(defmulti emit-frame (fn [t frm] t))
+
 
 ;;default frame emission does nothing.
 (defmethod emit-frame :default [t frm] nil)
@@ -818,9 +843,7 @@
    ;;location records?
    })
 
-;;Given a source of emitted frames, we can
-;;record the frames to an output file...
-(defmulti init-frame-saver (fn [t path & {:keys [field-order]}] t))
+
 ;;Our default frame-saver is a record writer.  If we have
 ;;a field-order provided in field-orderings that matches the
 ;;type t, we'll use it.
@@ -857,12 +880,17 @@
   `(with-outputs ~all-outputs
      ~@body))
 
+(def w (atom nil))
+
 (defn spit-history!
   "Spits h - sequence of [t ctx] frames of simulation history -
    to path using establish output criteria via emit-frame,
    and init-frame-saver.  Incrementally writes history
-   vs caching and traversing everything in memory."
-  [h path & {:keys [outputs]
+   vs caching and traversing everything in memory.  Caller
+   may supply a pre-defined map of savers to output, in which 
+   case the saver will be used instead of the default action of 
+   creating a new saver at the default output path."
+  [h path & {:keys [outputs savers]
              :or   {outputs *outputs*}}]
   (let [paths {:history            (str (io/as-directory path) "history.lz4")
                :location-samples   (str (io/as-directory path) "locsamples.txt")
@@ -871,10 +899,15 @@
                :deployment-records (str (io/as-directory path) "AUDIT_Deployments.txt")
                :demandtrends       (str (io/as-directory path) "DemandTrends.txt")
                :event-log          (str (io/as-directory path) "eventlog.txt")}
+        known-savers (get (meta h) :savers)
+        _ (println known-savers)
+        savers (merge savers known-savers )
         ;;collect all of our frame-grabbers into one state.
         frame-state (vec (for [[k path] paths
                                   :when (outputs k)]
-                              (let [saver (init-frame-saver k path)]
+                           (let [
+                                 saver (or (get savers k)
+                                           (init-frame-saver k path))]
                                 {:name k
                                  :grab (fn grab [frm]
                                          (when-let [res (emit-frame k frm)]
@@ -885,7 +918,8 @@
                                  :saver saver})))
         grab-frames!  (fn [frm] (reduce (fn [acc {:keys [name grab]}]
                                           (grab frm))
-                                        nil frame-state))]
+                                        nil frame-state))
+        _ (reset! w (some #(when (= (:name %) :event-log) (:saver %)) frame-state))]
     (with-open [savers (io/->closer (map :saver frame-state))]
       (doseq [frm h]
         (do (println [:day (first frm)])
@@ -984,26 +1018,4 @@
                   :NGFilled
                   :GhostFilled
                   :OtherFilled])
-)
-
-
-(comment
-;;legacy stream-based, naive version of spitting
-;;history.  Now we grab frames.
-
-;;this is basically the api for performing a run....
-;;We'll automatically audit when we do this...
-#_(defn spit-history! [h path & {:keys [outputs] :or
-                               {outputs *outputs*}}]
-  ;;hackneyed way to munge outputs and spit them to files.
-  (let [paths {:history     (str path "history.lz4")
-               :location-samples      (str path "locsamples.txt")
-               :locations   (str path "locations.txt")
-               :deployed-samples      (str path "depsamples.txt")
-               :deployment-records (str path "AUDIT_Deployments.txt")
-               :demandtrends (str path "DemandTrends.txt")} ;probably easier (and lighter) to just diff this.
-        ]
-    (doseq [[k path] paths
-            :when (outputs k)]
-      (spit-output k h path))))
 )

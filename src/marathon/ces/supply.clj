@@ -238,10 +238,7 @@
 ;;we wrap this accessor behind a entity called updates.
 (defn get-supply-updates "Get all units with pending supply updates." 
   [t ctx]
-  ;;transition this out...
-                                        ;  (get-ine ctx [:updates t :supply-update]
-  (sim/get-updates :supply-update t ctx
-           ))
+  (sim/get-updates :supply-update t ctx))
 
 (defn request-unit-update! "Schedule an update for unit at time t." 
   [t unit ctx] 
