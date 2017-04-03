@@ -320,7 +320,7 @@
 
 (deftest unfilled-demands
   (is  (same? unfilled-ds
-              '(["1_R25_SRC3_[1...541]" 1] ["1_R3_SRC3_[1...2521]" 1] ["2_R1_SRC3_[1...91]" 2] ["2_R2_SRC3_[1...2521]" 2]))
+              '([1 "1_R25_SRC3_[1...541]"] [1 "1_R3_SRC3_[1...2521]"] [2 "2_R1_SRC3_[1...91]"] [2 "2_R2_SRC3_[1...2521]"]))
       "Should have the same order and set of demands unfilled on day 1."))
 ;;Note:
 ;;simpler solution is to NOT maintain deployable buckets; Rather let

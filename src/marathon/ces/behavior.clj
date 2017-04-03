@@ -1207,15 +1207,12 @@
 (befn disengage {:keys [entity ctx overlapping-position tupdate] :as benv}
       (when-let [opvec overlapping-position]
         (let [[lname op] opvec 
-              _  (debug [:overlapping-prescribed op])
-              _  (debug [:disengaging (:name @entity) (:locationname @entity)])
-             ; lname (:locationname @entity)
-              res   (identical? op :to)
-          ;    _  (println [:move->overlap (:name @entity) :from lname
-          ;                 (select-keys (store/get-entity @ctx lname)
-          ;                               [:units-assigned :units-overlapping])])
-             _ (swap! ctx ;;update the context...
-                   #(d/disengage (core/get-demandstore %) (assoc @entity :last-update tupdate) lname % res #_true))]
+              _    (debug [:overlapping-prescribed op])
+              _    (debug [:disengaging (:name @entity) (:locationname @entity)])
+              res  (identical? op :to)
+              _    (swap! ctx ;;update the context...
+                     #(d/disengage (core/get-demandstore %)
+                          (assoc @entity :last-update tupdate) lname % res #_true))]
              (success (assoc benv :overlapping-position nil)))))
         ;; (when  overlap-detected
         ;;     (when (not (identical? res :none)) ;ugh?
@@ -1318,11 +1315,12 @@
           change-position
           (echo :<change-fill>)
           change-fill ;;newly added...
-          (echo :<check-overlap>) ;moved before change-position
-          check-overlap ;;Added, I think I missed this earlier...
           (echo :<change-location>)
           change-location
           change-state-beh
+          (echo :<check-overlap>) ;moved before change-position
+          check-overlap ;;Added, I think I missed this earlier...
+
           (echo :waiting)
           wait
           ]))
@@ -1835,7 +1833,7 @@
 ;;Some locations have overlap.  If so, we look for this
 ;;to see if the move is prescribed.  We store this as a
 ;;component in the entity.
-(defn prescribe-overlap! [benv t overlap state]
+(defn prescribe-overlap! [benv t overlap state locname]
   (if (and overlap (pos? overlap))
     (let [entity (:entity benv)]
       (do (debug [:prescribing-overlap (:name @entity)  overlap t])
@@ -1845,7 +1843,7 @@
                    :duration       overlap
                    :followingstate nil
                    :timeinstate    0}
-                  :overlapping-position :to;true
+                  :overlapping-position [locname :to] ;true
                   :t t}
                  )
           benv))
@@ -1928,7 +1926,8 @@
                   (-> benv
                       (prescribe-overlap!  (+ (:tupdate benv) wt)
                                            overlap
-                                           followingstate)
+                                           followingstate
+                                           name)
                       (assoc 
                        :state-change state-change                          
                        :location-change location-change

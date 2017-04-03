@@ -850,17 +850,17 @@
         unitname    (:name unit)
         _ (debug [:withdraw-unit unitname])
         ]
-	  (cond 
-	    (and demandgroup (not= "" demandgroup) (not (ungrouped? demandgroup)))
-            (do  (debug :abw1)
-                 (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
-                       _   (debug [:pre-abw unitname (store/gete ctx unitname :last-update)])]
-                   (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
-            (not (ghost? unit))
-            (do  (debug :abw2)
-                 (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx))
-	    :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
-                       (u/change-state (store/get-entity ctx unitname) :Reset 0 nil)))))                     
+    (cond
+      (and demandgroup (not= "" demandgroup) (not (ungrouped? demandgroup)))
+      (do  (debug :abw1)
+           (let [ctx (store/assoce ctx unitname :followoncode  demandgroup)
+                 _   (debug [:pre-abw unitname (store/gete ctx unitname :last-update)])]
+             (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx)))
+      (not (ghost? unit))
+      (do  (debug :abw2)
+           (u/change-state (store/get-entity ctx unitname) :abrupt-withdraw 0 0 ctx))
+      :else (->> (if (ghost? unit) (ghost-returned! demand unitname ctx) ctx)  
+                 (u/change-state (store/get-entity ctx unitname) :Reset 0 nil))))) 
 
 
 ;;We can swap out with-draw-unit with something else...
@@ -878,10 +878,13 @@
         demandgroup (:demandgroup demand)
         _ (debug [:demand/send-home (:name unit) :t t])
         
-        ]    
+        ]
+    (if (not (= (:locationname unit) (:name demand)))
+         (do (debug [:unit-already-relocated])
+             ctx)
     (->> (u/unit-update unit ctx)      ;;we don't want to get caught in an update cycle.
          (withdraw-unit unit demand) 
-         (disengaging! demand unitname)))) 
+         (disengaging! demand unitname)))))
 
 
 
