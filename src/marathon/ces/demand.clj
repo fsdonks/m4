@@ -111,7 +111,9 @@
 (defn unit-count [d] (count (:units-assigned d)))
 (defn demand-filled? [d] (= (count (:units-assigned d)) (:quantity d)))
 (defn empty-demand? [d] (zero? (unit-count d)))
-(defn priority-key [demand] [(:name demand) (:priority demand)]) 
+;;fixed priorty-key, was invertered, leading to lexical ordering
+;;by name rather than priority number.
+(defn priority-key [demand] [(:priority demand) (:name demand)]) 
           
 ;We can break the fill into a couple of simple queries...
 ;

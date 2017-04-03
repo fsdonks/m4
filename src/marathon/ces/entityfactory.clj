@@ -424,7 +424,7 @@
              (assoc unit :cycletime cycletime))
            ;;Added for consistency with legacy eversion....not technically incorrect.
            (->> (intervals (count units) clength)
-                (map inc))
+                (map identity #_inc))
              units)))
 
 ;;legacy

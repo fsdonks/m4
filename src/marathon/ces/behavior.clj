@@ -1198,27 +1198,32 @@
 ;;Now that we have prescribed moves, the entities are going into
 ;;an overlapping state, but it's a state set..
 
+(defn overlapping? [x]
+  (or (identical? x protocols/Overlapping)
+      (identical? x :overlapping)))
+
 ;;this is really a behavior, modified from the old state.  called from overlapping_state.
 ;;used to be called check-overlap.
-(befn disengage {:keys [entity position-change ctx overlapping-position] :as benv}
-      (if overlapping-position
-        (let [_  (debug [:overlapping-prescribed])
-              lname (:locationname @entity)
+(befn disengage {:keys [entity ctx overlapping-position tupdate] :as benv}
+      (when-let [opvec overlapping-position]
+        (let [[lname op] opvec 
+              _  (debug [:overlapping-prescribed op])
+              _  (debug [:disengaging (:name @entity) (:locationname @entity)])
+             ; lname (:locationname @entity)
+              res   (identical? op :to)
           ;    _  (println [:move->overlap (:name @entity) :from lname
           ;                 (select-keys (store/get-entity @ctx lname)
           ;                               [:units-assigned :units-overlapping])])
              _ (swap! ctx ;;update the context...
-                   #(d/disengage (core/get-demandstore %) @entity lname % true))]
-             (success (assoc benv :overlapping-position nil)))
-        (when  position-change
-          (let [{:keys [to-position from-position]}   position-change
-                res   (cond (identical? to-position   :overlapping)   true
-                            (identical? from-position :overlapping)   false                          
-                            :else :none)]
-            (when (not (identical? res :none)) ;ugh?
-              (do (swap! ctx ;;update the context...
-                         #(d/disengage (core/get-demandstore %) @entity (:locationname @entity) % res))
-                  (success benv)))))))
+                   #(d/disengage (core/get-demandstore %) (assoc @entity :last-update tupdate) lname % res #_true))]
+             (success (assoc benv :overlapping-position nil)))))
+        ;; (when  overlap-detected
+        ;;     (when (not (identical? res :none)) ;ugh?
+        ;;       (do (debug [:disengaging (:name @entity) (:locationname @entity)])
+        ;;           (swap! ctx ;;update the context...
+        ;;                  #(d/disengage (core/get-demandstore %)
+        ;;                                @entity (:locationname @entity) % res))
+        ;;           (success benv)))))))
 
 ;;used to be called check-overlap; 
 (def  check-overlap disengage)
@@ -1238,18 +1243,35 @@
              (swap! ctx #(supply/update-deploy-status u nil nil %))
              (success benv))))))
 
+(befn mark-overlap {:keys [entity position-change] :as benv}
+      (when-let [change position-change]
+        (let [{:keys [to-position from-position]}   position-change
+              ;;overlapping is not triggering because we only hae on definition of
+              ;;overlapping per the keyword.  There's a string version that shows
+              ;;up.
+              res       (cond (overlapping? to-position)   :to ;true
+                              (overlapping? from-position)  :from  ;false                          
+                              :else :none)
+              ]
+          (when (not (identical? res :none))
+            (do (debug [:marking-overlap res])
+                (success (assoc benv :overlapping-position [(:locationname @entity) res])))))))
+            
 ;;When there's a change in position, we want to do all these things.
 (befn change-position [entity position-change tupdate ctx]
-   (when-let [change position-change]        
-     (do (reset! ctx (supply/log-position! tupdate
-                                           (:from-position change)
-                                           (:to-position change) @entity @ctx)) ;ugly, fire off a move event.check-overlap
-         (reset! entity (assoc @entity :positionpolicy (:to-position change)))
-         (->seq [check-deployable                 
-                 finish-cycle
-                 (->alter  #(assoc % :position-change nil
-                                     :next-position nil))]))))
-
+      (when position-change
+        (let [{:keys [from-position to-position]} position-change]
+        (do (debug [:changed-position from-position to-position])
+            (reset! ctx (supply/log-position! tupdate
+                                              from-position 
+                                              to-position  @entity @ctx)) ;ugly, fire off a move event.check-overlap
+            (reset! entity (assoc @entity :positionpolicy to-position))
+            (->seq [check-deployable                 
+                    finish-cycle
+                    mark-overlap
+                    (->alter  #(assoc % :position-change nil
+                                      :next-position nil))])))))
+      
 ;;Performance: Mild hotspot.  Dissocing costs us here.  Change to assoc and
 ;;check.
 ;;if there's a location change queued, we see it in the env.
@@ -1294,10 +1316,10 @@
                  move->statechange])
           (echo :<change-position>)
           change-position
-          (echo :<check-overlap>)
-          check-overlap ;;Added, I think I missed this earlier...
           (echo :<change-fill>)
           change-fill ;;newly added...
+          (echo :<check-overlap>) ;moved before change-position
+          check-overlap ;;Added, I think I missed this earlier...
           (echo :<change-location>)
           change-location
           change-state-beh
@@ -1823,7 +1845,7 @@
                    :duration       overlap
                    :followingstate nil
                    :timeinstate    0}
-                  :overlapping-position true
+                  :overlapping-position :to;true
                   :t t}
                  )
           benv))
