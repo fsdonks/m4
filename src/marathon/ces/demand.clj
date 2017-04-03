@@ -70,6 +70,12 @@
     demandstore 
     (gen/deep-assoc demandstore [:changed demandname]  0)))
 
+(defn ctx->demand-change [ctx demandname]
+  (let [changed (store/gete ctx :DemandStore :changed)]
+    (if (contains? changed demandname) ctx
+        (store/assoce ctx :DemandStore :changed
+                      (assoc  changed demandname 0)))))
+
 (defn active-demand? [demandstore demandname]
   (contains? (get demandstore :activedemands) demandname))
 
@@ -880,8 +886,8 @@
         
         ]
     (if (not (= (:locationname unit) (:name demand)))
-         (do (debug [:unit-already-relocated])
-             ctx)
+      (do (debug [:unit-already-relocated])
+             (ctx->demand-change ctx (:name demand)))
     (->> (u/unit-update unit ctx)      ;;we don't want to get caught in an update cycle.
          (withdraw-unit unit demand) 
          (disengaging! demand unitname)))))
@@ -930,7 +936,7 @@
  ([demandstore unit demandname ctx overlap]
   (let [demand    (store/get-entity ctx  demandname)
         nextstore (register-change demandstore demandname)
-        ctx       (disengage-unit demand demandstore unit ctx :overlap overlap)]  
+        ctx       (disengage-unit demand nextstore #_demandstore unit ctx :overlap overlap)]  
    ; (if (zero? (d/required demand))
       (update-fill nextstore demandname ctx)  ;;always check...
 ;      (update-fill demandname (:unfilledq demandstore) demandstore ctx)
