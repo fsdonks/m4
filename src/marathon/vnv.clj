@@ -5,6 +5,7 @@
              [analysis :as a]
              [demo :refer :all]
              [run :as run]]
+            [spork.entitysystem.store :as store]
             [marathon.ces     [core :as core]]
             [spork.util       [io :as io] [table :as tbl]]
             [proc.example :as proc]))

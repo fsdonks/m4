@@ -114,7 +114,7 @@
 (defn set-followon [unit code] (assoc unit :followoncode code))
 (defn ghost? [unit] (= (:src unit) "Ghost"))
 (defn ungrouped? [g] (= g "UnGrouped"))
-(defn unit-count [d] (count (:units-assigned d)))
+(defn unit-count [d]  (+ (count (:units-assigned d)) (count (:units-overlapping d))))
 (defn demand-filled? [d] (= (count (:units-assigned d)) (:quantity d)))
 (defn empty-demand? [d] (zero? (unit-count d)))
 ;;fixed priorty-key, was invertered, leading to lexical ordering
@@ -886,7 +886,11 @@
         
         ]
     (if (not (= (:locationname unit) (:name demand)))
-      (do (debug [:unit-already-relocated])
+      (do (debug [:unit-already-relocated
+                  unitname
+                  (:name demand)
+                  (select-keys demand [:units-assigned :units-overlapping])])
+                                          
              (ctx->demand-change ctx (:name demand)))
     (->> (u/unit-update unit ctx)      ;;we don't want to get caught in an update cycle.
          (withdraw-unit unit demand) 
