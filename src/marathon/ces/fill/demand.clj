@@ -56,7 +56,6 @@
             ctx         (dem/request-fill! demandstore category demand ctx)
             _           (reset! lastfill [demand ctx])
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
-            ;_           (println [fill-status demandname])
             can-fill?   (= fill-status :filled)
             _           (debug [:fill-status fill-status])
             next-ctx    (if (= fill-status :unfilled) fill-ctx 

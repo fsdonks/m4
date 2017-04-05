@@ -605,9 +605,7 @@
   (let [deployment-count (atom (or (store/gete ctx :SupplyStore :deployment-count) 0))]
     (->  (reduce (fn [ctx promised-fill]            
                    (let [[filldata ctx] (realize-fill promised-fill ctx) ;reify our fill.
-                                        ;_ (println fd)
                          unit     (:source filldata)
-;                         unit     (or (:unit filldata)    filldata)
                          cnt      (swap! deployment-count unchecked-inc)
                          ] 
                      (->> ctx 

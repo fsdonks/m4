@@ -531,7 +531,6 @@
          :else
          (let [frompos  (get-next-position policy position)
                topos    (get-next-position policy frompos)
-               ;_ (println [frompos topos])
                ]
            (if-let [t (protocols/transfer-time policy frompos topos)]
              t
@@ -1106,7 +1105,7 @@
                          ;;I think we're good...should rename get-wait-time to something more appropriate.
                          ;;get-next-wait-time?
                          (get-wait-time @entity (:positionpolicy e) benv)))
-              _ (debug [:found-move {:next-position p :wait-time wt}])
+              _ (debug [:found-move {:current-position currentpos :next-position p :wait-time wt}])
               ]
           (bind!! {:next-position  p
                    :wait-time      wt
@@ -1671,7 +1670,7 @@
          (let [move-info (:data msg)
                {:keys [wait-time next-location next-position deltat] :or
                 {wait-time 0 deltat 0}} move-info
-               _ (debug [:executing-move move-info  msg])]
+               _ (debug [:executing-move move-info  msg {:positionpolicy @entity}])]
            (beval (move! next-location deltat next-position wait-time) benv))
          ;;allow the entity to invoke a state-change-behavior
          ;;We can always vary this by modifying the message-handler         
@@ -1746,7 +1745,8 @@
 
 (befn up-to-date {:keys [entity tupdate] :as benv}
       (let [e (reset! entity (assoc @entity :last-update tupdate))]
-        (echo [:up-to-date (:name e) :cycletime (:cycletime e) :last-update (:last-update e) :tupdate tupdate])))
+        (echo [:up-to-date (:name e) :cycletime (:cycletime e) :last-update (:last-update e) :tupdate tupdate
+               :positionpolicy (:positionpolicy e)])))
 
 (def process-messages-beh
   (->or [(->and [(echo :check-messages)

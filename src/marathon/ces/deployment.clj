@@ -75,11 +75,14 @@
             ;;This may be a little problematic.  We're pre-loading the move.
             ;;It may be more idiomatic to delegate the move to the entity behavior system.
             from-location (:locationname    unit) ;may be extraneous
-            from-position (:position-policy unit);
+            from-position (:positionpolicy unit);
             to-location   (:name demand)
             ;;Some demands have a special position associated with them...
-            to-position   :deployed
-            unit-delta    {:position-policy to-position
+            ;;removed external modification of positionpolicy, since this
+            ;;screws with our behavior implementation.  delegate changes to
+            ;;behavior.
+            ;to-position   :deployed
+            unit-delta    {;:position-policy to-position
                            :dwell-time-when-deployed (udata/get-dwell unit)}
             unit          (merge unit ;MOVE THIS TO A SEPARATE FUNCTION? 
                                  unit-delta)
@@ -90,7 +93,7 @@
         ;;Ideally, we don't store the entire unit under units-assigned, only the name.
         (->> ;;modified to just store unitname.
              (store/updatee ctx to-location :units-assigned assoc unitname unitname) ;need to update this in ctx..  ;;estore version.       
-             (sim/merge-entity {unitname     unit-delta
+             (sim/merge-entity {unitname     unit-delta   ;;REFACTOR - operate on unit directly...
                                 ;;TODO - rip out all stuff relate to fencing....no longer necessary.
                                 :SupplyStore {:tags (:tags supplystore)} ;(supply/add-unit supplystore unit)
                                 })                       

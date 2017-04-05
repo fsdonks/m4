@@ -626,7 +626,7 @@
 ;a data-driven definition that's more dynamic.  TBD.
 (defn deployed? [u] 
   (case (unit-state u)
-    (:bogging :deploying) true
+    (:bogging :deploying pol/Deployed pol/Bogging) true
     false))   
 
 ;Indicates whether unit u is eligible for a follow on deployment.

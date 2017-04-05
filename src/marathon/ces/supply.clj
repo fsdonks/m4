@@ -308,7 +308,7 @@
      (str "Spawned a ghost " (:name unit)) nil ctx))  
 
 (defn new-deployable! [unit ctx]
-  (assert (not= (:policy-position unit) :Recovery) "Recovery is not deployable")
+  (assert (not= (:positionpolicy unit) :Recovery) "Recovery is not deployable")
   (core/trigger-event :NewDeployable "SupplyManager" (:name unit) 
       (str "Unit " (:name unit) " at position " (:positionpolicy unit) 
            " is deployable") nil ctx))

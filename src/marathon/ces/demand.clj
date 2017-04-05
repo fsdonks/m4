@@ -961,7 +961,7 @@
        ;;ctx       (disengage-unit demand demandstore unit ctx :overlap overlap)       
        ]
    (->> (store/add-entity ctx demand)
-        (update-fill  demandstore demandname))))
+        (update-fill  nextstore #_demandstore demandname))))
 
 ;;Note: we're using demandmap for information here...rather than
 ;;the context...
