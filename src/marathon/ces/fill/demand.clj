@@ -159,7 +159,7 @@
   (if-let [groups (core/get-followon-keys ctx)]   
     (fill-demands-with
      (fn [store category ctx] 
-           (fill-category store [category groups] ctx :stop-early false)) ctx)
+           (fill-category store [category groups] ctx :stop-early? false)) ctx)
   ctx))
 
 ;; (defn fill-srm [ctx]
