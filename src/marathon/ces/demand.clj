@@ -70,7 +70,7 @@
     demandstore 
     (gen/deep-assoc demandstore [:changed demandname]  0)))
 
-(defn ctx->demand-change [ctx demandname]
+(defn ctx->demand-change [demandname ctx]
   (let [changed (store/gete ctx :DemandStore :changed)]
     (if (contains? changed demandname) ctx
         (store/assoce ctx :DemandStore :changed
@@ -605,23 +605,24 @@
    are removed from the unfilled queue, unsatisfied demands are kept or added to
    the unfilled queue.  Deactivating unfilled demands are detected as well.
    Propogates notifications for each special case."
-  [demandstore demandname ctx]
-  (let [demand   (store/get-entity ctx demandname)]
-    (cond  (nil? (:src demand)) (throw (Exception. (str "NO SRC for demand" demandname)))
-           (nil? demandname)    (throw (Exception. (str "Empty demand name! " demandname)))
-           :else
-           (let [ _ (debug [:updfill demandname :required (d/required demand)
-                           ; :quantity (:quantity demand)
-                           ; :assigned (:units-assigned demand)
-                           ; :overlapping (:units-overlapping demand)
-                            ])]
-             ;;The demand is inactive or has no fill, either way we should remove it from fill consideration.
-             (if (or (zero? (d/required demand))  ;;if we move to components, active-demand? doesn't need the store..
-                     (not (:active demand))) ;demand is filled, remove it
-               (drop-unfilled-demand demandstore demand ctx)        
-               ;;basically - add-unfilled-demand
+  ([demandstore demandname ctx]
+   (let [demand   (store/get-entity ctx demandname)]
+     (cond  (nil? (:src demand)) (throw (Exception. (str "NO SRC for demand" demandname)))
+            (nil? demandname)    (throw (Exception. (str "Empty demand name! " demandname)))
+            :else
+            (let [ _ (debug [:updfill demandname :required (d/required demand)
+                                        ; :quantity (:quantity demand)
+                                        ; :assigned (:units-assigned demand)
+                                        ; :overlapping (:units-overlapping demand)
+                             ])]
+              ;;The demand is inactive or has no fill, either way we should remove it from fill consideration.
+              (if (or (zero? (d/required demand))  ;;if we move to components, active-demand? doesn't need the store..
+                      (not (:active demand))) ;demand is filled, remove it
+                (drop-unfilled-demand demandstore demand ctx)        
+                ;;basically - add-unfilled-demand
                                         ;demand is unfilled, make sure it's added
-               (add-unfilled-demand demandstore demand ctx))))))
+                (add-unfilled-demand demandstore demand ctx))))))
+  ([demandname ctx] (update-fill (core/get-demandstore ctx) demandname ctx)))
 
 ;;##Describing Categories of Demand To Inform Demand Fill Rules
 ;;Demands have typically been binned into gross categories, based on the type 
@@ -891,7 +892,7 @@
                   (:name demand)
                   (select-keys demand [:units-assigned :units-overlapping])])
                                           
-             (ctx->demand-change ctx (:name demand)))
+             (ctx->demand-change (:name demand) ctx))
     (->> (u/unit-update unit ctx)      ;;we don't want to get caught in an update cycle.
          (withdraw-unit unit demand) 
          (disengaging! demand unitname)))))
@@ -938,14 +939,11 @@
   "Shifts the unit from being actively assigned to the demand, to passively 
    overlapping at the demand.  Updates the demand's fill status."
  ([demandstore unit demandname ctx overlap]
-  (let [demand    (store/get-entity ctx  demandname)
-        nextstore (register-change demandstore demandname)
-        ctx       (disengage-unit demand nextstore #_demandstore unit ctx :overlap overlap)]  
-   ; (if (zero? (d/required demand))
-      (update-fill nextstore demandname ctx)  ;;always check...
-;      (update-fill demandname (:unfilledq demandstore) demandstore ctx)
-  ;    ctx)
-  ))
+  (let [demand    (store/get-entity ctx  demandname)]
+    (->> (disengage-unit demand (core/get-demandstore ctx)
+                         unit ctx :overlap overlap)
+         (ctx->demand-change demandname)
+         (update-fill demandname))))
  ([demandstore unit demandname ctx] ;hack....
   (disengage demandstore unit demandname ctx false)))
 

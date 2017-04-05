@@ -537,7 +537,13 @@
        (day-before t)
        (sim/advance-time)))
     
-                
+(defn step-1
+  "Take one step from the current context.  Useful for interactive 
+   debugging or searching."
+  [ctx]
+  (-> ctx
+      (engine/sim-step)
+      (sim/advance-time)))
 
 ;;simple-project xforms
 (defn filter-srcs
