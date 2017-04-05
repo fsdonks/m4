@@ -1670,7 +1670,7 @@
          (let [move-info (:data msg)
                {:keys [wait-time next-location next-position deltat] :or
                 {wait-time 0 deltat 0}} move-info
-               _ (debug [:executing-move move-info  msg {:positionpolicy @entity}])]
+               _ (debug [:executing-move move-info  msg (:positionpolicy @entity)])]
            (beval (move! next-location deltat next-position wait-time) benv))
          ;;allow the entity to invoke a state-change-behavior
          ;;We can always vary this by modifying the message-handler         
