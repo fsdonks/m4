@@ -712,7 +712,6 @@
           newctx ;;covering down on a weird issue with nil valued fons.
           ))))
 
-
 ;;DEPRECATED
 ;;==========
 

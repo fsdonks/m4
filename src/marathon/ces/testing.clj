@@ -566,7 +566,7 @@
          (policy/manage-policies  day)  ;Apply policy changes, possibly affecting supply.
          (demand/manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.
          (filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.         
-         (supply/manage-followons day)  ;Resets unused units from follow-on status. 
+        ; (supply/manage-followons day)  ;Resets unused units from follow-on status. 
          (engine/end-day day)           ;End of day logic and notifications.
          ;(demand/manage-changed-demands day)
          )));Clear set of changed demands in demandstore.
@@ -649,24 +649,6 @@
   (->> (setup/simstate-from  sd/followon-tables core/debugsim)
        (sim/add-time 1)))
 
-(comment 
-(def followonfill
-  (let [f467 
-        (get (analysis/->history 467 engine/sim-step             
-                        followonctx) 467)
-        day (sim/get-time f467)]
-    (->> f467
-         (engine/begin-day        day)  ;Trigger beginning-of-day logic and notifications.
-         (supply/manage-supply    day)  ;Update unit positions and policies.
-         (policy/manage-policies  day)  ;Apply policy changes, possibly affecting supply.
-         (demand/manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.         
-         (filld/fill-demands      day)  ;Try to fill unfilled demands in priority order.
-         (supply/manage-followons day)  ;Resets unused units from follow-on status. 
-         (engine/end-day day)           ;End of day logic and notifications.
-         ;(demand/manage-changed-demands day)
-         )))
-)
-
 ;;we need to verify that overlap is working...
 ;;we should be able to see overlapping relations...
 
@@ -728,7 +710,7 @@
          (policy/manage-policies  0)  ;Apply policy changes, possibly affecting supply.
          (demand/manage-demands   0)  ;Activate/DeActiveate demands, handle affected units.         
          (filld/fill-demands      0)  ;Try to fill unfilled demands in priority order.
-         (supply/manage-followons 0)  ;Resets unused units from follow-on status. 
+         ;(supply/manage-followons 0)  ;Resets unused units from follow-on status. 
          (engine/end-day 0)           ;End of day logic and notifications.
          (sim/advance-time)           
          (engine/begin-day        1)  ;Trigger beginning-of-day logic and notifications.

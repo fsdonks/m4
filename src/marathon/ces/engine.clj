@@ -253,7 +253,6 @@
         (manage-policies  day)  ;Apply policy changes, possibly affecting supply.
         (manage-demands   day)  ;Activate/DeActiveate demands, handle affected units.      
         (fill-demands     day)  ;Try to fill unfilled demands in priority order. 
-        (manage-followons day)  ;Resets unused units from follow-on status. 
         (end-day day)           ;End of day logic and notifications.
         ))
   ([ctx] (sim-step (sim/get-time ctx) ctx)))

@@ -209,8 +209,7 @@
   [t ctx]
   (->> ctx    
     (fill-followons)
-   ;(supply/release-max-utilizers) ;DECOUPLE, eliminate supply dependency...
-;    (fill-srm) ;new, only uses supply in the [:SRM category]
+    (supply/manage-followons t)
     (fill-hierarchically) ;;goes by categories.
     ))
 
