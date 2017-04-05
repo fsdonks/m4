@@ -170,8 +170,10 @@
    train     #{:dwelling :c4}
    ready     #{:dwelling :c2} 
    available #{:dwelling :c1}
-   deployed    :bogging
-   Overlapping :overlapping
+   deployed       :bogging
+   Overlapping    :overlapping
+   demobilization :demobilizing
+   :recovering #{:dwelling} ;;not deployable by default.
    })
 
 (def srm-positions

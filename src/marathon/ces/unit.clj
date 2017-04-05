@@ -334,78 +334,7 @@
 (defn- cycle-bdr [c]  0.0)
 (defn get-BDR    [u] (cycle-bdr (:currentcycle u)))
 
-;;TODO remove this or switch over to them.  MAybe more clean.  Unknown
-;; at this point.
-
-;; (defn defaccessors [paths]
-;;   (doseq [p paths]
-;;     (let [nm (subs (str p) 1)]
-;;       (eval `(defn ~(symbol nm) [obj#] 
-;;                (-> obj# ~@path))))))
-
-;; (defaccessors [:currentcycle :bogbudget]
-;;               [:currentcycle :bog]
-;;               [:currentcycle :dwell])
-  
-;; (defn bog-budget [u] (-> u :currentcycle :bogbudget))
-;; (defn bog        [u] (-> u :currentcycle :bog))
-;; (defn dwell      [u] (-> u :currentcycle :dwell))
-
-;Public Sub changePolicy(newpolicy As IRotationPolicy)
-;If Not (policy Is Nothing) Then policyStack.add newpolicy
-
-;If policyStack.count = 0 Then Err.Raise 101, , "no policy on stack!"
-;'TOM Change 21 July -> account for passage of time between updates!
-;If newpolicy.name <> policy.name Then
-;'    If name = "32_BCT_AC" Then
-;'        Debug.Print "phenomenon"
-;'    End If
-    
-;    'TOM Change 25 July 2011
-;    ChangeState "PolicyChange", (parent.getTime - parent.lastupdate(name))
-;    'ChangeState "PolicyChange", 0
-;End If
-
-;End Sub
-
-;;__TODO__ Move changepolicy to sim.unit
-;probably need to figure out a way to thread time for these guys, or 
-;establish parent/child relations.
-;newpolicy should be an IRotationalPolicy
-;Time is not threaded, shift this to the unit level simulation.
-(comment 
-(defn changePolicy [u newpolicy]
-  (if (not= (:name newpolicy) (-> u :policy :name))
-    (changestate u "PolicyChange" (- (get-time u) (last-update u)))))
-)
-
-;Public Function getStats() As String
-;getStats = "Policy:" & policy.AtomicName & " Cycletime: " & cycletime
-;End Function
-
-(defn getStats [u] 
-  (str "Policy: " (-> u :policy :AtomicName) "Cycletime: " (:cycletime u)))
-
-
-;'force the unit to broadcast a unitmoved event if it's the first time it moved.
-;'Note, we need to ensure that units are cleaned up at the end of day....using end of day
-;'logic, specifically, set moved = false for every unit that moved.
-
-
-;;__TODO__ Move trigger move to sim.unit, this should not be 
-;;encapsulated and requires a simulation context.
-;note need to define entity-trigger 
-(comment 
-(defn- trigger-move [u newlocation]
-  (let [nm (:name u)
-        t (get-time u)
-        loc (:locationname u)
-        msg (str nm " moved from " loc " to " newlocation " on day " t)]
-    (entity-trigger u (make-packet :UnitMoved nm newlocation msg u))))
-)                      
-
-          
-
+;;TODO remove
 ;;__TODO__ Move changelocation  to sim.unit, this should not be 
 ;;encapsulated and requires a simulation context.
 ;note need to define entity-trigger 
@@ -626,7 +555,7 @@
 ;a data-driven definition that's more dynamic.  TBD.
 (defn deployed? [u] 
   (case (unit-state u)
-    (:bogging :deploying pol/Deployed pol/Bogging) true
+    (:bogging :deploying pol/Deployed pol/Bogging :non-bogging) true
     false))   
 
 ;Indicates whether unit u is eligible for a follow on deployment.
@@ -642,18 +571,35 @@
 
 (defn deployable-window [u] (pol/deployable-window (:policy u)))
 
+;; 'TOM Hack 24 July 2012
+;; 'Guard to prevent units in recovery from being eligible to deploy.
+;; Public Function isRecovering() As Boolean
+;; isRecovering = StateData.currentState = "Recovering"
+;; End Function
+(defn recovering? [u]
+  (= (unit-state u) :recovering))
+
+;; 'TOM Hack 15 Nov 2015 -> Preventing recovery from being nonBog
+;; Public Function isDemob() As Boolean
+;; isDemob = StateData.currentState = "DeMobilizing"
+;; End Function
+(defn demobilizing? [u]
+    (= (unit-state u) :demobilizing))
+
 ;Determines if u is capable of deploying, as a function of u's associated policy.
 (defn valid-deployer?
-  ([u spawning? policy]
+  ([u spawning? non-bog? policy]
    (if spawning? 
       (pol/deployable-at? policy (:positionpolicy u))
       (and (bog-remains? u) 
-           (not (deployed? u)) 
-           (or (can-followon? u)
-;               (in-deployable-window? u policy)
-                (pol/deployable-at? policy (:positionpolicy u))                                    
-                                   ))))
-  ([u] (valid-deployer? u nil (:policy u)))) 
+           (not (deployed? u))
+           (not (recovering? u))
+           (or non-bog?
+               (or (can-followon? u)
+                   (pol/deployable-at? policy (:positionpolicy u))
+                   )))))
+  ([u spawning? policy] (valid-deployer? u spawning? nil policy))
+  ([u] (valid-deployer? u nil nil (:policy u))))
 
 ;'TOM change 20 April 2012 - > Note, we were using cycletime here, which is the cycletime associated
 ;'with the unit state, i.e the empirical cycle time.  Since we've got a separation between the cycle
@@ -665,6 +611,26 @@
   ([u spawning? policy]  (valid-deployer? u spawning? policy))
   ([u spawning?] (valid-deployer? u spawning? (:policy u)))
   ([u] (valid-deployer? u nil (:policy u))))
+
+
+
+
+
+;;NonBOG state predicates.
+
+;; 'TOM hack 17 Jan 2013 -> could've used isdeployed, but this is clear too....
+;; Public Function canNonBOG() As Boolean
+;; 'TOM Hack 15 Nov 2015 -> Preventing recovery from being nonBog
+
+;; canNonBOG = Not isDeployed() And Not isRecovering() And Not isDemob() _
+;;     And PositionPolicy <> "Recovery"
+;; End Function
+(defn can-non-bog? [u]
+  (and (not (deployed? u))
+       (not (recovering? u))
+       (not (demobilizing? u))
+       (not= (:positionpolicy u) :recovery)))
+
 
 ;;Added for unit behavior utility
 (defn add-traversal [u t from to]

@@ -1233,8 +1233,9 @@
            u @entity
            p (:policy u)
            _ (debug [:checking-deployable  :from from-position :to to-position])]
-       (when   (not= (protocols/deployable-at? p from-position)
-                     (protocols/deployable-at? p to-position))
+       (when   (or (not= (protocols/deployable-at? p from-position)
+                         (protocols/deployable-at? p to-position))
+                   (unit/can-non-bog? u))
          (do (debug [:deployable-changed! from-position to-position])
              (swap! ctx #(supply/update-deploy-status u nil nil %))
              (success benv))))))
