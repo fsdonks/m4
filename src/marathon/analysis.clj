@@ -239,7 +239,7 @@
 ;;Note: these change daily potentially.
 (defn frame->location-samples [[t ctx]]
   (core/locations t ctx))
-(defn frame->location-samples [[t ctx]]
+(defn frame->deployment-samples [[t ctx]]
   (core/deployments t ctx))
 
 ;;compute the deployments table

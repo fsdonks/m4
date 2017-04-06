@@ -308,9 +308,15 @@
 ;;us when we use ces.core/current-entity.
 
 ;;TODO# Verify this statistic is accurate....
-(defn normalized-dwell [u] 
+#_(defn normalized-dwell [u]
  (double  (/ (+ (get u :cycletime) (get u :dt 0))
              (-> u :currentcycle :dwell-expected))))
+
+(defn normalized-dwell [u]
+ (core/float-trunc  (/ (+ (get u :cycletime) (get u :dt 0))
+                       (-> u :currentcycle :dwell-expected))
+                    6))
+
 
 ;;trying to boost speed.
 (comment

@@ -694,6 +694,15 @@
       (if (< lw rw) -1
           1)))
 
+(defn ->preference-orderer [order-by]
+  (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]
+          (let [res (compare-double (.nth ^clojure.lang.Indexed (.nth l 0) 2)
+                                    (.nth ^clojure.lang.Indexed (.nth r 0) 2))]
+            (if (zero? res) ;weights are equal.
+              ;;always compare weight first, by default...
+              (order-by (second l) (second r))
+              res))))
+
 ;;common choke point for us to find entities.  Currently, we don't update them
 ;;when we're looking for them.
 
