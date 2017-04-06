@@ -37,7 +37,8 @@
             [spork.ai.core        :as ai]
             [marathon.ces.basebehavior :as b]
             [marathon.data.store       :as simstate]
-            [clojure.core.reducers     :as r]))
+            [clojure.core.reducers     :as r]
+            [clojure.pprint :as pprint]))
     
 ;;This is a lifesaver...
 (def noisy            (atom true))
@@ -509,6 +510,13 @@
     (map f xs)))
 
 (defn atom? [x] (instance? clojure.lang.Atom x))
+(defn float-trunc [n places]
+  (let [scale (Math/pow 10 places)]
+    (/ (long (* n scale)) scale)))
+
+(defn print-float [n]
+  (pprint/cl-format nil
+    "~f" n))
 
 ;;Ephemeral Data
 ;;==============
