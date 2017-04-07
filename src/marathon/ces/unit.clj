@@ -554,14 +554,14 @@
 (defn bog-remains? [u]
   (pos? (gen/deep-get u [:currentcycle :bogbudget] 0)))
 
-(defn unit-state [u] (-> u :statedata :currentstate))
+(defn unit-state [u] (-> u :statedata :curstate #_:currentstate))
 
 ;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
 ;Note, this implicitly hardcodes deployed states.  We could probably yank this out into
 ;a data-driven definition that's more dynamic.  TBD.
 (defn deployed? [u] 
   (case (unit-state u)
-    (:bogging :deploying pol/Deployed pol/Bogging :non-bogging) true
+    (:bogging :deploying pol/Deployed pol/Bogging :non-bogging :waiting) true
     false))   
 
 ;Indicates whether unit u is eligible for a follow on deployment.
@@ -752,16 +752,12 @@
                  :location-based-move
                  location-details)))
 
-(defn wait-at [u location-details ctx]
-  (let [wait-time  (or (:MissionLength location-details) 999999)
-        wait-state (or (:StartState location-details) :waiting)]
-    (core/handle-message! ctx entity
-       (core/->msg (:name entity) (:name entity)
+(defn wait-at [u wait-info ctx]
+  (core/handle-message! ctx u
+       (core/->msg (:name u) (:name u)
                    (core/get-time ctx)
                    :wait-based-move
-                   (assoc location-details
-                          :wait-time wait-time
-                          :wait-state wait-state)))))
+                   wait-info)))
 
 
 ;;We need to expand this notion...
@@ -829,6 +825,14 @@
         (assoc :deployment-index cnt)
         (increment-deployments)
         (keep-bogging-until-depleted newlocation ctx))))
+
+(defn pseudo-deploy [unit info t ctx]
+  (let [cnt  (core/deployment-count ctx)
+        ctx  (core/inc-deployment-count ctx)]
+    (-> unit
+        (assoc :deployment-index cnt)
+        (increment-deployments)
+        (wait-at info ctx))))
 
 
 ;'Probably pull unit's changelocation into here as well.

@@ -192,7 +192,6 @@
    :DwellBeforeDeploy :int
    :Policy            :text})
 
-
 ;;PERFORMANCE NOTE: Minor Hotspot
 ;;note: filldata == {:keys [rule fillPath pathlength followon source]}
 ;;should match the deprecord schema.

@@ -1948,13 +1948,11 @@
                        :wait-time     wt
                        :next-position StartState))))))
 
+(def wbm (atom nil))
 (befn wait-based-beh {:keys [entity statedata wait-based-info ctx] :as benv}
   (when  wait-based-info
-    (let [{:keys [name wait-time wait-state]} wait-based-info
-          ;;just annotate the state...
-         ;;we need to schedule a state change.
-          ;;and a location-change...
-          _ (swap! entity assoc :location-behavior true)
+    (let [{:keys [demand wait-time wait-state]} wait-based-info
+          name (:name demand)
           state-change {:newstate       wait-state
                         :duration       wait-time
                         :followingstate (:state @entity)
@@ -1968,13 +1966,24 @@
                         :state-change state-change
                         :location-change location-change
                         :wait-time wait-time}])
+          ;; _ (throw (Exception. (str [:about-to-wait  {:name (:name @entity)
+          ;;                                             :state-change state-change
+          ;;                                             :location-change location-change
+          ;;                                             :wait-time wait-time}])))
           ]
-          (beval  change-state-beh
-                  (-> benv
-                      (assoc
-                       :state-change state-change
-                       :location-change location-change
-                       ))))))
+      (->seq [(->alter #(assoc % :state-change state-change
+                               :location-change location-change))
+              change-location
+              change-state-beh
+              (->alter (fn [benv]
+                         (let [u (deref (:entity benv))
+                               _ (debug [:deployable-changed! :waiting
+                                         :deployment-index (:deployment-index u)])
+                               _ (swap! (:ctx benv) #(supply/update-deploy-status u nil nil %))
+                               _ (reset! wbm u)
+                               _ :ballz #_(throw (Exception. (str [:ballz])))]
+                            benv)))]))))
+
 
 
 ;;All our behavior does right now is spawn...
@@ -2073,7 +2082,7 @@
 
 (declare apply-policy-change defer-policy-change)
 ;;hacky...
-(def infeasible-policy-change?  #{"Deployed" "Overlapping" "DeMobilizing"})      
+(def infeasible-policy-change?  #{"Deployed" "Overlapping" "DeMobilization"})
 (defn can-change-policy? [cycle-proportion from-pos]
   (and (<= cycle-proportion 1)
        (not (infeasible-policy-change? from-pos))))
@@ -2166,7 +2175,8 @@
                                        :cycletime cycletimeA
                                        :unit (:name unit)
                                        :t tupdate}))
-              CycleProportionA  (/ cycletimeA  (protocols/cycle-length current-policy))
+              CycleProportionA  (core/float-trunc (/ cycletimeA  (protocols/cycle-length current-policy))
+                                                  6)
               ;;'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
               ]
           (->or [(->and [(->pred (fn [_] (can-change-policy? CycleProportionA PositionA)))
@@ -2198,7 +2208,7 @@
             cycletimeA     cycletime          
             policynameA    (protocols/atomic-name  current-policy) ;active atomic policy
             policynameB    (protocols/atomic-name  next-policy)    ;new atomic policy
-            cyclelengthB   (protocols/cycle-length next-policy)            
+            cyclelengthB   (protocols/cycle-length next-policy)
             cycletimeB     (if (> cyclelengthB +twenty-years+) ;;effectively infinite...
                              cycletimeA ;;use current cycletime, do NOT project.
                              (long   (* proportion cyclelengthB))) ;coerce to a long cyclelength.

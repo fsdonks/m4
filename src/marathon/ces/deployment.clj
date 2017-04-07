@@ -33,17 +33,16 @@
 ;;for the unit's state.  This provides an
 ;;easy way to rewire common states.
 (def demand-effect-categories
-  {"NonBOG" {:on-deploy [{:wait :inf}
-                         :ignore-bog
-                         :ignore-dwell
-                         :ignore-cycletime
-                         :accumulate-duration]
-             :on-return [:allow-bog
-                         {:re-enter: :derive-from-cycletime}]}})
+  {"NonBOG" {:wait-time   999999
+             :wait-state :waiting}})
+
 
 (defn location-based-policy? [d]
-  (or  (and (:StartState d) (:EndState d))
-       (demand-effect-categories (:category d))))
+  (and (:StartState d) (:EndState d)))
+
+(defn wait-based-policy? [d]
+  (when-let [fx (demand-effect-categories (:category d))]
+    (assoc fx :demand d)))
 
 ;;These seem like lower level concerns.....
 ;;Can we push this down to the unit entity behavior?
@@ -58,9 +57,11 @@
 ;;or a simular behavior context.....this is more appealing.
 (defn deploy!  [followon? unit demand t ctx]
   (let [supply (core/get-supplystore ctx)
-        newlocation (:name demand)        
+        newlocation (:name demand)
+        effects (wait-based-policy? demand)
         ]
     (cond (location-based-policy? demand)  (u/location-based-deployment unit demand ctx) ;;allow location to override policy.
+          effects               (u/pseudo-deploy unit effects t ctx) ;;nonbog and the like.
           followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
                              newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
                          (u/re-deploy-unit  newunit  demand t newctx))

@@ -134,7 +134,7 @@
 
 
 (def depfields
-  {:Location identity
+  {:Location (fn [^String x] (.replace x "_Deployable" ""))
    :Demand   identity
    :DwellBeforeDeploy identity
    :BogBudget identity

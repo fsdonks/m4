@@ -863,7 +863,8 @@
 ;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
 (def not-ac   #(not= (:component %) "AC"))
 (def title32 [#(= (:component %) "NG") min-proportional-dwell min-unit-index])
-
+;;apparently identical.
+(def hld [#(= (:component %) "NG") min-proportional-dwell min-unit-index])
 
 ;;new rules....should be able to compose these...
 ;;By default, we get substituable, globally-available supply using our
