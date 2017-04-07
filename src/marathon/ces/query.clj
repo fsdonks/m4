@@ -420,14 +420,19 @@
 ;;We have a set of unit comparison criteria that together form a
 ;;little language for comparing units.
 
+(defn get! [m k]
+  (if-let [res (get m k)]
+    res
+    (throw (Exception. (str [:no-value k m])))))
+
 (defn same-val? 
-  ([k r1 r2] (= (get r1 k) (get r2 k)))
+  ([k r1 r2] (= (get! r1 k) (get! r2 k)))
   ([k r1 r2 & rs]
-     (let [l (get r1 k)
-           r (get r2 k)]
+     (let [l (get! r1 k)
+           r (get! r2 k)]
        (when (= l r)             
          (reduce (fn [acc r]
-                   (if (= (get r k) acc) acc
+                   (if (= (get! r k) acc) acc
                        (reduced nil)))
                  l
                  rs)))))
@@ -457,8 +462,8 @@
 
 (defn key-compare [k l r]
   (if (keyword? k)
-    (compare (get l k)
-             (get r k))
+    (compare (get! l k)
+             (get! r k))
     (compare (k l) (k r))))
 
 ;; (defmacro compare* [l r & else]
@@ -851,7 +856,7 @@
 ;; not_ac	(except-compo "AC")
 ;; title32	[(where-compo "NG") mindwell]
 
-(def uniform  [when-fenced #_when-followon max-proportional-dwell min-unit-index])
+(def uniform  [when-fenced when-followon max-proportional-dwell min-unit-index])
 (def ac-first [when-fenced when-followon AC max-proportional-dwell min-unit-index])
 (def rc-first [when-fenced when-followon RC max-proportional-dwell min-unit-index])
 (def ng-first [when-fenced when-followon NG max-proportional-dwell min-unit-index])
