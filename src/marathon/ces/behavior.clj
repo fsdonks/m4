@@ -548,11 +548,14 @@
 ;;Computes the wait time - i.e. transfer time - between
 ;;frompos and topos relative to a unit's policy and statedata.
 (defn immediate-wait-time
-  [unit frompos topos {:keys [deltat statedata] :as benv}]
-  (let [wt     (protocols/transfer-time (:policy unit) frompos topos)
-        deltat (or  deltat 0) ;allow the ctx to override us...
-        ]
-    (- wt (fsm/remaining statedata))))
+  ([unit frompos topos {:keys [deltat statedata] :as benv}]
+   (let [wt     (protocols/transfer-time (:policy unit) frompos topos)
+         deltat (or  deltat 0) ;allow the ctx to override us...
+         ]
+     (- wt (fsm/remaining statedata))))
+  ([unit frompos {:keys [deltat statedata] :as benv}]
+   (immediate-wait-time unit frompos
+      (get-next-position (:policy unit) frompos) benv)))
 
 ;;Could be a cleaner way to unpack our data, but this is it for now...
 ;;need to fix this...let's see where we use it.
@@ -1422,12 +1425,12 @@
 ;;and rip off the followon code.
 (befn reset-beh {:keys [entity] :as benv}
       (let [pos             (protocols/start-state (:policy @entity))
-            wt              (get-wait-time @entity pos benv)
+            wt              (#_get-wait-time immediate-wait-time @entity pos benv)
+            _   (debug [:immediate-reset :from (:positionpolicy @entity) :to pos :wait-time wt])
             _               (swap! entity #(assoc % :followoncode nil))
             ]
-        (beval moving-beh (assoc benv :next-position
-                                 (protocols/start-state (:policy @entity))
-                                 :wait-time wt))))
+        (beval moving-beh (assoc benv :next-position pos
+                                      :wait-time wt))))
 
 ;; 'A state to handle reentry into the available pool....
 (def invalid?  #{"Deployed" "Overlapping"})
@@ -1556,6 +1559,7 @@
             _    (debug [:abw-beh {:deltat deltat
                                    :bogremaining bogremaining
                                    :unt (:name unit)
+                                   :fc (:followoncode unit)
                                         ;:unit (dissoc unit :policy)
                                    }])]
         (if (not (pos? bogremaining))

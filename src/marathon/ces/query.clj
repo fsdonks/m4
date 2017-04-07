@@ -851,7 +851,7 @@
 ;; not_ac	(except-compo "AC")
 ;; title32	[(where-compo "NG") mindwell]
 
-(def uniform  [when-fenced when-followon max-proportional-dwell min-unit-index])
+(def uniform  [when-fenced #_when-followon max-proportional-dwell min-unit-index])
 (def ac-first [when-fenced when-followon AC max-proportional-dwell min-unit-index])
 (def rc-first [when-fenced when-followon RC max-proportional-dwell min-unit-index])
 (def ng-first [when-fenced when-followon NG max-proportional-dwell min-unit-index])

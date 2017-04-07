@@ -610,8 +610,17 @@
    }
     [max-utilization              "Max Utilization policy for AC 45" (route-by max-util-waits  max-util-routing)]
     [max-utilization-enabler      "Max Utilization policy for AC 30" (route-by max-util-waits  max-util-routing) :overlap   30]
-    [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  max-util-routing) :bogbudget 270]
-    [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  max-util-routing) :overlap 30 :bogbudget 270])
+  [near-max-utilization         "Max Utilization policy for RC 30" (route-by max-util-waits  max-util-routing)
+   :bogbudget 270
+   :mindwell 730
+   :maxbog 270
+   :startdeployable 730]
+  [near-max-utilization-enabler "Max Utilization policy for RC 30" (route-by max-util-waits  max-util-routing)
+   :overlap 30
+   :bogbudget 270
+   :mindwell 730
+   :maxbog 270
+   :startdeployable 730])
 
 ;;Constructor for building policy instances ...
 ;;We want to flexibly create Marathon policies .....
