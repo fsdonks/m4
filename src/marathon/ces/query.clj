@@ -856,10 +856,10 @@
 ;; not_ac	(except-compo "AC")
 ;; title32	[(where-compo "NG") mindwell]
 
-(def uniform  [when-fenced when-followon max-proportional-dwell min-unit-index])
-(def ac-first [when-fenced when-followon AC max-proportional-dwell min-unit-index])
-(def rc-first [when-fenced when-followon RC max-proportional-dwell min-unit-index])
-(def ng-first [when-fenced when-followon NG max-proportional-dwell min-unit-index])
+(def uniform  [when-fenced #_when-followon max-proportional-dwell min-unit-index])
+(def ac-first [when-fenced #_when-followon AC max-proportional-dwell min-unit-index])
+(def rc-first [when-fenced #_when-followon RC max-proportional-dwell min-unit-index])
+(def ng-first [when-fenced #_when-followon NG max-proportional-dwell min-unit-index])
 ;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
 (def not-ac   #(not= (:component %) "AC"))
 (def title32 [#(= (:component %) "NG") min-proportional-dwell min-unit-index])

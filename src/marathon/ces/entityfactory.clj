@@ -633,7 +633,8 @@
         conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
                                     (reduce conj! acc xs)))
         conj-unit  (fn [acc x] (do (swap! unit-count inc)
-                                   (conj! acc x)))]
+                                   (conj! acc x)))
+        rassoc     (fn [k v m] (assoc m k v))]
     (->> recs 
          (r/filter #(and (:Enabled %) (pos? (:Quantity %)))) ;;We need to add data validation, we'll do that later....
          (reduce (fn [acc r]                    
@@ -641,8 +642,9 @@
                      (conj-units acc
                          (create-units @unit-count  (:Quantity r) pstore r))
                      (->> (generate-name @unit-count (:SRC r) (:Component r))
-                          (assoc r :unit-index @unit-count :Name) ;;Add UnitIndex 3/8/2017
-                          (record->unitdata) ;;assign-policy handles policy wrangling.                          
+                          (assoc r :Name)
+                          (record->unitdata) ;;assign-policy handles policy wrangling.
+                          (rassoc :unit-index @unit-count) ;;Add UnitIndex 3/8/2017
                           (conj-unit  acc)))) (transient []))
          (persistent!))))       
 ;;we have two methods of initializing unit cycles.
