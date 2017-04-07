@@ -786,8 +786,6 @@
 ;;code.  re-deployment indicates followon?
 (defn  re-deploy-unit [unit demand t ctx] 
   (let [c    (:currentcycle unit)
-        ;; _ (when (= (:unit-index unit) 12)
-        ;;     (throw (Exception. (str ["blaH" t (:name unit) demand]))))
         deps (:deployments c)
         newlocation (:name demand)
         new-unit      (-> unit

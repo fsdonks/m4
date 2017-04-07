@@ -96,3 +96,73 @@
 (defn compare-bcts []
   (proc/do-charts-from  threepath  :interests   (src :BCTS))
   (proc/do-charts-from  fourpath   :interests   (src :BCTS)))
+
+
+;;useful helpers.
+(defn fill->info [{:keys [rule fillPath pathlength source] :as fd}]
+  (into  {:rule rule
+          :fillPath fillPath
+          :pathlength pathlength}
+         (seq (dissoc source :policy :statedata :locationhistory))))
+
+
+;;homebrew diffing tools.
+;;simple record-based diff function.
+(defn diff-by
+  ([fields l r]
+   (let [parsers (if (map? fields)
+                   fields
+                   {})
+         parse (fn [fld v]
+                 (if-let [f (parsers fld)]
+                   (f v)
+                   v))
+
+         fields (if (map? fields)
+                  (vec (keys fields))
+                  fields)]
+     (reduce (fn [acc fld]
+               (let [x (parse fld (get l fld))
+                     y (parse fld (get r fld))]
+                 (if (not= x y)
+                   (conj acc {:field fld
+                              :l x
+                              :r y})
+                   acc)))
+             [] fields)))
+  ([l r] (diff-by (keys l) l r)))
+
+
+(def depfields
+  {:Location identity
+   :Demand   identity
+   :DwellBeforeDeploy identity
+   :BogBudget identity
+   :CycleTime identity
+   :DeployInterval identity
+   :Unit identity
+   :FollowOn #(clojure.string/upper-case %)})
+
+(defn diff-deployments
+  [& {:keys [lpath rpath fields]
+      :or {lpath (str threepath "AUDIT_Deployments.txt")
+           rpath (str fourpath "AUDIT_Deployments.txt")
+           fields depfields}}]
+  (->> (map vector
+       ;;ignore not utilized records.
+         (->> (spork.util.table/tabdelimited->records lpath)
+              (into [])
+              (filter  #(not= (:Demand %) "NotUtilized")))
+         (into []
+               (spork.util.table/tabdelimited->records rpath)))
+       (map #(apply diff-by depfields %))
+       (map-indexed
+        (fn [n r] (when (not (empty? r))
+                    [n r])))
+       (filter identity)))
+
+
+
+
+
+

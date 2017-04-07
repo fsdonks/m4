@@ -465,7 +465,10 @@
   ;;we're out of position here..
   ;;rule ;fillPath ;pathLength
   (->> (dissoc u :dt)
-       (filldata/->fill  cat src length (if (:followon u) "TRUE" "FALSE"))))
+       (filldata/->fill  cat src length
+          (if (or (:followon u)
+                  (= (:state u) :followon))
+            "TRUE" "FALSE"))))
 
 ;;all we expect from fills is that there is a quantity
 ;;if there is a key for :actions, then we have some requirement.
