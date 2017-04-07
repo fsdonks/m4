@@ -725,6 +725,19 @@
   [u new-location ctx]
   (move-to u new-location "Deployed" (boggable-time u) ctx))
 
+;;designed to account for the non-bogging position, and other
+;;similar frankenstates.  Rather than having a specific
+;;policy position and corner case, we instead have a state
+;;set that we can use.  The legacy implementation of this
+;;was a hacky system of "demand effects," where we
+;;check to see if the demand has any pre-set effects that
+;;do stuff to the deploying unit.  This was really a
+;;primitive version of location-based-behavior, where the
+;;location determines policy and other things.  So,
+;;we can piggy-back on the location-based-behavior
+;;to describe our edge-cases like non-bogging and friends.
+
+
 ;;A deployment in which the details of the location tell
 ;;us how to proceed.  The entity must have special support
 ;;for this built in.  The cool thing here is that we can
@@ -738,6 +751,17 @@
                  (core/get-time ctx)
                  :location-based-move
                  location-details)))
+
+(defn wait-at [u location-details ctx]
+  (let [wait-time  (or (:MissionLength location-details) 999999)
+        wait-state (or (:StartState location-details) :waiting)]
+    (core/handle-message! ctx entity
+       (core/->msg (:name entity) (:name entity)
+                   (core/get-time ctx)
+                   :wait-based-move
+                   (assoc location-details
+                          :wait-time wait-time
+                          :wait-state wait-state)))))
 
 
 ;;We need to expand this notion...

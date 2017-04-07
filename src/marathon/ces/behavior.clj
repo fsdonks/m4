@@ -1360,6 +1360,8 @@
               (bind!! {:deltat 0 ;is this the sole consumer of time?
                        :last-update (unchecked-inc deltat)
                        :statedata (fsm/add-duration statedata dt)})))))
+
+;(befn thaw
  
 ;;Dwelling just increments statistics..
 (befn dwelling-beh ^behaviorenv {:keys [entity deltat] :as benv}
@@ -1602,6 +1604,9 @@
    ;;Need to make sure we don't add bogg if we're already bogging...
    :overlapping           bogging-beh
    protocols/Overlapping  bogging-beh
+
+   :waiting        (->seq [(echo :waiting-state)
+                           defer-policy-change])
    })
 
 
@@ -1661,7 +1666,7 @@
 ;;we can define a response-map, ala compojure and friends.
 
 ;;Temporary hack..
-(declare location-based-beh)
+(declare location-based-beh wait-based-beh)
 ;;type sig:: msg -> benv/Associative -> benv/Associative
 ;;this gets called a lot.
 (defn message-handler [msg ^behaviorenv benv]
@@ -1711,6 +1716,11 @@
          :location-based-move         
          (beval location-based-beh 
                 (assoc benv  :location-based-info (:data msg)))
+         ;;Like a location-based move, except with a simple wait time guarantee, with a
+         ;;reversion to the original state upon completion of the wait.
+         :wait-based-move
+         (beval wait-based-beh
+                (assoc benv  :wait-based-info (:data msg)))
          ;;allow the entity to change its behavior.
          :become (push! entity :behavior (:data msg))
          :do     (->do (:data msg))
@@ -1899,14 +1909,12 @@
           location-based-info
           ;;StartState is really a policy position....
           start-state (location-based-state @entity StartState)          
-          newstate #_(if BOG #{StartState :bogging} #{StartState})
-                     (if BOG (conj start-state :bogging) start-state)
+          newstate    (if BOG (conj start-state :bogging) start-state)
          ;;we need to schedule a state change.
           ;;and a location-change...
           _ (swap! entity assoc :location-behavior true)
           followingstate  (if (pos? overlap)
                             (conj newstate :overlapping)
-                            #_EndState
                             (location-based-state @entity EndState))
           state-change {:newstate       newstate
                         :duration       (- MissionLength  overlap)
@@ -1939,6 +1947,35 @@
                        :position-change position-change ;new
                        :wait-time     wt
                        :next-position StartState))))))
+
+(befn wait-based-beh {:keys [entity statedata wait-based-info ctx] :as benv}
+  (when  wait-based-info
+    (let [{:keys [name wait-time wait-state]} wait-based-info
+          ;;just annotate the state...
+         ;;we need to schedule a state change.
+          ;;and a location-change...
+          _ (swap! entity assoc :location-behavior true)
+          state-change {:newstate       wait-state
+                        :duration       wait-time
+                        :followingstate (:state @entity)
+                        :timeinstate    0}
+          location-change  {:from-location  (:locationname @entity)
+                            :to-location     name}
+ ;         position-change {:from-position (:positionpolicy @entity)
+ ;                          :to-position   StartState}
+          _  (debug [:wait-based
+                       {:name (:name @entity)
+                        :state-change state-change
+                        :location-change location-change
+                        :wait-time wait-time}])
+          ]
+          (beval  change-state-beh
+                  (-> benv
+                      (assoc
+                       :state-change state-change
+                       :location-change location-change
+                       ))))))
+
 
 ;;All our behavior does right now is spawn...
 ;;The only other changes we need to make are to alter how we deploy entities...
@@ -2255,22 +2292,23 @@
 ;;TOM change 2 Sep 2011 -> we modify the cyclerecord to reflect changes in expectations...
 ;;This is not a replacement...
 ;;WIP Nov 2016
-(befn defer-policy-change {:keys [entity ctx tupdate policy-change] :as benv} 
-      (let [_   (debug [:deferring-policy-change])
-            {:keys [next-policy]} policy-change
-            unit @entity
-            uname (:name unit)
-            _     (swap! ctx                       
-                         #(core/trigger-event 
-                               :AwaitingPolicyChange uname  (marathon.data.protocols/atomic-name
-                                                             (:policy unit))
-                               (core/msg "Unit " uname " in position " (:positionpolicy unit)
-                                         " is waiting until reset to change policies")
-                               nil %))
-            ;;marked the deferred policy change.
-            _     (swap! entity #(assoc % :deferred-policy-change
-                                        (select-keys  policy-change [:next-policy])))]            
-        (->alter (fn [benv] (assoc benv :policy-change nil)))))
+(befn defer-policy-change {:keys [entity ctx tupdate policy-change] :as benv}
+    (when policy-change
+        (let [_   (debug [:deferring-policy-change])
+              {:keys [next-policy]} policy-change
+              unit @entity
+              uname (:name unit)
+              _     (swap! ctx
+                           #(core/trigger-event
+                             :AwaitingPolicyChange uname  (marathon.data.protocols/atomic-name
+                                                           (:policy unit))
+                             (core/msg "Unit " uname " in position " (:positionpolicy unit)
+                                       " is waiting until reset to change policies")
+                             nil %))
+              ;;marked the deferred policy change.
+              _     (swap! entity #(assoc % :deferred-policy-change
+                                          (select-keys  policy-change [:next-policy])))]
+          (->alter (fn [benv] (assoc benv :policy-change nil))))))
 
 (befn try-deferred-policy-change {:keys [entity ctx tupdate] :as benv}
       (when-let [pc (:deferred-policy-change @entity)]

@@ -23,8 +23,27 @@
 ;;         ]
 ;;     (- bog-remaining  (protocols/overlap p))))
 
+;;Demand effect categories map values of associated
+;;with the :category of the demand to a set of
+;;interpreted effects, if any.  These provide a
+;;flexible form of location-based policy that allows
+;;us to express overrides of default policy-based
+;;behavior.  One simple idea is to override the
+;;behavioral defaults, i.e. the statemap,
+;;for the unit's state.  This provides an
+;;easy way to rewire common states.
+(def demand-effect-categories
+  {"NonBOG" {:on-deploy [{:wait :inf}
+                         :ignore-bog
+                         :ignore-dwell
+                         :ignore-cycletime
+                         :accumulate-duration]
+             :on-return [:allow-bog
+                         {:re-enter: :derive-from-cycletime}]}})
+
 (defn location-based-policy? [d]
-  (and (:StartState d) (:EndState d)))
+  (or  (and (:StartState d) (:EndState d))
+       (demand-effect-categories (:category d))))
 
 ;;These seem like lower level concerns.....
 ;;Can we push this down to the unit entity behavior?
