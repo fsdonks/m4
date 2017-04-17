@@ -78,30 +78,24 @@
      ~@body
      ~default))
 
+;;aux helper.
+(defn only-keys-from
+  "Like select-keys, but bypasses for non-map ks.
+   Also, performs more effeciently if ks is a map."
+  [ks origin]
+  (cond (map? ks)
+        (reduce-kv (fn [acc k v] (assoc acc k (get origin k))) {} ks)
+        (coll? ks) (select-keys origin ks)
+        :else origin))
 
-;;we could replace this with an entity query going forward. 
-;;For now, it'll work;  We accomplish the same thing in the
-;;end: we get a selection of unit entities that meet our
-;;selection criteria (namely deployable).
-
-;;really, an equally valid way is
-;;for each unit that has a deployable category,
-
-;; (defn ->deployers
-;;   "Given a supply store, returns a seqable, reducible object that can 
-;;    filter on category, the keys of the supply buckets in the supply 
-;;    store, on src, the subset of srcs within a specific category, or 
-;;    on a specific unit name.  In the partitioning of unit entities, 
-;;    we have a coordinate that maps to a specific unit of supply.
-;;    The coordinate is defined by [category src name], where name 
-;;    is the name of the unit."
-;;   [ctx & {:keys [cat src unit weight]
-;;              :or {cat  identity 
-;;                   src  identity 
-;;                   unit identity
-;;                   weight (fn [_ _] 1.0)}}]
-;;   (store/select-entities 
-
+;;We'd like to hook in additional supply, ala legacy
+;;support, but in a clean fashion.  The easiest way
+;;is to define other categories that match.  Currently,
+;;we use filtering functions to just traverse the
+;;entire range of deployable supply and ignore what
+;;we don't want.  Note: we can be much more selective
+;;if we - rather than specifying a filtering function
+;;
 
 ;;Reducer/seq that provides an abstraction layer for implementing 
 ;;queries over deployable supply.  I really wish I had more time 
@@ -125,14 +119,14 @@
                   weight (fn [_ _] 1.0)
                   nm->unit identity}}]
   (let [catfilter cat
-        srcfilter src 
+        srcfilter src
         unitfilter unit]
     (reify            
       clojure.lang.Seqable 
       (seq [this]
         (filter identity
-                (for [[cat srcs]    (:deployable-buckets supply)
-                      [src units]   srcs
+                (for [[cat srcs]    supply
+                      [src units]   (only-keys-from srcfilter srcs) 
                       [nm u]        units
                       :when (and (catfilter cat) (srcfilter src))]
                   (let [u (nm->unit u)]
@@ -148,7 +142,7 @@
                                                                      (let [unit (nm->unit nm)]
                                                                        (change-if units (unitfilter unit)
                                                                                   (f1 acc [[cat src (weight cat src)] unit])))) acc units)))
-                                           acc srcs))) (f1) (:deployable-buckets supply)))
+                                           acc (only-keys-from srcfilter srcs)))) (f1) supply))
       (coll-reduce [_ f1 init]      
         (reduce-kv (fn [acc cat srcs]
                      (change-if acc (catfilter cat)
@@ -158,7 +152,7 @@
                                                                      (let [unit (nm->unit nm)]
                                                                        (change-if units (unitfilter unit)
                                                                                   (f1 acc [[cat src (weight cat src)] unit])))) acc units)))
-                                           acc srcs))) init (:deployable-buckets supply))))))
+                                           acc (only-keys-from srcfilter srcs)))) init supply)))))
 
 
 ;; (deftype filterfunc [itm _meta]
@@ -255,7 +249,7 @@
            (let [
                  prefs (src->prefs  srcmap src)
                  src-selector (if any-src? identity ;;ensure we enable filtering if indicated.
-                                  #(contains? prefs %))
+                                  prefs #_#(contains? prefs %))
                  ;- (println category-selector)
                  ]
              (->>  (->deployers supply :src src-selector :cat category-selector :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
@@ -270,7 +264,7 @@
           (find-feasible-supply supply srcmap :default src)))
   ([ctx src]
    (do ;(println [:query/find-feasible2])
-       (find-feasible-supply (core/get-supplystore ctx) (:fillmap (core/get-fillstore ctx)) :default src
+       (find-feasible-supply (store/gete ctx :SupplyStore :deployable-buckets) (:fillmap (core/get-fillstore ctx)) :default src
                              (fn [nm] (store/get-entity ctx nm) )))))
 
 
@@ -791,7 +785,7 @@
           where    (eval-filter   where)
           t        (core/get-time ctx)] 
       (with-query-env env                                                                           
-        (as-> (->> (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) 
+        (as-> (->> (find-feasible-supply (store/gete ctx :SupplyStore :deployable-buckets) #_(core/get-supplystore ctx) (core/get-fillmap ctx) 
                                          cat src  (fn [nm]                                                    
                                                     (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
