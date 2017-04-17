@@ -93,9 +93,48 @@
 ;;is to define other categories that match.  Currently,
 ;;we use filtering functions to just traverse the
 ;;entire range of deployable supply and ignore what
-;;we don't want.  Note: we can be much more selective
-;;if we - rather than specifying a filtering function
-;;
+;;we don't want.
+
+;;Comptuted Categories
+;;====================
+;;In addition to our categories of supply that are
+;;actively monitored and cached (perhaps overly so),
+;;we have one or more categories of supply that
+;;fly in the face of typical notions of useable
+;;resources.  Also, we may expect that these
+;;categories are somewhat ad-hoc, or occur
+;;infrequently enough to justify caching and book-keeping.
+
+;;In this case, we can define computed categories, which
+;;merely provide a means for projecting the current
+;;context onto an ad-hoc set of supply relative to a
+;;niche query.
+
+;;We need to define which categories are computed,
+;;and provide means for projection (i.e. a function
+;;of ctx -> supply)
+
+;;We also need to hook into the primary API so that,
+;;when finding supply for said category, we have a
+;;way to check for a computed category.  We might
+;;also want to define a way to compose categories...
+
+(defn compute-nonbog [{:keys [src cat order-by where collect-by] :or 
+                       {src :any cat :default} :as env} ctx]
+  (let [es (store/select-entities ctx
+              :from [:unit-entity]
+              :where marathon.ces.unit/can-non-bog?)]
+    (into {}
+          (for [[src xs] (group-by :SRC es)]
+            [src (into {} (map (juxt :name identity)) xs)]))))
+
+(def computed-categories
+  {"NonBOG" compute-nonbog 
+   ;"Title32" compute-title32
+   })
+
+(defn computed? [cat] (computed-categories cat))
+
 
 ;;Reducer/seq that provides an abstraction layer for implementing 
 ;;queries over deployable supply.  I really wish I had more time 
@@ -776,6 +815,18 @@
 
 ;;We have the current time from the context.
 
+(defn compute-supply
+  "Interstitial function that provides a hook-site for 
+   adding computed supply - if need be - else we return 
+   our legacty means of finding deployable supply.  
+   WIP"
+  [{:keys [src cat order-by where collect-by] :or 
+    {src :any cat :default} :as env} ctx]
+  (let [supply (store/gete ctx :SupplyStore :deployable-buckets)]
+    (if-let [more-supply (computed? cat)]
+      (assoc supply cat (more-supply env ctx))
+      supply)))
+
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
@@ -785,7 +836,7 @@
           where    (eval-filter   where)
           t        (core/get-time ctx)] 
       (with-query-env env                                                                           
-        (as-> (->> (find-feasible-supply (store/gete ctx :SupplyStore :deployable-buckets) #_(core/get-supplystore ctx) (core/get-fillmap ctx) 
+        (as-> (->> (find-feasible-supply (compute-supply env ctx) (core/get-fillmap ctx) 
                                          cat src  (fn [nm]                                                    
                                                     (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
