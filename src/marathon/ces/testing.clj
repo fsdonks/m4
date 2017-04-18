@@ -329,6 +329,10 @@
 (defn deployable-units [ctx] (filter unit/can-deploy?   (core/units ctx)))
 (def  deploynames  (map :name (sort-by :unit-index deployables)))
 
+;;NonBOG testing and other supply categories...
+(def nonbogables (filter unit/can-non-bog? (core/units defaultctx)))
+(def nonbognames (map :name (sort-by :unit-index nonbogables)))
+
 ;;Every demand has a corresponding supply rule that indicates its preference for unit
 ;;types among other things.
 ;;fill queries...
@@ -363,13 +367,35 @@
                          (query/find-supply {:where #(even? (:cycletime %)) 
                                              :order-by query/uniform 
                                              })))
+
+(def nonbog-units (->> defaultctx
+                       (query/find-supply {:cat "NonBOG"
+                                           :src "SRC1"
+                                           ;:where #(even? (:cycletime %)) 
+                                           :order-by query/hld 
+                                           })))
+                       
 ;;These queries should not change from the sampledata.
 ;;Can we define more general supply orderings?...
 (deftest unit-queries 
   (is (same? deploynames 
-        '("6_SRC1_AC" "12_SRC2_AC" "27_SRC3_NG" "28_SRC3_NG" "29_SRC3_NG" "30_SRC3_NG"
-          "31_SRC3_NG" "32_SRC3_NG" "39_SRC3_AC" "40_SRC3_AC" "41_SRC3_AC" "42_SRC3_AC"))
+        '("6_SRC1_AC" "12_SRC2_AC" "27_SRC3_NG" "28_SRC3_NG"
+          "29_SRC3_NG" "30_SRC3_NG" "31_SRC3_NG" "32_SRC3_NG"
+          "39_SRC3_AC" "40_SRC3_AC" "41_SRC3_AC" "42_SRC3_AC"))
       "Should have 12 units deployable")
+  (is (same? nonbognames
+        '("1_SRC1_NG" "2_SRC1_NG" "3_SRC1_NG" "4_SRC1_AC" "5_SRC1_AC"
+          "6_SRC1_AC" "7_SRC2_NG" "8_SRC2_NG" "9_SRC2_NG" "10_SRC2_AC"
+          "11_SRC2_AC" "12_SRC2_AC" "13_SRC3_NG" "14_SRC3_NG"
+          "15_SRC3_NG" "16_SRC3_NG" "17_SRC3_NG" "18_SRC3_NG"
+          "19_SRC3_NG" "20_SRC3_NG" "21_SRC3_NG" "22_SRC3_NG"
+          "23_SRC3_NG" "24_SRC3_NG" "25_SRC3_NG" "26_SRC3_NG"
+          "27_SRC3_NG" "28_SRC3_NG" "29_SRC3_NG" "30_SRC3_NG"
+          "31_SRC3_NG" "32_SRC3_NG" "33_SRC3_AC" "34_SRC3_AC"
+          "35_SRC3_AC" "36_SRC3_AC" "37_SRC3_AC" "38_SRC3_AC"
+          "39_SRC3_AC" "40_SRC3_AC" "41_SRC3_AC" "42_SRC3_AC"))
+      "Should have all 42 units NonBOG-able, sorted by min weight,
+       NG compo, min normalized dwell.")  
   (is (same? odd-units
       '(["32_SRC3_NG" 1729]
         ["42_SRC3_AC" 657]
@@ -996,7 +1022,7 @@
 ;;Units that are deferred must have policy changes - to the current policy
 ;;at their next available opportunity.
 ;;[WIP]
-(defn policy-schedules? [h]  )
+(defn policy-schedules? [h] )
 
 
 (comment ;original policy debugging session, ephemeral 

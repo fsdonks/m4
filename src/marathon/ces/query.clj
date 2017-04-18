@@ -9,6 +9,7 @@
                            [unit   :as unit]
                            [supply :as supply]]
             [spork.entitysystem.store :as store]
+            [spork.data [lazymap :as lm]]
             [marathon.ces.fill.fillgraph]
             [spork.util.reducers]
             [spork.util [tags :as tag]]
@@ -21,6 +22,23 @@
 ;;   ([k f]       (napply f k))
 ;;   ([k f v]     (napply f k (v m)))
 ;;   ([k f v1 v2] (napply f k v1 v2)))
+
+;;mimick functionality from legacy m3.  NOTE: this is more constrained
+;;than we'd like, and is only here for legacy support!.
+(defn append-vals-lazily
+  "A dumb function to merge two maps, target and appendee, only where the keys 
+   in both match.  Returns the resulting map where keys/vals from target have 
+   added keys/vals from appendee, as opposed to merge, where a biased union 
+   is performed.  This function lives only to support legacy modes of 
+   computing ad-hoc categories of supply, and will be replaced 
+   in the future with a version that merges regardless of 
+   key presence."
+  [appendee target]
+  (reduce-kv (fn [acc k v]
+               (if-let [m (get acc k)]
+                 (assoc acc k (lm/lazy-map (merge v m)))
+                 acc))
+             target appendee))
 
 (defmacro mapfunctor
   [[k v] expr]
@@ -118,7 +136,6 @@
 ;;when finding supply for said category, we have a
 ;;way to check for a computed category.  We might
 ;;also want to define a way to compose categories...
-
 (defn compute-nonbog [{:keys [src cat order-by where collect-by] :or 
                       {src :any cat :default} :as env} ctx]
   (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
@@ -128,32 +145,23 @@
                                  (marathon.ces.unit/can-non-bog? %)))]
     (into {}
           (for [[src xs]  (group-by :src es)]
-            [src (into {} (map (juxt :name identity)) xs)]))))
+            [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))]))))
 
-;;mimick functionality from legacy m3.  NOTE: this is more constrained
-;;than we'd like, and is only here for legacy support!.
-(defn append-vals
-  "A dumb function to merge two maps, target and appendee, only where the keys 
-   in both match.  Returns the resulting map where keys/vals from target have 
-   added keys/vals from appendee."
-  [appendee target]
-  (reduce-kv (fn [acc k v]
-               (if-let [m (get acc k)]
-                 (assoc acc k (merge v m))
-                 acc))
-             target appendee))
-
-;;computed categories tell indicate which categories can be
+;;computed categories indicate which categories can be
 ;;derived on-demand by applying a function against the
 ;;context.
 (def computed-categories
-  {"NonBOG" {:compute-by  compute-nonbog 
-             :children    #{:default}}
+  {"NonBOG"
+     (fn [env  ctx]
+       (append-vals-lazily
+        (compute-nonbog env ctx) ;;<-merge these in
+        (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                            :deployable-buckets
+                            :default])))
    ;"Title32" compute-title32
    })
 
 (defn computed [cat] (computed-categories cat))
-
 
 ;;Reducer/seq that provides an abstraction layer for implementing 
 ;;queries over deployable supply.  I really wish I had more time 
@@ -310,12 +318,13 @@
                                   prefs)
                  ;- (println category-selector)
                  ]
-             (->>  (->deployers supply :src src-selector :cat category-selector :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
+             (->>  (->deployers supply :src src-selector :cat category-selector
+                                :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
                                 :nm->unit nm->unit)
-                 (r/map (fn [[k v]]
-                          [(conj k (get prefs (second k) Long/MAX_VALUE)) v])) ;sort by a score.
+               ;  (r/map (fn [[k v]]
+               ;           [(conj k (get prefs (second k) Long/MAX_VALUE)) v])) ;sort by a score.
                  (into [])
-                 (sort-by  (fn [[k v]]  (nth k 2))) ;;note, this is just a way of assigning distance.
+                 ;(sort-by  (fn [[k v]]  (nth k 2))) ;;note, this is just a way of assigning distance.
                  )))))
   ([supply srcmap src]
       (do ;(println [:query/find-feasible3])
@@ -505,12 +514,43 @@
                  ~@body)))))
 
 (def ^:dynamic *env* {})
-      
+
+;;Changed to invert the ordering...
+;;In clojure, truth is "greater" than
+;;false, thus sorting by a predicate
+;;ends up giving us false->true.
+;;In practice, we'd like to have
+;;true->false, since we're going
+;;in ascending order.
 (defmacro pred-compare
   ([pred expr]
-     `(if (~pred ~expr) 1 -1))
+   ;`(if (~pred ~expr) 1 -1))
+   `(if (~pred ~expr) -1 1))
   ([pred] 
-     `(if ~pred 1 -1)))
+   ;`(if ~pred 1 -1)))
+   `(if ~pred -1 1)))
+
+;;predicate aliases...
+;;This is a bit screwy, since we have to
+;;flip the order of comparison values for
+;;our predicate-based comparisons.  Clojure
+;;defaults to (< false true), in practice,
+;;we have several functions that expect the
+;;opposite (more like filter predicate behavior).
+(defn is
+  "Predicate alias for equality.  If x is equal 
+   to target, x will sort earlier than items 
+   that are not equal to target.. 'Truthy means
+   left!'"
+  ([x target] (not= x target))
+  ([x] (not x)))
+(defn is-not
+  "Predicate alias for equality.  If x is equal 
+   to target, x will sort later than items
+   that are not equal to target [default clojure
+   logical predicate behavior!]"
+  ([x target] (= x target))
+  ([x] x))
 
 (defn key-compare [k l r]
   (if (keyword? k)
@@ -576,7 +616,7 @@
 
 ;;Environmental queries
 ;;=====================
-
+;;TODO: Look into dropping this, no longer in use.
 (predicate followon  [l r] 
    (if (same-val? :followon l r) 0
        (cond 
@@ -838,13 +878,18 @@
   "Interstitial function that provides a hook-site for 
    adding computed supply - if need be - else we return 
    our legacty means of finding deployable supply.  
-   WIP"
+   Currently assumes one category - we can and will 
+   extend this to allow multiple categories.  Right now, 
+   we use the function associated with the category 
+   as a sort of pre-processor, making availabile 
+   the entire context and the query information, 
+   associating the result onto the supply used for
+   the actual deployer query."
   [{:keys [src cat order-by where collect-by] :or 
     {src :any cat :default} :as env} ctx]
   (let [supply (store/gete ctx :SupplyStore :deployable-buckets)]
-    (if-let [computed-spec (computed cat)]
-      (let [{:keys [compute-by]} computed-spec]
-        (assoc supply cat (compute-by (merge env computed-spec) ctx)))
+    (if-let [compute-supply (computed cat)]
+        (assoc supply cat (compute-supply  env ctx))
       supply)))
 
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
@@ -925,11 +970,13 @@
 (def ac-first [when-fenced #_when-followon AC max-proportional-dwell min-unit-index])
 (def rc-first [when-fenced #_when-followon RC max-proportional-dwell min-unit-index])
 (def ng-first [when-fenced #_when-followon NG max-proportional-dwell min-unit-index])
-;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
-(def not-ac   #(not= (:component %) "AC"))
-(def title32 [#(= (:component %) "NG") min-proportional-dwell min-unit-index])
+;;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
+;;TODO: Revisit the definitions here, potentially using a better candidate for
+;;predicate equality.  The inversion/flipping stuff is potentially awkward.
+(def not-ac   #(is-not (:component %) "AC"))
+(def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-index])
 ;;apparently identical.
-(def hld [#(= (:component %) "NG") min-proportional-dwell min-unit-index])
+(def hld [#(is (:component %) "NG") min-proportional-dwell min-unit-index])
 
 ;;new rules....should be able to compose these...
 ;;By default, we get substituable, globally-available supply using our
