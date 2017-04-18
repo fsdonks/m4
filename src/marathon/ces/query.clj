@@ -20,7 +20,7 @@
 ;; (defn klift 
 ;;   ([k f]       (napply f k))
 ;;   ([k f v]     (napply f k (v m)))
-;;   ([k f v1 v2] (napply f k v1 v2)))  
+;;   ([k f v1 v2] (napply f k v1 v2)))
 
 (defmacro mapfunctor
   [[k v] expr]
@@ -95,7 +95,7 @@
 ;;entire range of deployable supply and ignore what
 ;;we don't want.
 
-;;Comptuted Categories
+;;Computed Categories
 ;;====================
 ;;In addition to our categories of supply that are
 ;;actively monitored and cached (perhaps overly so),
@@ -120,20 +120,39 @@
 ;;also want to define a way to compose categories...
 
 (defn compute-nonbog [{:keys [src cat order-by where collect-by] :or 
-                       {src :any cat :default} :as env} ctx]
-  (let [es (store/select-entities ctx
-              :from [:unit-entity]
-              :where marathon.ces.unit/can-non-bog?)]
+                      {src :any cat :default} :as env} ctx]
+  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
+        es      (store/select-entities ctx
+                    :from   [:unit-entity]
+                    :where #(and (src-map (:src %))
+                                 (marathon.ces.unit/can-non-bog? %)))]
     (into {}
-          (for [[src xs] (group-by :SRC es)]
+          (for [[src xs]  (group-by :src es)]
             [src (into {} (map (juxt :name identity)) xs)]))))
 
+;;mimick functionality from legacy m3.  NOTE: this is more constrained
+;;than we'd like, and is only here for legacy support!.
+(defn append-vals
+  "A dumb function to merge two maps, target and appendee, only where the keys 
+   in both match.  Returns the resulting map where keys/vals from target have 
+   added keys/vals from appendee."
+  [appendee target]
+  (reduce-kv (fn [acc k v]
+               (if-let [m (get acc k)]
+                 (assoc acc k (merge v m))
+                 acc))
+             target appendee))
+
+;;computed categories tell indicate which categories can be
+;;derived on-demand by applying a function against the
+;;context.
 (def computed-categories
-  {"NonBOG" compute-nonbog 
+  {"NonBOG" {:compute-by  compute-nonbog 
+             :children    #{:default}}
    ;"Title32" compute-title32
    })
 
-(defn computed? [cat] (computed-categories cat))
+(defn computed [cat] (computed-categories cat))
 
 
 ;;Reducer/seq that provides an abstraction layer for implementing 
@@ -288,7 +307,7 @@
            (let [
                  prefs (src->prefs  srcmap src)
                  src-selector (if any-src? identity ;;ensure we enable filtering if indicated.
-                                  prefs #_#(contains? prefs %))
+                                  prefs)
                  ;- (println category-selector)
                  ]
              (->>  (->deployers supply :src src-selector :cat category-selector :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
@@ -823,8 +842,9 @@
   [{:keys [src cat order-by where collect-by] :or 
     {src :any cat :default} :as env} ctx]
   (let [supply (store/gete ctx :SupplyStore :deployable-buckets)]
-    (if-let [more-supply (computed? cat)]
-      (assoc supply cat (more-supply env ctx))
+    (if-let [computed-spec (computed cat)]
+      (let [{:keys [compute-by]} computed-spec]
+        (assoc supply cat (compute-by (merge env computed-spec) ctx)))
       supply)))
 
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
