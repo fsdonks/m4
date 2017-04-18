@@ -76,6 +76,7 @@
            (supply/adjust-max-utilization! store unit)))))
 
 (def last-deploy (atom nil))
+(defn non-bog? [d] (= (:category d) "NonBOG"))
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
 (defn deploy-unit
@@ -84,7 +85,7 @@
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
   ([ctx unit t demand   followon?]
-   (if (not  (u/valid-deployer? unit))
+   (if (not  (u/valid-deployer? unit nil (non-bog? demand) (:policy unit)))
      (do (reset! last-deploy [unit ctx])
          (throw (Exception. (str [:unit (:name unit) :invalid-deployer "Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment"]))))

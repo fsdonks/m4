@@ -20,7 +20,7 @@
                           [query :as query]]
             [marathon.ces.fill [fillgraph :as fg]]
             [spork.sim  [simcontext :as sim] [updates :as updates]]
-            [spork.util [tags :as tag]]
+            [spork.util [tags :as tag] [general]]
             [spork.entitysystem.store :as store]
             [spork.util.reducers]
             [clojure.core [reducers :as r]]))
@@ -247,12 +247,27 @@
   ([demand] (derive-supply-rule demand  (get demand :src))))
 ;  ([demand ctx] (derive-supply-rule demand (marathon.sim.core/get-fillstore ctx) (get demand :src))))
 
+
+(defn clean-source-rule [v]
+  (-> v
+      (clojure.string/lower-case)
+      (clojure.string/replace "_" "-")))
+
+(let [clean! (spork.util.general/memo-1
+                clean-source-rule)]
+  (defn parse-source-rule [k]
+    (if (keyword? k)
+      k
+      (clean! k))))
+
 ;;#TODO elevate stock queries into user-defined rules.
 (def stock-queries
   (let [m {"ac-first"  query/ac-first
            "AC"        query/ac-first
            "rc-first"  query/rc-first
            "RC"        query/rc-first
+           "ng-first"  query/ng-first
+           "NG"        query/ng-first
            "RCAD"      query/RCAD
            "RCAD-BIG"  query/RCAD-BIG
            "uniform"   query/uniform}]
@@ -261,7 +276,7 @@
                m m)))
 
 (defn resolve-source-first [sf]
-  (if-let [r  ( get stock-queries sf)]
+  (if-let [r  (get stock-queries (parse-source-rule sf))]
     r
     (throw (Exception. (str "unknown source-first rule: " sf)))))
 
@@ -271,7 +286,7 @@
 ;;If we're not SRM demand, i.e. the category is something other than
 ;;SRM, we use the default category so as to not restrict our fill.
 
-(def restricted-categories #{"SRM" :SRM})
+(def restricted-categories #{"SRM" :SRM "NonBOG" :NonBOG})
 
 ;;Ensures that we only allow StartStates
 ;;that exist in the unit's policy....
