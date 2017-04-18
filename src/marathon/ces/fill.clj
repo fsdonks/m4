@@ -653,7 +653,9 @@
                       (into []    (take req)))
         _           (reset! last-sel selected)
         actual-fill (count selected)
-        status      (if (== actual-fill req) :filled :unfilled)
+        status      (cond (== actual-fill req) :filled
+                          (zero?  actual-fill) :unfilled
+                          :else :changed)
         ;; _ (when (seq selected)
         ;;     (println [:filling rule (map (comp :name :source) selected)
         ;;                                 ;(first selected)
