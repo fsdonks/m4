@@ -1596,6 +1596,9 @@
    :bogging           bogging-beh
    protocols/Bogging  bogging-beh
    
+   ;;Added for legacy compatibility...
+   :non-bogging       dwelling-beh 
+   
    :recovering      (echo :recovering-beh)
    "Recovering"     (echo :recovering-beh)
    

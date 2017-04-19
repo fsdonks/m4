@@ -34,7 +34,7 @@
 ;;easy way to rewire common states.
 (def demand-effect-categories
   {"NonBOG" {:wait-time   999999
-             :wait-state :waiting}})
+             :wait-state  :waiting #_#{:waiting :non-bogging}}})
 
 
 (defn location-based-policy? [d]
