@@ -646,7 +646,7 @@
 ;;other state handler functions, we can now just directly
 ;;encode the transition in the tree...
 (definline special-state? [s]
-  `(#{:spawning :abrupt-withdraw :recovered #_:recovery} ~s))
+  `(#{:spawning :abrupt-withdraw :recovered :waiting #_:recovery} ~s))
 
 (defn just-spawned?
   "Determines if the entity recently spawned, indicated by a default
@@ -1354,15 +1354,15 @@
             (success benv) ;done aging.
             (let [e  @entity
                   ;_ (println [:currentcycle (:currentcycle e)])
-                  _  (swap! entity #(u/add-duration  % dt)) ;;update the entity atom
+                  _  (when-not (u/waiting? e)
+                       (swap! entity #(u/add-duration  % dt)))
+                       #_(debug [:skipping :add-duration (:name entity)]) ;;update the entity atom
                   _  (debug [:aging-unit deltat
                              :cycletime (:cycletime @entity)]) 
                   ]
               (bind!! {:deltat 0 ;is this the sole consumer of time?
                        :last-update (unchecked-inc deltat)
-                       :statedata (fsm/add-duration statedata dt)})))))
-
-;(befn thaw
+                       :statedata   (fsm/add-duration statedata dt)})))))
  
 ;;Dwelling just increments statistics..
 (befn dwelling-beh ^behaviorenv {:keys [entity deltat] :as benv}
@@ -1392,6 +1392,7 @@
                                re-entry-beh
                                ;reset-beh
                                ])
+        ;:waiting       (success benv) ;up-to-date
         (fail benv)))
 
 ;;rest-beh is kind of what we want to do.  We'd like to

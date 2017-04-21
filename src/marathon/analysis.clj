@@ -36,6 +36,15 @@
        (~cargs (fn [x#] (~name ~@cargs x#)))
        (~args ~@body))))
 
+(defn try-seq
+  "Tries to coerce x to a seq, returning nil if unable.
+   Useful wrapper around seq, since some fundamental types
+   like String and others cannot implement seq and are 
+   handled via hardcoded dispatch."
+  [x]
+  (try (seq x)
+       (catch Exception e nil)))
+
 (defmacro juxt-map [m]
   `(fn [v#]
       (reduce-kv (fn [acc# k# f#]
@@ -509,6 +518,14 @@
            (end-of-day-history))
        (merge-meta (meta ctx)))))
 
+(defn as-stream [x]
+  (if (and (try-seq x)
+           (util/context? (second (try-seq (first x)))))
+      x
+      (-> x
+          (as-context)
+          (marathon-stream))))
+
 (defn day-before-error
   "Given a sequence of frames, returns "
   [xs]
@@ -524,6 +541,7 @@
    to time t."
   [t xs]
   (->> xs
+       (as-stream)
        (take-while (fn [[tf ctx]]
                      (< tf t)))
        (last)
@@ -534,6 +552,7 @@
    evaluating the step-function at t."
   [t xs]
   (->> xs
+       (as-stream)
        (day-before t)
        (sim/advance-time)))
     
@@ -561,7 +580,7 @@
 (defn frame-at
   "Fetch the simulation frame at or nearest (after) time t from a 
    sequence of [t ctx] frames xs."
-  [t xs] (some (fn [[tc ctx]] (when (>= tc t) ctx)) xs)) 
+  [t xs] (some (fn [[tc ctx]] (when (>= tc t) ctx)) (as-stream xs))) 
 
 ;;Entity Tracing and Debugging
 ;;============================

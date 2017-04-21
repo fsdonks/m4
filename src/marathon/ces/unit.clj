@@ -131,7 +131,6 @@
 
 ;;PERFORMANCE NOTE: This is a hotspot;
 (defn add-duration [u t]
-  
   (merge u {:currentcycle (-> (:currentcycle u) 
                               (inc-field :duration t))
             :cycletime (+ (:cycletime u) t)}))
@@ -554,7 +553,32 @@
 (defn bog-remains? [u]
   (pos? (gen/deep-get u [:currentcycle :bogbudget] 0)))
 
-(defn unit-state [u] (-> u :statedata :curstate #_:currentstate))
+(defn unit-state [u] (-> u :statedata :curstate))
+
+;;(defmacro kw? [x]
+;;  `(instance? clojure.lang.Keyword ~x))
+
+(defn has?
+  "Dumb aux function to help with state sets/keys.
+   If we have an fsm with statedata, we can check 
+   whether the state representation has a desired 
+   state - or 'is'  the state - even in the 
+   presence of multiple conjoined states - ala 
+   state sets."
+  [ys xs]
+  (if (set? xs) 
+    (if (set? ys) (when (every? ys xs) xs)
+        (and (== (count xs) 1)
+             (xs ys)))
+    (if (set? ys) 
+        (and (== (count ys) 1)
+             (ys xs))
+        (when (= ys xs) ys))))
+
+(defn has-state? [u s]
+  (has? (unit-state u) s))
+
+(defn waiting? [u]  (has-state? u :waiting))
 
 ;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
 ;Note, this implicitly hardcodes deployed states.  We could probably yank this out into
