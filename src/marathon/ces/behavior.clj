@@ -813,16 +813,25 @@
 (defn compute-state-stats [entity cycletime policy positionpolicy]
   (let [duration (:duration (:spawn-info @entity)) ;;duration may be 0.
         ;;if so, we check policy to see if we should be waiting more than 0.
-        duration (if (and duration (zero? duration))
-                   (do (debug [:deriving-duration (:name @entity) positionpolicy])
-                       (policy-wait-time policy positionpolicy)) ;derive from policy.
+        derive? (or (not duration)
+                    (zero? duration))
+        duration (if derive? 
+                   (let [pw (policy-wait-time policy positionpolicy)
+                         _  (debug [:derived-duration (:name @entity) positionpolicy pw])]
+                     pw) ;derive from policy.
                    duration)
         ;;If the position is not in the policy, then we need to
         ;;find a way to compute the duration.
         ;;If we have spawn-info, then we have duration...
-        position-time (if duration ;prescribed.
-                        0
-                        (position->time  policy positionpolicy))
+        position-time (if derive? #_(pos? duration) ;prescribed.
+                          (try 
+                            (position->time  policy positionpolicy)
+                            (catch Exception e
+                              (if (protocols/leads-to-start? policy positionpolicy)
+                                0
+                                (throw (Exception.
+                                        (str [positionpolicy :isolated-from-cycle])))))) 
+                          0)
         ;;We're running into problems here....the positionpolicy 
         cycletime     (if (< cycletime position-time)
                         position-time
@@ -883,8 +892,9 @@
               {:keys [timeinstate
                       timeremaining
                       cycletime
-                      position-time]}
-                 (compute-state-stats entity cycletime policy positionpolicy)
+                      position-time] :as stats}
+              (compute-state-stats entity cycletime policy positionpolicy)
+                _ (debug [:unit (:name ent) stats])
               spawned-unit  (-> ent
                                 (assoc  :cycletime cycletime
                                         :default-recovery (core/default-recovery @ctx))

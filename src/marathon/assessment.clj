@@ -96,7 +96,8 @@
                     (+ 366 90) 270
                     (+ 366 90) 271)]                    
   (defn pos->color [dwell bog]
-    (cond ;(zero? bog) nil
+    (f dwell bog)
+    #_(cond ;(zero? bog) nil
       (or  (between? dwell 0 365)
            (> bog 365)) :red
            (and (between? dwell 366 (+ 366 90))  (between? bog 1 270))   :orange

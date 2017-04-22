@@ -334,6 +334,11 @@
            (set-position-graph policy))
       (throw (Exception. (str "No deployable range found between in " policy))))))
 
+(defn leads-to-start? [p position]
+  (-> (get-position-graph p)
+      (graph/depth-first-search position (start-state p))
+      (graph/path?)))       
+
 (defprotocol IUnitBehavior
   (behavior-name [b] "Return the name of the behavior...duh.")
   (init-behavior [b state] "Used for stateful initializaion, may tank this one.")
