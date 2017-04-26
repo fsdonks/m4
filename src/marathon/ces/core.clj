@@ -41,8 +41,8 @@
             [clojure.pprint :as pprint]))
     
 ;;This is a lifesaver...
-(def noisy            (atom true))
-(defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
+(def noisy?            (atom true))
+(defn toggle-noisy [] (swap! noisy? (fn [n] (not n))))
 ;;From Stuart Sierra's blog post, for catching otherwise "slient" exceptions
 ;;Since we're using multithreading and the like, and we don't want
 ;;exceptions to get silently swallowed
@@ -50,7 +50,7 @@
   (Thread/setDefaultUncaughtExceptionHandler
    (reify Thread$UncaughtExceptionHandler
      (uncaughtException [_ thread ex]
-       (when @noisy 
+       (when @noisy? 
          (binding [*out* out]
            (println ["Uncaught Exception on" (.getName thread) ex])))))))
 
@@ -722,6 +722,7 @@
 (defn demand-names    [ctx] (keys (gete ctx :DemandStore :demandmap)))
 (defn unit-names      [ctx] (keys (gete ctx :SupplyStore :unitmap)))
 (defn unit-entities   [s]   (store/get-domain s :unit-entity))
+(defn unit-records    [ctx] (store/get-entities ctx (unit-names ctx)))
 (defn demand-entities [s]   (store/get-domain s :DemandType))
 
 

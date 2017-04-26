@@ -92,9 +92,9 @@
 
 ;;This approximates our assessment function for
 ;;ARFORGEN.
-(let [f (->assessor 365        365
-                    (+ 366 90) 270
-                    (+ 366 90) 271)]                    
+(let [f (->assessor 364        365
+                    (+ 365 90) 270
+                    (+ 365 90) 271)]                    
   (defn pos->color [dwell bog]
     (f dwell bog)
     #_(cond ;(zero? bog) nil
