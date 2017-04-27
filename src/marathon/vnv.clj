@@ -134,34 +134,40 @@
 
 
 (def depfields
-  {:Location (fn [^String x] (.replace x "_Deployable" ""))
+  {:Location (fn [^String x] (when x (.replace x "_Deployable" "")))
    :Demand   identity
    :DwellBeforeDeploy identity
    :BogBudget identity
    :CycleTime identity
    :DeployInterval identity
    :Unit identity
-   :FollowOn #(clojure.string/upper-case %)})
+   :FollowOn #(when % (clojure.string/upper-case %))})
 
 (defn diff-deployments
   [& {:keys [lpath rpath fields]
       :or {lpath (str threepath "AUDIT_Deployments.txt")
            rpath (str fourpath "AUDIT_Deployments.txt")
            fields depfields}}]
-  (->> (map vector
-       ;;ignore not utilized records.
-         (->> (spork.util.table/tabdelimited->records lpath)
-              (into [])
-              (filter  #(not= (:Demand %) "NotUtilized")))
-         (into []
-               (spork.util.table/tabdelimited->records rpath)))
-       (map #(apply diff-by depfields %))
-       (map-indexed
-        (fn [n r] (when (not (empty? r))
-                    [n r])))
-       (filter identity)))
-
-
+  (let [ls  (->> (spork.util.table/tabdelimited->records lpath)
+                 (into [])
+                 (filter  #(not= (:Demand %) "NotUtilized")))
+        rs  (into []
+                  (spork.util.table/tabdelimited->records rpath))        
+        lc (count ls)
+        rc (count rs)
+        diff (- lc rc)
+        padded-ls (when (neg? diff)
+                    (take (Math/abs diff) (repeat {})))
+        padded-rs (when (pos? diff)
+                    (take (Math/abs diff) (repeat {})))        
+        ]
+    (->> (map vector (concat ls padded-ls)
+                     (concat rs padded-rs)) 
+         (map #(apply diff-by depfields %))
+         (map-indexed
+          (fn [n r] (when (not (empty? r))
+                          [n r])))
+         (filter identity))))
 
 
 
