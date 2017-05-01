@@ -821,7 +821,7 @@
 ;;the bread-n-butter wait time as a function of the
 ;;spawning information, if any, the entity's policy, and
 ;;the proposed position for the entity.
-(defn compute-state-stats [entity cycletime policy positionpolicy]
+#_(defn compute-state-stats [entity cycletime policy positionpolicy]
   (let [duration (:duration (:spawn-info @entity)) ;;duration may be 0.
         ;;if so, we check policy to see if we should be waiting more than 0.
         derive? (or (not duration)
@@ -861,6 +861,36 @@
            positionpolicy 
            (protocols/next-position policy positionpolicy)))}))
 
+(defn compute-state-stats [entity cycletime policy positionpolicy]
+  (let [duration (:duration (:spawn-info @entity)) ;;duration may be 0.
+        ;;if so, we check policy to see if we should be waiting more than 0.
+        duration (if (and duration (zero? duration))
+                   (do (debug [:deriving-duration (:name @entity) positionpolicy])
+                       (policy-wait-time policy positionpolicy)) ;derive from policy.
+                   duration)
+        ;;If the position is not in the policy, then we need to
+        ;;find a way to compute the duration.
+        ;;If we have spawn-info, then we have duration...
+        position-time (if duration ;prescribed.
+                        0
+                        (position->time  policy positionpolicy))
+        ;;We're running into problems here....the positionpolicy 
+        cycletime     (if (< cycletime position-time)
+                        position-time
+                        cycletime)]
+;;timeinstate also subject to spawn-info....
+    {:cycletime cycletime
+     :position-time position-time
+     :timeinstate
+     (if duration
+       0
+       (non-neg! "timeinstate" (- cycletime position-time)))
+;;timeremaining is subject to spawn info.
+     :timeremaining
+     (or duration ;this should keep us from bombing out...
+         (protocols/transfer-time policy
+           positionpolicy 
+           (protocols/next-position policy positionpolicy)))}))
 
 ;;Our default spawning behavior is to use cycle to indicate.
 ;;There will be times we alter the methods in which a unit 
