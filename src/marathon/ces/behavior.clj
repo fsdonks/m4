@@ -1248,7 +1248,11 @@
 ;;We check to see if there was a position change, and if so, if that
 ;;change caused us to finish a policy cycle.  Note: this only applies
 ;;in cyclical policies.
-(befn finish-cycle ^behaviorenv {:keys [entity position-change] :as benv}      
+;;Note: We want to preclude finishing cycles if we are applying a
+;;policy change.  We handle that in another state.  This keeps us
+;;from entering into a policy change that sends us to reset, and
+;;automagically terminates the current cycle stats.  Consistent with M3.
+(befn finish-cycle ^behaviorenv {:keys [entity position-change policy-change] :as benv}      
   (when position-change
     (let [{:keys [from-position to-position]} position-change
           no-spawn? (not (just-spawned? benv))
@@ -1256,7 +1260,8 @@
           ;_ (println [:check-cycle no-spawn? new-cyc? (:tupdate benv)])
           ]
       (when (and no-spawn?
-                 new-cyc?)
+                 new-cyc?
+                 (not policy-change)) ;;NEWLY Added
         (do (debug [:finishing-cycle (:name @entity) from-position])
             (->seq [start-cycle
                     end-cycle
@@ -1497,7 +1502,7 @@
 ;;and rip off the followon code.
 (befn reset-beh {:keys [entity] :as benv}
       (let [pos             (protocols/start-state (:policy @entity))
-            wt              (#_get-wait-time immediate-wait-time @entity pos benv)
+            wt              (immediate-wait-time @entity pos benv)
             _   (debug [:immediate-reset :from (:positionpolicy @entity) :to pos :wait-time wt])
             _               (swap! entity #(assoc % :followoncode nil))
             ]
@@ -1841,7 +1846,18 @@
                       (move! positionB newduration) ;;movement behavior
                       (->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
                        ]))))
-          
+
+;;TODO: Add this?
+
+;;'Craig add 10 May 2016 . We have some units changing policies from a longer BOG budget
+;;'to a shorter BOG budget.  We are running into issues when a unit's new BOG budget is < Overlap
+;;'and then this unit got deployed and ended up with a negative BOG budget throwing negativeErr
+;;If .CurrentCycle.bogbudget <= .policy.overlap Then 'this matches our check in AbruptWithdraw_State
+;;  Set unit = Reset_State(unit, deltat)
+;;  .parent.UpdateDeployStatus unit
+;;End If
+
+
           ;;This automatically gets checked during move!...
 ;;         MarathonOpSupply.UpdateDeployStatus simstate.supplystore, unit, , , simstate.context
 
