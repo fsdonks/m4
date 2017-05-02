@@ -564,6 +564,23 @@
       (engine/sim-step)
       (sim/advance-time)))
 
+(defn step-prefill
+  "Steps the context up to the point of filling demands.
+   Essentially provides an updated state prior to selecting
+   units for deployment.  Useful for verifying supply-queries
+   and other fill-related rules."
+  [ctx]
+  (engine/parametric-sim-step ctx 
+    :fill nil
+    :end  nil))
+
+(defn fill-of
+  "Like day-of, except we fast forward to the point just before 
+   filling.  Convenience function for debugging."
+  [day ctx]
+  (-> (day-of day ctx)
+      (step-prefill)))
+
 ;;simple-project xforms
 (defn filter-srcs
   "Given a sequence of srcs to keep, pre-processes the project tables

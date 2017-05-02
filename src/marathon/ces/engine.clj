@@ -257,6 +257,29 @@
         ))
   ([ctx] (sim-step (sim/get-time ctx) ctx)))
 
+(defn parametric-sim-step
+  "Like marathon.ces.engine/sim-step, except callers can plug in alternate 
+   functions using keyword parameters.  Useful for debugging.  Stages with 
+   no associated funtion will be excluded, otherwise the step-functions 
+   of type:: day->ctx->ctx,  will be called in order of 
+   [begin supply policies demands fill end]."
+  [ctx & {:keys [begin supply policies demands fill end] :or
+               {begin begin-day
+                supply manage-supply
+                policies manage-policies
+                demands manage-demands
+                fill fill-demands
+                end end-day}}]
+  (let [day (sim/get-time ctx)]
+    (->> (filter identity [begin
+                           supply
+                           policies
+                           demands
+                           fill
+                           end])
+         (reduce (fn [acc f] (f day acc))
+                 ctx))))
+
 ;;in ECS parlance, the functions in sim-step are just systems.
 ;;Each of these systems operates on the ECS, or more specifically,
 ;;the components within the ECS that are of interest, and
