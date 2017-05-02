@@ -1451,7 +1451,13 @@
                              abrupt-withdraw-beh)
         :recovery      recovery-beh ;moving-beh ;;setup the move to recovered.
         :recovered     (->and [(echo :recovered-beh)
-                               re-entry-beh
+                               (->seq [re-entry-beh
+                                       ;;TODO: Optimize. We can skip the re-entry,
+                                       ;;go to policy-change directly.
+                                       (->if (fn [{:keys [entity]}]
+                                               (zero? (u/get-bog @entity)))
+                                             try-deferred-policy-change)])
+                               
                                ;reset-beh
                                ])
         ;:waiting       (success benv) ;up-to-date
@@ -1500,6 +1506,13 @@
 
 ;; 'A state to handle reentry into the available pool....
 (def invalid?  #{"Deployed" "Overlapping"})
+
+;;Note:
+;;Attempting to match m3 behavior exactly.  Units re-entering
+;;with 0 bog and a pending policy change should go ahead
+;;and change policies vs. going through re-entry in the
+;;current cycle's policy.
+
 ;;Kind of like reset, except it's not guaranteed we go to reset.
 (befn re-entry-beh {:keys [entity ctx tupdate] :as benv}
       (let [unit   @entity
@@ -1508,7 +1521,7 @@
             ct          (:cycletime unit)
             _      (when (< ct 0) (throw (Exception. (str "Cycle Time should not be negative!"))))
             _      (when (invalid? current-pos)
-                         (throw (Exception.  "Cannot handle during deployment or overlap")))
+                     (throw (Exception.  "Cannot handle during deployment or overlap")))
             is-deployable  (protocols/deployable-by? p ct)
             positionA  current-pos
             positionB (protocols/get-position p ct)
@@ -1529,19 +1542,19 @@
                           :timeinstate    timeinstate
                           }
             _          (reset! ctx
-                         (->> @ctx
-                             ; (supply/log-position! tupdate positionA positionB  unit)
-                              (supply/supply-update! {:name "SupplyStore"} unit
-                                (core/msg "Unit " (:name unit)
-                                          "  ReEntering at " positionB " with "
-                                          (:bogbudget (:currentcycle unit))
-                                          " BOGBudget."))))
+                               (->> @ctx
+;; (supply/log-position! tupdate positionA positionB  unit)
+                                    (supply/supply-update! {:name "SupplyStore"} unit
+                                                           (core/msg "Unit " (:name unit)
+                                                                     "  ReEntering at " positionB " with "
+                                                                     (:bogbudget (:currentcycle unit))
+                                                                     " BOGBudget."))))
             _          (reset! entity
                                (assoc unit :followoncode nil))]
         (beval  change-state-beh
                 (assoc benv :state-change state-change
- ;                      :position-change {:from-position positionA
- ;                                        :to-position   positionB}
+;;                      :position-change {:from-position positionA
+;;                                        :to-position   positionB}
                        :wait-time wt
                        :next-position positionB))))
 

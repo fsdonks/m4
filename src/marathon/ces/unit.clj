@@ -613,14 +613,16 @@
 ;; isRecovering = StateData.currentState = "Recovering"
 ;; End Function
 (defn recovering? [u]
-  (= (unit-state u) :recovering))
+  (has-state? u :recovering)
+  #_(= (unit-state u) :recovering))
 
 ;; 'TOM Hack 15 Nov 2015 -> Preventing recovery from being nonBog
 ;; Public Function isDemob() As Boolean
 ;; isDemob = StateData.currentState = "DeMobilizing"
 ;; End Function
 (defn demobilizing? [u]
-    (= (unit-state u) :demobilizing))
+    (has-state? u :demobilizing)
+    #_(= (unit-state u) :demobilizing))
 
 ;Determines if u is capable of deploying, as a function of u's associated policy.
 (defn valid-deployer?
