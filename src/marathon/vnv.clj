@@ -155,11 +155,16 @@
   (map-indexed (fn [i r] (assoc r :index i)) rs))
 
 (defn diff-deployments
+  "Somewhat of a monster, pending refactor.  We sort
+   the records now (note eager/forcing....) by 
+   demandtype and index (order of appearance).  
+   That leaves us with a dataset that can be 
+   diffed in-order."
   [& {:keys [lpath rpath fields]
       :or {lpath (str threepath "AUDIT_Deployments.txt")
            rpath (str fourpath "AUDIT_Deployments.txt")
            fields depfields}}]
-  (let [sortf   (juxt :DemandType :index)
+  (let [sortf    (juxt :DemandType :index)
         ls  (->> (spork.util.table/tabdelimited->records lpath)
                  (into [])
                  (enumerate)
