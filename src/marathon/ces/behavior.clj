@@ -842,7 +842,7 @@
                                 0
                                 (throw (Exception.
                                         (str [positionpolicy :isolated-from-cycle])))))) 
-                          0)
+                          0)        
         ;;We're running into problems here....the positionpolicy 
         cycletime     (if (< cycletime position-time)
                         position-time
@@ -861,23 +861,37 @@
            positionpolicy 
            (protocols/next-position policy positionpolicy)))}))
 
+
 (defn compute-state-stats [entity cycletime policy positionpolicy]
   (let [duration (:duration (:spawn-info @entity)) ;;duration may be 0.
         ;;if so, we check policy to see if we should be waiting more than 0.
-        duration (if (and duration (zero? duration))
-                   (do (debug [:deriving-duration (:name @entity) positionpolicy])
-                       (policy-wait-time policy positionpolicy)) ;derive from policy.
+        derive? (or (not duration)
+                    (zero? duration))
+        ;;if so, we check policy to see if we should be waiting more than 0.
+        duration (if #_derive? (and duration (zero? duration)) 
+                   (let [pw (policy-wait-time policy positionpolicy)
+                         _  (debug [:derived-duration (:name @entity) positionpolicy pw])]
+                     pw) ;derive from policy.
                    duration)
+        
         ;;If the position is not in the policy, then we need to
         ;;find a way to compute the duration.
         ;;If we have spawn-info, then we have duration...
-        position-time (if duration ;prescribed.
-                        0
-                        (position->time  policy positionpolicy))
+        position-time (if derive? ;prescribed.
+                          (try 
+                            (position->time  policy positionpolicy)
+                            (catch Exception e
+                              (if (protocols/leads-to-start? policy positionpolicy)
+                                0
+                                (throw (Exception.
+                                        (str [positionpolicy :isolated-from-cycle])))))) 
+                          0)
+
         ;;We're running into problems here....the positionpolicy 
         cycletime     (if (< cycletime position-time)
                         position-time
-                        cycletime)]
+                        cycletime)
+        ]
 ;;timeinstate also subject to spawn-info....
     {:cycletime cycletime
      :position-time position-time
@@ -1684,7 +1698,7 @@
 (befn policy-change-state ^behaviorenv {:keys [entity wait-time tupdate policy-change ctx]
                                         :as benv}
       (when policy-change ;;we have a change.
-        ;(if (u/waiting? @entity) defer-policy-change ;;units in waiting must defer policy changes!
+        (if (u/waiting? @entity) defer-policy-change ;;units in waiting must defer policy changes!
           (let [next-policy (:next-policy policy-change)
                 unit @entity
                 tnow tupdate
@@ -1730,8 +1744,7 @@
                                                               :proportion CycleProportionA
                                                               :current-position PositionA}))
                            apply-policy-change])                 
-                   defer-policy-change]))))
-      ;)
+                   defer-policy-change])))))
 
 ;;Assuming we have a change, let's apply it!
 ;;How long will the unit have been in this state?
