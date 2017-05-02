@@ -136,6 +136,14 @@
 ;;when finding supply for said category, we have a
 ;;way to check for a computed category.  We might
 ;;also want to define a way to compose categories...
+
+;;Note: There's an implicit constraint in M3, which we
+;;must respect in M4, that only entities in the category
+;;of "NonBOG", i.e. entities tagged as nonbog eligible,
+;;are able to engage in non-bog relations.  We need to specifically
+;;exclude followon-eligible demands from this query, since
+;;that will unintentionally drag additional supply into the
+;;mix that we don't want.
 (defn compute-nonbog [{:keys [src cat order-by where collect-by] :or 
                       {src :any cat :default} :as env} ctx]
   (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.

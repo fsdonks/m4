@@ -580,16 +580,19 @@
 
 (defn waiting? [u]  (has-state? u :waiting))
 
+(defn deployed-state? [s]
+  (case s 
+    (:bogging :deploying pol/Deployed pol/Bogging :non-bogging :waiting) true
+    false))
+
 ;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
 ;Note, this implicitly hardcodes deployed states.  We could probably yank this out into
 ;a data-driven definition that's more dynamic.  TBD.
 (defn deployed? [u]
   (let [s (unit-state u)]
     (if-not (set? s)
-      (case s #_(unit-state u)
-        (:bogging :deploying pol/Deployed pol/Bogging :non-bogging :waiting) true
-        false)
-      (some #(deployed? %) s))))   
+      (deployed-state? s)
+      (some #(deployed-state? %) s))))   
 
 ;Indicates whether unit u is eligible for a follow on deployment.
 ;Units eligible for follow on deployments are units that have "any" followon code.
