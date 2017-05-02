@@ -143,16 +143,35 @@
    :Unit identity
    :FollowOn #(when % (clojure.string/upper-case %))})
 
+;;Note: we need a little bit smarter indexing here,
+;;since we have multiple srcs interleaved in the deployment
+;;output.  We can just sort by a unique key...
+
+;;In this case, if we assign an index to each record,
+;;we can sort by the idx and the SRC to get a consistent
+;;ordering for diffing.
+
+(defn enumerate [rs]
+  (map-indexed (fn [i r] (assoc r :index i)) rs))
+
 (defn diff-deployments
   [& {:keys [lpath rpath fields]
       :or {lpath (str threepath "AUDIT_Deployments.txt")
            rpath (str fourpath "AUDIT_Deployments.txt")
            fields depfields}}]
-  (let [ls  (->> (spork.util.table/tabdelimited->records lpath)
+  (let [sortf   (juxt :DemandType :index)
+        ls  (->> (spork.util.table/tabdelimited->records lpath)
                  (into [])
-                 (filter  #(not= (:Demand %) "NotUtilized")))
-        rs  (into []
-                  (spork.util.table/tabdelimited->records rpath))        
+                 (enumerate)
+                 (filter  #(not= (:Demand %) "NotUtilized"))
+                 (sort-by sortf)
+                 #_(reset! lefts)
+                 )
+        rs  (->> (spork.util.table/tabdelimited->records rpath)
+                 (into [])
+                 (enumerate)
+                 (sort-by sortf)
+                 #_(reset! rights))
         lc (count ls)
         rc (count rs)
         diff (- lc rc)
