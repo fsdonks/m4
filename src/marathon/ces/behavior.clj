@@ -1242,7 +1242,8 @@
 ;;Wow...just got burned on this..strings are no good for identity
 ;;checks....since some are interned and some ore instances.  wow....
 (defn new-cycle? [unit frompos topos]
-  (= (protocols/start-state (:policy unit)) topos))
+  (and (not= frompos :recovered)  ;;additional criteria to cover nonbog reentry.
+       (= (protocols/start-state (:policy unit)) topos)))
 
 ;;We check to see if there was a position change, and if so, if that
 ;;change caused us to finish a policy cycle.  Note: this only applies
