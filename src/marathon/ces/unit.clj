@@ -580,9 +580,10 @@
 
 (defn waiting? [u]  (has-state? u :waiting))
 
+;;added :overlapping...
 (defn deployed-state? [s]
   (case s 
-    (:bogging :deploying pol/Deployed pol/Bogging :non-bogging :waiting) true
+    (:bogging :deploying pol/Deployed pol/Bogging :non-bogging :waiting :overlapping) true
     false))
 
 ;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
