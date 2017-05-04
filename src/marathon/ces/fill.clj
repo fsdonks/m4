@@ -250,7 +250,7 @@
 
 (defn clean-source-rule [v]
   (-> v
-      (clojure.string/lower-case)
+      (clojure.string/upper-case)
       (clojure.string/replace "_" "-")))
 
 (let [clean! (spork.util.general/memo-1
@@ -262,15 +262,15 @@
 
 ;;#TODO elevate stock queries into user-defined rules.
 (def stock-queries
-  (let [m {"ac-first"  query/ac-first
+  (let [m {"AC-FIRST"  query/ac-first
            "AC"        query/ac-first
-           "rc-first"  query/rc-first
+           "RC-FIRST"  query/rc-first
            "RC"        query/rc-first
-           "ng-first"  query/ng-first
+           "NG-FIRST"  query/ng-first
            "NG"        query/ng-first
            "RCAD"      query/RCAD
            "RCAD-BIG"  query/RCAD-BIG
-           "uniform"   query/uniform}]
+           "UNIFORM"   query/uniform}]
     (reduce-kv (fn [acc nm r]
                  (assoc acc (keyword nm) r))
                m m)))

@@ -310,12 +310,16 @@
         ]
     (->> (map vector (concat ls padded-ls)
                      (concat rs padded-rs)) 
-         (map #(apply diff-by depfields %))
+         (map #(let [res (apply diff-by depfields %)]
+                 (if (empty? res)
+                     res 
+                     (conj res [:SRC (:DemandType (first %))]))))
          (map-indexed
           (fn [n r] (when (not (empty? r))
                           [n r])))
          (filter identity))))
 
-
+(defn bad-srcs []
+  (distinct (map (fn [[n r]] (second (last r))) (diff-deployments))))
 
 
