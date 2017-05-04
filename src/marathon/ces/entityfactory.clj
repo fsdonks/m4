@@ -199,9 +199,11 @@
 ;;Returns a set of demand data, derived from recs, with 
 ;;duplicate records attached as meta data.
 (defn demands-from-records [recs ctx]  
-  (let [[uniques dupes]  
+  (let [in-scope?   (get (core/get-parameters ctx) :SRCs-In-Scope identity)
+        [uniques dupes]  
             (->> recs 
-                 (r/filter #(valid-record? % (core/get-parameters ctx)))
+                 (r/filter #(and (valid-record? % (core/get-parameters ctx))
+                                 (in-scope? (:SRC %))))
                  (partition-dupes demand-key))]
     (with-meta (mapv record->demand uniques)
       {:duplicates dupes})))

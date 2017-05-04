@@ -150,7 +150,7 @@
   (let [records (or records (get-records :SupplyRecords))
         sstore (core/get-supplystore ctx)
         pstore (core/get-policystore ctx)
-        in-scope?  (:SRCs-In-Scope (core/get-parameters ctx))]
+        in-scope?  (get (core/get-parameters ctx) :SRCs-In-Scope identity)]
     (-> records
         (ent/units-from-records sstore pstore #(and (in-scope? (:SRC %))
                                                     (ent/valid-supply-record? %)))
