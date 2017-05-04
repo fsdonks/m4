@@ -808,6 +808,29 @@
               (order-by (second l) (second r))
               res))))
 
+(defn compare-nth
+  "Given an index into two values, l and r that satisfiy 
+   clojure.lang.Indexed, applies the comparison function f
+   on the values at index n.  Optionally, caller may elide 
+   the comparison function in lieu of clojure.core/compare"
+  ([^long n f ^clojure.lang.Indexed l ^clojure.lang.Indexed r]
+   (f (.nth  l n)
+      (.nth  r n)))
+  ([n l r] (compare-nth n compare l r)))
+
+(defn ->kv-ordering
+  "Refactoring of the inner function originally defined in find-supply.
+   Given two comparers, one for keys and one for values,, operates on a sequence 
+   of pairs:: seq [k v], assuming that keys take precedence over values."
+  [key-compare val-compare]
+  (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]
+          (let [res (key-compare  (.nth l 0)
+                                  (.nth r 0))]
+            (if (zero? res) ;weights are equal. 
+              ;;always compare weight first, by default...                                                    
+              (val-compare (.nth l 1) (.nth r 1))
+              res))))
+
 ;;common choke point for us to find entities.  Currently, we don't update them
 ;;when we're looking for them.
 
@@ -900,6 +923,18 @@
         (assoc supply cat (compute-supply  env ctx))
       supply)))
 
+
+;;Intended to compare [category src weight], convenience fn. 
+(def compare-fill-weight #(compare-nth 2 compare-double %1 %2))
+
+(defn ->ordering
+  "Refactoring of the inner function originally defined in
+  find-supply.  Given an ordering criteria, order-by:: v -> v,
+  operates on a sequence of pairs:: seq [[category src score] v], where a default
+  key-comparer is supplied."
+  [order-by]
+  (->kv-ordering compare-fill-weight order-by))
+
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
@@ -913,32 +948,10 @@
                                          cat src  (fn [nm]                                                    
                                                     (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
-                            :order-by (when order-by
-                                        (ord-fn [^clojure.lang.Indexed l ^clojure.lang.Indexed r]
-                                                (let [res (compare-double (.nth ^clojure.lang.Indexed (.nth l 0) 2)
-                                                                          (.nth ^clojure.lang.Indexed (.nth r 0) 2))]
-                                                  (if (zero? res) ;weights are equal. 
-                                                       ;;always compare weight first, by default...                                                    
-                                                    (order-by (second l) (second r))
-                                                    res))))}))
+                            :order-by (when order-by (->ordering order-by))}))
               res               
              (if collect-by (core/collect collect-by (map second res)) 
                  res)))))
-
-
-;;What is this doing here?
-(defn find-supply! [{:keys [src cat order-by where collect-by] :or 
-                    {src :any cat :default} :as env} ctx] 
-    (let [order-by (eval-order   order-by)
-          where    (eval-filter  where) ] 
-      (with-query-env env
-        (let [xs       (find-feasible-supply (core/get-supplystore ctx) (core/get-fillmap ctx) cat src)
-              _        (println (count xs))
-              selected (select {:where    (when where   (fn wherf [kv]    (where (second kv))))
-                                :order-by (when order-by (ord-fn [l r] (order-by (second l) (second r))))}
-                               xs)]             
-          (if collect-by (core/collect collect-by (map second selected)) 
-              selected)))))
 
 ;;More sophisticated querying API
 ;;===============================

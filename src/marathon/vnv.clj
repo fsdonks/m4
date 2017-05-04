@@ -229,7 +229,6 @@
           :pathlength pathlength}
          (seq (dissoc source :policy :statedata :locationhistory))))
 
-
 ;;homebrew diffing tools.
 ;;simple record-based diff function.
 (defn diff-by

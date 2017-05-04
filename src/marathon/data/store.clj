@@ -196,7 +196,7 @@
   "Defines a specification for entities that correspond to force structure demands."
   [id name type priority startday duration overlap category source-first quantity title
    vignette operation demandgroup 
-   & {:keys [location behavior fills  source-first theater
+   & {:keys [location behavior fills theater
              BOG StartState EndState MissionLength]}]
   {
    :components
