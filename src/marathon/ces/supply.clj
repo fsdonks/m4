@@ -420,7 +420,7 @@
                      :deployable-cat    src
                      :deployable true}
          components (if (known-buckets bucket) components
-                        (do ;(println [:followon bucket])
+                        (do (debug [:followon bucket])
                             (assoc components :followon bucket)))
          _ (debug [(:name unit) components :bucket bucket])
          ]         
@@ -596,7 +596,7 @@
         fbucket  (if (== (count bucket) 1)
                    (when (> (count fbucket) 1) (dissoc fbucket src))
                    (assoc fbucket src (dissoc bucket (:name unit))))
-        unit    (dissoc :followon)
+        ;unit    (dissoc :followon)
         ]
     (-> ctx
         (store/update-ine  [:SupplyStore :deployable-buckets]

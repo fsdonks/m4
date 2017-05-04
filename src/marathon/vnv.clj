@@ -184,23 +184,15 @@
       (proc/do-charts-from path :interests interests)))
 
 (in-ns 'incanter.io)
+;;This is just a hack to allow us to parse 9-digit SRCs
+;;without interpreting them as scientific numbers.
 (defn parse-string [x & [default-value]]
-  (or (spork.util.parsing/parse-string-nonscientific x)
-      default-value))
+  (if  (and (== (count x) 9)
+            (= (nth x 5) \E))
+    x
+    (or (spork.util.parsing/parse-string x)
+        default-value)))
 (in-ns 'marathon.vnv)
-
-(comment
-(in-ns 'proc.util)
-(defn read-tsv-dataset
-  [path]
-  (let [fields (atom nil)
-        rs     (into []
-                 (spork.util.table/tabdelimited->records
-                  path))]
-    (incanter.core/dataset (vec (keys (first rs))) rs)))
-
-(in-ns 'marathon.vnv)
-)
 
 (defn sample-charts [path & {:keys [interests]
                              :or   {interests taa-ints}}]
@@ -382,6 +374,6 @@
                         (filter identity))))))))
 
 (defn bad-srcs []
-  (distinct (map (fn [[n r]] (second (last r))) (diff-deployments))))
+  (distinct (map (fn [[n r]] (second (last r))) (diff-deployments-grouped))))
 
 

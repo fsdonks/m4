@@ -1483,12 +1483,16 @@
         (when fc ;if the unit has a followon code
           (do ;register the unit as a possible followOn
                                         ;(println [(:name @entity) :added-followon :for [fc]])
+            ;;Note: we have a problem here, since add-followon ends up getting our entity
+            ;;out-of-sync with the entity reference stored in the context...
+            ;;We add a bunch of components to the entity, like :followon, which may
+            ;;end up getting ditched when we merge the entity atom in at the end
+            ;;of the transaction...
             (swap! ctx #(supply/add-followon (core/get-supplystore %) @entity %))
-            (swap! entity #(merge % {:state :followon}))
+            (reset! entity (-> (store/get-entity @ctx (:name @entity))
+                               (merge {:state :followon})))
                                         ;age-unit
             (debug [:waiting-in-followon-status fc])
-            #_(success (merge benv {:wait-time +inf+
-                                    :next-position :followon}))
             (->seq [(->alter (fn [b]
                                (merge b {:wait-time +inf+
                                           :next-position :followon ;(:positionpolicy @entity) ;:followon
