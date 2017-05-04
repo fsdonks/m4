@@ -183,6 +183,12 @@
   (do (proc/run-sample! path :interests interests)
       (proc/do-charts-from path :interests interests)))
 
+(in-ns 'incanter.io)
+(defn parse-string [x & [default-value]]
+  (or (spork.util.parsing/parse-string-nonscientific x)
+      default-value))
+(in-ns 'marathon.vnv)
+
 (comment
 (in-ns 'proc.util)
 (defn read-tsv-dataset
@@ -318,6 +324,62 @@
           (fn [n r] (when (not (empty? r))
                           [n r])))
          (filter identity))))
+
+(defn diff-deployments-grouped
+  "Somewhat of a monster, pending refactor.  We sort
+   the records now (note eager/forcing....) by 
+   demandtype and index (order of appearance).  
+   That leaves us with a dataset that can be 
+   diffed in-order."
+  [& {:keys [lpath rpath fields]
+      :or {lpath (str threepath "AUDIT_Deployments.txt")
+           rpath (str fourpath "AUDIT_Deployments.txt")
+           fields depfields}}]
+  (let [sortf    (juxt :DemandType :index)
+        lgs  (->> (spork.util.table/tabdelimited->records lpath)
+                 (into [])
+                 (enumerate)
+                 (filter  #(not= (:Demand %) "NotUtilized"))
+                 #_(sort-by sortf)
+                 #_(reset! lefts)
+                 (group-by :DemandType)
+                 )
+        rgs  (->> (spork.util.table/tabdelimited->records rpath)
+                 (into [])
+                 (enumerate)
+                 (group-by :DemandType)
+                 #_(sort-by sortf)
+                 #_(reset! rights))
+        lks (set (keys lgs))
+        rks (set (keys rgs))
+        commons (clojure.set/intersection lks rks)
+        diffs   {lpath  (filter (complement commons) lks)
+                 rpath  (filter (complement commons) rks)}]
+    (do (when (or (get diffs lpath)
+                  (get diffs rpath))
+          (println diffs))
+        (apply concat
+               (for [src commons]
+                 (let [ls (get lgs src)
+                       rs (get rgs src)
+                       lc (count ls)
+                       rc (count rs)
+                       diff (- lc rc)
+                       padded-ls (when (neg? diff)
+                                   (take (Math/abs diff) (repeat {})))
+                       padded-rs (when (pos? diff)
+                                   (take (Math/abs diff) (repeat {})))        
+                       ]
+                   (->> (map vector (concat ls padded-ls)
+                             (concat rs padded-rs)) 
+                        (map #(let [res (apply diff-by depfields %)]
+                                (if (empty? res)
+                                  res 
+                                  (conj res [:SRC src]))))
+                        (map-indexed
+                         (fn [n r] (when (not (empty? r))
+                                     [n r])))
+                        (filter identity))))))))
 
 (defn bad-srcs []
   (distinct (map (fn [[n r]] (second (last r))) (diff-deployments))))
