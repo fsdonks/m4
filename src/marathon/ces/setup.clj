@@ -149,8 +149,12 @@
 (defn default-supply [ctx & {:keys  [records]}]
   (let [records (or records (get-records :SupplyRecords))
         sstore (core/get-supplystore ctx)
-        pstore (core/get-policystore ctx)]
-    (ent/process-units (ent/units-from-records records sstore pstore) ctx)))
+        pstore (core/get-policystore ctx)
+        in-scope?  (:SRCs-In-Scope (core/get-parameters ctx))]
+    (-> records
+        (ent/units-from-records sstore pstore #(and (in-scope? (:SRC %))
+                                                    (ent/valid-supply-record? %)))
+        (ent/process-units  ctx))))
 
 ;;Creates a default demand.  The default is to derive from Excel worksheets.
 (defn default-demand [ctx & {:keys  [records]}]                            

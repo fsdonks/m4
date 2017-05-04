@@ -616,6 +616,9 @@
               (recur (unchecked-inc idx)
                      (conj acc new-unit))))))))
 
+(defn valid-supply-record? [r]
+  (and (:Enabled r) (pos? (:Quantity r))))
+
 ;;Given a set of raw unit records, create a set of unitdata that has
 ;;all the information necessary for initialization, i.e. lifecycle, 
 ;;policy, behavior, name, etc.  We want to name the units according 
@@ -625,28 +628,32 @@
 ;;we do all the minute prepatory tasks to "fill in the details", 
 ;;like associating the units with a supply, establishing unit 
 ;;subscriptions to policies, etc..
-(defn units-from-records [recs supply pstore]
-  (let [unit-count (atom (-> supply :unitmap (count)))
-        ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
-        ;;TODO fix this...our defaults aren't that great.  
-;        normal-beh @base/default-behavior ;(-> supply :behaviors :defaultACBehavior)
-        conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
-                                    (reduce conj! acc xs)))
-        conj-unit  (fn [acc x] (do (swap! unit-count inc)
-                                   (conj! acc x)))
-        rassoc     (fn [k v m] (assoc m k v))]
-    (->> recs 
-         (r/filter #(and (:Enabled %) (pos? (:Quantity %)))) ;;We need to add data validation, we'll do that later....
+(defn units-from-records
+  ([recs supply pstore filter-func]
+   (let [unit-count (atom (-> supply :unitmap (count)))
+         ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
+         ;;TODO fix this...our defaults aren't that great.  
+                                        ;        normal-beh @base/default-behavior ;(-> supply :behaviors :defaultACBehavior)
+         conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
+                                     (reduce conj! acc xs)))
+         conj-unit  (fn [acc x] (do (swap! unit-count inc)
+                                    (conj! acc x)))
+         rassoc     (fn [k v m] (assoc m k v))]
+     (->> recs 
+         (r/filter filter-func) ;;We need to add data validation, we'll do that later....
          (reduce (fn [acc r]                    
                    (if (> (:Quantity r) 1) 
                      (conj-units acc
-                         (create-units @unit-count  (:Quantity r) pstore r))
+                                 (create-units @unit-count  (:Quantity r) pstore r))
                      (->> (generate-name @unit-count (:SRC r) (:Component r))
                           (assoc r :Name)
                           (record->unitdata) ;;assign-policy handles policy wrangling.
                           (rassoc :unit-index @unit-count) ;;Add UnitIndex 3/8/2017
                           (conj-unit  acc)))) (transient []))
-         (persistent!))))       
+         (persistent!))))
+  ([recs supply pstore]
+   (units-from-records recs supply pstore valid-supply-record?)))
+
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
  
