@@ -178,11 +178,6 @@
 (defn src [& xs] (select-keys taa-ints (vec xs)))
 (defn branch [& xs] (select-keys branches (vec xs)))
 
-(defn sample-charts [path & {:keys [interests]
-                             :or   {interests taa-ints}}]
-  (do (proc/run-sample! path :interests interests)
-      (proc/do-charts-from path :interests interests)))
-
 (in-ns 'incanter.io)
 ;;This is just a hack to allow us to parse 9-digit SRCs
 ;;without interpreting them as scientific numbers.
