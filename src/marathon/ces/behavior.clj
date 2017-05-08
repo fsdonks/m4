@@ -1252,16 +1252,16 @@
 ;;policy change.  We handle that in another state.  This keeps us
 ;;from entering into a policy change that sends us to reset, and
 ;;automagically terminates the current cycle stats.  Consistent with M3.
-(befn finish-cycle ^behaviorenv {:keys [entity position-change policy-change] :as benv}      
+(befn finish-cycle ^behaviorenv {:keys [entity position-change changed-policy policy-change] :as benv}      
   (when position-change
     (let [{:keys [from-position to-position]} position-change
           no-spawn? (not (just-spawned? benv))
           new-cyc?  (new-cycle? @entity from-position to-position)
-          ;_ (println [:check-cycle no-spawn? new-cyc? (:tupdate benv)])
+          ;_ (println [:check-cycle no-spawn? new-cyc? (not policy-change) (:tupdate benv)])
           ]
       (when (and no-spawn?
                  new-cyc?
-                 (not policy-change)) ;;NEWLY Added
+                 (not changed-policy)) ;;If we changed-policy already, preclude...
         (do (debug [:finishing-cycle (:name @entity) from-position])
             (->seq [start-cycle
                     end-cycle
@@ -1721,7 +1721,9 @@
 (befn policy-change-state ^behaviorenv {:keys [entity wait-time tupdate policy-change ctx]
                                         :as benv}
       (when policy-change ;;we have a change.
-        (if (u/waiting? @entity) defer-policy-change ;;units in waiting must defer policy changes!
+        (if (u/waiting? @entity)
+          (do (debug [:deferring-policy-change-while-waiting])
+              defer-policy-change) ;;units in waiting must defer policy changes!
           (let [next-policy (:next-policy policy-change)
                 unit @entity
                 tnow tupdate
@@ -1844,11 +1846,13 @@
                                               (assoc benv :state-change
                                                      {:newstate newstate
                                                       :duration newduration
-                                                      :timeinstate 0})
+                                                      :timeinstate 0}
+                                                     :changed-policy true
+                                                     :policy-change nil)
                                               ))
                                               ;)))
                       (move! positionB newduration) ;;movement behavior
-                      (->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
+                      #_(->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
                        ]))))
 
 ;;TODO: Add this?
@@ -1895,7 +1899,7 @@
 ;;This is not a replacement...
 ;;WIP Nov 2016
 (befn defer-policy-change {:keys [entity ctx tupdate policy-change] :as benv}
-    (when policy-change
+      (when policy-change
         (let [_   (debug [:deferring-policy-change])
               {:keys [next-policy]} policy-change
               unit @entity
