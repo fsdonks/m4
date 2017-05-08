@@ -209,8 +209,11 @@
   (proc/do-charts-from  threepath  :interests   (src :BCTS))
   (proc/do-charts-from  fourpath   :interests   (src :BCTS)))
 
-(defn run-branch [br]
-  (re-run :interests (branch br)))
+(defn run-branch
+  ([br]
+   (re-run :interests (branch br)))
+  ([br & rest]
+   (re-run :interests (apply branch (cons br rest)))))
 (defn compare-branch [br]
   (proc/do-charts-from  threepath  :interests (branch br))
   (proc/do-charts-from  fourpath   :interests (branch br)))
