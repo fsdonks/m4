@@ -1795,7 +1795,7 @@
             cycletimeB     (if (> cyclelengthB +twenty-years+) ;;effectively infinite...
                              cycletimeA ;;use current cycletime, do NOT project.
                              (long   (* proportion cyclelengthB))) ;coerce to a long cyclelength.
-            _              (assert (>= cycletimeB 0) "Negative cycle times are not handled...")
+            _              (assert (>=  cycletimeB 0) "Negative cycle times are not handled...")
             _              (assert (<=  cycletimeB cyclelengthB) "Cyclelength is too long!")
             wasDeployable  (protocols/deployable-by? (:policy unit) cycletimeA) ;;can maybe do this faster just checking state.
             isDeployable   (protocols/deployable-by? next-policy    cycletimeB)

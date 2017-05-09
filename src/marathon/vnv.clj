@@ -189,6 +189,70 @@
         default-value)))
 (in-ns 'marathon.vnv)
 
+
+;;A quick patch for proc...
+(in-ns 'proc.util)
+(defmethod as-dataset :table [ds]
+  (incanter.core/dataset (spork.util.table/table-fields  ds)
+                         (spork.util.table/table-records ds)))
+(in-ns 'marathon.vnv)
+
+;;This is to try to speed up our damn charts...
+;;proc.stacked/dwell-over-fill doesn't need the
+;;entire fills table....in fact, we ignore
+;;most of the table entirely.  So, we spend more
+;;time parsing and garbage collecting useless
+;;crap.  Also, we can use string 
+(def fill-schema
+  {:fill-type         :text
+   :DwellBeforeDeploy :int
+   :Component   :text 
+   :DwellYearsBeforeDeploy :float
+   :DemandGroup :text
+   :Period      :text
+   :sampled     :text
+   :start  :int
+   :duration :int
+   :quantity :int
+   })
+
+(def deploy-schema
+  {:DeployInterval :int
+   :DwellYearsBeforeDeploy :float 
+   :Component :text
+   :FollowOnCount :int
+   :Demand :text
+   :DemandType :text
+   :Period :text})
+
+(in-ns 'proc.core)
+
+(defn dwell-over-fill [root src subs phase]
+  (let [path (str root "fills/" (first src) ".txt")]
+    (if (spork.util.io/fexists? path)
+      (let [as-str (spork.util.string/->string-pool 1000 2000) 
+            [fill-data trend-info]  (-> path
+                                        (tbl/tabdelimited->table  :schema (into {}
+                                                                                (map (fn [[k v]]
+                                                                                          [k (if (= v :text)
+                                                                                               (fn [s] (as-str s))
+                                                                                               v)]) (seq marathon.vnv/fill-schema))))
+                                        (util/as-dataset)
+                                        (stacked/fill-data phase subs))]
+      [(proc.core/do-chart-pane (str "Run: " (get-run-name root) "<br>Interest: " (first src) )) ;"<br>" for a newline
+       (-> (str root "AUDIT_Deployments.txt")
+           (tbl/tabdelimited->table  :schema marathon.vnv/deploy-schema #_(into {}
+                                                   (map (fn [[k v]]
+                                                          [k (if (= v :text)
+                                                               (fn [s] (as-str s))
+                                                               v)]) (seq marathon.vnv/deploy-schema))))
+           (deployment-plot   src phase)); avg line should continue
+       (binding [proc.stacked/*trend-info* trend-info] ;Meh.  if we don't have new trend-info, this is a circular binding
+         ;fill-data is XYdataset ;as-chart returns a jfree chart object?
+         (stacked/as-chart fill-data {:title "Fill" :tickwidth 365}))])
+      (println [:path path "Does Not Exist!" :ignoring src]))))
+(in-ns 'marathon.vnv)
+
 (defn sample-charts [path & {:keys [interests]
                              :or   {interests taa-ints}}]
   (do (proc/run-sample! path    :interests interests)
