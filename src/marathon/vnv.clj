@@ -439,3 +439,6 @@
   (distinct (map (fn [[n r]] (second (last r))) (diff-deployments-grouped))))
 
 
+;;Note: added a patch to M3 to cover the case where we're doing compo
+;;comparisons, and inconsistently applying the predicate.  V82 corrects
+;;this behavior, just annotating here for vcs posterity.
