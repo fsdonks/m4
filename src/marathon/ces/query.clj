@@ -25,6 +25,10 @@
 
 ;;mimick functionality from legacy m3.  NOTE: this is more constrained
 ;;than we'd like, and is only here for legacy support!.
+;;Note: Since M3-v82, we fixed the legacy system to include all possible
+;;supply independent of the presence of deployable supply.  Thus,
+;;we eliminate the legacy dependency on the existence of a deployable
+;;bucket prior to searching for extra supply (a useless constraint).
 (defn append-vals-lazily
   "A dumb function to merge two maps, target and appendee, only where the keys 
    in both match.  Returns the resulting map where keys/vals from target have 
@@ -39,6 +43,15 @@
                  (assoc acc k (lm/lazy-map (merge v m)))
                  acc))
              target appendee))
+
+;;Note: port this to general purpose lib later...
+(defn lazy-merge
+  "A dumb function to merge two maps, target and appendee.  Rather than 
+   eagerly merging the values, new values are lazy-maps computed from a 
+   delayed merge."
+  ([m1 m2]
+   (merge-with (fn [ml mr]
+                 (lm/lazy-map (merge ml mr))) m1 m2)))
 
 (defmacro mapfunctor
   [[k v] expr]
@@ -158,10 +171,13 @@
 ;;computed categories indicate which categories can be
 ;;derived on-demand by applying a function against the
 ;;context.
+;;Note:  Changed to account for updated, i.e. corrected
+;;behavior in M3-82, we now fully merge (if there is
+;;deployable supply or not).
 (def computed-categories
   {"NonBOG"
      (fn [env  ctx]
-       (append-vals-lazily
+       (lazy-merge
         (compute-nonbog env ctx) ;;<-merge these in
         (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                             :deployable-buckets
