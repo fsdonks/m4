@@ -442,3 +442,7 @@
 ;;Note: added a patch to M3 to cover the case where we're doing compo
 ;;comparisons, and inconsistently applying the predicate.  V82 corrects
 ;;this behavior, just annotating here for vcs posterity.
+
+;;Note: Initial VNV success 5/19/2017 @ 0750PM for every branch
+;;between M3-vb83 and M4.09 f45296bcaff99096f600cad0cd18f6214f3cf327
+;;Diff tests passing.  Capacity analysis verified.
