@@ -100,10 +100,12 @@
                      xs)]
     [(persistent! (first res)) (persistent! (second res))]))
 
+;;added positivity check for pre-run filtering.
 (defn valid-record? 
   ([r params] 
      (and (:Enabled r) 
-          (core/in-scope? params (:SRC r))))
+          (core/in-scope? params (:SRC r))
+          (pos? (:Quantity r))))
   ([r] (valid-record? r (core/get-parameters *ctx*))))
 
 (defn demand-key 
@@ -133,7 +135,8 @@
         idx       (if (or empty-op empty-vig) (core/next-idx) 0)
         vig       (if empty-vig (core/msg "Vig-ANON-" idx) Vignette)
         op        (if empty-op  (core/msg "Op-ANON-" idx) Operation)
-        demandname (or DemandKey (demand-key SRC vig op Priority StartDay Duration)) ]
+        demandname (or DemandKey (demand-key SRC vig op Priority StartDay Duration))
+        _         (assert (pos? Quantity) (str [:non-positive-quantity! demandname]))]
     (store/demand    ;unique name associated with the demand entity.
      demandname
      demandname

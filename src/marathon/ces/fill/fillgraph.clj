@@ -138,19 +138,25 @@
        (map (fn [src] 
               [:source src]))))
 
+(defn valid-record?
+  "Used to pre-filter records to ensure that we ignore zeroed demands.."
+  [r]
+  (and (:Enabled r)
+       (pos? (:Quantity r))))
+
 ;;was fromsourcetable
 (defn append-sourcetable [g tbl]
   (reduce (fn [acc {:keys [SRC]}]
             (add-source acc SRC))
           g 
-          (r/filter :Enabled tbl)))
+          (r/filter valid-record? tbl)))
 
 ;;this is fromDemandrecords kinda
 (defn append-sinktable [g tbl]
   (reduce (fn [acc {:keys [SRC]}]
               (add-sink acc SRC))
           g 
-          (r/filter :Enabled tbl)))
+          (r/filter valid-record? tbl)))
 
 ;;was fromRelationTable 
 (defn append-relationtable [g tbl]
