@@ -642,10 +642,12 @@
 
 ;;Move this out to marathon.ces.unit?
 ;;auxillary function that helps us wrap updates to the unit.
+;;added check to prevent recording traversals to save time and
+;;memory.  Does not affect debugging.
 (defn traverse-unit [u t from to]   
-  (-> u 
-      (assoc :positionpolicy  to)
-      (u/add-traversal t from to)))
+  (-> (if marathon.ces.core/*debug* (u/add-traversal u t from to)
+          u) 
+      (assoc :positionpolicy  to)))
 
 ;;this is kinda weak, we used to use it to determine when not to
 ;;perform updates via the global state, but it's probably less
@@ -800,7 +802,7 @@
              wt   (- duration timeinstate)
              _  (when (neg? wt) (throw (Exception. (str [:negative-wait-time])))) 
              _  (debug [:changing-state state-change :wait-time wt])
-             newdata (assoc (fsm/change-statedata statedata newstate duration followingstate)
+             newdata (assoc (fsm/change-statedata statedata newstate duration followingstate marathon.ces.core/*debug*)
                             :timeinstate timeinstate)
              benv    (merge (dissoc benv :state-change) {:statedata newdata
                                                          :duration duration
@@ -2304,6 +2306,7 @@
                        :wait-time     wt
                        :next-position StartState))))))
 
+;;Another potential garbage leak!
 (def wbm (atom nil))
 (befn wait-based-beh {:keys [entity statedata wait-based-info ctx] :as benv}
   (when  wait-based-info
@@ -2336,7 +2339,7 @@
                                _ (debug [:deployable-changed! :waiting
                                          :deployment-index (:deployment-index u)])
                                _ (swap! (:ctx benv) #(supply/update-deploy-status u nil nil %))
-                               _ (reset! wbm u)
+                               ;_ (reset! wbm u)
                                _ :ballz #_(throw (Exception. (str [:ballz])))]
                             benv)))]))))
 

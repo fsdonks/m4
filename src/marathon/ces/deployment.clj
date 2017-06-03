@@ -75,6 +75,8 @@
            (supply/first-deployment! store unit)
            (supply/adjust-max-utilization! store unit)))))
 
+;;This provides forensics if our deployment throws an exception,
+;;not worried about collecting garbage.  Used in deploy-unit only.
 (def last-deploy (atom nil))
 (defn non-bog? [d] (= (:category d) "NonBOG"))
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?

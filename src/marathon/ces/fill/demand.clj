@@ -37,6 +37,7 @@
 ;    on the queue, and stop filling. Note, the demand is still on the queue, we
                                         ;    only "tried" to fill it. No state changed .
 
+;;Potential garbage leak here.
 (def lastfill (atom nil))
 
 
@@ -54,7 +55,7 @@
             demand      (second (first pending)) 
             demandname  (:name demand)           ;try to fill the topmost demand
             ctx         (dem/request-fill! demandstore category demand ctx)
-            _           (reset! lastfill [demand ctx])
+            ;_           (reset! lastfill [demand ctx]) ;;potential garbage point.
             [fill-status fill-ctx]  (fill/satisfy-demand demand category ctx);1)
             can-fill?   (= fill-status :filled)
             _           (debug [:fill-status fill-status])

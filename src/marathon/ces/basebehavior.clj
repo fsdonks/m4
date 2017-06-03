@@ -67,6 +67,7 @@
 
 ;;debugging info for the behavior environment
 ;;constructor.
+;;Note: this is a source of garbage / memory leaks.
 (def args  (atom  nil))
 
 ;;global var...
@@ -117,7 +118,8 @@
                (- tupdate tprev)
                0)
              (:statedata e))        
-          _ (reset! args benv)]
+          ;_ (reset! args benv)
+          ]
       benv))
 
 ;;Marker used to determine if an entity is being actively observed

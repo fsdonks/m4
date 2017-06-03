@@ -43,17 +43,23 @@
               :duration newduration
               :timeinstate 0}))
 
-(defn ^statedata change-statedata [^statedata  sdata tostate duration followingstate]
-  (statedata. 
-   tostate
-   (.curstate sdata)
-   followingstate
-   0
-   (.timeinstate sdata)
-   duration
-   (.duration sdata)
-   (.statestart sdata)
-   (.cons ^clojure.lang.PersistentVector (.statehistory sdata) tostate)))
+;;Added an option to not automatically record the state
+;;transition.
+(defn ^statedata change-statedata
+  ([^statedata  sdata tostate duration followingstate record?]
+   (statedata. 
+    tostate
+    (.curstate sdata)
+    followingstate
+    0
+    (.timeinstate sdata)
+    duration
+    (.duration sdata)
+    (.statestart sdata)
+    (if record? (.cons ^clojure.lang.PersistentVector (.statehistory sdata) tostate)
+        (.statehistory sdata))))
+  ([sd tostate duration followingstate]
+   (change-statedata sd tostate duration followingstate false)))
 
 (defn remaining [fsm]  
    (- (:duration fsm) (:timeinstate fsm)))
