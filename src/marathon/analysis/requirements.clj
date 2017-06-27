@@ -383,11 +383,14 @@
                   r)                
                 )))))
 
+;;note: strange incidence of getting 50 instead of 25 for total on an
+;;initial bisection step...
+;;I think we're misusing :total-ghosts, not sure we even need it.
 ;;So, each time we add supply, we conceptually take a growth step.
 (defn distribute [reqstate src n]
   (let [steps   (or (:steps reqstate) [])
         total   (if (empty? steps) n
-                     (:total-ghosts (last steps)))
+                     (:total #_:total-ghosts (last steps)))
         amounts (compute-amounts reqstate src total)]
     (-> reqstate
         (apply-amounts  amounts) 
@@ -681,21 +684,34 @@
 
 ;;We have an alternate implementation....
 ;;This is our entry point....
+;;Note: If we filter out all demands, i.e. we have an src in
+;;proportions that's not in the demand, and we're left with no
+;;demands, we should skip the src and accumulate a warning or
+;;something.
 (defn tables->requirements
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
-  [tbls & {:keys [dtype search] :or {search iterative-convergence
-                                     dtype  :proportional}}]
+  [tbls & {:keys [dtype search src-filter]
+           :or {search iterative-convergence
+                dtype  :proportional
+                src-filter (fn [_] true)}}]
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
         distros (aggregate-distributions tbls :dtype dtype)]
     (->> distros
+         (filter (fn [[src _]]
+                   (src-filter src)))
          (mapv (fn [[src compo->distros]] ;;for each src, we create a reqstate
                  (let [_          (println [:computing-requirements src])
                        src-filter (a/filter-srcs [src])
                        src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
-                       reqstate   (->requirements-state src-tables ;create the searchstate.
-                                                        src compo->distros)]
-                   [src (search reqstate)]))))))
+                       demands?   (pos? (tbl/record-count (:DemandRecords src-tables)))] 
+                   (if demands?
+                     (let [reqstate   (->requirements-state src-tables ;create the searchstate.
+                                                            src compo->distros)]
+                       [src (search reqstate)])
+                     (do (println [:skipping-src src :has-no-demand])
+                        [src nil])
+                      )))))))
 
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])
@@ -704,7 +720,8 @@
   "Computes a finalized table of supply records representing the 
    required supply."
   [rs]
-  (->> rs 
+  (->> rs
+       (filter second) ;eliminating nil resultsx
        (mapcat (comp :supply second))       
        (tbl/records->table)
 ;       (tbl/order-fields-by supply-fields)
