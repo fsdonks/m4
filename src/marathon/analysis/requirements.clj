@@ -141,12 +141,13 @@
   ;;we'll basically do the same thing we normally do.
   ;;For now at least...
   ;;use init-context here, but not setting up observers.  
-  (->>  (setup/simstate-from ;;allows us to pass maps in, hackey
-         tbls
-         core/emptysim)  
-        (sim/add-time 1)
-        ;(sim/register-routes obs/default-routes)
-        ))
+  #_(->>  (setup/simstate-from ;;allows us to pass maps in, hackey
+           tbls
+           core/emptysim)  
+          (sim/add-time 1)
+                                        ;(sim/register-routes obs/default-routes)
+          )
+  (a/load-context tbls :init-ctx core/emptysim :observer-routes {}))
 
 ;;Note: we need a higher-order function that wraps
 ;;performing RA for multiple srcs...
@@ -299,10 +300,17 @@
     (->> (for [[src src-groups] (group-by :SRC       xs)]
            (let [compo-xs       (group-by :Component src-groups)]
              {:Type "GhostProportionsAggregateRecord"
-              :Enabled true :SRC src :AC (quantities  (get compo-xs "AC"))
-              :NG (quantities (get compo-xs "NG"))
-              :RC (quantities (get compo-xs "RC"))})))))
+              :Enabled true
+              :SRC src
+              :AC (quantities  (get compo-xs "AC"))
+              :NG (quantities  (get compo-xs "NG"))
+              :RC (quantities  (get compo-xs "RC"))})))))
 
+;;note: this currently bombs if sum is zero...
+;;Now, we filter out zero-summed records.  That means
+;;if the components aren't recognized (ala Ghost) then
+;;we exclude said records.  We won't compute a requirement
+;;for them, which will show up in post processing.
 (defn aggregate-proportions
   "Computes proportional values for each record in xs, by component, 
    where the associated component value is a proportion of the sum of 
@@ -310,13 +318,15 @@
   [xs & {:keys [float?]}]
   (let [divide (if float? (fn [l r] (double (/ l r)))
                / )]
-    (into [] (map (fn [{:keys [AC NG RC] :as r}]
-                    (let [sum (+ AC NG RC)]
-                      (merge r {:AC (divide AC sum)
-                                :NG (divide NG sum)
-                                :RC (divide RC sum)}))))
+    (into [] (comp (map (fn [{:keys [AC NG RC] :as r}]
+                          (let [sum (+ AC NG RC)]
+                            (when (pos? sum) 
+                              (merge r {:AC (divide AC sum)
+                                        :NG (divide NG sum)
+                                        :RC (divide RC sum)})))))
+                   (filter identity))
         xs)))
-                   
+
 (defn aggregate-distributions
   "Given a map of tables, computes the aggregate supply proportions  
    from the input.  User may specify alternate tables to use for the 
@@ -373,11 +383,14 @@
                   r)                
                 )))))
 
+;;note: strange incidence of getting 50 instead of 25 for total on an
+;;initial bisection step...
+;;I think we're misusing :total-ghosts, not sure we even need it.
 ;;So, each time we add supply, we conceptually take a growth step.
 (defn distribute [reqstate src n]
   (let [steps   (or (:steps reqstate) [])
         total   (if (empty? steps) n
-                     (:total-ghosts (last steps)))
+                     (:total #_:total-ghosts (last steps)))
         amounts (compute-amounts reqstate src total)]
     (-> reqstate
         (apply-amounts  amounts) 
@@ -443,12 +456,15 @@
 ;;instead of this approach...
 ;;TODO: Replace event-step-marathon with the appropriate simreducer or whatnot.
 ;;Returns the next requirement state, if we actually have a requirement.
-;;Otherwise nil. 
+;;Otherwise nil.
+;;I think we can just use analysis/load-context...
 (defn calculate-requirement
+  "Computes requirements from an initial set of tables.  Workhorse function for 
+   requirements analysis."
   ([reqstate distance-function]
    (calculate-requirement reqstate distance-function requirements-ctx))
   ([{:keys [tables src steps supply] :as reqstate} distance-function tables->ctx]
-   (-> (assoc tables :SupplyRecords supply)
+   (-> (update reqstate :tables assoc :SupplyRecords supply)
        (tables->ctx)
        (distance-function))))
 
@@ -457,6 +473,27 @@
 (def default-distance (comp history->ghosts a/marathon-stream))
 
 (def prior (atom nil))
+
+;;So, this is actually pretty good for smallish requirements..
+;;Except some structure has ginormous requirements....
+;;There may be a hueristic we can use to switch between
+;;depth-first and bisection.
+
+;;We have degenerate cases where the preponderance of the
+;;growth occurs in compos with high rotational discounts...
+;;so we're really ineffecient.  Combine that with
+;;growth-steps of 1....and we end up with tons of iterations.
+
+;;Can we pre-process the demand to get a better estimate?
+;;That is, determine an initial seed - and pre-distribute
+;;up to said seed - to get us closer to the goal to
+;;begin with?
+
+;;Lower-bound analysis indicates that the peak concurrent
+;;demand is - assuming perfect usage of supply, i.e.
+;;no rotational policy in place, we need at least
+;;enough supply - at a given point in time -
+;;to accmodate the peak demand.
 
 ;;We may be able to fold this into calculate-requirements...
 (defn iterative-convergence
@@ -576,13 +613,17 @@
             rtest (distribute reqs (:src reqstate) mid)
             reqs  (update reqs :iteration inc)]
         (if (= mid lower) ;need a new bound...double upper?
-          (recur reqs lower (* upper 2))
+          (if (@known? upper)
+            (do (println [:converged upper])
+                (distribute reqs (:src reqstate) upper))
+            (do (println [:mid mid := lower :bounding! (* upper 1.5)])
+                (recur reqs lower (* upper 2))))
           (do (swap! known? conj mid)
               (if-let [res (calculate-requirement rtest distance)] ;;naive growth.
                 (do (println [:guessing [lower upper] :at mid :got res])
                     (recur reqs mid upper))
                 (do (println [:guessing [lower upper] :at mid :got 0])
-                    (if (== hw 1)
+                    (if  (== hw 1)
                       (do (println [:converged mid])
                           rtest)
                       (recur reqs lower mid))
@@ -643,21 +684,34 @@
 
 ;;We have an alternate implementation....
 ;;This is our entry point....
+;;Note: If we filter out all demands, i.e. we have an src in
+;;proportions that's not in the demand, and we're left with no
+;;demands, we should skip the src and accumulate a warning or
+;;something.
 (defn tables->requirements
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
-  [tbls & {:keys [dtype search] :or {search iterative-convergence
-                                     dtype  :proportional}}]
+  [tbls & {:keys [dtype search src-filter]
+           :or {search iterative-convergence
+                dtype  :proportional
+                src-filter (fn [_] true)}}]
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
         distros (aggregate-distributions tbls :dtype dtype)]
     (->> distros
+         (filter (fn [[src _]]
+                   (src-filter src)))
          (mapv (fn [[src compo->distros]] ;;for each src, we create a reqstate
                  (let [_          (println [:computing-requirements src])
                        src-filter (a/filter-srcs [src])
                        src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
-                       reqstate   (->requirements-state src-tables ;create the searchstate.
-                                                        src compo->distros)]
-                   [src (search reqstate)]))))))
+                       demands?   (pos? (tbl/record-count (:DemandRecords src-tables)))] 
+                   (if demands?
+                     (let [reqstate   (->requirements-state src-tables ;create the searchstate.
+                                                            src compo->distros)]
+                       [src (search reqstate)])
+                     (do (println [:skipping-src src :has-no-demand])
+                        [src nil])
+                      )))))))
 
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])
@@ -666,7 +720,8 @@
   "Computes a finalized table of supply records representing the 
    required supply."
   [rs]
-  (->> rs 
+  (->> rs
+       (filter second) ;eliminating nil resultsx
        (mapcat (comp :supply second))       
        (tbl/records->table)
 ;       (tbl/order-fields-by supply-fields)
@@ -692,7 +747,14 @@
         (println ["Spit requirements to " outpath]))))
               
 (comment ;testing
-  (def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
+  #_(def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
+  (def ags "Type	Enabled	SRC	AC	NG	RC	Note
+Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge requirement lol.  Great pathological case.")
+  (def agg-table
+    #spork.util.table.column-table{:fields [:Type :Enabled :SRC :AC :NG :RC :Note],
+                                   :columns [["Blah"] [True] ["43429R000"] [13/69] [42/69] [14/69]
+                                             ["This produces a huge requirement lol.  Great pathological case."]]})
+  (def root (hpath "\\Documents\\marv\\vnv\\m4v6\\testdata-v6.xlsx"))
   (require '[marathon.analysis [dummydata :as data]])
   (def dummy-table
     (apply-schema (marathon.schemas/get-schema :SupplyRecords)
@@ -704,6 +766,9 @@
               (tables->requirements (:tables tbls) :search iterative-convergence)))
   (def bsres (requirements->table
               (tables->requirements (:tables tbls) :search bisecting-convergence)))
+  ;;Much better...This ends up testing a huge case.
+  (def bigres (requirements->table
+              (tables->requirements (assoc (:tables tbls) :GhostProportionsAggregate agg-table) :search bisecting-convergence))
   (def s1 {"AC" 1696969696969697/4000000000000000
            "RC" 0N
            "NG" 5757575757575757/10000000000000000})
