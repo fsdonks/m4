@@ -34,8 +34,9 @@
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity] :as store]
             [spork.sim.simcontext :as sim]
-            [spork.ai.core        :as ai]
-            [marathon.ces.basebehavior :as b]
+            [spork.ai [core        :as ai]
+                      [behaviorcontext :as b]]             
+            #_[marathon.ces.basebehavior :as b]
             [marathon.data.store       :as simstate]
             [clojure.core.reducers     :as r]
             [clojure.pprint :as pprint]))
@@ -402,7 +403,7 @@
              ~'spork.ai.core/*debug* true]
      ~@expr))
 (defmacro debug-entity [name & expr]
-  `(binding [~'marathon.ces.basebehavior/*observed* ~name]
+  `(binding [~'spork.ai.behaviorcontext/*observed* ~name]
     ~@expr))
 
 (defmacro ignoring [es & expr]

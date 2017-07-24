@@ -3,7 +3,8 @@
 (ns marathon.ces.behaviortest
   (:require [spork.ai.behavior :refer [beval]]
             [marathon.ces.behavior :as b]
-            [marathon.ces.basebehavior :as base]
+            #_[marathon.ces.basebehavior :as base]
+            [spork.ai.behaviorcontext :as base]
             [marathon.ces.core :as core]
             [spork.entitysystem.store :as store]
             [marathon.ces [testing :as t]

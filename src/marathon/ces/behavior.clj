@@ -3,7 +3,7 @@
 ;;behavior tree approach defined by spork.ai.behavior .
 (ns marathon.ces.behavior
   (:require [spork.ai.core :as ai :refer
-             [deref! fget fassoc  push-message- map->entityctx debug ->msg]]
+             [deref! fget fassoc  push-message- debug ->msg]]
             [spork.ai.behavior 
              :refer [beval
                      success?
@@ -38,10 +38,11 @@
                      val!
                      befn
                      ] :as b]
+            [spork.ai.behaviorcontext :as base :refer :all]
             [marathon.data [fsm :as fsm]
                            [protocols :as protocols]
              ]
-            [marathon.ces [basebehavior :as base :refer :all]
+            [marathon.ces #_[basebehavior :as base :refer :all]
                           [core :as core]
                           [unit :as u]
                           [supply :as supply]
@@ -55,7 +56,8 @@
             [spork.sim.simcontext :as sim]
             [clojure.core.reducers :as r]
             )
-  (:import [marathon.ces.basebehavior behaviorenv]))
+  (:import #_[marathon.ces.basebehavior behaviorenv]
+             [spork.ai.behaviorcontext behaviorenv]))
 
 ;;Overview
 ;;========
@@ -104,7 +106,7 @@
 ;;reference into the simulation context reference, returning the
 ;;simulation context.  The function that encapsulates this functional
 ;;form of entity behavior processing is
-;;marathon.ces.behaviorbase/step-entity .
+;;spork.ai.behaviorcontext/step-entity .
 
 ;;Behavior evaluation occurs using the spork.ai.behavior/beval
 ;;function, which operates similarly to eval but in the domain of
@@ -126,7 +128,7 @@
 ;;function of the IBehaviorTree).
 
 ;;The current implementation assumes that the highest-level of
-;;evaluation - as in marathon.ces.behaviorbase/step-entity!  will
+;;evaluation - as in spork.ai.behaviorcontext/step-entity!  will
 ;;always be successful.  Anything else is an error (even returning
 ;;[:fail ...].
 
@@ -193,12 +195,12 @@
 ;;==================================
 
 ;;Technically, a unit entity update is any application of
-;;marathon.ces.behaviorbase/step-entity!, in which the entity, the
+;;spork.ai.behaviorcontext/step-entity!, in which the entity, the
 ;;simulation context, and a behavior - either a unique behavior
 ;;associated with the entity's :behavior component, or a default
 ;;global behavior defined in
-;;marathon.ces.behaviorbase/default-behavior - are munged into a
-;;marathon.ces.basebehavior/behaviorenv.
+;;spork.ai.behaviorcontext/default-behavior - are munged into a
+;;spork.ai.behaviorcontext/behaviorenv.
 
 ;;Thus, stepping entities requires the simulation context/entity
 ;;store, the entity to update, and a message to send it.  The result
@@ -736,7 +738,7 @@
   
 
 ;;A lot of these behaviors operate on the concept of a blackboard.
-;;The behavior environment, defined in marathon.ces.basebehavior,
+;;The behavior environment, defined in spork.ai.behaviorcontext,
 ;;is a map of lexical bindings that we use to evaluate the consequences
 ;;of a unit's behavior.  Certain behaviors may place or remove things
 ;;from the blackboard to communicate information with other behaviors
