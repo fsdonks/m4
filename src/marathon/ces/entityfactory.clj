@@ -20,7 +20,7 @@
             [marathon.ces.demand :as demand]
             [marathon.ces.unit :as unitsim]
             [marathon.ces.behavior :as b]
-            [marathon.ces.basebehavior :as base]
+            [spork.ai.behaviorcontext :as base]
             [marathon.supply [unitdata :as u]]
             [marathon.ces.supply :as supply]
             [marathon.ces.policy :as plcy]            

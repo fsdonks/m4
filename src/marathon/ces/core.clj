@@ -35,8 +35,8 @@
             [spork.entitysystem.store :refer :all :exclude [entity-name merge-entity] :as store]
             [spork.sim.simcontext :as sim]
             [spork.ai [core        :as ai]
-                      [behaviorcontext :as b]]             
-            #_[marathon.ces.basebehavior :as b]
+                      [behaviorcontext :as b]
+                      [messaging]]             
             [marathon.data.store       :as simstate]
             [clojure.core.reducers     :as r]
             [clojure.pprint :as pprint]))
@@ -316,58 +316,12 @@
   get-time
   add-time])
 
-;;Error Raising Convenience Functions
-;;===================================
-(defmacro watching-error
-  "Acts like a pass-through version of try-catch, 
-   where an automatic generic exception handler - 
-   body - is defined and called prior to simply 
-   re-throwing the original error.  Used for 
-   supplying debugging forensics."
-  [body handler & {:keys [err-symbol]
-                   :or {err-symbol 'e}}]
-  `(try ~body
-        (catch ~'Exception ~err-symbol
-          (do ~handler
-              (throw ~err-symbol)))))
-              
-
-;;probably deprecate in near future.
-(defmacro ->msg
-   ([t msg]              `(sim/->packet ~t :message (:from ~msg) (:to ~msg) ~msg))
-   ([from to t msg]      `(sim/->packet ~t :message ~from ~to ~msg nil))
-   ([from to t msg data] `(sim/->packet ~t :message ~from ~to ~msg ~data)))
-
-;;all we need to do is create  a behavior context,
-;;eval the behavior, and store the entity in the
-;;evaluated context.
-;;need to push this into simcontext...
-;;Message handling is equivalent to stepping the entity
-;;immediately.
-(defn handle-message! [ctx ent msg]  
-  (watching-error
-   (b/step-entity! ctx ent msg)
-   ;if we observe an error, we'll print out handy forensics before throwing.
-   (println [:ERROR
-             :messaging-entity!
-             {:t    (get-time ctx)
-              :name (:name ent)}])))
-
-
-;;Convenience function for abstractly sending messages to
-;;entities and synchronously computing the result.
-;;Double-bang convention is consistent with synchronous
-;;send.  Note: we can easily extend this if we have a
-;;communication channel, then we can do async comms.
-;;We need to make sure we update the entity prior.
-;;Either handle that in the message processing
-;;or handle it elsewhere...
-(defn send!! [e type data ctx]
-  (handle-message! ctx e
-     (->msg (:name e) (:name e)
-            (get-time ctx)
-            type
-            data)))
+;;Messaging convenience functions.
+(util/import-vars 
+ [spork.ai.messaging  
+  ->msg
+  handle-message!
+  send!!])
 
 (defn set-parameter    [s p v] (assoce  s :parameters p v))
 (defn merge-parameters [s ps]  (mergee  s :parameters  ps))
