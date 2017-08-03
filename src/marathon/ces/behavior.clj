@@ -348,6 +348,7 @@
   `(do (debug ~msg)
        ~ctx))
 
+;;migrate.,..
 (defn echo [msg]
   (fn [ctx] (do (debug msg) (success ctx))))
 

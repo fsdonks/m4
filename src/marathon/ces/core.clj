@@ -40,10 +40,39 @@
             [marathon.data.store       :as simstate]
             [clojure.core.reducers     :as r]
             [clojure.pprint :as pprint]))
-    
+
+;;Back-porting to our newly consolidated vars in spork.sim.core
+;;We're importing so that down-stream dependencies will still work
+;;in the refactor.
+(util/import-vars
+ [spork.sim.core
+  emptysim get-time trigger-event deep-dissoc debugsim key= updates
+  defkey next-idx debugging!  *debug* ->msg swap-counter atom?
+  get-count deep-assoc visualize-data debug!  debug-by!  noisy?
+  with-event-filter visible?  empty-string?  now deep-get send!!
+  ignoring set-parameter get-counter debug-listener deep-update
+  events persist-counters *ignored* some-ephemeral entity?
+  inc-counter debug-print times merge-entity debug-entity
+  conj-ephemeral ensure-name msg swap-ephemeral segments tree-view
+  reset-ephemeral debugging as-records merge-updates noisy
+  handle-message!  *verbose* toggle-noisy float-trunc request-update
+  collect add-time merge-parameters current-entity entity-name
+  *event-filter* location-table visualize-store key-tag-maker
+  get-ephemeral update-events]
+  [spork.util.general
+   print-float
+   prune-in
+   ;deep-assoc
+   ;deep-get
+   ;deep-update 
+   ;deep-dissoc
+   ])
+
+(comment ;;alread in sim.core
 ;;This is a lifesaver...
 (def noisy?            (atom true))
 (defn toggle-noisy [] (swap! noisy? (fn [n] (not n))))
+
 ;;From Stuart Sierra's blog post, for catching otherwise "slient" exceptions
 ;;Since we're using multithreading and the like, and we don't want
 ;;exceptions to get silently swallowed
@@ -55,27 +84,9 @@
          (binding [*out* out]
            (println ["Uncaught Exception on" (.getName thread) ex])))))))
 
-;;#Providing Common Access to the State in the Simulation Context
-;;The simulation context contains the simulation state - a large nested map of 
-;;information that is 'typically' partitioned by a particular domain.  
-;;Some systems, like the fill function, need access to multiple domains to
-;;fulfill their purpose.  In response, we maintain an open, broad structure for 
-;;the state portion of the context, but provide a set of common paths or 
-;;mappings to resources embedded in the state.  
-
-;;As a result, subsystems can query resources by predefined paths - a higher 
-;;level of abstraction and clarity - OR they may dip down to low level 
-;;operations on the raw state.  
-
-;;This should maintain a balance between flexibility and clarity.
+)
 
 ;;#Common Paths to Simulation Resources
-
-;;In the previous implementation, the 'state' was implemented as a class, with 
-;;concrete members to access each piece.  We retain that level of commonality
-;;via the paths, but the underlying representation is based on a dynamic map 
-;;structure, so we can still add new data as needed in a flexible manner.
-
 ;;Creates a set of accessors for our simulation state.  This allows us to 
 ;;dissect our nested map of state a bit easier.  Each symbol in the defpath 
 ;;binding returns a function that, given a simulation context, points to the 
@@ -92,23 +103,6 @@
 ;;    supply-tags   [:supplystore :tags]
 ;;    demand-tags   [:demandstore :tags]})
 
-(defmacro defpath [name path]
-  (if (coll? path)        
-    `(do (defn ~(symbol (str "get-" name)) [ctx#]
-           (store/get-ine  ctx# ~path))
-         (defn ~(symbol (str "set-" name)) [ctx# v#]
-           (store/assoc-ine  ctx# ~path v#)))
-    `(do (defn ~(symbol (str "get-" name)) [ctx#]
-           (with-meta (store/get-entity  ctx# ~path)
-             {:ctx ctx#}))
-         (defn ~(symbol (str "set-" name)) [ctx# v#]
-           (store/add-entity  ctx# ~path v#)))))
-
-(defmacro defpaths [& name-paths]
-  (assert (even? (count name-paths)))
-  `(do ~@(for [[name path] (partition 2 name-paths)]
-           `(defpath ~name ~path))))
-                         
 ;;generic get/set path functions.
 (defpaths
   parameters    :parameters
@@ -205,9 +199,10 @@
   (when-let [c (gete ctx nm :Category)]
     (= c "SRM")))
 
+
 ;;Functions for dealing with subsets of supply/demand,
 ;;for defining smaller simulations.
-(defn entity? [x] (instance? spork.entitysystem.store.entity x))
+#_(defn entity? [x] (instance? spork.entitysystem.store.entity x))
 (defn prune-children [prune? parent]
   (reduce-kv (fn [acc p c]
                (if (prune? p)
@@ -299,32 +294,33 @@
 ;;structure.
 
 ;;Imports from spork.util.cellular and simcontext
-(util/import-vars
- [spork.util.inspection
-  tree-view]
- [spork.util.cellular
-  with-cells
-  with-transient-cells
-  swap-cell!
-  reset-cell!
-  ->cell]
- [spork.entitysystem.store
-  entity-name]
- [spork.sim.simcontext ;minimal amount of stuff pulled in..
-  merge-updates
-  merge-entity
-  get-time
-  add-time])
+#_(util/import-vars
+ #_[spork.util.inspection
+    tree-view]
+ #_[spork.util.cellular
+    with-cells
+    with-transient-cells
+    swap-cell!
+    reset-cell!
+    ->cell]
+ #_[spork.entitysystem.store
+    entity-name]
+ #_[spork.sim.simcontext ;minimal amount of stuff pulled in..
+    merge-updates
+    merge-entity
+    get-time
+    add-time])
 
 ;;Messaging convenience functions.
-(util/import-vars 
- [spork.ai.messaging  
-  ->msg
-  handle-message!
-  send!!])
+#_(util/import-vars 
+   [spork.ai.messaging  
+    ->msg
+    handle-message!
+    send!!])
 
-(defn set-parameter    [s p v] (assoce  s :parameters p v))
-(defn merge-parameters [s ps]  (mergee  s :parameters  ps))
+#_(defn set-parameter    [s p v] (assoce  s :parameters p v))
+#_(defn merge-parameters [s ps]  (mergee  s :parameters  ps))
+
 ;;Operations for recording new units in the context.
 ;;We now just merge the new entity into the context; no need to
 ;;mess with the supplystore.  We may also get away with only
@@ -335,14 +331,17 @@
 
 ;;#Empty Simulation Contexts
 ;;altered.
-
-(def emptystate    (simstate/->store)) ;;now using ces
-;;Testing purposes...
-;;temporary testing purposes...
+;;TODO Deprecate?
+(def emptystate
+  "An empty simulation state"
+  (simstate/->store)) ;;now using ces
 
 ;;we could make emptysim dynamic...
-(def emptysim   (sim/add-time 0 (sim/make-context :state emptystate)))
+(def emptysim
+  "A custom simulation context that shadows the spork.sim.core/emptysim"
+  (sim/add-time 0 (sim/make-context :state emptystate)))
 
+(comment ;;moved to spork.sim.core
 ;;A useful debugging context for us.  Prints out everything it sees.
 (def ^:dynamic *debug*   nil)
 (def ^:dynamic *verbose* nil)
@@ -394,14 +393,16 @@
 ;;Note:
 ;;This is the primary simulation context we use from marathon.analysis,
 ;;particularly when we generate marathon-streams or histories.
+)
 
-(def debugsim   
+(def debugsim
+  "A shadowed version of spork.sim.core/debugsim, using our custom simstate."
   (->> (-> (sim/make-debug-context 
             :debug-handler  
             debug-listener)
            (assoc :state emptystate))
        (sim/add-time 0)))
-
+(comment 
 (defn debug! [ctx] 
   (if (contains?  (spork.sim.pure.network/get-event-clients ctx :all)
                   :debugger)
@@ -415,9 +416,11 @@
      (fn [ctx edata _]
        (do (f edata)
            ctx)) [:all] ctx))
+)
+
 
 ;;#State-wide queries...
-;;tbd
+;;TODO Deprecate or move?
 (defn features [ctx & {:keys [where] :or {where identity}}]
   [:simstate
    (for [[nm obj] (seq (:state ctx))
@@ -426,6 +429,7 @@
      )])
 
 ;;TODO# port this over into the API in spork.sim
+(comment ;;ported to spork.sim.core
 (defn events [ctx]   (spork.sim.data/event-seq ctx))
 (defn times [ctx] (map :time (events ctx)))
 (defn segments [ctx] 
@@ -435,7 +439,9 @@
                r]))
        (map first)
        (map (fn [r] (if (:duration r) r (assoc r :duration 1))))))
-             
+
+;;not used.
+;;Ported to spork.util.general
 (defn rvals [kvs]
   (reify
     clojure.lang.Counted 
@@ -447,7 +453,7 @@
       (reduce-kv (fn [acc k v] (f1 acc v)) (f1) kvs))
     (coll-reduce [_ f1 init]
       (reduce-kv (fn [acc k v] (f1 acc v)) init kvs))))
-
+;;Ported to spork.util.general
 (defn rkeys [kvs]
   (reify
     clojure.lang.Counted 
@@ -460,19 +466,26 @@
     (coll-reduce [_ f1 init]
       (reduce-kv (fn [acc k v] (f1 acc k)) init kvs))))
 
+;;Ported to spork.sim.core (probably stick in spork.util.general)
 (defn collect [fs xs]  
   (let [f (if (coll? fs) (apply juxt fs) fs)]
     (map f xs)))
-
+;;Ported to spork.sim.core (probably stick in spork.util.general)
 (defn atom? [x] (instance? clojure.lang.Atom x))
+;;Ported to spork.sim.core (probably stick in spork.util.general)
 (defn float-trunc [n places]
   (let [scale (Math/pow 10 places)]
     (/ (long (* n scale)) scale)))
 
+;;Ported to spork.util.general
 (defn print-float [n]
   (pprint/cl-format nil
-    "~f" n))
+                    "~f" n))
+)
 
+;;Moved to spork.entitystore.ephemeral
+(comment
+  
 ;;Ephemeral Data
 ;;==============
 ;;Typically used for storing append-only daily logging
@@ -544,6 +557,8 @@
     (if (number? cnt) cnt
         (deref cnt))
     0))
+)
+
 
 ;;common counters
 (defn deployment-count [ctx]
@@ -556,6 +571,7 @@
 ;;strings, keywords, are assumed to be field names. A map is built 
 ;;from the fields by getting the corresponding field in an input
 ;;record.  Vector keys are assumed to imply [key function-to-apply]
+;;TODO: Check for dependencies and prune...
 (defn juxtmap [& ks]
   (let [fs  (reduce (fn [acc x]
               (cond (or  (keyword? x)  (string? x) (number? x))   (assoc acc x #(get % x))
@@ -571,7 +587,7 @@
                    {} ks)]
     (fn [x] 
       (reduce-kv (fn [m fld f] (assoc m fld (f x))) {} fs))))
-
+;;TODO: Check for dependencies and prune...
 (defmacro fields [xs]
   (cond (map? xs)
         `(marathon.sim.core/juxtmap ~@(:fields xs))
@@ -579,14 +595,15 @@
         `(juxt ~@xs)))
 
 ;;TODO maybe make this a reducer....dunno yet.
-(defn collectr [fs xs]  
-  (let [f (if (coll? fs) (apply juxt fs) fs)]
-    (reify     
-      clojure.core.protocols/CollReduce
-      (coll-reduce [this f1]   (reduce f1 (f1) (r/map f xs)))        
-      (coll-reduce [_ f1 init] (reduce f1 init (r/map f xs)))
-      clojure.lang.Seqable 
-      (seq [this]  (seq (map f xs))))))
+;;moved to spork.util.general
+#_(defn collectr [fs xs]  
+    (let [f (if (coll? fs) (apply juxt fs) fs)]
+      (reify     
+        clojure.core.protocols/CollReduce
+        (coll-reduce [this f1]   (reduce f1 (f1) (r/map f xs)))        
+        (coll-reduce [_ f1 init] (reduce f1 init (r/map f xs)))
+        clojure.lang.Seqable 
+        (seq [this]  (seq (map f xs))))))
 
 ;;legacy api, just using CES now.
 ;(defmacro entities [ctx] `(entity-seq ~ctx))
@@ -626,7 +643,8 @@
 
 ;;This is going to be a little brittle; should access to updates
 ;;behind a protocol...
-(defn updates [ctx] 
+;;moved to spork.sim.core
+#_(defn updates [ctx] 
   (for [[ks xs] (-> ctx :updater :updates)
         [ts  us]  xs
         [nm pckt] us]
@@ -665,11 +683,15 @@
     (visualize-graph fg)
     (throw (Exception. "No fillgraph to visualize!"))))
 
+;;getting from spork.sim.core
+(comment 
 (defn visualize-store [ctx]
   (tree-view  (store/domains ctx)))
 
+;;getting from spork.sim.core
 (defn visualize-data [ctx]
   (tree-view ctx))
+)
 
 ;;Short queries...we should move these away from being a map for
 ;;entities, and into sets. Set access is actually faster than
@@ -680,8 +702,8 @@
 (defn unit-records    [ctx] (store/get-entities ctx (unit-names ctx)))
 (defn demand-entities [s]   (store/get-domain s :DemandType))
 
-
-(defn current-entity
+;;getting from spork.sim.core now
+#_(defn current-entity
   "Fetch the entity with it's current time interpolated as a :dt component.
    We use this to perform lightweight updates, particularly for computing   
    accumulated stats, so that we can interpolate statistics for things like 
@@ -767,7 +789,8 @@
 ;;refactor them into core services, but for now, relocating them in sim.core 
 ;;allows every system access to them.
 
-(defn now
+;;spork.sim.core
+#_(defn now
   "Consult the system clock for the current time.  Used for logging."
   [] 
   (System/currentTimeMillis))
@@ -882,11 +905,12 @@
 ;;were bubbling up in each of the domain-specific modules.  As a result, we'll 
 ;;just shove them in here.  If we don't, we'll get circular dependencies.
 
-;;We alias the more efficient make-string function, rather than 
+(comment ;;spork.sim.core
+  ;;We alias the more efficient make-string function, rather than 
 ;;using core/str.  This is commonly used for logging messages 
 ;;and other things.  Since there are lots of events flying 
 ;;around with string data, this is a serious bottleneck.
-(def msg gen/make-string)
+(def msg gen/make-string))
 
 ;;Stubs were used during the initial port to toss exceptions if an unimplemented
 ;;or deferred function was called.  
@@ -904,13 +928,13 @@
 
 ;If function results in an empty map, contained within another map, 
 ;removes the entry associated with the empty map.
-(defn prune-in [m ks f & args]
-  (let [updated (apply update-in ks f args)]
-    (if (empty? (get-in updated ks))
-      (let [path   (butlast ks)
-            parent (get-in m path)]            
-        (assoc-in m path (dissoc parent (last ks))))
-      updated)))
+#_(defn prune-in [m ks f & args]
+    (let [updated (apply update-in ks f args)]
+      (if (empty? (get-in updated ks))
+        (let [path   (butlast ks)
+              parent (get-in m path)]            
+          (assoc-in m path (dissoc parent (last ks))))
+        updated)))
 
 ;;Predicate for determining if a map has a key equal to a val.
 (defn key= [k v] (fn [m] (= (get m k) v)))
@@ -957,8 +981,9 @@
                    new-idx))))
 
 
+;;Now comes from spork.sim.core (import declaration at top..)...
 ;;Imported from spork.util.general
-(util/import-vars 
+#_(util/import-vars 
  [spork.util.general  
   deep-assoc
   deep-get
@@ -970,6 +995,7 @@
 ;;for longs
 (def ^:constant +inf+ 9999999)
 
+(comment ;;both are in spork.sim.core now
 ;;#Wrapper around spork.simcontext 
 ;;As it stands, update requests aren't events...
 ;;They're disconnected...since the updater is handling the event
@@ -981,6 +1007,7 @@
        ;(sim/trigger-event request-type requested-by :update-manager 
        ;                   (msg requested-by " requested an " request-type " at " tupdate) nil)
        ))
+
 
 ;;Note/TODO: Probable Performance Enhancement for generating events.
 ;;We call sim/trigger-event quite a bit from the manager libraries.
@@ -1011,6 +1038,8 @@
       (sim/trigger-event ~id ~from ~to  msg# ~data ~ctx)))
   ([e ctx] ;event is already baked.
    (sim/trigger-event ~e ~ctx)))
+
+)
 
 ;;##Developer Notes
 

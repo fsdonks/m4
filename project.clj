@@ -12,6 +12,7 @@
                  [joinr/swingrepl "1.4.2-SNAPSHOT"]
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
+  :source-paths ["src" "../spork/src"]
   :profiles {:uberjar {:aot  [marathon.main]
                        :main  marathon.main
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
