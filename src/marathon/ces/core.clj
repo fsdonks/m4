@@ -35,7 +35,7 @@
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store :refer :all :exclude
              [entity-name merge-entity] :as store]
-            [spork.sim.simcontext :as sim]
+            [spork.sim [simcontext :as sim] [core :as simcore]]
             [spork.ai [core        :as ai]
                       [behaviorcontext :as b]
                       [messaging]]             
@@ -72,13 +72,13 @@
 (util/import-vars
  [spork.sim.core
   ;spork.sim.core
-  noisy?  toggle-noisy location-table entity?  set-parameter
-  merge-parameters emptysim *debug* *verbose* *ignored* debugging
-  debugging!  debug-entity ignoring noisy visible?  *event-filter*
+  noisy?  toggle-noisy entity?  set-parameter merge-parameters
+  emptysim *debug* *verbose* *ignored* debugging debugging!
+  debug-entity ignoring noisy visible?  *event-filter*
   with-event-filter debug-listener debugsim debug!  debug-by!  events
   times segments updates update-events visualize-store visualize-data
-  current-entity now msg key= key-tag-maker defkey ensure-name
-  empty-string?  debug-print as-records next-idx trigger-event
+  current-entity now msg key= key-tag-maker defkey next-idx
+  trigger-event
   ;spork.sim.simcontext 
   add-time request-update get-time merge-updates merge-entity
 
