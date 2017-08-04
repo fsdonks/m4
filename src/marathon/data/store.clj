@@ -5,7 +5,8 @@
     [spork.entitysystem.store :refer :all]
     [spork.sim.core :as sim]
     [spork.util.tags :as tag]
-    [marathon.data [period :as p] [fsm :as fsm]]
+    [marathon.data    [period :as p]]
+    [spork.ai.machine :as fsm]
     ))
 
 ;;Cleanup - WORK IN PROGRESS

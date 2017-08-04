@@ -39,11 +39,10 @@
                      befn
                      ] :as b]
             [spork.ai.behaviorcontext :as base :refer :all]
-            [marathon.data [fsm :as fsm]
-                           [protocols :as protocols]
+            [spork.ai      [machine :as fsm]]
+            [marathon.data [protocols :as protocols]
              ]
-            [marathon.ces #_[basebehavior :as base :refer :all]
-                          [core :as core]
+            [marathon.ces [core :as core]
                           [unit :as u]
                           [supply :as supply]
                           [demand :as d]
@@ -56,8 +55,7 @@
             [spork.sim.simcontext :as sim]
             [clojure.core.reducers :as r]
             )
-  (:import #_[marathon.ces.basebehavior behaviorenv]
-             [spork.ai.behaviorcontext behaviorenv]))
+  (:import [spork.ai.behaviorcontext behaviorenv]))
 
 ;;Overview
 ;;========
@@ -447,7 +445,7 @@
 
 (defn deployed? [e] (identical? (:state e) :deploying))
 (defn should-reset? [t tmax] (>= t tmax))
-(defn spawning?     [^marathon.data.fsm.statedata statedata]
+(defn spawning?     [^spork.ai.machine.statedata statedata]
   (identical?  (.curstate statedata) :spawning))
 
 ;;aux functions will most likely be plentiful.  We specifically

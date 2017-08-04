@@ -1,9 +1,9 @@
 ;;this is pretty cool; we can test entity
 ;;behaviors in isolation here.  very nice.
 (ns marathon.ces.behaviortest
-  (:require [spork.ai.behavior :refer [beval]]
+  (:require [spork.ai [behavior :refer [beval]]
+                      [machine :as fsm]]
             [marathon.ces.behavior :as b]
-            #_[marathon.ces.basebehavior :as base]
             [spork.ai.behaviorcontext :as base]
             [marathon.ces.core :as core]
             [spork.entitysystem.store :as store]
@@ -22,7 +22,7 @@
    :cycles [],
    :policystack [],
    :statedata
-   #marathon.data.fsm.statedata{
+   #spork.ai.machine.statedata{
       :curstate :spawning,
       :prevstate nil,
       :nextstate nil,
