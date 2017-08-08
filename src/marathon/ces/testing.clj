@@ -33,7 +33,8 @@
             [marathon.project [linked :as linked]
              [excel :as xl]]
             [marathon.project :as proj]
-            [spork.sim     [simcontext :as sim]]
+            [spork.sim     [simcontext :as sim]
+                           [history :as history]]
             [spork.entitysystem.store :as store]
             [spork.util [reducers]
                         [tags :as tags]]
@@ -48,6 +49,26 @@
 ;;print it all out kills emacs.
 ;;So we'll restrict our error messages for now...
 
+
+;;Util
+;;====
+;;Added for backwards compatibility, once we
+;;ported older tests to the new spork.sim.history
+;;framework, which used to exist as a prototype
+;;in marathon.analysis.  These functions
+;;just specialize the general functions in
+;;spork.sim.history, and provide a short-hand
+;;for the legacy tests.
+(defn ->history  [tfinal stepf init-ctx]
+  (history/->history tfinal stepf
+                     engine/keep-simulating?
+                     init-ctx))
+(defn ->history-stream  [tfinal stepf init-ctx]
+  (history/->history-stream tfinal stepf
+                            engine/keep-simulating?
+                            init-ctx))
+(defn ->simulator [stepf seed]
+  (history/->simulator stepf engine/keep-simulating? seed))
 
 ;(set! *print-level* 5)
 ;(set! *print-length* 100)
@@ -281,7 +302,7 @@
     ));Clear set of changed demands
                                         ;in demandstore.
 
-(def demand-sim (analysis/->simulator demand-step defaultctx))
+(def demand-sim (->simulator demand-step defaultctx))
 (def the-unit    "4_SRC1_AC")
 
 (defn disable-except [u ctx]
@@ -309,8 +330,8 @@
 
 (def small-ctx (disable-except "2_SRC1_NG" defaultctx))
 
-(def supply-sim (analysis/->simulator supply-step defaultctx))
-(def ss (analysis/->simulator supply-step (disable-except the-unit defaultctx)))
+(def supply-sim (->simulator supply-step defaultctx))
+(def ss (->simulator supply-step (disable-except the-unit defaultctx)))
 
 (defn actives [rctx]
   (into [] (r/map (fn [ctx] [(sim/get-time ctx) (:activedemands (core/get-demandstore ctx))])  rctx)))
@@ -630,23 +651,23 @@
 ;;turning on debugging information for a narrow range of updates...
 (comment 
 (def h91
-  (analysis/->history 91  (debugging-on 91)
+  (->history 91  (debugging-on 91)
              defaultctx))
 
 (def ctx91 (get h91 91))
 (def s91 (core/get-supplystore (get h91 91)))
 
 (def h181
-  (analysis/->history 181  (debugging-on 181)
+  (->history 181  (debugging-on 181)
              ctx91))
 
 ;(binding [unit/*uic* "2_SRC1_NG"]
 (def h271 
-  (analysis/->history 271  (debugging-on (fn [_] true))
+  (->history 271  (debugging-on (fn [_] true))
              (get h181 181)))
 
 (def h1000
-                        (analysis/->history 1000 engine/sim-step
+                        (->history 1000 engine/sim-step
                                    defaultctx))
 
 )
@@ -654,7 +675,7 @@
 ;;just run the simulation for 2521 days and see if we
 ;;don't pop any exceptions.
 (deftest vanilla-sim
-  (let [h2521  (analysis/->history 2521 engine/sim-step 
+  (let [h2521  (->history 2521 engine/sim-step 
                           defaultctx)]
     ))
     
@@ -680,7 +701,7 @@
 
 ;;Should get through 
 (deftest followontest
-  (let [ft  (analysis/->history 1100
+  (let [ft  (->history 1100
                    ;(debugging-on #{451
                    ;               467
                    ;               523
@@ -706,7 +727,7 @@
          (core/solo-src "Binder")))
   
   (def bindertest
-    (->  (analysis/->history 1 ;(debugging-on #{451
+    (->  (->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -718,7 +739,7 @@
          (get 1)))
   
   (def srm1
-    (->  (analysis/->history 1 ;(debugging-on #{451
+    (->  (->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -759,7 +780,7 @@
    (deployment/deploy-unit srm1nofill (store/get-entity srm1nofill "3_Binder_AC") 1  srmd)))
 
 (def simple-srm
-  (analysis/->history 100 ;(debugging-on #{451
+  (->history 100 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -769,7 +790,7 @@
                  simple-step
                  srmctx))
 (def srm1
-  (->  (analysis/->history 1 ;(debugging-on #{451
+  (->  (->history 1 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -781,7 +802,7 @@
        (get 1)))
 
 (def srmtest
-  (analysis/->history 5001 ;(debugging-on #{451
+  (->history 5001 ;(debugging-on #{451
                   ;               467
                    ;              523
                    ;              563
@@ -814,7 +835,7 @@
   (let [srmctx
           (->> (setup/simstate-from  sd/srm-tables core/debugsim)
                (sim/add-time 1))]
-    (analysis/->history-stream tmax
+    (->history-stream tmax
                engine/sim-step
                srmctx)))
 
@@ -848,7 +869,7 @@
         (sim/add-time 1)))
 
 (defn excel-stream [& {:keys [path tmax] :or {path ep tmax 5001}}]
-  (analysis/->history-stream tmax
+  (->history-stream tmax
                       engine/sim-step
                       (excel-ctx path)))
 
@@ -872,12 +893,12 @@
         (sim/register-routes obs/default-routes)))
 
 (defn observer-seq [& {:keys [tmax] :or {tmax 5001}}]
-  (analysis/->history-stream tmax
+  (->history-stream tmax
      engine/sim-step
                              (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")))
 
 (defn observer-hist [& {:keys [tmax] :or {tmax 5001}}]
- (into {} (analysis/->history-stream tmax
+ (into {} (->history-stream tmax
              engine/sim-step
              (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx"))))
 
@@ -888,7 +909,7 @@
 (defn observer-timing [& {:keys [n tmax] :or {n 1 tmax 5001}}]
   (let [ctx (obs-ctx "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")]
     (time (dotimes [i n]
-            (count  (analysis/->history-stream tmax
+            (count  (->history-stream tmax
                                                engine/sim-step                                                
                                                ctx))))))
 

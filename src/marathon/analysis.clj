@@ -8,6 +8,7 @@
                         [io :as io]
                         [stream :as stream]
                         [serial :as ser]
+                        [metaprogramming :as util]
              ]
             [marathon.ces [core     :as core]
                           [engine   :as engine]
@@ -27,8 +28,7 @@
                        [history :as history]]
             [marathon
              [schemas   :as schemas]
-             [observers :as obs]
-             [util      :as util]]))
+             [observers :as obs]]))
 
 (comment
 ;;ripped from clojure.core.reducers temporarily...
@@ -536,7 +536,9 @@
                        audit? false}}]
   (-> (as-context path-or-ctx :table-xform table-xform :audit? audit?
                         :audit-path audit-path :events? events?)
-      (state-stream :tmax tmax :step-function step-function)))
+      (history/state-stream :tmax tmax
+                            :step-function step-function
+                            :keep-simulating? engine/keep-simulating?)))
 
 (defn as-stream
   "Convenience wrapper around marathon-stream to use with downstream
@@ -548,7 +550,7 @@
 (defn day-before-error
   "Given a sequence of frames, returns "
   [xs]
-  (history/day-before-error xs))
+  (history/time-before-error xs))
 
 (defn day-before
   "Given a sequence of frames, returns the closest context prior  
@@ -556,7 +558,7 @@
   [t xs]
   (->> xs
        (as-stream)
-       (history/day-before)))
+       (history/time-before)))
 
 (defn day-of
   "Given a sequence of frames, returns the context prior to 
@@ -564,7 +566,7 @@
   [t xs]
   (->> xs
        (as-stream)
-       (history/day-of)))
+       (history/time-of)))
     
 (defn step-1
   "Take one step from the current context.  Useful for interactive 
