@@ -13,8 +13,7 @@
 (ns marathon.ces.entityfactory
   (:require [marathon        [schemas :as s]]            
             [marathon.data.protocols :as generic] ;rename
-            [marathon.data   [cycle :as cyc] 
-                             [fsm :as fsm]
+            [marathon.data   [cycle :as cyc]                              
                              [store :as store]]
             [marathon.demand [demanddata :as d]]
             [marathon.ces.demand :as demand]
