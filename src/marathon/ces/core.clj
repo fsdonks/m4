@@ -78,7 +78,7 @@
   with-event-filter debug-listener debugsim debug!  debug-by!  events
   times segments updates update-events visualize-store visualize-data
   current-entity now msg key= key-tag-maker defkey next-idx
-  trigger-event
+  trigger-event context?
   ;spork.sim.simcontext 
   add-time request-update get-time merge-updates merge-entity
 

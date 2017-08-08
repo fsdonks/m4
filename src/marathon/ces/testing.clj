@@ -49,8 +49,8 @@
 ;;So we'll restrict our error messages for now...
 
 
-(set! *print-level* 5)
-(set! *print-length* 100)
+;(set! *print-level* 5)
+;(set! *print-length* 100)
 
 ;;Testing for the core Engine Infrastructure
 ;;==========================================

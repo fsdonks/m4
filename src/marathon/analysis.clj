@@ -6,7 +6,9 @@
 (ns marathon.analysis
   (:require [spork.util [table       :as tbl]
                         [io :as io]
-                        [stream :as stream]]
+                        [stream :as stream]
+                        [serial :as ser]
+             ]
             [marathon.ces [core     :as core]
                           [engine   :as engine]
                           [setup    :as setup]
@@ -21,13 +23,14 @@
             [spork.entitysystem
              [diff     :as diff]
              [store :as store]]
-            [spork.sim.simcontext     :as sim]
+            [spork.sim [simcontext     :as sim]
+                       [history :as history]]
             [marathon
              [schemas   :as schemas]
              [observers :as obs]
-             [serial    :as ser]
              [util      :as util]]))
 
+(comment
 ;;ripped from clojure.core.reducers temporarily...
 (defn- do-curried
   [name doc meta args body]
@@ -155,6 +158,8 @@
             (let [{:keys [start end]} (get (meta ctx) :start-end)]
               [[t start  :start]
                [t end :end]])) h))
+
+)
 
 ;;Note: we probably want to vary the resolution
 ;;here, currently we're hardwired to sample
@@ -496,11 +501,11 @@
                           (load-audited-context x :table-xform table-xform :root audit-path
                                                 :events? events?))
                       (load-context x :table-xform table-xform))
-        (util/context? x) x
+        (core/context? x) x
         :else (throw (Exception.
                       (str "Invalid MARATHON sim context " x)))))
 
-(defn marathon-stream
+#_(defn marathon-stream
   "Create a stream of simulation states, indexed by time.
    Optionally, set the maximum simulation time, define transformations
    on the project tables, like src filters, provide a custom step function,
@@ -516,25 +521,34 @@
   (-> (->> ctx
            (->history-stream tmax step-function)
            (end-of-day-history))
-       (merge-meta (meta ctx)))))
+      (merge-meta (meta ctx)))))
 
-(defn as-stream [x]
-  (if (and (try-seq x)
-           (util/context? (second (try-seq (first x)))))
-      x
-      (-> x
-          (as-context)
-          (marathon-stream))))
+(defn marathon-stream ;;refactored.
+  "Create a stream of simulation states, indexed by time.
+   Optionally, set the maximum simulation time, define transformations
+   on the project tables, like src filters, provide a custom step function,
+   and choose to generate auditing information upon initializing the
+   stream."
+  [path-or-ctx & {:keys [tmax table-xform step-function audit? audit-path events?]
+                  :or {tmax 5001
+                       table-xform identity
+                       step-function engine/sim-step
+                       audit? false}}]
+  (-> (as-context path-or-ctx :table-xform table-xform :audit? audit?
+                        :audit-path audit-path :events? events?)
+      (state-stream :tmax tmax :step-function step-function)))
+
+(defn as-stream
+  "Convenience wrapper around marathon-stream to use with downstream
+  consumption of spork.sim.history api, where a stream of [t ctx] is
+  expected.  Allows us to use marathon-stream as our stream producer."
+  [x]
+  (history/as-stream marathon-stream x))
 
 (defn day-before-error
   "Given a sequence of frames, returns "
   [xs]
-  (let [frm (atom nil)]
-    (try (doseq [x xs]
-           (reset! frm x))
-         (catch Exception e
-           (do (println [:error-occurs-in-next-frame])
-               @frm)))))
+  (history/day-before-error xs))
 
 (defn day-before
   "Given a sequence of frames, returns the closest context prior  
@@ -542,10 +556,7 @@
   [t xs]
   (->> xs
        (as-stream)
-       (take-while (fn [[tf ctx]]
-                     (< tf t)))
-       (last)
-       (second)))
+       (history/day-before)))
 
 (defn day-of
   "Given a sequence of frames, returns the context prior to 
@@ -553,8 +564,7 @@
   [t xs]
   (->> xs
        (as-stream)
-       (day-before t)
-       (sim/advance-time)))
+       (history/day-of)))
     
 (defn step-1
   "Take one step from the current context.  Useful for interactive 
@@ -597,7 +607,8 @@
 (defn frame-at
   "Fetch the simulation frame at or nearest (after) time t from a 
    sequence of [t ctx] frames xs."
-  [t xs] (some (fn [[tc ctx]] (when (>= tc t) ctx)) (as-stream xs))) 
+  [t xs] (some (fn [[tc ctx]] (when (>= tc t) ctx))
+               (as-stream xs)))
 
 ;;Entity Tracing and Debugging
 ;;============================
@@ -615,26 +626,8 @@
    to determine if frames should be dropped."
   [ctx id & {:keys [sample?] :or {sample?
                                   (fn [x] true)}}]
-  (let [tfinal (when (and (coll? sample?)
-                          (every? number? sample?))
-                 (reduce max sample?))
-        sample? (if tfinal (let [time?  (set sample?)]
-                             (fn [ctx]
-                               (time? (:t ctx))))
-                    sample?)]
-  (->>  (as-context  ctx)
-        (marathon-stream)
-        ;;(raw-frames) elided for now.
-        (map (fn [[t ctx :as f]]
-               (let [;ctx (:ctx f)
-                     ;t   (:t   f)
-                     e   (store/get-entity ctx id)]
-                 (assoc e :t t))))
-        (take-while (if tfinal (fn [f] (<= (:t f) tfinal))
-                        (fn [x] true)))
-        (filter #(and (sample? %)
-                      (== (:last-update %) (:t %))))
-        )))
+  (-> (as-stream ctx)
+      (history/discrete-entity-history :sample? sample?)))
 
 (def unit-entity-summary
   (juxt :t :locationname :positionpolicy
@@ -646,146 +639,11 @@
    behavior as it changes and see fine-grained event and 
    behavior messages about the entity, as well as its 
    discrete state changes."
-  [ctx e & {:keys [debug? sample?]
-                             :or {debug? true sample? (fn [_] true)}}] 
-  (let [eh (if debug?
-             (core/debug-entity e
-                (doall (discrete-entity-history ctx e :sample? sample?)))
-             (doall (discrete-entity-history ctx e :sample? sample?)))]
-    (println [:<<<<<<<<<<<<<<<<TRACE>>>>>>>>>>>>>])
-    (doseq [x (map unit-entity-summary eh)]
-      (println x))))
-
-;;Another useful feature...
-;;We'd like to optionally audit our project, when we create a stream and
-;;initialize it.
-;;We can do this by hooking into the table-xforms, since this allows us
-;;to audit.
-
-;;serializing all the snapshots is untenable...
-;;can we compute diffs?
-;;All we really care about, as we traverse forward,
-;;is information regarding who changed...
-;;So if any entity was touched or updated during the
-;;t, the it'll show...
-;;In theory, any last-updates to entities
-;;will show up....so that limits our diffs
-;;to the entities with last-update components..
-;;From there, we can just compare them with their previous selves...
-
-;;The goal here is to easily serialize our entity database...
-;;Note...we have some options for how we do this...
-;;We could do an initial state + diffs (similar to
-;;git...) and save our stuff that way.  For now we
-;;have a stream of state snapshots which have internal
-;;references via persistent structures....so...
-;;we should? be able to persist our stuff efficiently.
-;;We're going to stream this rather than do it all in
-;;memory...we can also add a diff buffer that can
-;;be serialized at the end of the day...
-;;So, anytime an entity is modified (via gete adde
-;;assoce, etc.), the diff buffer (or dirty flag)
-;;gets mutated in the db.  Then we compare dirty
-;;entities with their previous versions to see
-;;what the differences are...seems plausible...
-;;the brute-force approach is to just use
-;;hashing to compare...assuming we have hash
-;;equality, we just hash-compare the stores, and
-;;then the components in the stores, and then
-;;the entities...
-;;probably makes more sense to diff the components...
-;;structural diffing is a pretty powerful way to
-;;compute deltas...and laid back.  It "would" be
-;;nice if we'd cached the values though.
-(defn diff-stores [l r]
-  (let [lcomps (-> l :state :store :domain-map)
-        rcomps (-> r :state :stote :domain-map)]
-    ;;many components will be the same..
-    ;;man, we can actually save time if the hash hasn't been computed yet...
-    (if (identical? lcomps rcomps) nil
-        (reduce-kv (fn [acc lk lv]
-                     (if-let [rv (get rcomps lk)]
-                       (if (not (identical? lv rv))
-                         (conj acc lk) acc) (conj acc lk))) [] lcomps))))
-
-;;since components are maps...we can recursively diff to see which
-;;entities changed.
-
-;;If we constrain all access to go through assoce, etc,
-;;then we can get away with diffing...
-(defn diff-store [l r]
-  (let [le (:store (sim/get-state l))
-        re (:store (sim/get-state r))]
-    (if (identical? (:domain-map le) (:domain-amp re))
-      nil
-      (diff/entity-diff le re))))
-
-;;we might have a memory leak here if we're force the first and traversing the
-;;rest of the history...
-(defn patch-history [h]
-  {:init    (first h)
-   :patches (for [[[t1 l] [t2 r]] (partition 2 1 h)]
-              [t2 (diff/entity-diffs->patch (diff-store l r))])})
-
-(defn     write-history  [h path]  (ser/freeze-to (patch-history h)  path))
-(defn     write-history! [h path]  (ser/freeze-to! (patch-history h) path))
-
-(defmacro with-print [{:keys [level length]} & body]
-  `(let [before-level# ~'*print-level*
-         before-length# ~'*print-length*
-         lvl#    ~level
-         length# ~length]
-    (do (set! ~'*print-level*  lvl#)
-        (set! ~'*print-length* length#)
-        ~@body
-        (set! ~'*print-level*  before-level#)
-        (set! ~'*print-length* before-length#))))
-
-;;textual, printed version
-;;if we use pprint, we get killed here.
-(defn print-history [h path]
-  (with-print {}
-    (with-open [writer (clojure.java.io/writer path)]
-      (binding [*out* writer]
-        (let [{:keys [init patches]} (patch-history h)]
-          (println "{:init")
-          (pr init)
-          (println " :patches")
-          (doseq [[t patches] patches]
-            (println "[" t)
-            (pr patches)
-            (println "]"))
-          (println "}"))))))
-
-(defn print-patches [h path]
-  (with-print {}
-    (with-open [writer (clojure.java.io/writer path)]
-      (binding [*out* writer]
-        (let [{:keys [init patches]} (patch-history h)]
-          (println "{:patches ")
-          (doseq [[t patches] patches]
-            (println "[" t)
-            (pr patches)
-            (println "]"))
-          (println "}"))))))
-
-;;hmmm...can we actually slurp this up?  It's 28 mb...so maybe...
-;;ahh...this poorly named...
-(defn string->history [path]
-  (println [:warning 'read-history "you're using read-string, vs. clojure.edn/read-string"])
-  (read-string (slurp path)))
-
-(defn read-history! [path]
-  (let [{:keys [init patches]} (ser/thaw-from path)
-        store  (atom (second init))]
-    (into [init]
-          (map (fn [[t patch]]
-                 (let [prev @store
-                       nxt  (diff/patch->store prev patch)
-                       _    (reset! store nxt)]
-                   [t nxt]))
-               patches)
-          )))
+  [ctx e & {:keys [debug? sample? trace]
+            :or {debug? true sample? (fn [_] true) trace unit-entity-summary}}]
+  (-> (as-stream ctx)
+      (history/entity-trace  e
+          :debug? debug? :sample? sample? :trace trace)))
 
 ;;hmm...
 
@@ -820,7 +678,7 @@
 (defmethod spit-output :history [t h hpath]
   (do  (println [:spitting-history hpath])
        (println [:fix-memory-leak-when-serializing!])
-       (write-history h hpath)))
+       (history/write-history h hpath)))
 
 (defmethod spit-output :location-samples [t h lpath]
   (do (println [:spitting-location-samples lpath])
@@ -843,9 +701,6 @@
   (do (println [:spitting-demandtrends dtrendpath])
       (tbl/records->file (->demand-trends h) dtrendpath
                          :field-order schemas/demandtrend-fields)))
-
-
-
 
 ;;default frame emission does nothing.
 (defmethod emit-frame :default [t frm] nil)
@@ -969,30 +824,12 @@
         (do (println [:day (first frm)])
             (grab-frames! frm))))))
 
-;;spits a log of all the events passing through.
-(defn spit-log
-  ([h root nm]
-   (println [:logging-to (str root nm)])
-   (with-open [wrtr (clojure.java.io/writer (str root nm))]
-     (binding [*out* wrtr]
-       (core/debugging
-        (doseq [hd h]
-          )
-        ))))
-  ([h root] (spit-log h root "events.txt")))
-
-;;spits a verbose log of all the events and
-;;behavioral updates that are performed...
-(defn spit-log!
-  ([h root nm]
-   (println [:logging-to (str root nm)])
-   (with-open [wrtr (clojure.java.io/writer (str root nm))]
-     (binding [*out* wrtr]
-       (core/debugging!
-        (doseq [hd h]
-          )
-        ))))
-  ([h root] (spit-log! h root "events.txt")))
+;;note:
+;;spit-log! and spit-log moved to spork.sim.history
+(util/import-vars 
+   [spork.sim.history
+    spit-log
+    spit-log!])
 
 
 (comment
