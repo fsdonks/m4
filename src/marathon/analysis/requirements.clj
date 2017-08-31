@@ -208,6 +208,12 @@
      :steps     []
      :iteration 0}))
 
+(defn has-demand? [src dtbl]
+  (->> dtbl
+       (tbl/table->flyrecords)
+       (filter :Enabled)
+       (some #(= (:SRC %) src))))
+
 ;;interesting notes on machine precision and clojure's numeric tower.
 ;;(def rats '(1696969696969697/4000000000000000 0N 5757575757575757/10000000000000000))
 ;;(reduce + rats) => 19999999999999999/20000000000000000 
@@ -603,7 +609,7 @@
   [reqstate & {:keys [distance init-lower init-upper]
                :or   {distance default-distance
                       init-lower 0
-                      init-upper 50}}]
+                      init-upper 10}}]
   (let [known? (atom #{})]
     (loop [reqs      reqstate
            lower init-lower
@@ -704,7 +710,7 @@
                  (let [_          (println [:computing-requirements src])
                        src-filter (a/filter-srcs [src])
                        src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
-                       demands?   (pos? (tbl/record-count (:DemandRecords src-tables)))] 
+                       demands?   (has-demand? src (:DemandRecords src-tables)) #_(pos? (tbl/record-count (:DemandRecords src-tables)))] 
                    (if demands?
                      (let [reqstate   (->requirements-state src-tables ;create the searchstate.
                                                             src compo->distros)]
@@ -768,7 +774,7 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
               (tables->requirements (:tables tbls) :search bisecting-convergence)))
   ;;Much better...This ends up testing a huge case.
   (def bigres (requirements->table
-              (tables->requirements (assoc (:tables tbls) :GhostProportionsAggregate agg-table) :search bisecting-convergence))
+              (tables->requirements (assoc (:tables tbls) :GhostProportionsAggregate agg-table) :search bisecting-convergence)))
   (def s1 {"AC" 1696969696969697/4000000000000000
            "RC" 0N
            "NG" 5757575757575757/10000000000000000})

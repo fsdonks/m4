@@ -759,6 +759,27 @@
   (or (== x +inf+ )
       (>= x (* 365 100))))
 
+(defn compute-proportion
+  "Given a current cycletime, a cyclelength we're projecting from, and
+  a cyclelength we're projecting to, computes the proportion of the
+  normalized projected cycle length - the cycle propotion.  When
+  dealing with effectively infinite policies, we avoid projecting onto
+  finite policies with ~0 propotion for everything by computing the
+  cycle proportion based on the remainder of the current cycletime
+  relative to the target cyclelength.  Otherwise, we compute a simple
+  coordinate based on the proportion of ct : clfrom."
+  [ct clfrom clto]
+  (let [finf  (effectively-infinite? clfrom)
+        tinf  (effectively-infinite? clto)]
+    (cond  (or  (and (not finf) (not tinf))
+                (and finf tinf)) ;policy relative
+             (core/float-trunc (/ ct  clfrom) 6)
+           tinf ;relative to infinite policy...
+             (core/float-trunc (/ ct  clto) 6)
+           :else
+             (-> (rem ct clto) ;chop
+                 (/  clto) ;normalize
+                 (core/float-trunc  6)))))
 
 ;;note-we have a wait time in the context, under :wait-time
 ;;updates an entity after a specified duration, relative to the 
@@ -1761,8 +1782,26 @@
                                          :cycletime cycletimeA
                                          :unit (:name unit)
                                          :t tupdate}))
-                CycleProportionA  (core/float-trunc (/ cycletimeA  (protocols/cycle-length current-policy))
-                                                    6)
+                ;;We run into a problem here: when changing from an infinite policy to
+                ;;a finite policy, despite units having a substational amount of cycletime - exceeding
+                ;;the cyclelength of the new policy in fact - our proportion is computed as a function
+                ;;of the time in the current cycle.  It works out that any unit transitioning
+                ;;will get shucked into a 0.0 truncated cycle proportion coordinate....
+                ;;The net effect is that, regardless of how much supply we get, this artificially
+                ;;"resets" our surplus supply by shoving them all back to the start of the next cycle..
+                ;;typically reset and unavailable status.  For certain inputs, we can never effectively
+                ;;grow supply, which wrecks requirements analysis.
+                ;;The solution is to detect the edge-case where we have an effectively infinite policy,
+                ;;and change the proportion computation.  A fair proposal is to take the current cycle
+                ;;time, and quot it by the cycle length of the target policy.  that becomes the input
+                ;;for our cycleproportion calculation....We should still get a useful distribution
+                ;;of cycletimes in the new policy without resorting to randomness, while crediting the
+                ;;units that have a longer time in cycle...
+                CycleProportionA  #_(core/float-trunc (/ cycletimeA  (protocols/cycle-length current-policy))
+                                                      6)
+                (compute-proportion cycletimeA
+                                    (protocols/cycle-length current-policy)
+                                    (protocols/cycle-length next-policy))
                 ;;'TOM change 23 April 2012 -> No longer allow units that are De-mobilizing to enter into available pool.
                 ]
             (->or [(->and [(->pred (fn [_] (can-change-policy? CycleProportionA PositionA)))

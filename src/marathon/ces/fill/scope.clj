@@ -14,9 +14,12 @@
 ;;where vals assocd to :supply are islands of supply that cannot be
 ;;used to fill demand, and vals assocd to :demand are elements of
 ;;supply that cannot be used to fill demand.  We know an element is an
-;;island if it has no 
+;;island if it has no
+;;note: we may not have demand or supply, hence no :filled or :unfilled nodes..
+;;To work around this, we exclude non-existing nodes prior to detecting islands now.
 (defn find-islands [g]
-  (let [stripped       (graph/drop-nodes g [:filled :unfilled])      
+  (let [stripped       (graph/drop-nodes g
+                         (filter #(graph/has-node? g %) [:filled :unfilled]))
         supplies       (get-supplies g)
         demands        (get-demands g)
         isle-type      (fn [nd] (cond (supplies nd) :supply
