@@ -1,6 +1,6 @@
 ;;Requirements Analysis implementation.
 (ns marathon.analysis.requirements
-  (:require [spork.util [record :as r] [table :as tbl] [io :as io]]
+  (:require [spork.util [record :as r] [table :as tbl] [io :as io] [temporal :as temporal]]
             [spork.sim [simcontext :as sim]]
             [spork.entitysystem [store :as store]]
             [clojure [pprint :as pprint]]
@@ -64,6 +64,33 @@
 ;;    that have identical values for the field."
 ;;   [tbls & {:keys [field tables]}]
 ;;   (let [[base variable]
+
+;;Profiling for informing lower bounds and hueristics...
+;;======================================================
+(defn daily-totals [actives]
+  (reduce (fn daily [acc {:keys [SRC Quantity]}]
+            (update acc SRC #(+ (or % 0) Quantity)))
+          {} actives))
+(defn merge-by-max [l r]
+  (reduce-kv (fn total [totals src q]
+               (let [qprev (get totals src 0)]
+                 (if-not (== q qprev)
+                   (assoc totals src (max q qprev))
+                   totals)))
+             l r))
+
+(defn demands->src-peaks
+  "Given a sequence of DemandRecords, recs, computes a map of 
+   the peak concurrent demand for each SRC, keyed by {SRC Peak}.
+   This is intended to be used as a lower-bound for requirements 
+   analysis."
+  [recs]
+  (->> (-> (filter  :Enabled recs)      
+           (temporal/activity-profile  :start-func :StartDay))
+       (reduce (fn [totals [t {:keys [actives]}]]
+                 (let [tm (daily-totals actives)
+                       _ (assert (every? number? (vals tm)) (str ["Should be numeric!" [t tm]]))]
+                   (merge-by-max totals tm))) {})))
 
 ;;Data munging and records
 ;;========================
@@ -175,7 +202,8 @@
                             :when (pos? (compo-distros compo))]
                         (->supply-record src compo 0))]
     (do (println [:computing-initial-supply])    
-        (concat (tbl/table-records supply-table)
+        (concat (map (fn [r] (if-not (:Enabled r)
+                               (assoc r :Quantity 0 :Enabled true) r)) (tbl/table-records supply-table))
                 new-records))))
 
 (defn zero-supply
@@ -395,8 +423,8 @@
 ;;So, each time we add supply, we conceptually take a growth step.
 (defn distribute [reqstate src n]
   (let [steps   (or (:steps reqstate) [])
-        total   (if (empty? steps) n
-                     (:total #_:total-ghosts (last steps)))
+        total   n #_(if (empty? steps) n
+                    (:total #_:total-ghosts (last steps)))
         amounts (compute-amounts reqstate src total)]
     (-> reqstate
         (apply-amounts  amounts) 
@@ -576,6 +604,28 @@
           (setup/default-supply :records (:SupplyRecords tbls))))))
 
 
+(defn find-bounds
+  "Bounding hueristic. Using an initial guess at a lower and an upper bound, 
+   tries to bracket in an on empirical lower and upper bound, returning 
+   a vector of [lower upper]."
+  [reqstate & {:keys [distance init-lower init-upper]
+               :or   {distance default-distance
+                      init-lower 1
+                      init-upper 10}}]
+  (loop [reqs      reqstate
+         lower     init-lower
+         upper     init-upper]
+    (let [reqs  (-> reqs
+                    (distribute (:src reqs) upper)
+                    (update  :iteration inc))]
+      (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
+        (do (println [:guessing-bounds [lower upper] :at upper :got res])
+            (recur reqs (inc upper)  (* 2 upper)))
+        (do (println [:guessing-bounds [lower upper] :at upper :got 0])
+            (let [res  [lower  upper]
+                  _    (println [:bounded! res])]
+                res))))))
+
 (defn iterative-convergence-shared
   "Given a requirements-state, searches the force structure 
    space by varying the supply of the requirements, until 
@@ -605,35 +655,46 @@
 ;;runs, which hurts performance.  Doing more volume of
 ;;work than IC.  IC makes many small jumps.  BS
 ;;makes some large jumps, and some small jumps.
+
+;;We need to modify this to figure out the bounds first.
+;;We're wasting time on needless bisecting, when we haven't
+;;established.
 (defn bisecting-convergence
   [reqstate & {:keys [distance init-lower init-upper]
                :or   {distance default-distance
                       init-lower 0
                       init-upper 10}}]
-  (let [known? (atom #{})]
+  (let [known?     (atom {})
+        converge   (fn [dir reqs n]
+                     (do (println [:converged dir n])
+                         (distribute reqs (:src reqstate) n)))
+        amount     (fn amt [reqs n]
+                     ;(println [:amount n])
+                     (get-or @known? n
+                        (let [res (or (calculate-requirement reqs distance) 0)
+                              _   (swap! known? assoc n res)]
+                          res)))
+        _ (assert (not= init-lower init-upper) "need a valid interval!")]
     (loop [reqs      reqstate
            lower init-lower
            upper init-upper]
       (let [hw    (quot (- upper lower) 2)
-            mid   (+ lower hw)         
-            rtest (distribute reqs (:src reqstate) mid)
-            reqs  (update reqs :iteration inc)]
-        (if (= mid lower) ;need a new bound...double upper?
-          (if (@known? upper)
-            (do (println [:converged upper])
-                (distribute reqs (:src reqstate) upper))
-            (do (println [:mid mid := lower :bounding! (* upper 1.5)])
-                (recur reqs lower (* upper 2))))
-          (do (swap! known? conj mid)
-              (if-let [res (calculate-requirement rtest distance)] ;;naive growth.
-                (do (println [:guessing [lower upper] :at mid :got res])
-                    (recur reqs mid upper))
-                (do (println [:guessing [lower upper] :at mid :got 0])
-                    (if  (== hw 1)
-                      (do (println [:converged mid])
-                          rtest)
-                      (recur reqs lower mid))
-                ))))))))
+            mid   (+ lower hw)]
+        (if (= mid lower)
+          (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
+            [true  true] (if (pos? lower) (converge :left  reqs lower)
+                             (converge :right  reqs lower))
+              [false true] (converge :right reqs upper)              
+              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)]))))
+          (let [reqs (update reqs :iteration inc)
+                rtest  (-> reqstate
+                           (distribute (:src reqstate) mid)
+                           )
+                res (amount rtest mid)
+                _   (println [:guessing [lower upper] :at mid :got res])]
+            (if (pos? res)
+              (recur reqs mid upper)
+              (recur reqs lower mid))))))))
   
 ;;The iterative convergence function is a fixed-point function that implements the algorithm described in the declarations section.
 ;;During iterative convergence, we don;;t care about intermediate results, only the final fixed-point calculation.
@@ -698,26 +759,32 @@
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
   [tbls & {:keys [dtype search src-filter]
-           :or {search iterative-convergence
+           :or {search bisecting-convergence ;iterative-convergence
                 dtype  :proportional
                 src-filter (fn [_] true)}}]
   (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
-        distros (aggregate-distributions tbls :dtype dtype)]
+        distros (into {} (->> (aggregate-distributions tbls :dtype dtype)
+                              (filter (fn [[src _]]
+                                        (src-filter src)))))
+        peaks   (->>  (:DemandRecords tbls)
+                      (tbl/table-records)
+                      (filter #(and (:Enabled %)
+                                    (distros (:SRC %))))
+                      (demands->src-peaks))
+        n       (atom (count peaks))]
     (->> distros
-         (filter (fn [[src _]]
-                   (src-filter src)))
-         (mapv (fn [[src compo->distros]] ;;for each src, we create a reqstate
-                 (let [_          (println [:computing-requirements src])
-                       src-filter (a/filter-srcs [src])
-                       src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords
-                       demands?   (has-demand? src (:DemandRecords src-tables)) #_(pos? (tbl/record-count (:DemandRecords src-tables)))] 
-                   (if demands?
-                     (let [reqstate   (->requirements-state src-tables ;create the searchstate.
-                                                            src compo->distros)]
-                       [src (search reqstate)])
-                     (do (println [:skipping-src src :has-no-demand])
-                        [src nil])
-                      )))))))
+         (map (fn [[src compo->distros]] ;;for each src, we create a reqstate
+                 (if-let [peak (peaks src)]
+                   (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
+                         src-filter (a/filter-srcs [src])
+                         src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords                                       
+                         reqstate   (->requirements-state src-tables ;create the searchstate.
+                                                          src compo->distros)
+                         [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
+                     [src (search reqstate :init-lower lower :init-upper upper)])
+                   (do (println [:skipping-src src :has-no-demand])
+                       [src nil])
+                   ))))))
 
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])
@@ -759,6 +826,10 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
   (def agg-table
     #spork.util.table.column-table{:fields [:Type :Enabled :SRC :AC :NG :RC :Note],
                                    :columns [["Blah"] [True] ["43429R000"] [13/69] [42/69] [14/69]
+                                             ["This produces a huge requirement lol.  Great pathological case."]]})
+  (def agg-table
+    #spork.util.table.column-table{:fields [:Type :Enabled :SRC :AC :NG :RC :Note],
+                                   :columns [["Blah"] [True] ["10560RN00"] [1] [0] [0]
                                              ["This produces a huge requirement lol.  Great pathological case."]]})
   (def root (hpath "\\Documents\\marv\\vnv\\m4v6\\testdata-v6.xlsx"))
   (require '[marathon.analysis [dummydata :as data]])

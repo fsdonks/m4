@@ -20,8 +20,8 @@
 (defn find-islands [g]
   (let [stripped       (graph/drop-nodes g
                          (filter #(graph/has-node? g %) [:filled :unfilled]))
-        supplies       (get-supplies g)
-        demands        (get-demands g)
+        supplies       (or (get-supplies g) {})
+        demands        (or (get-demands g)  {})
         isle-type      (fn [nd] (cond (supplies nd) :supply
                                      (demands nd) :demand
                                      :else (throw (Exception.
