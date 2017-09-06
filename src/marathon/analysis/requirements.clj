@@ -8,7 +8,8 @@
                           [engine :as engine]
                           [setup :as setup]
                           [demand :as demand]]
-            [marathon [analysis :as a] [observers :as obs]]))
+            [marathon [analysis :as a] [observers :as obs]]
+            [clojure.core [async :as async]]))
 
 ;;Utility functions
 ;;=================
@@ -19,6 +20,8 @@
   `(if-let [res# (get ~m ~k)]
      res#
      ~@else))
+
+(defn procs [] (.. Runtime getRuntime  availableProcessors))
 
 ;;this isn't a huge deal; multiplying by ratios returns bigints...
 (defn distribute-rationally [n xs] (mapv (fn [r] (* n r)) xs))
@@ -91,6 +94,13 @@
                  (let [tm (daily-totals actives)
                        _ (assert (every? number? (vals tm)) (str ["Should be numeric!" [t tm]]))]
                    (merge-by-max totals tm))) {})))
+
+;;Question: Are there populations that are "duplicate", i.e. they
+;;have the same aggregate distribution and demand records?
+;;If so....we should be able to reduce the required number of runs...
+;;  If we break down the demands by src, and have a way to get a
+;;  canonical hash of the demand signal by [start,duration, quantity]
+;;  We have the possibility tha multiple demands are identical...
 
 ;;Data munging and records
 ;;========================
@@ -417,6 +427,8 @@
                   r)                
                 )))))
 
+
+
 ;;note: strange incidence of getting 50 instead of 25 for total on an
 ;;initial bisection step...
 ;;I think we're misusing :total-ghosts, not sure we even need it.
@@ -660,16 +672,18 @@
 ;;We're wasting time on needless bisecting, when we haven't
 ;;established.
 (defn bisecting-convergence
-  [reqstate & {:keys [distance init-lower init-upper]
+  [reqstate & {:keys [distance init-lower init-upper log]
                :or   {distance default-distance
                       init-lower 0
-                      init-upper 10}}]
+                      init-upper 10
+                      log println
+                     }}]
   (let [known?     (atom {})
         converge   (fn [dir reqs n]
-                     (do (println [:converged dir n])
+                     (do (log [:converged dir n])
                          (distribute reqs (:src reqstate) n)))
         amount     (fn amt [reqs n]
-                     ;(println [:amount n])
+                     ;(log [:amount n])
                      (get-or @known? n
                         (let [res (or (calculate-requirement reqs distance) 0)
                               _   (swap! known? assoc n res)]
@@ -691,7 +705,7 @@
                            (distribute (:src reqstate) mid)
                            )
                 res (amount rtest mid)
-                _   (println [:guessing [lower upper] :at mid :got res])]
+                _   (log [:guessing [lower upper] :at mid :got res])]
             (if (pos? res)
               (recur reqs mid upper)
               (recur reqs lower mid))))))))
@@ -786,6 +800,107 @@
                        [src nil])
                    ))))))
 
+
+(defn requirements-by
+  "Helper function for our parallel requirements computation."
+  [tbls peaks search n]
+  (fn [[src compo->distros]]
+    ;;for each src, we create a reqstate
+    (if-let [peak (peaks src)]
+      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
+            src-filter (a/filter-srcs [src])
+            src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords                                       
+            reqstate   (->requirements-state src-tables ;create the searchstate.
+                                             src compo->distros)
+            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
+        [src (search reqstate :init-lower lower :init-upper upper :log (fn [msg]
+                                                                         (println (str [src msg]))))])
+      (do (println [:skipping-src src :has-no-demand])
+          [src nil]))))
+
+;;https://gist.github.com/stathissideris/8659706
+(defn seq!! 
+   "Returns a (blocking!) lazy sequence read from a channel." 
+   [c] 
+   (lazy-seq 
+    (when-let [v (async/<!! c)] 
+      (cons v (seq!! c)))))
+
+;;Trying to avoid the crap that's happening
+;;with pipeline...we get stalled out on
+;;long-running tasks, when we could still be making
+;;progress...
+(defn producer->consumer!! [n out f jobs]
+  (let [;jobs    (async/chan 10)
+        done?   (atom 0)
+        res     (async/chan n)        
+        workers (dotimes [i n]
+                  (async/thread
+                    (loop []
+                      (if-let [nxt (async/<!! jobs)]
+                        (let [res (f nxt)
+                              _   (async/>!! out res)]
+                          (recur))
+                        (let [ndone (swap! done? inc)]
+                          (when (= ndone n)
+                            (do (async/close! out)
+                                (async/>!! res true))))))))]
+    res))
+
+(defn producer->consumer [n out f jobs]
+  (let [;jobs    (async/chan 10)
+        done?   (atom 0)
+        res     (async/chan n)        
+        workers (dotimes [i n]
+                  (async/go
+                    (loop []
+                      (if-let [nxt (async/<! jobs)]
+                        (let [res (f nxt)
+                              _   (async/>! out res)]
+                          (recur))
+                        (let [ndone (swap! done? inc)]
+                          (when (= ndone n)
+                            (do (async/close! out)
+                                (async/>! res true))))))))]
+    res))
+    
+;;using core.async to pipeline this dude...
+(defn tables->requirements-async
+  "Given a database of distributions, and the required tables for a marathon 
+   project, computes a sequence of [src {compo requirement}] for each src."
+  [tbls & {:keys [dtype search src-filter]
+           :or {search bisecting-convergence ;iterative-convergence
+                dtype  :proportional
+                src-filter (fn [_] true)}}]
+  (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
+        distros (into {} (->> (aggregate-distributions tbls :dtype dtype)
+                              (filter (fn [[src _]]
+                                        (src-filter src)))))
+        peaks   (->>  (:DemandRecords tbls)
+                      (tbl/table-records)
+                      (filter #(and (:Enabled %)
+                                    (distros (:SRC %))))
+                      (demands->src-peaks))
+        n       (atom (count peaks))
+        src-distros->requirements  (requirements-by tbls peaks search n)
+        out     (async/chan 10)
+        in      (async/chan 10)
+        _       (async/onto-chan in (seq distros))
+        pipe    #_(async/pipeline-blocking
+                   (.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
+                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
+                   out
+                   (map src-distros->requirements)
+                   in)
+                 (producer->consumer
+                    2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
+                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
+                   out
+                   src-distros->requirements
+                   in)
+        ]
+    (seq!! out)))
+
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])
 
@@ -843,6 +958,9 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
               (tables->requirements (:tables tbls) :search iterative-convergence)))
   (def bsres (requirements->table
               (tables->requirements (:tables tbls) :search bisecting-convergence)))
+  (def bsresa (requirements->table
+              (tables->requirements-async (:tables tbls) :search bisecting-convergence)))
+
   ;;Much better...This ends up testing a huge case.
   (def bigres (requirements->table
               (tables->requirements (assoc (:tables tbls) :GhostProportionsAggregate agg-table) :search bisecting-convergence)))
@@ -857,8 +975,24 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
               (tables->requirements (:tables tbls) :search bisecting-convergence)))
   (def icsres  (requirements->table
                 (tables->requirements (:tables tbls) :search iterative-convergence-shared)))
-  
-)
+
+  (def pks (demands->src-peaks (tbl/table-records (:DemandRecords (:tables tbls)))))
+  ;;These are massive src requirements...
+  (def massives
+    [{:SRC "42529RE00", :Required 1479, :Peak 201} ;;~5x
+     {:SRC "41750R100", :Required 1240, :Peak 102}
+     {:SRC "12567RE00", :Required 1152, :Peak 160}
+     {:SRC "27523RC00", :Required 916,  :Peak 127}
+     {:SRC "19539RB00", :Required 743,  :Peak 188}
+     {:SRC "09537RB00", :Required 675,  :Peak 227}
+     {:SRC "14527RB00", :Required 649,  :Peak 128}
+     {:SRC "19473K000", :Required 563,  :Peak 262}
+     {:SRC "10527RC00", :Required 503,  :Peak 115}])
+
+  )
+
+
+
 
 ;; 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
 ;; 'This is meant to be performed on a single SRC, i.e. a single independent requirement.
