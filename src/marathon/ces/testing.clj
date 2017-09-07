@@ -418,16 +418,16 @@
       "Should have all 42 units NonBOG-able, sorted by min weight,
        NG compo, min normalized dwell.")  
   (is (same? odd-units
-      '(["32_SRC3_NG" 1729]
-        ["42_SRC3_AC" 657]
-        ["30_SRC3_NG" 1547]
-        ["28_SRC3_NG" 1365]
-        ["40_SRC3_AC" 511])))
+     '(["32_SRC3_NG" 1733]
+       ["42_SRC3_AC" 657]
+       ["30_SRC3_NG" 1551]
+       ["40_SRC3_AC" 511]
+       ["27_SRC3_NG" 1277])))
   (is (same? even-units
-      '(["31_SRC3_NG" 1638]
+      '(["31_SRC3_NG" 1642]
+        ["29_SRC3_NG" 1460]
         ["41_SRC3_AC" 584]
-        ["29_SRC3_NG" 1456]
-        ["27_SRC3_NG" 1274]
+        ["28_SRC3_NG" 1368]
         ["6_SRC1_AC" 730]
         ["12_SRC2_AC" 730]
         ["39_SRC3_AC" 438]))))
@@ -530,9 +530,9 @@
        to include SRC2, which adds two deployable elements to our set.")
   (is (ascending? (map :priority (vals unfilled)))
       "Priorities of unfilled demand should be sorted in ascending order, i.e. low to hi")
-  (is (same? suitables             
-             '("32_SRC3_NG" "42_SRC3_AC" "31_SRC3_NG" "30_SRC3_NG" "41_SRC3_AC" "29_SRC3_NG"
-               "28_SRC3_NG" "40_SRC3_AC" "27_SRC3_NG" "39_SRC3_AC" "6_SRC1_AC"))
+  (is (same? suitables
+             '("32_SRC3_NG" "42_SRC3_AC" "31_SRC3_NG" "30_SRC3_NG" "29_SRC3_NG"
+               "41_SRC3_AC" "28_SRC3_NG" "40_SRC3_AC" "27_SRC3_NG" "39_SRC3_AC" "6_SRC1_AC"))
       "The feasible supply names that match the first demand should be consistent.  Since SRC1 is a lower
        order of supply via its substitution weight, it should end up last, even though the unit's cycle 
        time is actually pretty good.")
@@ -968,8 +968,8 @@
                                                (= (:src e) "SRC3")))))
         
         times  (map second (sort-by first name-time))]
-    (is (same? times  '(0 109 218 327 436 545 654 763 872 981 1090
-                          1199 1308 1417 1526 1635 1744 1853 1962 2071))
+    (is (same? times
+               '(0 109 219 328 438 547 657 766 876 985 1095 1204 1314 1423 1533 1642 1752 1861 1971 2080))
         "Cycle times for the test data should be evenly distributed according to a constant interval.")))
 
 ;;this should only look at policies with actual subscriptions...
