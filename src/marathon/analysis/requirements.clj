@@ -501,6 +501,19 @@
        (filter pos?)
        (first)))
 
+(defn history->indexed-ghosts [h]
+  ;;The crude idea here is to traverse the history until
+  ;;we find the first time we actually miss demand.
+  ;;We compute total misses on said day, and report the
+  ;;number.  Simple.
+  (->> h
+       (map (fn [[t ctx]]  (when-let [xs (unfilled-demand ctx)]
+                             (when (pos? xs)
+                               [t xs]))))
+       (filter identity)
+       ;(filter pos?)
+       (first)))
+
 ;;I think we'll prefer to work with the history, so probably using a marathon-stream
 ;;instead of this approach...
 ;;TODO: Replace event-step-marathon with the appropriate simreducer or whatnot.
@@ -520,6 +533,7 @@
 ;;calculate-requirement works on one requirement...
 ;;to perform a requirements analysis, we want to 
 (def default-distance (comp history->ghosts a/marathon-stream))
+(def indexed-distance (comp history->indexed-ghosts a/marathon-stream))
 
 (def prior (atom nil))
 
@@ -1022,7 +1036,9 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
 
 
   (require '[incanter [core :as i] [charts :as c]])
-  (def razero (load-src (:tables tbls) "42529RE00" {"AC" 0 "NG" 0.125 "RC" 0.875}))
+  (def root (hpath "\\Documents\\marv\\vnv\\m4v6\\testdata-v6.xlsx"))
+  (def tbls (a/load-requirements-project root))
+  (def razero (load-src (:tables tbls) "42529RE00" {"AC" 0 "NG" 0.125 "RC" 0.875}))     
 
 
   (def bisections ;;from a previous run
@@ -1039,7 +1055,7 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
       [  1691  0]])
   ;;computing data on requirement holes..  
   (def emps
-    (if (io/exists? "emps.edn")
+    (if false ;(io/exists? "emps.edn")
       (clojure.edn/read-string (slurp "emps.edn"))      
       (->> (range 1 1690)
            (pmap! 2 (fn [i] (do (println i) [i (calculate-requirement (distribute razero (:src razero) i) default-distance)])) )
@@ -1058,6 +1074,12 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
                           :title "Earliest Missed Demand x Growth Step" :x-label "Step" :y-label "Quantity Earliest Unfilled Demands"))
   (i/view (c/scatter-plot (map first emps) (map (comp #(if (pos? %) 1.0 0)(fn [n] (or n 0)) second) emps)
                           :title "Missed Demand? by growth Step" :x-label "Step" :y-label "Missed Demand? [1 => True 0 => False]"))
+
+  (def distros {"AC" 0.0, "RC" 0.875, "NG" 0.125})
+  (def clength 2190)
+  (defn inits [n] (for [[c q] (distribute-by distros n) :when (pos? q)] (marathon.ces.entityfactory/intervals q clength)))
+  (defn init-points [n] (apply concat (map-indexed (fn [i xs] (let [x (+ (* i 0.1) i)] (map vector (repeat x) (rest xs)))) (inits n))))
+  (defn init-chart [n] (let [xs (init-points n)] (i/view (c/scatter-plot (map first xs) (map second xs)))))
   
   )
 

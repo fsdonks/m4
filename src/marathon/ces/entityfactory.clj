@@ -401,7 +401,7 @@
 
 ;;#Potential Digression from M3
 ;;Replaces the inner logic 
-(defn intervals [n clength]
+#_(defn intervals [n clength]
   (let [remaining        (atom n)
         uniform-interval (atom (compute-interval clength n))
         last-interval    (atom (- @uniform-interval))        
@@ -415,6 +415,13 @@
                                  (reset! last-interval nxt)
                                  nxt)))]
     (map next-interval  (range n 0 -1))))
+
+;;FIX: Proposed correction for the above intervals function, which appears to be flawed and
+;;compressing cycle times for large populations!
+(defn intervals [n clength]
+  (let [i  (/ clength n)]
+    (map #(long %)
+         (take (long n) (iterate #(+ % i) 0)))))
 
 ;;take the unit seq and distribute the units evenly. Pass in a
 ;;collection of unit names, as well as the appropriate counts, and the
