@@ -237,10 +237,13 @@
    we'll need for our requirements analysis."
   [tables src compo-distros]
   (let [;ctx0 (requirements-ctx tables)
-        s    (initial-supply  src (:SupplyRecords tables) compo-distros)]
+        s    (initial-supply  src (:SupplyRecords tables) compo-distros)
+        mins (into {} (for [[c [r]] (group-by :Component s)]
+                                [c (:Quantity r)]))]
     {;:ctx    ctx0 ;initial simulation context.
      :tables tables
      :supply s    ;initial seq of supply records.
+     :minimum-supply mins
      :src src
      :distributions compo-distros
      :steps     []
@@ -417,17 +420,17 @@
 (defn apply-amounts
   "Given a requirementstate ,reqstate, and 
    a map of {component amount}, increments the 
-   supply records in reqstate where compo matches."
+   supply records in reqstate where compo matches, 
+   according to (+ (minimum-supply component) amount)"
   [reqstate compo-amounts]
-  (update reqstate :supply          
-   #(->> %
-         (map (fn [r]
-                (if-let [n (get compo-amounts (:Component r))]                        
-                  (assoc r :Quantity n)
-                  r)                
-                )))))
-
-
+  (let [mins (:minimum-supply reqstate)]
+    (update reqstate :supply          
+            #(->> %
+                  (map (fn [r]
+                         (if-let [n (get compo-amounts (:Component r))]
+                           (assoc r :Quantity (+ n (get mins (:Component r) 0)))
+                           r)                
+                ))))))
 
 ;;note: strange incidence of getting 50 instead of 25 for total on an
 ;;initial bisection step...
@@ -614,7 +617,11 @@
     (fn [tbls]
       (-> base-ctx
           (setup/default-supply :records (:SupplyRecords tbls))))))
-
+;;note: we need to account for pre-existin supply.
+;;We want to define proportional growth as a function of the initial
+;;supply...that is...
+;;if we have [ac0 ng0 rc0] that's our initial-supply.
+;;we grow proportionally from there (there's a fixed amount to begin with).
 
 (defn find-bounds
   "Bounding hueristic. Using an initial guess at a lower and an upper bound, 
@@ -624,19 +631,24 @@
                :or   {distance default-distance
                       init-lower 1
                       init-upper 10}}]
-  (loop [reqs      reqstate
-         lower     init-lower
-         upper     init-upper]
-    (let [reqs  (-> reqs
-                    (distribute (:src reqs) upper)
-                    (update  :iteration inc))]
-      (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
-        (do (println [:guessing-bounds [lower upper] :at upper :got res])
-            (recur reqs (inc upper)  (* 2 upper)))
-        (do (println [:guessing-bounds [lower upper] :at upper :got 0])
-            (let [res  [lower  upper]
-                  _    (println [:bounded! res])]
-                res))))))
+  (if (and (pos? (reduce + (vals (:minimum-supply reqstate))))
+           (not (calculate-requirement reqstate distance)))
+    (do (println [:minimum-supply-sufficient])
+        (println [:bounded! [0 0]])
+        [0 0])
+    (loop [reqs      reqstate
+           lower     init-lower
+           upper     init-upper]
+      (let [reqs  (-> reqs
+                      (distribute (:src reqs) upper)
+                      (update  :iteration inc))]
+        (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
+          (do (println [:guessing-bounds [lower upper] :at upper :got res])
+              (recur reqstate (inc upper)  (* 2 upper)))
+          (do (println [:guessing-bounds [lower upper] :at upper :got 0])
+              (let [res  [lower  upper]
+                    _    (println [:bounded! res])]
+                res)))))))
 
 (defn iterative-convergence-shared
   "Given a requirements-state, searches the force structure 
@@ -747,6 +759,12 @@
 
 
 
+(defn load-src [tbls src compo->distros] ;;for each src, we create a reqstate
+  (let [src-filter (a/filter-srcs [src])
+        src-tables (src-filter     tbls)] ;alters SupplyRecords, DemandRecords
+    (->requirements-state src-tables ;create the searchstate.
+                          src compo->distros)))
+
 ;;So, need a way to apply the step-function to the
 ;;current supply, compute new supply records, etc.
 ;;should be keeping a running tally of the
@@ -789,13 +807,13 @@
     (->> distros
          (map (fn [[src compo->distros]] ;;for each src, we create a reqstate
                  (if-let [peak (peaks src)]
-                   (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
-                         src-filter (a/filter-srcs [src])
-                         src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords                                       
-                         reqstate   (->requirements-state src-tables ;create the searchstate.
-                                                          src compo->distros)
+                   (let [_ (println [:computing-requirements src :remaining (swap! n dec)])                                     
+                         reqstate       (load-src tbls src compo->distros)
+                         _              (println [:growing-by dtype :from (:minimum-supply reqstate)])
                          [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
-                     [src (search reqstate :init-lower lower :init-upper upper)])
+                     (if (== lower upper 0)
+                       [src reqstate]
+                       [src (search reqstate :init-lower lower :init-upper upper)]))
                    (do (println [:skipping-src src :has-no-demand])
                        [src nil])
                    ))))))
@@ -808,9 +826,10 @@
     ;;for each src, we create a reqstate
     (if-let [peak (peaks src)]
       (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
-            src-filter (a/filter-srcs [src])
-            src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords                                       
-            reqstate   (->requirements-state src-tables ;create the searchstate.
+            ;src-filter (a/filter-srcs [src])
+            ;src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords                                       
+            reqstate   (load-src tbls src compo->distros)
+                        #_(->requirements-state src-tables ;create the searchstate.
                                              src compo->distros)
             [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
         [src (search reqstate :init-lower lower :init-upper upper :log (fn [msg]
@@ -863,6 +882,18 @@
                             (do (async/close! out)
                                 (async/>! res true))))))))]
     res))
+
+(defn pmap! [n f xs]
+  (let [out     (async/chan 10)
+        in      (async/chan 10)
+        _       (async/onto-chan in (seq xs))
+        pipe    (producer->consumer
+                    n  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
+                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
+                   out
+                   f
+                   in)]
+    (seq!! out)))
     
 ;;using core.async to pipeline this dude...
 (defn tables->requirements-async
@@ -989,6 +1020,45 @@ Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge req
      {:SRC "19473K000", :Required 563,  :Peak 262}
      {:SRC "10527RC00", :Required 503,  :Peak 115}])
 
+
+  (require '[incanter [core :as i] [charts :as c]])
+  (def razero (load-src (:tables tbls) "42529RE00" {"AC" 0 "NG" 0.125 "RC" 0.875}))
+
+
+  (def bisections ;;from a previous run
+     [[ 3216 0]
+      [  2412  0]
+      [  2010  0]
+      [  1809  0]
+      [  1709  0]
+      [  1659  9]
+      [  1684  4]
+      [  1696  0]
+      [  1690  1]
+      [  1693  0]
+      [  1691  0]])
+  ;;computing data on requirement holes..  
+  (def emps
+    (if (io/exists? "emps.edn")
+      (clojure.edn/read-string (slurp "emps.edn"))      
+      (->> (range 1 1690)
+           (pmap! 2 (fn [i] (do (println i) [i (calculate-requirement (distribute razero (:src razero) i) default-distance)])) )
+           (into [] ))))
+
+  (def emps (into emps bisections))
+
+  (def bound-steps [[201 1]
+                    [402 1]
+                    [804  1]
+                    [1608 1]
+                    [3216 0]])
+
+  
+  (i/view (c/scatter-plot (map first emps) (map (comp (fn [n] (or n 0)) second) emps)
+                          :title "Earliest Missed Demand x Growth Step" :x-label "Step" :y-label "Quantity Earliest Unfilled Demands"))
+  (i/view (c/scatter-plot (map first emps) (map (comp #(if (pos? %) 1.0 0)(fn [n] (or n 0)) second) emps)
+                          :title "Missed Demand? by growth Step" :x-label "Step" :y-label "Missed Demand? [1 => True 0 => False]"))
+  
   )
 
 
