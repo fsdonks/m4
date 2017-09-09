@@ -21,9 +21,34 @@
         [marathon.processing.post]
         [marathon.project]
         [clojure.repl])
-  (:import [javax.swing JFrame]) ;Bah!
-  ;(:gen-class :main true)
-  )
+  (:import [javax.swing JFrame UIManager]))
+
+(defn screen-size []
+  ((juxt #(.getWidth %) #(.getHeight %))
+   (.getScreenSize (java.awt.Toolkit/getDefaultToolkit))))
+
+(defn scale-factors [w h]
+   (let [[ws hs] (screen-size)]
+     [(/ ws w)
+      (/ hs h)]))
+
+(defn setDefaultSize [size]  
+  (let [ks (seq (.keySet (UIManager/getLookAndFeelDefaults)))] 
+    (doseq [k ks]
+      (when (and k (.contains (clojure.string/lower-case (str k)) "font"))
+        (let [_ (println k)
+              ^java.awt.Font font  (-> (UIManager/getDefaults)
+                              (.getFont key))]
+          (when font
+            (let [font  (.deriveFont font (float size))]
+              (.put UIManager k font))))))))
+
+(defn scale-fonts []
+  (gui/run-app
+   (fn []
+     (try (UIManager/setLookAndFeel  (UIManager/getSystemLookAndFeelClassName))
+          (catch Exception e (.printStrackTrace e)))
+     (setDefaultSize 128))))
 
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
@@ -373,8 +398,11 @@
                     (fn [^JFrame fr] 
                       (doto fr
                         (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
-                      identity)
-        rpl             (repl-panel 800 600)
+                    identity)
+        [ws hs]         (scale-factors 1920 1080)
+        rpl             (repl-panel (* 800 ws) (* 600 hs)
+                                    {:font (java.awt.Font. "Monospaced"
+                                                           java.awt.Font/PLAIN (* 14 ws))})
         project-menu    (gui/map->reactive-menu "Project-Management"  
                                                project-menu-spec)
         processing-menu (gui/map->reactive-menu "Processing"

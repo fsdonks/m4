@@ -980,17 +980,17 @@
         (println ["Spit requirements to " outpath]))))
               
 (comment ;testing
-  #_(def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
-  (def ags "Type	Enabled	SRC	AC	NG	RC	Note
-Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge requirement lol.  Great pathological case.")
-  (def agg-table
-    #spork.util.table.column-table{:fields [:Type :Enabled :SRC :AC :NG :RC :Note],
-                                   :columns [["Blah"] [True] ["43429R000"] [13/69] [42/69] [14/69]
-                                             ["This produces a huge requirement lol.  Great pathological case."]]})
-  (def agg-table
-    #spork.util.table.column-table{:fields [:Type :Enabled :SRC :AC :NG :RC :Note],
-                                   :columns [["Blah"] [True] ["10560RN00"] [1] [0] [0]
-                                             ["This produces a huge requirement lol.  Great pathological case."]]})
+;;   #_(def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
+;;   (def ags "Type	Enabled	SRC	AC	NG	RC	Note
+;; Blah	TRUE	43429R000	0.188405797	0.202898551	0.608695652	This produces a huge requirement lol.  Great pathological case.")
+;;   (def agg-table
+;;     #spork.util.table.column-table{:fields [:Type :Enabled :SRC :AC :NG :RC :Note],
+;;                                    :columns [["Blah"] [True] ["43429R000"] [13/69] [42/69] [14/69]
+;;                                              ["This produces a huge requirement lol.  Great pathological case."]]})
+;;   (def agg-table
+;;     #spork.util.table.column-table{:fields [:Type :Enabled :SRC :AC :NG :RC :Note],
+;;                                    :columns [["Blah"] [True] ["10560RN00"] [1] [0] [0]
+;;                                              ["This produces a huge requirement lol.  Great pathological case."]]})
   (def root (hpath "\\Documents\\marv\\vnv\\m4v6\\testdata-v6.xlsx"))
   (require '[marathon.analysis [dummydata :as data]])
   (def dummy-table

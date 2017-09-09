@@ -25,4 +25,16 @@
                               spork.util.metaprogramming                              
                               marathon.ces.core
                               marathon.serial 
-                              marathon.core]}]})
+                              marathon.core]}]}
+  :plugins [
+            [lein-capsule "0.2.1"]]
+  ;;; Capsule plugin configuration section, optional
+  :capsule {
+            :types {
+     ;; Optional, can override anything, will trigger building a thin capsule
+                    :fat {
+                          :name "fat-capsule.jar"
+                          }}
+            :execution {:runtime {:jvm-args ["-Xmx4g"]}
+                        :boot    {:main-class  "marathon.main"}}}
+  )

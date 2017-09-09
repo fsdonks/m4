@@ -3,9 +3,9 @@
 ;;for analyzing static demand signals, and quickly generating
 ;;end-strength constrained portfolios.
 (ns marathon.processing.stoke.core
-  (:require [spork.opt [core :as opt]]
+  (:require ;[spork.opt [core :as opt]]
             [spork.opt.representation :refer [defsolution]]
-            [spork.opt  [dumbanneal :as ann]]
+            ;[spork.opt  [dumbanneal :as ann]]
             [spork.util [combinatoric :as c] 
                         [temporal :as temporal]
                         [stats :as stats]

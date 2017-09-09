@@ -4,6 +4,34 @@
 (ns marathon.main
   (:gen-class :main true))
 
+import java.awt.EventQueue;
+import java.awt.Font;
+import java.util.Set;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
+
+(defn setDefaultSize [size]  
+  (let [keySet (.. UIManager getLookAndFeelDefaults keySet)
+        ks   (seq keySet)] ;(keySet.toArray(new Object[keySet.size()]);
+    (doseq [k ks]
+      (when (and k (.contains (clojure.string/lower-case (str k)) "font"))
+        (let [_ (println k)
+              ^Font font  (-> (. getDefaults UIManager)
+                              (. getFont key))]
+          (when font
+            (let [font  (.deriveFont font (float size))]
+              (.put UIManager k font))))))))
+
+
+(defn scale-fonts []
+  (run  (fn []
+          (try (.setLookAndFeel UIManager (.getSystemLookAndFeelClassName UIManager))
+               (catch Exception e (.printStrackTrace e)))
+          (setDefaultSize 24))))
+
+
 ;;This is the main entry point for marathon.
 ;;It's a good example of a shim-class, and
 ;;requires some arcane features to get things
