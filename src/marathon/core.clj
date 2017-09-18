@@ -14,41 +14,15 @@
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
                            [native :as swing-events]]
-            ;[piccolotest.repl :as repl]
-            [org.dipert.swingrepl.main]
+            [nightclub [core :as night]]
+            [nightcode [repl :as repl]]
+            [seesaw.core]
             )
   (:use [spork.util.mailbox] ;;should be able to deprecate this.
         [marathon.processing.post]
         [marathon.project]
         [clojure.repl])
   (:import [javax.swing JFrame UIManager]))
-
-(defn screen-size []
-  ((juxt #(.getWidth %) #(.getHeight %))
-   (.getScreenSize (java.awt.Toolkit/getDefaultToolkit))))
-
-(defn scale-factors [w h]
-   (let [[ws hs] (screen-size)]
-     [(/ ws w)
-      (/ hs h)]))
-
-(defn setDefaultSize [size]  
-  (let [ks (seq (.keySet (UIManager/getLookAndFeelDefaults)))] 
-    (doseq [k ks]
-      (when (and k (.contains (clojure.string/lower-case (str k)) "font"))
-        (let [_ (println k)
-              ^java.awt.Font font  (-> (UIManager/getDefaults)
-                              (.getFont key))]
-          (when font
-            (let [font  (.deriveFont font (float size))]
-              (.put UIManager k font))))))))
-
-(defn scale-fonts []
-  (gui/run-app
-   (fn []
-     (try (UIManager/setLookAndFeel  (UIManager/getSystemLookAndFeelClassName))
-          (catch Exception e (.printStrackTrace e)))
-     (setDefaultSize 128))))
 
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
@@ -109,7 +83,7 @@
                        (tbl/table-rows t) 
                        :sorted sorted))
 
-(defn repl-panel
+#_(defn repl-panel
   "Creates a swing-repl that we can send code to for remote 
    evaluation, or allow the user to interactively eval 
    expressions."
@@ -352,109 +326,45 @@
                                   (gui/input-box
                                    :prompt "Select a Clojure script"))
             `(~'println ~e))]
-      (org.dipert.swingrepl.main/send-repl rpl (str expr)))))
+      #_(org.dipert.swingrepl.main/send-repl rpl (str expr))
+      (repl/echo-repl! expr))))
 
-;;work on separating out from the jframe.
-;; (defn hub-panel []
-;;   (let [rpl             (repl/repl-panel 800 600)
-;;         project-menu    (gui/map->reactive-menu "Project-Management"  
-;;                                                project-menu-spec)
-;;         processing-menu (gui/map->reactive-menu "Processing"
-;;                                                 processing-menu-spec)
-;;         debug-menu      (gui/map->reactive-menu "Debug"
-;;                                                 debug-menu-spec)
-;;         main-menu       (gui/menu-bar (:view project-menu)
-;;                                       (:view processing-menu)
-;;                                       (:view debug-menu))
-;;         menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
-;;                                              (-> processing-menu :control :event-stream)
-;;                                              (-> debug-menu   :control :event-stream)])
-;;         textlog         (gui/label "Idle")
-;;         audit           (gui/button "Clear" (fn [_] 
-;;                                               (obs/notify! menu-events :clear)))
-;;         handle-menu       (atom  (menu-handler rpl))
-;;         reflect-selection (->> menu-events 
-;;                                (obs/subscribe  #(gui/change-label textlog %)))
-;;         _                 (->> menu-events 
-;;                                (obs/subscribe  #(@handle-menu %)))        
-;;         ]
-;;     (mvc/make-modelview 
-;;       (agent {:state (if project {:current-project project} {})
-;;               :routes (merge default-routes project-routes)})       
-;;       (gui/display (->> (close-beh 
-;;                           (gui/empty-frame "Marathon Project Management")) 
-;;                         (gui/add-menu main-menu)
-;;                         )
-;;                    (gui/stack textlog  
-;;                               rpl
-;;                               audit))
-;;       {:menu-events menu-events
-;;        :repl rpl
-;;        :handle-menu handle-menu
-;;        :set-handler (fn [f] (reset! handle-menu (menu-handler rpl)))})))
-
+;;TODO: migrate the rest of this to seesaw, get rid of the old redundant
+;;crud...
 (defn hub [& {:keys [project exit? repl-options]}]
-  (let [close-beh (if exit?
-                    (fn [^JFrame fr] 
-                      (doto fr
-                        (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
-                    identity)
-        [ws hs]         (scale-factors 1920 1080)
-        rpl             (repl-panel (* 800 ws) (* 600 hs)
-                                    {:font (java.awt.Font. "Monospaced"
-                                                           java.awt.Font/PLAIN (* 14 ws))})
-        project-menu    (gui/map->reactive-menu "Project-Management"  
-                                               project-menu-spec)
-        processing-menu (gui/map->reactive-menu "Processing"
-                                                processing-menu-spec)
-        debug-menu      (gui/map->reactive-menu "Debug"
-                                                debug-menu-spec)
-        scripting-menu  (gui/map->reactive-menu "Scripting"
-                                                scripting-menu-spec)
-        help-menu       (gui/map->reactive-menu "Help"
-                                                help-menu-spec)
-        main-menu       (gui/menu-bar (:view project-menu)
-                                      (:view processing-menu)
-                                      (:view scripting-menu)
-                                      (:view debug-menu)
-                                      (:view help-menu))        
-        menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
-                                             (-> processing-menu :control :event-stream)
-                                             (-> debug-menu   :control :event-stream)
-                                             (-> help-menu    :control :event-stream)
-                                             (-> scripting-menu :control :event-stream)
-                                             ])
-        textlog         (gui/label "Idle")
-        audit           (gui/button "Clear" (fn [_] 
-                                              (obs/notify! menu-events :clear)))
-        handle-menu       (atom  (menu-handler rpl))
-        reflect-selection (->> menu-events 
-                               (obs/subscribe  #(gui/change-label textlog %)))
-        _                 (->> menu-events 
-                               (obs/subscribe  #(@handle-menu %)))        
-        ]
-    (mvc/make-modelview 
-      (agent {:state (if project {:current-project project} {})
-              :routes (merge default-routes project-routes)})       
-      (gui/display (->> (close-beh 
-                          (gui/empty-frame "Marathon Project Management")) 
-                        (gui/add-menu main-menu)
-                        )
-                   (gui/stack textlog  
-                              rpl
-                              audit))
-      {:menu-events menu-events
-       :repl rpl
-       :handle-menu handle-menu
-       :set-handler (fn [f] (reset! handle-menu (menu-handler rpl)))})))
+  (seesaw.core/invoke-later
+   (binding [*ns* *ns*]
+           (in-ns 'marathon.core)
+           (let [project-menu    (gui/map->reactive-menu "Project-Management"  
+                                                         project-menu-spec)
+                 processing-menu (gui/map->reactive-menu "Processing"
+                                                         processing-menu-spec)
+                 debug-menu      (gui/map->reactive-menu "Debug"
+                                                         debug-menu-spec)
+                 scripting-menu  (gui/map->reactive-menu "Scripting"
+                                                         scripting-menu-spec)
+                 help-menu       (gui/map->reactive-menu "Help"
+                                                         help-menu-spec)
+                 main-menu       (gui/menu-bar (:view project-menu)
+                                               (:view processing-menu)
+                                               (:view scripting-menu)
+                                               (:view debug-menu)
+                                               (:view help-menu))        
+                 menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
+                                                      (-> processing-menu :control :event-stream)
+                                                      (-> debug-menu   :control :event-stream)
+                                                      (-> help-menu    :control :event-stream)
+                                                      (-> scripting-menu :control :event-stream)
+                                                      ])
+                 handle-menu    (menu-handler nil)                    
+                 _                 (->> menu-events 
+                                        (obs/subscribe  #(handle-menu %)))        
+                 ]
+             (night/attach! :window-args
+                            {:menubar main-menu
+                             :on-close (if exit? :exit :dispose)})))))
 
-(defn reset-handler! [h]
-  (let [h (:control h)
-        r (:repl h)]
-    (reset! (:handle-menu h) (menu-handler r))))
-
-(defn -main [& args]
-  (hub :exit? true))
+(defn -main [& args]  (hub :exit? true))
 
 ;       :add-table   
 ;       :clear-project     
