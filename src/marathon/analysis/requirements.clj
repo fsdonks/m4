@@ -973,7 +973,7 @@
     (do (println ["Analyzing requirements for" inpath])        
         (->> (-> (a/load-requirements-project inpath)
                  (:tables)
-                 (tables->requirements  :search iterative-convergence-shared)
+                 (tables->requirements  :search bisecting-convergence)
                  (requirements->table)
                  (tbl/table->tabdelimited))
              (spit outpath))

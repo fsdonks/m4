@@ -85,6 +85,8 @@
 
 
 
+
+
 (comment ;testing
   ;;Worked without legacy records...
   (def maxbase (hpath "\\Documents\\srm\\tst\\notionalv2\\maxbase.xlsx"))

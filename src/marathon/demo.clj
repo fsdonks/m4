@@ -24,10 +24,14 @@
    :SRC3   ["SRC3" ["SRC3"]]
    :SRC4   ["SRC4" ["SRC4"]]})
 
-(defn run-it []
-  (do (run/do-audited-run full-path out-path)
-      (proc/run-sample! out-path    :interests test-interests)
-      (proc/do-charts-from out-path :interests test-interests)))
+(defn run-it [& {:keys [root  destination interests]
+                 :or {root   full-path
+                      destination  out-path
+                      interests test-interests
+                      }}]
+  (do (run/do-audited-run  root           out-path)
+      (proc/run-sample!    destination    :interests interests)
+      (proc/do-charts-from destination    :interests interests)))
 
 (comment
   (def ctx (a/load-context full-path))

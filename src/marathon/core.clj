@@ -6,8 +6,9 @@
                                        [io :as stokeio]
                                         ;[scraper :as scraper]
              ]
-            [marathon.run :as run]
+            [marathon [run :as run] [demo :as demo]]
             [marathon.analysis [requirements :as requirements]]
+            [marathon.sampledata [branches :as branches]]
             [clojure       [pprint :as pprint]
                            [set :as set]]
             [spork.cljgui.components [swing :as gui]]
@@ -23,6 +24,8 @@
         [marathon.project]
         [clojure.repl])
   (:import [javax.swing JFrame UIManager]))
+
+(def +version+ "4.1.0-SNAPSHOT")
 
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
@@ -150,6 +153,8 @@
    ;;"Charts"             "Generate plots."   
    "Capacity-Analysis"     "Performs a capacity run (default)"
    "Requirements-Analysis" "Performs a Requirements Run"
+   "PostProcessed-Run"
+     "Capacity Analysis, post-process using Proc, rendering dwell/fill charts"
    "Stochastic-Demand"     "Generate stochastic demand files from a casebook."
    "Compute-Peaks"         "Extract the peak concurrent demands from a folder."
    "Debug-Run"             "Runs the capacity analysis with output directed toward a file"
@@ -275,6 +280,31 @@
     (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
                   (capacity-analysis wbpath)))
 
+(defn interests-dialogue [wbpath]
+  (if  @(future (gui/yes-no-box "Would you like to select an interests file?"))
+    (request-path [wbpath "Please select the location of a valid MARATHON interests file."]
+                  (clojure.edn/read-string (slurp wbpath)))
+    (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
+        branches/branches)))
+                     
+(defn post-processed-run [wbpath]
+  (let [pieces       (clojure.string/split wbpath #"\\")
+        root         (io/as-directory (clojure.string/join "\\" (butlast pieces)))
+        destination  (clojure.string/replace wbpath ".xlsx" "\\")
+        ipath        (str root "interests.clj")
+        interests    (if (io/file? ipath)
+                          (do (println [:using-interests-at ipath])
+                              (clojure.edn/read-string (slurp ipath)))
+                          (interests-dialogue wbpath))
+        _            (println [:running :post-processed-analysis :at wbpath])]
+    (demo/run-it :root        wbpath
+                 :destination destination
+                 :interests   interests)))
+
+(defn post-processed-run-dialogue []
+    (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
+                  (post-processed-run wbpath)))
+
 (defn requirements-analysis-dialogue []
     (request-path [wbpath "Please select the location of a valid MARATHON requirements project file."]  
                   (requirements/requirements-run wbpath)))
@@ -322,6 +352,7 @@
                                   (apropos
                                    (gui/input-box
                                     :prompt "Enter A Topic")))
+            :postprocessed-run  '(post-processed-run-dialogue) 
             :load-script        '(load-file
                                   (gui/input-box
                                    :prompt "Select a Clojure script"))
@@ -361,7 +392,8 @@
                                         (obs/subscribe  #(handle-menu %)))        
                  ]
              (night/attach! :window-args
-                            {:menubar main-menu
+                            {:title   (str "MARATHON " +version+)
+                             :menubar main-menu
                              :on-close (if exit? :exit :dispose)})))))
 
 (defn -main [& args]  (hub :exit? true))
