@@ -13,7 +13,7 @@
                  [alembic "0.3.2"]
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
-  :source-paths ["src" "../spork/src" "../nightclub/src"]
+  :source-paths ["src" "../spork/src" "../nightclub/src" "../proc/src"]
   :profiles {:uberjar {:aot  [marathon.main]
                        :main  marathon.main
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]

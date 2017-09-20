@@ -687,7 +687,7 @@
             (update :iteration inc)            
             (recur))
       reqs))))
-
+(def rs (atom nil))
 ;;Currently 2x slower than ic....wonder if we can speed this
 ;;up?  Problem is, we end up doing a lot of higher-supply
 ;;runs, which hurts performance.  Doing more volume of
@@ -698,23 +698,25 @@
 ;;We're wasting time on needless bisecting, when we haven't
 ;;established.
 (defn bisecting-convergence
-  [reqstate & {:keys [distance init-lower init-upper log]
+  [reqstate & {:keys [distance init-lower init-upper log init-known]
                :or   {distance default-distance
                       init-lower 0
                       init-upper 10
                       log println
                      }}]
-  (let [known?     (atom {})
+  (let [known?     (atom (or init-known {}))
         converge   (fn [dir reqs n]
                      (do (log [:converged dir n])
                          (distribute reqs (:src reqstate) n)))
         amount     (fn amt [reqs n]
                      ;(log [:amount n])
                      (get-or @known? n
-                        (let [res (or (calculate-requirement reqs distance) 0)
+                             (let [rtest (-> reqs
+                                             (distribute (:src reqs) n))
+                                   res (or (calculate-requirement rtest distance) 0)
                               _   (swap! known? assoc n res)]
                           res)))
-        _ (assert (not= init-lower init-upper) "need a valid interval!")]
+        _ (assert (not (neg?  (- init-upper init-lower))) "need a valid non-negative interval!")]
     (loop [reqs      reqstate
            lower init-lower
            upper init-upper]
@@ -724,14 +726,12 @@
           (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
             [true  true] (if (pos? lower) (converge :left  reqs lower)
                              (converge :right  reqs lower))
-              [false true] (converge :right reqs upper)              
-              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)]))))
+            [false true] (converge :right reqs upper)
+            (do (reset! rs reqstate)
+              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)])))))
           (let [reqs (update reqs :iteration inc)
-                rtest  (-> reqstate
-                           (distribute (:src reqstate) mid)
-                           )
-                res (amount rtest mid)
-                _   (log [:guessing [lower upper] :at mid :got res])]
+                res  (amount reqs mid)
+                _    (log [:guessing [lower upper] :at mid :got res])]
             (if (pos? res)
               (recur reqs mid upper)
               (recur reqs lower mid))))))))
@@ -801,6 +801,24 @@
 ;;proportions that's not in the demand, and we're left with no
 ;;demands, we should skip the src and accumulate a warning or
 ;;something.
+(defn requirements-by
+  "Helper function for our parallel requirements computation."
+  [tbls peaks search n]
+  (fn [[src compo->distros]]
+    ;;for each src, we create a reqstate
+    (if-let [peak (peaks src)]
+      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])                                     
+            reqstate       (load-src tbls src compo->distros)
+            _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
+            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
+        (if (== lower upper 0)
+          [src reqstate]
+          [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
+      (do (println [:skipping-src src :has-no-demand])
+          [src nil])
+      
+      )))
+
 (defn tables->requirements
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
@@ -819,37 +837,7 @@
                       (demands->src-peaks))
         n       (atom (count peaks))]
     (->> distros
-         (map (fn [[src compo->distros]] ;;for each src, we create a reqstate
-                 (if-let [peak (peaks src)]
-                   (let [_ (println [:computing-requirements src :remaining (swap! n dec)])                                     
-                         reqstate       (load-src tbls src compo->distros)
-                         _              (println [:growing-by dtype :from (:minimum-supply reqstate)])
-                         [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
-                     (if (== lower upper 0)
-                       [src reqstate]
-                       [src (search reqstate :init-lower lower :init-upper upper)]))
-                   (do (println [:skipping-src src :has-no-demand])
-                       [src nil])
-                   ))))))
-
-
-(defn requirements-by
-  "Helper function for our parallel requirements computation."
-  [tbls peaks search n]
-  (fn [[src compo->distros]]
-    ;;for each src, we create a reqstate
-    (if-let [peak (peaks src)]
-      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
-            ;src-filter (a/filter-srcs [src])
-            ;src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords                                       
-            reqstate   (load-src tbls src compo->distros)
-                        #_(->requirements-state src-tables ;create the searchstate.
-                                             src compo->distros)
-            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
-        [src (search reqstate :init-lower lower :init-upper upper :log (fn [msg]
-                                                                         (println (str [src msg]))))])
-      (do (println [:skipping-src src :has-no-demand])
-          [src nil]))))
+         (map (requirements-by tbls peaks search n)))))
 
 ;;https://gist.github.com/stathissideris/8659706
 (defn seq!! 
@@ -973,7 +961,7 @@
     (do (println ["Analyzing requirements for" inpath])        
         (->> (-> (a/load-requirements-project inpath)
                  (:tables)
-                 (tables->requirements  :search bisecting-convergence)
+                 (tables->requirements-async  :search bisecting-convergence)
                  (requirements->table)
                  (tbl/table->tabdelimited))
              (spit outpath))
