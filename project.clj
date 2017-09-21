@@ -5,7 +5,7 @@
                    '[marathon.main])))
 (def version "4.1.1")
 (def capsule-name "marathon")
-(def capsule-jar (str version capsule-name ".jar"))
+(def capsule-jar (str  capsule-name "-" version ".jar"))
 
 ;;project definition...
 (defproject marathon "4.1.1-SNAPSHOT"
