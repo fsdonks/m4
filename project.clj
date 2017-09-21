@@ -29,7 +29,7 @@
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
                        }
              :aot {:main  marathon.main
-                   :aot ~order}}
+                   :aot ~aot-order}}
   :plugins [[lein-capsule "0.2.1"]]
   ;;; Capsule plugin configuration section, optional
   :capsule {:application {:name    ~capsule-name
