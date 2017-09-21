@@ -30,7 +30,13 @@
   :plugins [
             [lein-capsule "0.2.1"]]
   ;;; Capsule plugin configuration section, optional
-  :capsule {
+  :capsule {;;; Optional, check https://github.com/puniverse/capsule#application-id for defaults 
+            :application { 
+           ;; Optional, corresponds 1:1 to Application-Name manifest entry, check https://github.com/puniverse/capsule#application-id for defaults 
+            :name "marathon" 
+       ;; Optional, corresponds 1:1 to Application-Version manifest entry, check https://github.com/puniverse/capsule#application-id for defaults 
+            :version "4.1.1" } 
+
             :types {
      ;; Optional, can override anything, will trigger building a thin capsule
                     :fat {
