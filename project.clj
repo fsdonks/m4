@@ -1,4 +1,14 @@
-(defproject marathon "4.1.1-SNAPSHOT"
+(require 'clojure.edn)
+(def aot-order (let [f (clojure.java.io/file "order.edn")]
+                 (if (.exists f)
+                   (clojure.edn/read-string (slurp "order.edn"))
+                   '[marathon.main])))
+(def version "4.1.1")
+(def capsule-name "marathon")
+(def capsule-jar (str version capsule-name ".jar"))
+(def artifact (str version "-SNAPSHOT"))
+
+(defproject marathon ~artifact
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
@@ -18,30 +28,13 @@
                        :main  marathon.main
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
                        }
-             :publish [:uberjar
-                       {:aot [spork.util.reducers
-                              spork.cljgui.components.PaintPanel
-                              spork.cljgui.components.swing
-                              spork.util.table
-                              spork.util.metaprogramming                              
-                              marathon.ces.core
-                              marathon.serial 
-                              marathon.core]}]}
-  :plugins [
-            [lein-capsule "0.2.1"]]
+             :aot {:main  marathon.main
+                   :aot ~order}}
+  :plugins [[lein-capsule "0.2.1"]]
   ;;; Capsule plugin configuration section, optional
-  :capsule {;;; Optional, check https://github.com/puniverse/capsule#application-id for defaults 
-            :application { 
-           ;; Optional, corresponds 1:1 to Application-Name manifest entry, check https://github.com/puniverse/capsule#application-id for defaults 
-            :name "marathon" 
-       ;; Optional, corresponds 1:1 to Application-Version manifest entry, check https://github.com/puniverse/capsule#application-id for defaults 
-            :version "4.1.1" } 
-
-            :types {
-     ;; Optional, can override anything, will trigger building a thin capsule
-                    :fat {
-                          :name "fat-capsule.jar"
-                          }}
+  :capsule {:application {:name    ~capsule-name
+                          :version ~version} 
+            :types {:fat {:name   ~capsule-jar}}
             :execution {:runtime {:jvm-args ["-Xmx4g"]}
                         :boot    {:main-class  "marathon.main"}}}
   )
