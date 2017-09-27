@@ -45,14 +45,16 @@
 (defn active-path [] (last @path-history))  
 
 (defn select-file []
-  (let [p (gui/select-file (active-path))]
-    (do (add-path! p)
-      p)))
+  (seesaw.core/invoke-now
+   (let [p (gui/select-file (active-path))]
+     (do (add-path! p)
+         p))))
 
 (defn select-folder []
-  (let [p (gui/select-folder (active-path))]
-    (do (add-path! p)
-      p)))
+  (seesaw.core/invoke-now
+   (let [p (gui/select-folder (active-path))]
+     (do (add-path! p)
+         p))))
 
 (defn notify [msg]
   (fn [] (gui/alert msg)))
@@ -280,8 +282,16 @@
     (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
                   (capacity-analysis wbpath)))
 
-(defn interests-dialogue [wbpath]
+#_(defn interests-dialogue [wbpath]
   (if  @(future (gui/yes-no-box "Would you like to select an interests file?"))
+    (request-path [wbpath "Please select the location of a valid MARATHON interests file."]
+                  (clojure.edn/read-string (slurp wbpath)))
+    (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
+        branches/branches)))
+
+(defn interests-dialogue [wbpath]
+  (if (seesaw.core/confirm "Would you like to select an interests file?"
+                           :option-type :yes-no)
     (request-path [wbpath "Please select the location of a valid MARATHON interests file."]
                   (clojure.edn/read-string (slurp wbpath)))
     (do (println [:using-default-interests 'marathon.sampledata.branches/branches])

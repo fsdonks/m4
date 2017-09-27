@@ -29,7 +29,7 @@
                       destination  out-path
                       interests test-interests
                       }}]
-  (do (run/do-audited-run  root           out-path)
+  (do (run/do-audited-run  root           destination)
       (proc/run-sample!    destination    :interests interests)
       (proc/do-charts-from destination    :interests interests)))
 
