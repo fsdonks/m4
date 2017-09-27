@@ -45,16 +45,14 @@
 (defn active-path [] (last @path-history))  
 
 (defn select-file []
-  (seesaw.core/invoke-now
-   (let [p (gui/select-file (active-path))]
-     (do (add-path! p)
-         p))))
+  (let [p (gui/select-file (active-path))]
+    (do (add-path! p)
+         p)))
 
 (defn select-folder []
-  (seesaw.core/invoke-now
-   (let [p (gui/select-folder (active-path))]
-     (do (add-path! p)
-         p))))
+  (let [p (gui/select-folder (active-path))]
+    (do (add-path! p)
+        p)))
 
 (defn notify [msg]
   (fn [] (gui/alert msg)))
