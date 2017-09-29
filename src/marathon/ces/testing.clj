@@ -1094,3 +1094,13 @@
 )
 
 
+(comment ;mutation testing
+  
+  (defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
+    (let [ctx (update init-ctx :state spork.entitysystem.store/mutate!)]
+      (analysis/marathon-stream ctx)))
+    
+    
+  
+  )
+
