@@ -196,6 +196,9 @@
     (mvc/make-modelview nil menus 
       {:menu-events (obs/multimerge-obs (vals menus))})))       
 
+(defn yes-no-box [msg]
+  (gui/swing! (seesaw.core/confirm msg :option-type :yes-no)))
+
 ;;This is helmet specific.
 (defn casekey->filename [[case-name future]]
   (str case-name \_ future ".txt"))
@@ -288,8 +291,7 @@
         branches/branches)))
 
 (defn interests-dialogue [wbpath]
-  (if (seesaw.core/confirm "Would you like to select an interests file?"
-                           :option-type :yes-no)
+  (if (yes-no-box "Would you like to select an interests file?")
     (request-path [wbpath "Please select the location of a valid MARATHON interests file."]
                   (clojure.edn/read-string (slurp wbpath)))
     (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
