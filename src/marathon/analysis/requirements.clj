@@ -841,7 +841,7 @@
 
 ;;https://gist.github.com/stathissideris/8659706
 (defn seq!! 
-   "Returns a (blocking!) lazy sequence read from a channel." 
+   "Returns a (blocking!) lazy sequence read from a channel.  Throws on err values" 
    [c] 
    (lazy-seq 
     (when-let [v (async/<!! c)]
@@ -887,6 +887,7 @@
                                 (async/>! res true))))))))]
     res))
 
+
 (defn pmap! [n f xs]
   (let [out     (async/chan 10)
         in      (async/chan 10)
@@ -898,7 +899,11 @@
                    f
                    in)]
     (seq!! out)))
-    
+
+;;a little box type for our requirements runs...
+(defn ->error [input ^Throwable e]
+  (Throwable. (str input) e))
+
 ;;using core.async to pipeline this dude...
 (defn tables->requirements-async
   "Given a database of distributions, and the required tables for a marathon 
@@ -921,13 +926,12 @@
         out     (async/chan 10)
         in      (async/chan 10)
         _       (async/onto-chan in (seq distros))
-        pipe    #_(async/pipeline-blocking
-                   (.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
-                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
-                   out
-                   (map src-distros->requirements)
-                   in)
-                 (producer->consumer
+        require-or-err  (fn require-or-err [distros]
+                          (try  (src-distros->requirements  distros)
+                                (catch Exception e
+                                  (do (async/go (async/close! in))
+                                      (->error distros e)))))
+        pipe    (producer->consumer
                     2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
                                         ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
                    out
@@ -1075,8 +1079,7 @@
 
 (comment ;debugging a wierd case with new policies.
   (def p (io/hpath  "Documents\\m4test\\testdata-v6-leebug.xlsx"))
-  ;;temporarily altered to allow us to get our error out from core.async...
-  (defn requirements-run
+(defn requirements-run
   "Primary function to compute  requirements analysis.  Reads requirements 
    project from inpath, computes requirement, and spits results to a tsv 
    table in the same root folder as inpath, requirements.txt"
@@ -1143,7 +1146,7 @@
   ;;Now the question is why?  
   
   ;;we learn that the unit is this guy from our convenient error message.
-  (def bad-unit "19_10527RF00_AC")  
+  (def bad-unit "4_10527RF00_AC" #_"19_10527RF00_AC")  
   (def bad-src "10527RF00")
 
   ;;Recreating the initial conditions for interactive forensic analysis.
@@ -1177,8 +1180,10 @@
   (defn error-ctx []
     (a/load-context
       "C:/Users/thomas.l.spoon/Documents/m4test/testdata-v6-leebug.xlsx"
-      :table-xform
-      (alter-supply {[bad-src "AC"] 32})))
+      #_:table-xform
+      #_(alter-supply {[bad-src "AC"] 6 #_32
+                     [bad-src "RC"] 90
+                     })))
   ;;we can get the context the day before the error...
   (def prior (a/day-before-error (a/marathon-stream (error-ctx))))
   ;;[:error-occurs-in-next-frame]
@@ -1256,7 +1261,7 @@
   ;;Waiting in Ready (not yet deployable according to policy)...
   
 
-
+)
 
   
 ;; 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.

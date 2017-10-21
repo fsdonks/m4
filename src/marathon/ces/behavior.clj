@@ -594,6 +594,8 @@
          lite-update-state-beh
          check-overlap
          check-deployable
+         check-deployable-state
+         
          finish-cycle
          spawning-beh
 ;;         age-unit
@@ -1133,10 +1135,15 @@
             ]
         (if (= frompos nextpos)  ;;if we're already there...
           (do (debug [:no-movement frompos nextpos {:wt wt :state-change state-change}])
-              (success 
-               (if state-change
-                 (assoc benv :wait-time nil :next-position nil)
-                 (dissoc benv :next-position)))) ;do nothing, no move has taken place.  No change in position.
+              (if state-change
+                (->seq [(->alter  #(assoc % :wait-time nil :next-position nil))
+                        check-deployable-state])
+                 (success  (dissoc benv :next-position))) ;do nothing, no move has taken place.  No change in position.
+
+              #_(success 
+                 (if state-change                 
+                   (assoc benv :wait-time nil :next-position nil)
+                   (dissoc benv :next-position)))) ;do nothing, no move has taken place.  No change in position.
           (let [_            (debug [:moving frompos nextpos])
                 newstate     (or (get-state u nextpos)
                                  nextpos) ;;need to account for prescribed moves.
@@ -1343,26 +1350,73 @@
 
 ;;used to be called check-overlap; 
 (def  check-overlap disengage)
+;;Note: This behavior ASSUMES position changes within the
+;;same policy.  We can't have changed policies and assume
+;;this works.  Need an invariant to cover that.
+
 ;;Performance: We have a mild hotspot when we eagerly update
 ;;deployability via supply/update-deploy-status.  Might be possible to
 ;;update deployability lazily, save a little bit.  We're typically
-;;"not" deploying...
+;;"not" deploying...    
+#_(befn check-deployable ^behaviorenv {:keys [entity position-change ctx] :as benv}
+      (when position-change
+          (let [{:keys [from-position to-position]} position-change
+                u @entity
+                p (:policy u)
+                _ (debug [:checking-deployable-position
+                          :from from-position :to to-position])]
+            (when   (or (not= (protocols/deployable-at? p from-position)
+                              (protocols/deployable-at? p to-position))
+                        #_(unit/can-non-bog? u))
+              (do (debug [:deployable-changed! from-position to-position])
+                  (swap! ctx #(supply/update-deploy-status u nil nil %))
+                  (success benv))))
+        ))
+
+(befn check-deployable ^behaviorenv {:keys [entity position-change changed-policy ctx] :as benv}
+      (when position-change
+        (if-not changed-policy
+          (let [{:keys [from-position to-position]} position-change
+                u @entity
+                p (:policy u)
+                _ (debug [:checking-deployable-position
+                          :from from-position :to to-position])]
+            (when   (or (not= (protocols/deployable-at? p from-position)
+                              (protocols/deployable-at? p to-position))
+                        #_(unit/can-non-bog? u))
+              (do (debug [:deployable-changed! from-position to-position])
+                  (swap! ctx #(supply/update-deploy-status u nil nil %))
+                  (success benv))))
+          check-deployable-state)
+          ))
+
 ;;Suggestion: To deal with the fact that deployability may change
 ;;without nominal position changes (but state changes), we should
-;;add in the ability to check for a passed-in state-change.
-;;If from-position = to-position, then we look at the state-change.
-(befn check-deployable ^behaviorenv {:keys [entity position-change ctx] :as benv}
-   (when position-change
-     (let [{:keys [from-position to-position]} position-change
-           u @entity
-           p (:policy u)
-           _ (debug [:checking-deployable  :from from-position :to to-position])]
-       (when   (or (not= (protocols/deployable-at? p from-position)
-                         (protocols/deployable-at? p to-position))
-                   #_(unit/can-non-bog? u))
-         (do (debug [:deployable-changed! from-position to-position])
+;;add in the ability to check for a state-change fallback.
+(befn check-deployable-state ^behaviorenv {:keys [entity state-change ctx] :as benv}
+   (when state-change
+     (let [u @entity
+           from-state (marathon.ces.unit/unit-state u)
+           to-state   (:newstate state-change)
+           _ (debug   [:checking-deployable-state  :from from-state  :to to-state])]
+       (when   (not=  (protocols/deployable-state? from-state)
+                      (protocols/deployable-state? to-state))
+         (do (debug [:deployable-changed! from-state to-state])
              (swap! ctx #(supply/update-deploy-status u nil nil %))
              (success benv))))))
+
+;; (befn check-deployable ^behaviorenv {:keys [entity position-change state-change ctx] :as benv}
+;;    (when position-change
+;;      (let [{:keys [from-position to-position]} position-change
+;;            u @entity
+;;            p (:policy u)
+;;            _ (debug [:checking-deployable  :from from-position :to to-position])]
+;;        (when   (or (not= (protocols/deployable-at? p from-position)
+;;                          (protocols/deployable-at? p to-position))
+;;                    #_(unit/can-non-bog? u))
+;;          (do (debug [:deployable-changed! from-position to-position])
+;;              (swap! ctx #(supply/update-deploy-status u nil nil %))
+;;              (success benv))))))
 
 (befn mark-overlap {:keys [entity position-change] :as benv}
       (when-let [change position-change]
@@ -1387,7 +1441,7 @@
                                               from-position 
                                               to-position  @entity @ctx)) ;ugly, fire off a move event.check-overlap
             (reset! entity (assoc @entity :positionpolicy to-position))
-            (->seq [check-deployable                 
+            (->seq [check-deployable  ;;now being checked a bit more universally...
                     finish-cycle
                     mark-overlap
                     (->alter  #(assoc % :position-change nil
