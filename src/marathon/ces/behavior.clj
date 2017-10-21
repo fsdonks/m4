@@ -1099,6 +1099,29 @@
 ;;to, we will add the wait-time to the context.  That way,
 ;;downstream behaviors can pick up on the wait-time, and 
 ;;apply it.
+
+;;Note: there's a potential problem where our assumptions about
+;;deployability may be violated: If a policy change occurs, and
+;;the old policy position ends up being the new policy position,
+;;we bypass the position-change behavior to save time.  If the
+;;state-change happens, we still do it, but we miss - by virtue
+;;of assuming position changes -> deployable changes -
+;;the possibility that while the position may nominally
+;;be the same between two policies, the state is not...
+;;Case in point: ReqAnalysis_MaxUtilization_FullSurge_AC ->
+;;TAA19-23_AC_1:2; for at least one case, we have a transition
+;;from #{:deployable :c2 :dwelling} to  #{:c2 :dwelling},
+;;while the position is still Ready...the fine difference is
+;;that the preceding policy had [Reset :deployable] transition
+;;to Ready, where the new policy is not deployable until
+;;later in cycle.  We end up not updating the deployability
+;;of the unit, and it gets selected for a fill that - upon
+;;deployment checks - is illegal under the new policy.
+
+;;Solution: strengthen our definition of "no position change"
+;;to include no state change....Positions are equal iff
+;;they have the same state...the presence (or absence) of
+;;:deployable is the key currently...
 (befn move->statechange ^behaviorenv {:keys [entity next-position location-change
                                              tupdate statedata state-change  ctx] :as benv}
     (when-let [nextpos next-position] ;we must have a position computed, else we fail.                                       
@@ -1320,10 +1343,14 @@
 
 ;;used to be called check-overlap; 
 (def  check-overlap disengage)
-;;Performance: We have a mild hotspot when we actually have a mild hotspot
-;;when we eagerly update deployability via supply/update-deploy-status.
-;;Might be possible to update deployability lazily, save a little bit.
-;;We're typically "not" deploying...
+;;Performance: We have a mild hotspot when we eagerly update
+;;deployability via supply/update-deploy-status.  Might be possible to
+;;update deployability lazily, save a little bit.  We're typically
+;;"not" deploying...
+;;Suggestion: To deal with the fact that deployability may change
+;;without nominal position changes (but state changes), we should
+;;add in the ability to check for a passed-in state-change.
+;;If from-position = to-position, then we look at the state-change.
 (befn check-deployable ^behaviorenv {:keys [entity position-change ctx] :as benv}
    (when position-change
      (let [{:keys [from-position to-position]} position-change

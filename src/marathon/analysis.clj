@@ -558,7 +558,7 @@
   [t xs]
   (->> xs
        (as-stream)
-       (history/time-before)))
+       (history/time-before t)))
 
 (defn day-of
   "Given a sequence of frames, returns the context prior to 
@@ -566,7 +566,7 @@
   [t xs]
   (->> xs
        (as-stream)
-       (history/time-of)))
+       (history/time-of t)))
     
 (defn step-1
   "Take one step from the current context.  Useful for interactive 

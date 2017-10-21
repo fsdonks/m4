@@ -844,8 +844,10 @@
    "Returns a (blocking!) lazy sequence read from a channel." 
    [c] 
    (lazy-seq 
-    (when-let [v (async/<!! c)] 
-      (cons v (seq!! c)))))
+    (when-let [v (async/<!! c)]
+      (if (instance? Throwable v)
+        (throw v)
+        (cons v (seq!! c))))))
 
 ;;Trying to avoid the crap that's happening
 ;;with pipeline...we get stalled out on
@@ -1071,9 +1073,192 @@
   
   )
 
+(comment ;debugging a wierd case with new policies.
+  (def p (io/hpath  "Documents\\m4test\\testdata-v6-leebug.xlsx"))
+  ;;temporarily altered to allow us to get our error out from core.async...
+  (defn requirements-run
+  "Primary function to compute  requirements analysis.  Reads requirements 
+   project from inpath, computes requirement, and spits results to a tsv 
+   table in the same root folder as inpath, requirements.txt"
+  [inpath]
+  (let [inpath (clojure.string/replace inpath #"\\" "/")
+        base (->> (clojure.string/split inpath #"/")
+                  (butlast)
+                  (clojure.string/join "/"))
+        outpath (str base "/requirements.txt")]
+    (do (println ["Analyzing requirements for" inpath])        
+        (->> (-> (a/load-requirements-project inpath)
+                 (:tables)
+                 (tables->requirements :search bisecting-convergence)
+                 (requirements->table)
+                 (tbl/table->tabdelimited))
+             (spit outpath))
+        (println ["Spit requirements to " outpath]))))
+  
+;;Performing a requirements run manually to replicate the error..
+  
+;; marathon.analysis.requirements> (requirements-run p)
+;; [Analyzing requirements for C:/Users/thomas.l.spoon/Documents/m4test/testdata-v6-leebug.xlsx]
+;; Loading CompositePolicyRecords . . . done.
+;; Loading DemandRecords . . . done.
+;; Loading SuitabilityRecords . . . (missing).
+;; Loading PolicyTemplates . . . (missing).
+;; Loading SRCTagRecords . . . done.
+;; Loading Parameters . . . done.
+;; Loading PolicyDefs . . . (missing).
+;; Loading PolicyRecords . . . done.
+;; Loading SupplyRecords . . . done.
+;; Loading RelationRecords . . . done.
+;; Loading GhostProportionsAggregate . . . done.
+;; Loading PeriodRecords . . . done.
+;; [:computing-requirements 10527RF00 :remaining 0]
+;; [:computing-initial-supply]
+;; [:growing-by :proportional :from {AC 0, RC 15}]
+;; [:guessing-bounds [0 16] :at 16 :got 1]
+;; [:guessing-bounds [17 32] :at 32 :got 1]
+  
+;; Exception [:unit "19_10527RF00_AC" :invalid-deployer "Must have
+;; bogbudget > 0, \n cycletime in deployable window, or be eligible or
+;; a followon deployment"] marathon.ces.deployment/deploy-unit
+;; (deployment.clj:92)
+
+  ;;Synopsis
+  ;;========
+  ;;The requirements analysis was trying to peform a 2-stage
+  ;;search, and failed during the first stage due to exception thrown
+  ;;trying to deploy entity 19.  During the first stage, bounding, the
+  ;;algorithm is just trying to find an upper and lower bound by
+  ;;multiple runs, doubling the interval each time.  That sets us of
+  ;;for bection search.  Each run is a capacity analysis run (for
+  ;;regardless of phase), where we are only running a single SRC,
+  ;;and have a parametric supply, where for each compo:
+  ;;current-supply(compo,src,step) =
+  ;;    initial-supply(compo,src) + GhostProportionsAggregate(compo,src) * step
+  ;;We basically replace the corresponding supply records, then run a
+  ;;capacity analysis trying to find missed demand.  During the simulation
+  ;;run, as soon as we find any missed demand, we stop and report the misses
+  ;;(fail early), so we don't waste time on a failed supply.
+
+  ;;In this case, the run errored out before we failed or completed....
+  ;;Now the question is why?  
+  
+  ;;we learn that the unit is this guy from our convenient error message.
+  (def bad-unit "19_10527RF00_AC")  
+  (def bad-src "10527RF00")
+
+  ;;Recreating the initial conditions for interactive forensic analysis.
+  ;;====================================================================
+  
+  ;;let's alter the supply to do a capacity analysis with the same supply
+  ;;we errored on, then use our analysis functions to get the state of
+  ;;play when our problem happened.  We'll interactively dissect things
+  ;;rather than sift through event logs hoping for history (we can still
+  ;;do that too though).
+  
+  ;;move to marathon.analysis
+  (defn alter-supply [src-compo->quantity]
+    (fn [tbls]
+      (->> (:SupplyRecords  tbls)
+           (tbl/table-records)
+           (map (fn [{:keys [SRC Component] :as r}]
+                  (if-let [q (src-compo->quantity [SRC Component])]
+                    (assoc r :Quantity q :Enabled true)
+                    r)))
+           (tbl/records->table)           
+           (assoc tbls :SupplyRecords))))
+  ;;we know the error occurs during requirements analysis search at n=64,
+  ;;so, let's define a function that gets our context, and overrides the
+  ;;input supply table to have said record (currently a Quantity = 1)
+  ;;have a quantity of 64 (and be enabled).  This should replicate
+  ;;our capacity run that bombed.  We can pass that function in via
+  ;;the :table-xform optional keyword argument and it will be run
+  ;;as a "pre-process" step on our input tables prior to initializing
+  ;;the simulation context from the resulting output.
+  (defn error-ctx []
+    (a/load-context
+      "C:/Users/thomas.l.spoon/Documents/m4test/testdata-v6-leebug.xlsx"
+      :table-xform
+      (alter-supply {[bad-src "AC"] 32})))
+  ;;we can get the context the day before the error...
+  (def prior (a/day-before-error (a/marathon-stream (error-ctx))))
+  ;;[:error-occurs-in-next-frame]
+  ;;In this context, a frame is a time-indexed pair of simulation contexts,
+  ;;which sequentially form a history...
+  ;;[t ctx]
+  (def t (first prior))
+  (println [:day-before t])
+  ;;Note: we typically don't want to print the context, since it's typically
+  ;;really verbose (especially with lots of entities).  We have several
+  ;;means of visualizing and querying it though. In short: avoid evaluating
+  ;;or otherwise print the ctx at the repl, it might occupy your repl for a
+  ;;bit.
+  (def ctx (second prior))
+  ;;We are effectively, at the beginning of the day prior to the error
+  ;;occurring.  Let's see what unit 19 is doing now...
+  ;;Using the function from marathon.ces.core/current-entity, we can
+  ;;get a map representing the entity at the current point in time.
+  ;;This is useful, because in a discrete event context, the entity's
+  ;;statistics won't technically change until it next update...the entity
+  ;;is effectively frozen, but we know it's in a state that implies
+  ;;time-varying metrics, and we'd like a view of the entity as of 1822...
+  ;;current-entity lets us get a view of the entity as it exists "now",
+  ;;namely with linearly interpolated stats for it's various time-dependent
+  ;;metrics, like cycle duration, time in cycle, bog, dwell, etc.
+  (def e (core/current-entity ctx bad-unit))
+  ;; marathon.analysis.requirements> (keys e)
+  ;; (:oi-title :cycles :policystack :statedata :home :deployment-index
+  ;; :locationname :interactive :deployable :speed :cycletime
+  ;; :unit-entity :name :dt :unit-index :deployable-bucket :supply :type
+  ;; :behavior :src :state :icon :positionpolicy :component :policy
+  ;; :dwell-time-when-deployed :oititle :default-recovery :last-update
+  ;; :date-to-reset :currentcycle :label :spawntime :deployable-cat
+  ;; :locationhistory :physical :position :location :velocity)
+  
+  ;;we can print out the entity to the repl by evaluating it....
+  ;;however, the policy data structure is typically pretty verbose...
+  ;;let's elide it...
+
+  ;;marathon.ces.unit/summary provides a nice short description of the
+  ;;typical essentials..
+  
+  ;; marathon.analysis.requirements> (marathon.ces.unit/summary e)
+  ;; {:bog 0, :nextstate #{:c2 :dwelling},
+  ;;  :location-history ["Train"
+  ;;                     "Ready"
+  ;;                     ["Ready" :deployable] "Available"
+  ;;                     "9424_Shiloh_10527RF00_[761...769]"
+  ;;                     "9425_Shiloh_10527RF00_[769...809]"
+  ;;                     "9426_Shiloh_10527RF00_[809...841]"
+  ;;                     "9427_Shiloh_10527RF00_[841...1995]" "Reset"
+  ;;                     ["Reset" :deployable]
+  ;;                     "Train" "Ready"],
+  ;;  :cycletime 674, :name "19_10527RF00_AC",
+  ;;  :positionstate #{:c2 :dwelling},
+  ;;  :deployable? nil,
+  ;;  :duration 56,
+  ;;  :src   "10527RF00",
+  ;;  :dwell 675,
+  ;;  :positionpolicy "Ready",
+  ;;  :policy   "TAA_2024_Requirements_AC",
+  ;;  :statestart 0,
+  ;;  :statehistory [],
+  ;;  :timeinstate 0,
+  ;;  :curstate #{:c2 :dwelling},
+  ;;  :location "Ready"}
+
+  ;;We can see the entity - at time 1822 - is dwelling.  The location history
+  ;;provides a view of where it's been, to include policy locations and deployments.
+  (def pol (marathon.data.protocols/get-active-policy (:policy e)))
+  ;;marathon.analysis.requirements> (:name pol)
+  ;;"TAA19-23_AC_1:2"
+  
+  ;;Looks like he's transitioned his policy.  
+  ;;Waiting in Ready (not yet deployable according to policy)...
+  
 
 
 
+  
 ;; 'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
 ;; 'This is meant to be performed on a single SRC, i.e. a single independent requirement.
 ;; 'Bisection requires an src as the arguement.
