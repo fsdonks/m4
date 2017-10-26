@@ -258,29 +258,54 @@
   (do (proc/run-sample! path    :interests interests)
       (proc/do-charts-from path :interests interests)))
 
-(defn re-run4 [& {:keys [interests]}]
-  (run/do-audited-run (str fourpath "testdata-v6.xlsx") fourpath)
-  (proc/run-sample! fourpath :interests (or interests (src :BCTS))))
+(defn run4
+  "Executes a 'full run' to include auditing and post processing
+   for the marathon project located at path, spits either to
+   user-supplied outpath or parent of the input path.  User may
+   supply interests."
+  [path & {:keys [interests outpath audit? sample?]
+           :or {audit? true sample? true}}]
+  (let [wbf     (clojure.java.io/file path)
+        path    (io/fpath wbf)
+        parent  (.getParent wbf)
+        outpath (io/as-directory (or outpath parent))]
+     (when audit? (run/do-audited-run path outpath))
+     (when sample? (proc/run-sample! outpath
+                     :interests (or interests (src :BCTS))))))
 
-(defn re-run3 [& {:keys [interests]}]
-  (proc/run-sample! threepath :interests (or interests (src :BCTS))))
+(defn re-run4 [& {:keys [root wbname interests]
+                  :or {root fourpath wbname "testdata-v6.xlsx"}}]
+  (run/do-audited-run (str root wbname) root)
+  (proc/run-sample! root :interests (or interests (src :BCTS))))
 
-(defn re-run [& {:keys [interests]}]
-  (do (re-run4 :interests interests)
-      (re-run3 :interests interests)))
+(defn re-run3 [& {:keys [root wbname interests]
+                  :or {root threepath wbname "testdata-v6.xlsx"}}]
+  (proc/run-sample! root :interests (or interests (src :BCTS))))
+
+(defn re-run [& {:keys [l lname r rname interests]
+                 :or {l threepath lname "testdata-v6.xlsx"
+                      r fourpath rname "testdata-v6.xlsx"}}]
+  (do (re-run4 :root l :wbname lname :interests interests)
+      (re-run3 :root r :wbname rname :interests interests)))
 
 (defn compare-bcts []
   (proc/do-charts-from  threepath  :interests   (src :BCTS))
   (proc/do-charts-from  fourpath   :interests   (src :BCTS)))
 
 (defn run-branch
-  ([br]
-   (re-run :interests (branch br)))
-  ([br & rest]
+  ([brs & {:keys [l lname
+                  r rname]
+           :or {l threepath lname "testdata-v6.xlsx"
+                r fourpath rname "testdata-v6.xlsx"}}]
+   (re-run :l l :lname lname :r r :rname rname
+           :interests (apply branch brs)))
+  #_([br & rest]
    (re-run :interests (apply branch (cons br rest)))))
-(defn compare-branch [br]
-  (proc/do-charts-from  threepath  :interests (branch br))
-  (proc/do-charts-from  fourpath   :interests (branch br)))
+(defn compare-branch [br & {:keys [l r]
+                            :or {l threepath
+                                 r fourpath}}]
+  (proc/do-charts-from  l  :interests (branch br))
+  (proc/do-charts-from  r   :interests (branch br)))
 
 ;;useful helpers.
 (defn fill->info [{:keys [rule fillPath pathlength source] :as fd}]
@@ -446,3 +471,35 @@
 ;;Note: Initial VNV success 5/19/2017 @ 0750PM for every branch
 ;;between M3-vb83 and M4.09 f45296bcaff99096f600cad0cd18f6214f3cf327
 ;;Diff tests passing.  Capacity analysis verified.
+
+
+;;working on debugging some stuff from lee
+(comment
+
+  (def four
+    (-> (io/hpath "Documents/m4sampledata/leereqs/m4")
+        (io/alien->native)
+        (io/as-directory)))
+  (def three
+    (-> (io/hpath "Documents/m4sampledata/leereqs/m3/")
+        (io/alien->native)
+        (io/as-directory)))
+                      
+  ;;handy dandy fn for re-running our sim and post processing
+  ;;assuming m3 output is already there...
+  (defn re-run-ra []
+    (re-run :l four :r three :lname "testdata-v6-leebug.xlsx"
+            :interests (branch :42)))
+  
+  ;;handy dandy fn for diffing for us...
+  (defn diff-deps []
+    (diff-deployments-grouped :lpath (str three "AUDIT_Deployments.txt")
+                              :rpath (str four "AUDIT_Deployments.txt")))
+  
+;;passed deployment diffing...
+;;marathon.vnv> (first (diff-deps))
+  ;;{C:\Users\tom\Documents\m4sampledata\leereqs\m3\AUDIT_Deployments.txt (),
+  ;; C:\Users\tom\Documents\m4sampledata\leereqs\m4\AUDIT_Deployments.txt ()}
+;;nil
+
+  )

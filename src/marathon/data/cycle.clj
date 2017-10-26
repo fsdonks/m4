@@ -47,10 +47,32 @@
       :tstart t
       :tfinal (+ t policyduration)))
 
+;; 'TOM Change 20 April 2012
+;; 'Added BOGBudget as a modified field, since it did not exist before.  We used to just base everything off
+;; 'of MAXbog, which was bogtime in this function, but now we incorporate the notional of BOGBudget, or a
+;; 'or a cumulative bog capacity in a cycle.
+;; 'TOM change 2 Sep 2011
+;; 'mutate the current cycle object to reflect changes in expectations
+;; Public Function modify(bogtime As Long, dwelltime As Long, policyduration As Long, Optional MOBtime As Single, Optional bogbudget As Long) As TimeStep_CycleRecord
+;; Set modify = Me
+
+;; With modify
+;;     .BOGExpected = bogtime
+;;     .BDRExpected = 1 / ((bogtime + MOBtime) / (policyduration - (bogtime + MOBtime)))
+;;     .DurationExpected = policyduration
+;;     .DwellExpected = dwelltime
+;;     If .DwellExpected > 1095 And MOBtime = 0 Then
+;;         If .DwellExpected <> 9999999 Then Err.Raise 101, , "wierd "
+;;     End If
+;;     .MOBexpected = MOBtime
+;;     .bogbudget = bogbudget
+;; End With
+
+;; End Function
 (defn ^cyclerecord modify-cyclerecord
   "Modifies oldcycle, assumably in the context of a policy change.  Returns the 
    result of the modification, as a new cycle."
-  [cyclerec bogtime dwelltime policyduration MOBtime]
+  [cyclerec bogtime dwelltime policyduration MOBtime bogbudget]
   (if (and (> dwelltime 1095)  (zero? MOBtime) (not (= :inf dwelltime)))
     (throw (Exception. "Expected dwell time is abnormal..."))
     (let [bogmob (+ bogtime MOBtime)]
@@ -61,7 +83,7 @@
          :duration-expected policyduration
          :dwell-expected  dwelltime
          :mob-expected MOBtime
-         ;:bogbudget bogbudget
+         :bogbudget bogbudget
          }))))
 
 (defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]

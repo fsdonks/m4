@@ -231,23 +231,39 @@
       :mob-expected      MOBtime
       :bogbudget         bogbudget)))
 
+;'TOM Change 24 April 2012 -> When bogbudget is increased, we take into account the unit's bog history
+;'as part of the projection.  Namely, we reduce! the bogbudget correspondingly.  Negative bogbudgets are
+;'zeroed, which correctly prevents the unit from bogging any more until reset.
+;'TOM Change 20 April 2012 -> Incoporated BOGBudget into this guy, so unit's can now grow their bog budget
+;'as composite policies change over time.
 ;'TOM Change 2 Sep 2011
-;Public Sub ModifyCycle(plcy As IRotationPolicy)
-
-;With CurrentCycle
+;Public Sub ModifyCycle(u As TimeStep_UnitData, plcy As IRotationPolicy)
+;
+;With u.CurrentCycle
 ;    'update the record to account for this....when we record the cycle as completed, we want to use expected
 ;    'values from the new policy.
-;    .modify plcy.MaxBOG, plcy.MaxDwell, plcy.cyclelength, plcy.MaxMOB
+;    .modify plcy.maxbog, plcy.maxdwell, plcy.cyclelength, plcy.MaxMOB, _
+;            maxFloat(plcy.bogbudget - u.bog, 0)  'Note the reduction in bogbudget!
+;                                               'If unit has already bogged over budget, budget is zeroed!
 ;End With
-
+;
 ;End Sub
 
 ;;Modified to correspond with new cycle-stats wrapper function.
+;;note: this implementation clashed with the original mod-cycle fn,
+;;in that bogbudget is not updated.  This flew under the radar for
+;;the bulk of vnv testing, since we never looked at policies
+;;that deviated bogbudget from maxbog...until recently.  Need to
+;;ensure that bogbudget is updated as the cycle changes...
 (defn modify-cycle [u newpolicy]
-  (let [;vs #_(get-vals newpolicy [:maxBOG  :maxDwell :cyclelength :maxMOB])
-        {:keys [max-bog max-dwell cycle-length max-mob]} (cycle-stats newpolicy)       
-        newrecord ;#_(apply modify-cyclerecord (:currentcycle u) vs)
-                    (cyc/modify-cyclerecord (:currentcycle u) max-bog max-dwell cycle-length max-mob)]
+  (let [{:keys [max-bog max-dwell cycle-length max-mob]} (cycle-stats newpolicy)
+        ;;Note the reduction in bogbudget!
+        ;;If unit has already bogged over budget, budget is zeroed!
+        bogbudget   (max (- (pol/bog-budget newpolicy)
+                            (get-bog u))
+                         0)
+        newrecord   (cyc/modify-cyclerecord (:currentcycle u) max-bog max-dwell
+                                            cycle-length max-mob bogbudget)]
     (assoc u :currentcycle newrecord)))
 
 
