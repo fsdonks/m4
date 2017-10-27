@@ -1079,7 +1079,6 @@
 
 (comment ;debugging a wierd case with new policies.
   (def p (io/hpath  "Documents\\m4sampledata\\leereqs\\m4\\testdata-v6-leebug.xlsx"))
-  (def p (io/hpath  "Documents\\m4test\\testdata-v6-leebug.xlsx"))
 (defn requirements-run
   "Primary function to compute  requirements analysis.  Reads requirements 
    project from inpath, computes requirement, and spits results to a tsv 

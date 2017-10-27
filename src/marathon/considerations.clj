@@ -2,6 +2,105 @@
 ;;pending tasks.
 (ns marathon.considerations)
 
+;;Counter Intuitive / Sensitive Behaviors
+;;=======================================
+;;Order of supply now matters (technically).
+
+;;Before the MARV effort, we didn't have a platform neutral
+;;total ordering of supply, due the implementation-specific
+;;hash functions and storage used in different implementations
+;;of M3 and M4...
+
+;;This led to inconsistent behavior between the platforms
+;;in regards to selecting units for fill, where - if
+;;two units were effectively equal - the unit that just
+;;happend to be "ordered" (read stored) first would get
+;;picked.  This meant that the implementation of the
+;;associative structure containing the entities had
+;;an undefined, seemingly arbitrary control over the
+;;fill order for such cases.
+
+;;To rectify this - and for the sake of comparative
+;;verification - we added a "unit-index" key to
+;;each entity, that derived from the order in which
+;;the entity was created from source data (supply records).
+;;This serves as the final, lowest form of sorting
+;;criteria for any fill comparison.  Thus, units with
+;;lower indices (appearing "earlier" in the supply records)
+;;will have an arbitrary advantage in filling demands
+;;iff all other criteria are equal (rare, but possible).
+
+;;This cured one source of inconsistency and helped
+;;aid in comparative verification of the platforms...
+
+;;The side-effect - which just reared its head during
+;;requirements analysis in M4 - is that the order of
+;;supply can cause counterintuitive behavior when
+;;computing requirements from a capacity run.  In other
+;;words, supply order is now an independent variable
+;;that can contribute to changes in history!
+
+;;I noticed the phenomena when tracking down a bug
+;;related to a new policy, and comparing output with
+;;legacy m3 and m4.  During testing the M4, I
+;;alternately had supply records (from RA) where
+;;the components were in order of NG, RC, AC, vs.
+;;the typical (AC NG RC).
+;;In this case, only AC was being grown, against an
+;;initial supply of NG and RC.
+
+;;During testing, RA converged on 611 for the step
+;;size.  I checked capacity analyses with identical
+;;supply in each and found the output to be consistent
+;;using marathon.vnv.  After some wrangling, though,
+;;I must have mixed up the order, and ended up
+;;with an insufficient supply in M3, but a sufficient
+;;supply in M4.  I even generated the explicit supply
+;;records according to the cycle-times that M4
+;;was using to ensure consistent supply.
+
+;;Finally, I tracked down the case to RA being "wrong,"
+;;even though M4 says it converged with 0 misses....
+;;Testing in the REPL showed that, indeed, with the
+;;- otherwise identical - supply of [9 NG 63 RC 611 AC]
+;;pulled in from the requirements.txt output, if
+;;fed to a stand alone capacity analysis, we'd get
+;;1 missed demand, despite having converged!?!
+
+;;Testing showed that, running with [611 AC 9 NG 63 RC]
+;;indeed created zero misses; thus - at some point -
+;;the deployments were biased "enough" solely by the
+;;lower unit-index values of the NG/RC entities, that
+;;we ended up with at least one instance where a
+;;non-AC unit was used, thus deviating history from
+;;the RA run, and leaving us with a miss!  In actuality,
+;;the miss was incredibly small, BUT, it caused an
+;;infeasibility in practice.
+
+;;Solution: I'm looking at different options here....
+;;Seems the simplest is to:
+;;a) sort the output of
+;;   requirements.txt to ensure that it's consistent
+;;   with the supply records built for the run,
+;;   (RA fills in missing records by proportion order,
+;;   which goes AC, NG, RC in the GhostProportionsAggregate
+;;   input).
+;;b) Possibly sort all supplyrecords by compo before doing
+;;   any run.  This is how data is "typically" formatted....
+;;   and sorting would eliminate the unit-index as a confounding
+;;   source between runs.
+;;c) Accept that supply order matters and inform the user?
+;;   Are there cases where it's semantically useful to have
+;;   earlier supply be preferred in case of a tie?
+;;   That's the current behavior.  It was originally for
+;;   consistency, but may have analytic uses....
+;;d) Use a consistent random-seed based off hashing the
+;;   supply records to provide a PRNG to determine ties?
+;;   This would preserve determinism, but could be hard
+;;   to get right for multiple platforms....
+
+;;Currently, behavior c is the default.
+
 ;;Legacy Scattered Files
 ;;======================
 ;;--Mostly Done
