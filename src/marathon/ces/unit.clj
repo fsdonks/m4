@@ -176,6 +176,38 @@
 
 (def add-MOB addMOB)
 
+;Public Sub ChangeState(newstate As String, deltat As Single, Optional duration As Single)
+;Call behavior.ChangeState(Me, newstate, deltat, duration)
+;End Sub
+
+;Public Function CanDeploy() As Boolean
+
+;With policy
+;    CanDeploy = (followoncode <> vbNullString) Or (cycletime >= .StartDeployable And cycletime < .StopDeployable)
+;End With
+
+                                        ;End Function
+
+
+;Note -> this is obsolete.....need to use the version in sim.unit instead.
+;; (defn can-deploy? [u & [spawning policy]]
+;;   (let [policy (or policy (:policy u))
+;;         ct (:cycletime u)
+;;         [start stop] [(:StartDeployable policy) (:StopDeployable policy)]] 
+;;   (or (not= (:followoncode u) nil) 
+;;       (and (>= ct start) (< ct stop)))))
+
+;Public Property Get bog() As Single
+;bog = CurrentCycle.bog
+;End Property
+(defn get-bog         [u] (-> u :currentcycle :bog))
+(defn get-bog-budget  [u] (-> u :currentcycle :bogbudget))
+;Public Property Get dwell() As Single
+;dwell = CurrentCycle.dwell
+;End Property
+(defn get-dwell       [u] (-> u :currentcycle :dwell))
+(defn get-cyclelength [u] (-> u :currentcycle :duration-expected))
+
 ;'Note, this will retain a good deal of data...we're keeping track of the unit's arforgen histories..
 ;Public Sub RecordCycle(day As Single)
 ;Cycles.add CurrentCycle
@@ -265,41 +297,6 @@
         newrecord   (cyc/modify-cyclerecord (:currentcycle u) max-bog max-dwell
                                             cycle-length max-mob bogbudget)]
     (assoc u :currentcycle newrecord)))
-
-
-
-
-;Public Sub ChangeState(newstate As String, deltat As Single, Optional duration As Single)
-;Call behavior.ChangeState(Me, newstate, deltat, duration)
-;End Sub
-
-;Public Function CanDeploy() As Boolean
-
-;With policy
-;    CanDeploy = (followoncode <> vbNullString) Or (cycletime >= .StartDeployable And cycletime < .StopDeployable)
-;End With
-
-                                        ;End Function
-
-
-;Note -> this is obsolete.....need to use the version in sim.unit instead.
-;; (defn can-deploy? [u & [spawning policy]]
-;;   (let [policy (or policy (:policy u))
-;;         ct (:cycletime u)
-;;         [start stop] [(:StartDeployable policy) (:StopDeployable policy)]] 
-;;   (or (not= (:followoncode u) nil) 
-;;       (and (>= ct start) (< ct stop)))))
-
-;Public Property Get bog() As Single
-;bog = CurrentCycle.bog
-;End Property
-(defn get-bog         [u] (-> u :currentcycle :bog))
-(defn get-bog-budget  [u] (-> u :currentcycle :bogbudget))
-;Public Property Get dwell() As Single
-;dwell = CurrentCycle.dwell
-;End Property
-(defn get-dwell       [u] (-> u :currentcycle :dwell))
-(defn get-cyclelength [u] (-> u :currentcycle :duration-expected))
 
 
 ;;BUG NOTE: We have an issue with computing normalized dwell
