@@ -39,8 +39,8 @@
             [spork.ai [core        :as ai]
                       [behaviorcontext :as b]
                       [messaging]]             
-            [marathon.data. [store       :as simstate]
-                            [protocols   :as protocols]]
+            [marathon.data [store       :as simstate]
+                           [protocols   :as protocols]]
             [clojure.core.reducers     :as r]
             [clojure.pprint :as pprint]))
 
