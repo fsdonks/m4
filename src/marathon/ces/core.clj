@@ -39,7 +39,8 @@
             [spork.ai [core        :as ai]
                       [behaviorcontext :as b]
                       [messaging]]             
-            [marathon.data.store       :as simstate]
+            [marathon.data. [store       :as simstate]
+                            [protocols   :as protocols]]
             [clojure.core.reducers     :as r]
             [clojure.pprint :as pprint]))
 
@@ -547,7 +548,7 @@
 
 ;;TODO# define a visualization protocol, extend it to core datatypes...
 (defn visualize-unit [u]   (inspect/tree-view u))    
-(defn visualize-policy [p] (jung/view-graph (:positiongraph p) jung/fr))
+(defn visualize-policy [p] (jung/view-graph (protocols/get-position-graph p) jung/fr))
 
        
 ;;#Shared Functions
