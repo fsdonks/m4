@@ -484,11 +484,12 @@
     (-> (io/hpath "Documents/m4sampledata/leereqs/m3/")
         (io/alien->native)
         (io/as-directory)))
-                      
+
+  (def wb "testdata-v6-leebug.xlsx")
   ;;handy dandy fn for re-running our sim and post processing
   ;;assuming m3 output is already there...
   (defn re-run-ra []
-    (re-run :l four :r three :lname "testdata-v6-leebug.xlsx"
+    (re-run :l four :r three :lname wb
             :interests (branch :42)))
   
   ;;handy dandy fn for diffing for us...
