@@ -270,4 +270,37 @@
               [serial    :as ser]
               [util      :as util]]
              )
+
+
+;;from https://rosettacode.org/wiki/Linear_congruential_generator#Clojure
+  (defn lcg [a b]
+    (let [k (long (Math/pow 2 31))]
+      (fn [n]
+        (mod (+ (* n a)
+                b)
+             k))))
+
+  (defn lcgen [a b init]
+    (let [f     (lcg a b)
+          prior (atom init)]
+      (fn []
+        (reset! prior (f @prior)))))
+  ;;state_{n+1}=1103515245 * state_{n}+12345 mod 2^31
+  ;;rand_{n}=state_{n}
+  ;;rand_{n} is in range 0 to 2147483647.
+  (defn bsdlcg [init] (lcgen 1103515245 12345 init))
+  ;;state_{n+1}=214013 * state_{n}+2531011 mod 2^31
+  ;;rand_{n}=state_{n} / 2^16
+  ;;rand_{n} is in range 0 to 32767.
+  ;;msvcrt prng from rand()
+  (defn mslcg [init]
+    (let [f (lcgen 214013 2531011 init)]
+      (fn [] (bit-shift-right (f) 16))))
+
+  (defn bsdlcg-stream [init]
+    (let [f (bsdlcg init)]
+      (repeatedly f)))
+  (defn mslcg-stream [init]
+    (let [f (mslcg init)]
+      (repeatedly f)))
 )

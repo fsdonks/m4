@@ -406,15 +406,27 @@
                              :menubar main-menu
                              :on-close (if exit? :exit :dispose)})))))
 
+(defn project-context-menu [selection]
+  (let [{:keys [view control]}
+        (gui/map->reactive-menu "Processing"
+                                processing-menu-spec :popup? true)
+        handler (menu-handler nil)]
+    (-> control
+        :event-stream
+        (obs/subscribe #(handle-menu %)))
+    view))
+
+(defn ^javax.swing.JPopupMenu item->menu
+  "Return a popup menu as a function of the input..."
+  [selection]
+  (doto ^javax.swing.JPopupMenu (javax.swing.JPopupMenu.)
+    (.add (javax.swing.JMenuItem.  (or
+                                    selection
+                                    "nothing")))))
+
 ;;temporary hack to add context menu to the project window (right-click processing menu).
-(defn install-popups! []
-  (let [get-popup! (fn ^javax.swing.JPopupMenu get-popup!
-                     [lbl]
-                     (doto ^javax.swing.JPopupMenu (javax.swing.JPopupMenu.)
-                       (.add (javax.swing.JMenuItem.  (or
-                                                       lbl
-                                                       "nothing")))))
-        show-popup!
+(defn install-popups! [& {:keys [on-popup] :or {on-popup item->menu}}]
+  (let [show-popup!
           (fn show-popup! [^java.awt.event.MouseEvent e]
             (let [x (.getX e)
                   y (.getY e)
@@ -422,7 +434,7 @@
                   ^javax.swing.tree.TreePath path (.getPathForLocation t x y)]
               (when path
                  (let [tgt (.. path getLastPathComponent getLabel)]
-                   (.show (get-popup!) t x y)))))]
+                   (.show (on-popup tgt) t x y)))))]
     (->> (spork.events.native/mouse-observer
                 (nightcode.ui/get-project-tree))
          (:clicked)
