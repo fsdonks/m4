@@ -373,7 +373,7 @@
 ;;TODO: migrate the rest of this to seesaw, get rid of the old redundant
 ;;crud...
 (defn hub [& {:keys [project exit? repl-options]}]
-  (seesaw.core/invoke-later
+  (seesaw.core/invoke-now
    (binding [*ns* *ns*]
            (in-ns 'marathon.core)
            (let [project-menu    (gui/map->reactive-menu "Project-Management"  
@@ -405,6 +405,29 @@
                             {:title   (str "MARATHON " +version+)
                              :menubar main-menu
                              :on-close (if exit? :exit :dispose)})))))
+
+;;temporary hack to add context menu to the project window (right-click processing menu).
+(defn install-popups! []
+  (let [get-popup! (fn ^javax.swing.JPopupMenu get-popup!
+                     [lbl]
+                     (doto ^javax.swing.JPopupMenu (javax.swing.JPopupMenu.)
+                       (.add (javax.swing.JMenuItem.  (or
+                                                       lbl
+                                                       "nothing")))))
+        show-popup!
+          (fn show-popup! [^java.awt.event.MouseEvent e]
+            (let [x (.getX e)
+                  y (.getY e)
+                  ^javax.swing.JTree t (.getSource e)
+                  ^javax.swing.tree.TreePath path (.getPathForLocation t x y)]
+              (when path
+                 (let [tgt (.. path getLastPathComponent getLabel)]
+                   (.show (get-popup!) t x y)))))]
+    (->> (spork.events.native/mouse-observer
+                (nightcode.ui/get-project-tree))
+         (:clicked)
+         (obs/filter-obs spork.events.native/right-button?)
+         (obs/subscribe show-popup!))))
 
 (defn -main [& args]  (hub :exit? true))
 
