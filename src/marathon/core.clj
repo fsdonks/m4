@@ -237,15 +237,18 @@
           _ (gui/alert (str "dumping peaks stats to " target))]            
       (stokeio/compute-peak-stats dump-folder target))))
 
+(defn stoch-demand [wbpath]
+  (let [dump-folder (apply str (interleave (butlast (io/list-path wbpath))
+                                           (repeat "\\")))
+        _ (gui/alert (str "dumping to " dump-folder))]            
+    (spit-tables 
+     (helm/futures->tables 
+      (helm/xlsx->futures wbpath :ignore-dates? true :log? false)) dump-folder)))
+
 ;a quick plugin for stochastic demand generation.
 (defn stoch-demand-dialogue []
   (request-path [wbpath "Please select the location of valid case-book."]
-    (let [dump-folder (apply str (interleave (butlast (io/list-path wbpath))
-                                               (repeat "\\")))
-          _ (gui/alert (str "dumping to " dump-folder))]            
-      (spit-tables 
-       (helm/futures->tables 
-        (helm/xlsx->futures wbpath :ignore-dates? true :log? false)) dump-folder))))
+     (stoch-demand wbpath)))
 
 (defn clean-demand-dialogue []
   (request-path [wbpath "Please select the location of valid case-files."]
@@ -342,6 +345,39 @@
   (request-path [wbpath "Please select the location of a valid MARATHON project file."] 
      (run/examine-project wbpath)))
 
+;;commands that have a single meaning; typically dialogue-driven.
+(def commands
+  {:stochastic-demand  '(stoch-demand-dialogue)
+   :compute-peaks      '(compute-peaks-dialogue) 
+   :say-hello          '(println "hello!")
+   :capacity-analysis  '(capacity-analysis-dialogue)
+   :requirements-analysis  '(requirements-analysis-dialogue)
+   :debug-run          '(debug-run-dialogue)
+   :examine-project    '(examine-project-dialogue)
+   :search-for         '(pprint/pprint
+                         (apropos
+                          (gui/input-box
+                                    :prompt "Enter A Topic")))
+   :postprocessed-run  '(post-processed-run-dialogue) 
+   :load-script        '(load-file
+                         (gui/input-box
+                          :prompt "Select a Clojure script"))})
+
+;;commands that have a file-path supplied.
+(defn contextual-command [e]
+  (when-let [cmd (:command e)]
+    (let [path (:path e)]
+      (case cmd
+        :stochastic-demand      `(~'stoch-demand ~path)
+        :compute-peaks          '(compute-peaks-dialogue) 
+        :capacity-analysis      `(~'capacity-analysis ~path)
+        :requirements-analysis  `(~'requirements-analysis ~path)
+        :debug-run              `(~'debug-run ~path)
+        :examine-project        `(~'run/examine-project ~path)
+        :postprocessed-run      `(~'post-processed-run ~path) 
+        :load-script            `(~'load-file ~path)
+       `(throw (Exception. (str [:unknown-command! ~e])))))))
+
 ;;holy wow this is terrible.  must be a better way...
 (defn menu-handler
   "Default menu-handling function.  Handles events coming from the 
@@ -349,30 +385,56 @@
    to the appropriate command."
   [rpl]
   (fn [e]
-    (let [expr 
-          (case e
-            :stochastic-demand  '(stoch-demand-dialogue)
-            :compute-peaks      '(compute-peaks-dialogue) 
-            :say-hello          '(println "hello!")
-            :capacity-analysis  '(capacity-analysis-dialogue)
-            :requirements-analysis  '(requirements-analysis-dialogue)
-            :debug-run          '(debug-run-dialogue)
-            :examine-project    '(examine-project-dialogue)
-            :search-for         '(pprint/pprint
-                                  (apropos
-                                   (gui/input-box
-                                    :prompt "Enter A Topic")))
-            :postprocessed-run  '(post-processed-run-dialogue) 
-            :load-script        '(load-file
-                                  (gui/input-box
-                                   :prompt "Select a Clojure script"))
-            `(~'println ~e))]
-      #_(org.dipert.swingrepl.main/send-repl rpl (str expr))
+    (let [expr (or (get commands e)
+                   (contextual-command e))]
       (repl/echo-repl! expr))))
+
+;;provide a popup menu that shows processing options for a selected file.
+(defn project-context-menu
+  "Defines the popup context menu displayed when right-clicking on files
+   in the project tree, to provide quick access to common tasks and avoid
+   the file dialogue process..."
+  [{:keys [name file] :as nd}]
+  (let [{:keys [view control]}
+        (gui/map->reactive-menu "Processing"
+                                processing-menu-spec :popup? true)
+        handle-menu (menu-handler nil)]
+    (->> control
+         :event-stream
+         (obs/map-obs (fn [e] {:path (io/fpath file)
+                               :command e}))
+         (obs/subscribe #(handle-menu %)))
+    view))
+
+(def pop-fn (atom project-context-menu))
+
+(defn install-popups!
+  "Slight hack to install a popup context menu to the project window
+  (right-click currently yields a menu identical to processing...)."
+  [& {:keys [on-popup] :or {on-popup (fn [s] (@pop-fn s))}}]
+  (let [show-popup!
+          (fn show-popup! [^java.awt.event.MouseEvent e]
+            (let [x (.getX e)
+                  y (.getY e)
+                  ^javax.swing.JTree t (.getSource e)
+                  ^javax.swing.tree.TreePath path (.getPathForLocation t x y)]
+              (when path
+                (let [;_ (reset! last-path path)
+                      tgt (.. path getLastPathComponent getUserObject)]
+                   (.show (on-popup tgt) t x y)))))]
+    (->> (spork.events.native/mouse-observer
+                (nightcode.ui/get-project-tree))
+         (:clicked)
+         (obs/filter-obs spork.events.native/right-button?)
+         (obs/subscribe show-popup!))))
+
 
 ;;TODO: migrate the rest of this to seesaw, get rid of the old redundant
 ;;crud...
-(defn hub [& {:keys [project exit? repl-options]}]
+(defn hub
+  "Creates the graphical interface for M4, including project browser, file editors,
+   a REPL, and a menu-bars for common processing tasks."
+  [& {:keys [project exit? repl-options]}]
   (seesaw.core/invoke-now
    (binding [*ns* *ns*]
            (in-ns 'marathon.core)
@@ -404,63 +466,21 @@
              (night/attach! :window-args
                             {:title   (str "MARATHON " +version+)
                              :menubar main-menu
-                             :on-close (if exit? :exit :dispose)})))))
-
-(defn project-context-menu [selection]
-  (let [{:keys [view control]}
-        (gui/map->reactive-menu "Processing"
-                                processing-menu-spec :popup? true)
-        handler (menu-handler nil)]
-    (-> control
-        :event-stream
-        (obs/subscribe #(handle-menu %)))
-    view))
-
-(defn ^javax.swing.JPopupMenu item->menu
-  "Return a popup menu as a function of the input..."
-  [selection]
-  (doto ^javax.swing.JPopupMenu (javax.swing.JPopupMenu.)
-    (.add (javax.swing.JMenuItem.  (or
-                                    selection
-                                    "nothing")))))
-
-;;temporary hack to add context menu to the project window (right-click processing menu).
-(defn install-popups! [& {:keys [on-popup] :or {on-popup item->menu}}]
-  (let [show-popup!
-          (fn show-popup! [^java.awt.event.MouseEvent e]
-            (let [x (.getX e)
-                  y (.getY e)
-                  ^javax.swing.JTree t (.getSource e)
-                  ^javax.swing.tree.TreePath path (.getPathForLocation t x y)]
-              (when path
-                 (let [tgt (.. path getLastPathComponent getLabel)]
-                   (.show (on-popup tgt) t x y)))))]
-    (->> (spork.events.native/mouse-observer
-                (nightcode.ui/get-project-tree))
-         (:clicked)
-         (obs/filter-obs spork.events.native/right-button?)
-         (obs/subscribe show-popup!))))
+                             :on-close (if exit? :exit :dispose)})
+             (seesaw.core/invoke-later (install-popups!))))))
 
 (defn -main [& args]  (hub :exit? true))
 
-;       :add-table   
-;       :clear-project     
-;       :load-project   
-;       :save-project        
-;       :view-project  
-;       :view-table   
-;       :add-table}))
-                  
+(comment ;popup testing stuff
+  (defn ^javax.swing.JPopupMenu item->menu
+    "Return a popup menu as a function of the input..."
+    [{:keys [name file] :as nd}]
+    (doto ^javax.swing.JPopupMenu (javax.swing.JPopupMenu.)
+      (.add (javax.swing.JMenuItem.  (or
+                                      (io/fpath file) 
+                                      "nothing")))))
 
+  ;;tree user objects are files
+  ;;(def last-path (atom nil))
 
-;;Just some mucking around with parallel mapping stuff.
-;;Didn't see a boost.  Need to tweak this guy.
-;; (defn chunked-pmap [f size coll]
-;;   (->> coll 
-;;        (partition-all size)
-;;        (pmap (comp doall 
-;;                    (partial map f)))
-;;        (apply concat)))
-
-               
-               
+  )

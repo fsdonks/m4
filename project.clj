@@ -21,6 +21,7 @@
                  [org.clojure/core.logic "0.8.10"]
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
                  [alembic "0.3.2"]
+                 [eigenhombre/splasher "0.0.2"] ;;splash screen lib
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src" "../spork/src" "../nightclub/src" "../proc/src"]
