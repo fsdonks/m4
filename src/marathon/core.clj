@@ -318,9 +318,12 @@
     (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
                   (post-processed-run wbpath)))
 
+(defn requirements-analysis [wbpath]
+  (requirements/requirements-run wbpath))
+
 (defn requirements-analysis-dialogue []
     (request-path [wbpath "Please select the location of a valid MARATHON requirements project file."]  
-                  (requirements/requirements-run wbpath)))
+           (requirements-analysis wbpath)))
 
 (defn debug-run-dialogue []
   (request-path [wbpath "Please select the location of a valid MARATHON project file."]
