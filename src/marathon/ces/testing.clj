@@ -429,7 +429,7 @@
         ["41_SRC3_AC" 584]
         ["28_SRC3_NG" 1368]
         ["12_SRC2_AC" 730]
-        ["6_SRC1_AC" 730]
+        ["6_SRC1_AC"  730]
         ["39_SRC3_AC" 438]))))
 
 (def supplytags (store/gete defaultctx :SupplyStore :tags))

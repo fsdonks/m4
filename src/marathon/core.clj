@@ -428,7 +428,6 @@
          (obs/filter-obs spork.events.native/right-button?)
          (obs/subscribe show-popup!))))
 
-
 ;;TODO: migrate the rest of this to seesaw, get rid of the old redundant
 ;;crud...
 (defn hub
@@ -467,7 +466,11 @@
                             {:title   (str "MARATHON " +version+)
                              :menubar main-menu
                              :on-close (if exit? :exit :dispose)})
-             (seesaw.core/invoke-later (install-popups!))))))
+             (add-watch nightcode.ui/root :popup
+                        (fn [_ _ _ _]
+                          (seesaw.core/invoke-later (install-popups!))
+                          (remove-watch nightcode.ui/root :popup)
+                          ))))))
 
 (defn -main [& args]  (hub :exit? true))
 
