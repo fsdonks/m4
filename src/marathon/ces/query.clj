@@ -619,7 +619,8 @@
                 bog        unit/get-bog 
                 proportional-dwell unit/normalized-dwell
                 relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength u))))
-                unit-index :unit-index)
+                unit-index  :unit-index
+                unit-weight :unit-weight)
 
 ;;predicates...
 
@@ -1003,17 +1004,17 @@
 ;; not_ac	(except-compo "AC")
 ;; title32	[(where-compo "NG") mindwell]
 
-(def uniform  [when-fenced #_when-followon max-proportional-dwell min-unit-index])
-(def ac-first [when-fenced #_when-followon AC max-proportional-dwell min-unit-index])
-(def rc-first [when-fenced #_when-followon RC max-proportional-dwell min-unit-index])
-(def ng-first [when-fenced #_when-followon NG max-proportional-dwell min-unit-index])
+(def uniform  [when-fenced #_when-followon max-proportional-dwell min-unit-weight])
+(def ac-first [when-fenced #_when-followon AC max-proportional-dwell min-unit-weight])
+(def rc-first [when-fenced #_when-followon RC max-proportional-dwell min-unit-weight])
+(def ng-first [when-fenced #_when-followon NG max-proportional-dwell min-unit-weight])
 ;;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
 ;;TODO: Revisit the definitions here, potentially using a better candidate for
 ;;predicate equality.  The inversion/flipping stuff is potentially awkward.
 (def not-ac   #(is-not (:component %) "AC"))
-(def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-index])
+(def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 ;;apparently identical.
-(def hld [#(is (:component %) "NG") min-proportional-dwell min-unit-index])
+(def hld [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 
 ;;new rules....should be able to compose these...
 ;;By default, we get substituable, globally-available supply using our

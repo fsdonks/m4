@@ -630,6 +630,29 @@
 (defn valid-supply-record? [r]
   (and (:Enabled r) (pos? (:Quantity r))))
 
+;;so, we'd like to maintain a deterministic sequence of random weights.
+(defn rands-from [seed]
+  (let [prng (java.util.Random. seed)]
+    (repeatedly  (fn []
+                   (.nextDouble prng)))))
+(defn ints-from [n seed]
+  (map #(int (* % n)) (rands-from seed)))
+
+;;Alleviates the problem with using :unit-index for weighting (tie breaking)
+;;during fills.
+(defn weights-from
+  "Creates a determinstic sequence of weights, based on an initial count
+   of entities.  This lets us incrementally add entities without
+   losing our place in the random number stream.  We typically
+   won't call this more than once - during initialization -
+   so most of the time we won't be dropping.  Should not be a
+   bottleneck.  Provides a psuedo-random uniform basis for
+   selecting entities based on a weight.  Returns a weight in the
+   range [0 2147483647), which is Integer/MAX_VALUE"
+  [initial-count]
+  (->> (ints-from 2147483647 0)
+       (drop initial-count)))
+
 ;;Given a set of raw unit records, create a set of unitdata that has
 ;;all the information necessary for initialization, i.e. lifecycle, 
 ;;policy, behavior, name, etc.  We want to name the units according 
@@ -642,6 +665,7 @@
 (defn units-from-records
   ([recs supply pstore filter-func]
    (let [unit-count (atom (-> supply :unitmap (count)))
+         initial-count @unit-count
          ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
          ;;TODO fix this...our defaults aren't that great.  
                                         ;        normal-beh @base/default-behavior ;(-> supply :behaviors :defaultACBehavior)
@@ -661,7 +685,10 @@
                           (record->unitdata) ;;assign-policy handles policy wrangling.
                           (rassoc :unit-index @unit-count) ;;Add UnitIndex 3/8/2017
                           (conj-unit  acc)))) (transient []))
-         (persistent!))))
+         (persistent!)
+         (mapv (fn [weight unit] ;;added random-weights
+                (assoc unit :unit-weight weight)) (weights-from initial-count))
+         )))
   ([recs supply pstore]
    (units-from-records recs supply pstore valid-supply-record?)))
 
