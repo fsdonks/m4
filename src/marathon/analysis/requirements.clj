@@ -655,7 +655,8 @@
            upper     init-upper]
       (let [reqs  (-> reqs
                       (distribute (:src reqs) upper)
-                      (update  :iteration inc))]
+                      (update  :iteration inc))
+            _ (println [:guessing-bounds [lower upper] :at upper])]
         (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
           (do (println [:guessing-bounds [lower upper] :at upper :got res])
               (recur reqstate (inc upper)  (* 2 upper)))

@@ -1373,6 +1373,22 @@
                   (success benv))))
         ))
 
+;;Begavior note:
+;;When units change policy, they may come from (as in RA) a finite policy
+;;with a larger bog budget than the target policy, and have bogged (longer
+;;than the bog of the new policy), and end up in a position/state that
+;;is identical to the old policy.  So, on the surface, we have no
+;;state change; no position change, no indicator of deployability change,
+;;yet the unit is not technically deployable, since it has no bogbudget.
+
+;;M3 addressed this by adding an automatic update deployability
+;;check at the end of policy change, regardless.
+;;M3 also added an additional check, where bogbudget exists,
+;;but the deployable time is less than the new policy's overlap,
+;;causing a negative cycle time error to occur.  This second
+;;conditions sends the unit to reset if the modified bogbudget
+;;< newpolicy.overlap.
+
 (befn check-deployable ^behaviorenv {:keys [entity position-change changed-policy ctx] :as benv}
       (when position-change
         (if-not changed-policy
