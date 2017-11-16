@@ -3,17 +3,17 @@
                  (if (.exists f)
                    (clojure.edn/read-string (slurp "order.edn"))
                    '[marathon.main])))
-(def version "4.1.3")
+(def version "4.1.4")
 (def capsule-name "marathon")
 (def capsule-jar (str  capsule-name "-" version ".jar"))
 
 ;;project definition...
-(defproject marathon "4.1.3-SNAPSHOT"
+(defproject marathon "4.1.4-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
-                 [spork "0.2.0.7-SNAPSHOT"]
-                 [proc  "0.2.3-SNAPSHOT"] ;;post processing.
+                 [spork "0.2.0.8-SNAPSHOT"]
+                 [proc  "0.2.4-SNAPSHOT"] ;;post processing.
                  ;;external libs
 ;                 [com.taoensso/nippy "2.11.0-RC1"] ;temporarily added to tes serialization.
                  ;;temporarily added to explore possible uses of inference...
