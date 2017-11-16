@@ -549,14 +549,16 @@
 ;;Computes the wait time - i.e. transfer time - between
 ;;frompos and topos relative to a unit's policy and statedata.
 (defn immediate-wait-time
-  ([unit frompos topos {:keys [deltat statedata] :as benv}]
-   (let [wt     (protocols/transfer-time (:policy unit) frompos topos)
-         deltat (or  deltat 0) ;allow the ctx to override us...
-         ]
-     (- wt (fsm/remaining statedata))))
+  ([unit frompos topos deltat statedata]
+   (let [wt        (protocols/transfer-time (:policy unit) frompos topos)
+         remaining (fsm/remaining statedata)
+         deltat    (or  deltat remaining) ;allow the ctx to override us...
+         ] 
+     (- wt (- deltat remaining))))
   ([unit frompos {:keys [deltat statedata] :as benv}]
    (immediate-wait-time unit frompos
-      (get-next-position (:policy unit) frompos) benv)))
+                        (get-next-position (:policy unit) frompos)
+                        deltat statedata)))
 
 ;;Could be a cleaner way to unpack our data, but this is it for now...
 ;;need to fix this...let's see where we use it.
@@ -1373,6 +1375,14 @@
                   (success benv))))
         ))
 
+
+(defn update-deploy-status
+  ([u ctx]
+   (->alter (fn [benv] 
+             (do (swap! ctx #(supply/update-deploy-status u nil nil %))
+                 benv))))
+  ([benv] (update-deploy-status @(:entity benv) (:ctx benv))))
+
 ;;Begavior note:
 ;;When units change policy, they may come from (as in RA) a finite policy
 ;;with a larger bog budget than the target policy, and have bogged (longer
@@ -1401,8 +1411,9 @@
                               (protocols/deployable-at? p to-position))
                         #_(unit/can-non-bog? u))
               (do (debug [:deployable-changed! from-position to-position])
-                  (swap! ctx #(supply/update-deploy-status u nil nil %))
-                  (success benv))))
+                  (update-deploy-status u ctx)
+                  #_(swap! ctx #(supply/update-deploy-status u nil nil %))
+                  #_(success benv))))
           check-deployable-state)
           ))
 
@@ -1418,8 +1429,10 @@
        (when   (not=  (protocols/deployable-state? from-state)
                       (protocols/deployable-state? to-state))
          (do (debug [:deployable-changed! from-state to-state])
-             (swap! ctx #(supply/update-deploy-status u nil nil %))
-             (success benv))))))
+             (update-deploy-status u ctx)
+             #_(swap! ctx #(supply/update-deploy-status u nil nil %))
+             #_(success benv))))))
+
 
 ;; (befn check-deployable ^behaviorenv {:keys [entity position-change state-change ctx] :as benv}
 ;;    (when position-change
@@ -1910,6 +1923,25 @@
                            apply-policy-change])                 
                    defer-policy-change])))))
 
+;;policy-change specific reset behaviors, due to transforms
+;;between policies:
+
+;;if the unit's bog budget does not exceed the prescribed overlap,
+;;we go to reset early.
+(befn infeasible-bog-reset ^behaviorenv {:keys [entity ctx] :as benv}
+      (->if (fn [_] (not (pos? (u/boggable-time @entity))))
+            reset-beh))
+
+;;Note: in retrospect, it looks like we can just use the unit/can-deploy?
+;;predicate, which performs the same checks (and more!) that check-deployable
+;;and check-deployable-state perform.  This ends up being the standard
+;;by which the unit is judged when selected for fill...so...
+;;We just postpone deployable status updates until the end, and do a blanket
+;;check using 
+(befn policy-change-deployability-check ^behaviorenv {:keys [entity ctx] :as benv}
+      (->seq [infeasible-bog-reset
+              update-deploy-status]))
+
 ;;Assuming we have a change, let's apply it!
 ;;How long will the unit have been in this state?
 ;;    Since it's a policy change....do we zero it out?
@@ -1991,6 +2023,7 @@
                                               ))
                                               ;)))
                       (move! positionB newduration) ;;movement behavior
+                      policy-change-deployability-check
                       #_(->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
                        ]))))
 
