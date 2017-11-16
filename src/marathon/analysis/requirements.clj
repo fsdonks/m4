@@ -936,13 +936,36 @@
                     2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
                                         ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
                    out
-                   src-distros->requirements
+                   require-or-err #_src-distros->requirements
                    in)
         ]
     (seq!! out)))
 
+(comment ;;pc test
+  (defn pc []
+    (let [out     (async/chan 10)
+          in      (async/chan 10)
+          _       (async/onto-chan in  (range 100))
+          break (rand-int 100)
+          f-or-err  (fn f-or-err [n]
+                      (try  (if (= n break)
+                              (throw (Exception. (str [:error! n])))
+                               n)
+                                  
+                            (catch Exception e
+                              (do (async/go (async/close! in))
+                                  (->error n e)))))
+          pipe    (producer->consumer
+                   2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
+                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
+                   out
+                   f-or-err #_src-distros->requirements
+                   in)
+        ]
+    (seq!! out)))
+  )
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
-                    :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])
+                    :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position #_:Original])
 
 (defn requirements->table
   "Computes a finalized table of supply records representing the 
@@ -952,8 +975,8 @@
        (filter second) ;eliminating nil resultsx
        (mapcat (comp :supply second))       
        (tbl/records->table)
-;       (tbl/order-fields-by supply-fields)
-       (tbl/map-field :Quantity long)))
+       (tbl/map-field :Quantity long)
+       (tbl/order-fields-by supply-fields)))
 
 (defn requirements-run
   "Primary function to compute  requirements analysis.  Reads requirements 
@@ -965,7 +988,7 @@
                   (butlast)
                   (clojure.string/join "/"))
         outpath (str base "/requirements.txt")]
-    (do (println ["Analyzing requirements for" inpath])        
+    (do (println ["Analyzing requirements for" inpath])
         (->> (-> (a/load-requirements-project inpath)
                  (:tables)
                  (tables->requirements-async  :search bisecting-convergence)
