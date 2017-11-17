@@ -99,7 +99,11 @@
 ;;   This would preserve determinism, but could be hard
 ;;   to get right for multiple platforms....
 
-;;Currently, behavior c is the default.
+;;We use option d) to implement a consistent total ordering,
+;;using a the PRNG in clojure (java) using the same
+;;initial random seed.  Order of supply still matters
+;;(technically), but the effects are likely imperceptible
+;;with this randomization.
 
 ;;Legacy Scattered Files
 ;;======================
