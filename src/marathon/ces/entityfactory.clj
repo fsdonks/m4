@@ -379,9 +379,6 @@
 ;        (unitsim/change-location newpos ctx)
         )))
 
-(def ^:constant +max-cycle-length+     10000)
-(def ^:constant +default-cycle-length+ 1095)
-
 ;;Computes the intervals between units distributed along a lifecylce.
 ;;Used to uniformly disperse units in a deterministic fashion.
 (defn compute-interval [clength unitcount]  
@@ -429,7 +426,7 @@
 ;;#Potential Digression from M3
 (defn distribute-cycle-times [units policy]
   (let [clength (generic/cycle-length policy)
-        clength (if (> clength +max-cycle-length+) +default-cycle-length+ clength)]                                              
+        clength (if (> clength core/+max-cycle-length+) core/+default-cycle-length+ clength)]                                              
     (mapv  (fn [cycletime  unit]
              (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")                          
              (assoc unit :cycletime cycletime))
