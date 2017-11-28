@@ -724,6 +724,23 @@
 ;;for longs
 (def ^:constant +inf+ 9999999)
 
+(defn finite-else
+  "Ensures that x is a 'finite' value, relative to
+   the sentinel constant for infinity +inf+, in that
+   x < +inf+.  If not, returns a default, assumably
+   finite value."
+  [x default]
+  (if (< x +inf+)
+    x
+    default
+    ))
+
+;;moved from marathon.ces.entityfactory
+(def ^:constant +max-cycle-length+     10000)
+(def ^:constant +default-cycle-length+ 1095)
+
+
+
 ;;##Developer Notes
 
 ;;#Transitioning from Effectful Simulation and State Updating#

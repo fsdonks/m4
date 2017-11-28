@@ -78,9 +78,20 @@
 ;;maxbog,maxdwell, cyclength, maxMOB vals, but
 ;;in composite policies, they don't square.
 
-(defn cycle-stats [policy]  
+;;To accomodate comparing potentially infinite
+;;and finite cycle lengths, we introduce
+;;a finiteness check, deriving a 'finite'
+;;value for max-dwell for the cycle if
+;;the underlying policy provides an
+;;infinite maximum dwell time.  This
+;;creates a better basis for normalized
+;;dwell computation.  Addresses issue
+;;from commit bbe385e5 regarding
+;;the Finite Cycle Length Goal proposal.
+(defn cycle-stats [policy]
   {:max-bog      (pol/max-bog policy)
-   :max-dwell    (pol/max-dwell policy)
+   :max-dwell    (core/finite-else (pol/max-dwell policy)
+                                   core/+default-cycle-length+)
    :cycle-length (pol/cycle-length policy)
    :max-mob      (pol/max-mob policy)})
 
