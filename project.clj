@@ -17,11 +17,14 @@
                  ;;external libs
 ;                 [com.taoensso/nippy "2.11.0-RC1"] ;temporarily added to tes serialization.
                  ;;temporarily added to explore possible uses of inference...
-                 [datascript "0.15.0"] 
+                 [datascript "0.15.0"]
                  [org.clojure/core.logic "0.8.10"]
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
                  [alembic "0.3.2"]
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
+                 ;;spec libs, compatible with clojure 1.8
+                 [clojure-future-spec "1.9.0-beta4"]
+                 [org.clojure/test.check "0.9.0"]
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src" "../spork/src" "../nightclub/src" "../proc/src"]
