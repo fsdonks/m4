@@ -84,5 +84,7 @@
    :text
    })
 
+;;Coerces a spork.util.parsing schema
+;;into a clojure.spec.
 (defn schema->spec [schema]
   )
