@@ -330,6 +330,22 @@
    deployed (- 270 overlap) 
    Overlapping overlap})
 
+(defn ac14-waits [{:keys [overlap]}]
+  {reset 365 
+   train 365 
+   ready 730 
+   available 365 
+   deployed (- 365 overlap) 
+   Overlapping overlap})
+
+(defn ac15-waits [{:keys [overlap]}]
+  {reset 730 
+   train 365
+   ready 730 
+   available 365 
+   deployed (- 365  overlap)
+   Overlapping overlap})
+
 (defn rc11-waits [{:keys [overlap]}]
   {reset 182 
    train 183 
@@ -553,7 +569,9 @@
   [ac12-enabler  "AC 12 template for enablers"   (route-by ac12-waits default-routing)  :overlap 30]
   [ac13          "AC 1:3 template for MCU"       (route-by ac13-waits default-routing)  :overlap 45]
   [ac13-enabler  "AC 13 template for MCU"        (route-by ac13-waits default-routing)  :overlap 30]
-  [ac11          "AC 1:1 template for MCU"       (route-by ac11-waits default-routing)  :overlap 0 ])
+  [ac11          "AC 1:1 template for MCU"       (route-by ac11-waits default-routing)  :overlap 0]
+  [ac14          "AC 1:4 template"               (route-by ac14-waits default-routing)]
+  [ac15          "AC 1:5 template"               (route-by ac15-waits default-routing)])
 
 (deftemplates   {:startstate reset
                  :endstate   available
@@ -692,6 +710,8 @@
 (def aliases
   {"AC12"  ac12
    "AC13"  ac13
+   "AC14"  ac14
+   "AC15"  ac15
    "AC11"  ac11       
    "RC11"  rc11 ;added missing template
    "RC12"  rc12   
