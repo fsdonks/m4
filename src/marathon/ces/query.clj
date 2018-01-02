@@ -529,7 +529,9 @@
   [type nm [l r] & body]
   (let [[hi lo] (case type 
                   :value     ["min"   "max"]
-                  :predicate ["not" "when"])
+                  :predicate ["not" "when"]
+                  (throw (Exception.
+                          (str [:unknown-comparison-type type]))))
         hi  (symbol (str hi "-" nm))
         lo  (symbol (str lo "-" nm))]                  
     `(do (def ~hi (ord-fn [~l ~r] 

@@ -243,7 +243,9 @@
       :src-and-group  (rule->supply-rule category) ;[(sink-label (first category)) (second category)]
                                         ;For complex categories that contain information in a map structure, we 
                                         ;will have a way to parse the supply rule, which could be arbitrarily complex.
-      :rule-map       (rule->supply-rule category)))
+      :rule-map       (rule->supply-rule category)
+      (throw (Exception. (str [:unknown-demand-category (supply-cat demand category)
+                               {:demand demand :category category}])))))
   ([demand] (derive-supply-rule demand  (get demand :src))))
 ;  ([demand ctx] (derive-supply-rule demand (marathon.sim.core/get-fillstore ctx) (get demand :src))))
 
@@ -297,7 +299,7 @@
 ;;Note: this is pretty crucial for the fill process, it provides all of
 ;;the ordering and filtering context, derived from the demand record.
 
-;;compute a compatible supply category based on the demand.
+;;compute a compatible supply catesgory based on the demand.
 (defn derive-category [d supply-category]
   (if (vector? supply-category)
     (let [[src groups] supply-category]

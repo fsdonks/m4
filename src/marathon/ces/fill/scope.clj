@@ -55,7 +55,10 @@
       (reduce (fn [scope [label reason]]
                 (let [src  (case reason
                              :supply (fillgraph/source-root label)
-                             :demand (fillgraph/sink-root label))]
+                             :demand (fillgraph/sink-root label)
+                             (throw (Exception.
+                                     (str [:expected-supply-or-demand
+                                           :for-reason :got reason]))))]
                   (if (contains? scope src) 
                     (assoc scope src :both)
                     (assoc scope src reason))))  {}))

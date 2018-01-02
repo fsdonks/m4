@@ -129,7 +129,7 @@
   (case (first arc-info)
     :source (add-source g (second arc-info))
     :sink   (add-sink   g (second arc-info))
-    :rel    (throw (Exception. (str "not implemented : parse-arc :rel")))))
+    (throw (Exception. (str "not implemented : parse-arc " (first arc-info))))))
 
 (defn supplystore->arc-info [supplystore]
   (->> (:unitmap supplystore)
