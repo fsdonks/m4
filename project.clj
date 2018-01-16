@@ -23,6 +23,7 @@
                  [alembic "0.3.2"]
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
                  ;;spec libs, compatible with clojure 1.8
+                 ;;debating shifting to 1.9, spork is updated..
                  [clojure-future-spec "1.9.0-beta4"]
                  [org.clojure/test.check "0.9.0"]
                  ]
