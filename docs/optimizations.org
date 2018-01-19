@@ -1,0 +1,56 @@
+* Possible Optimizations for M4 
+** General (implemented, alpha)
+   Mutable entity store
+   - For testing, we want immutability.
+   - Mutability for performance.
+   - Perfect implementation of mutable
+     spork.util.entitystore.
+   - Expected 10-fold performance
+     improvements.
+** Post Processing (PROC)
+   Bottlenecks:
+   - proc.core/get-unfilled-demandtrends 
+     - Currently naive processing
+       We process everything in memory, group-by, etc.
+       Streaming/eventful model would be much more efficient
+       Potential for parallelism too...    
+   - proc.core/location-table
+     - unit-locs
+     - loc-records
+   - naive refresh
+     - we re-run everything.
+     - can we be smarter, use diffing, to re-run only 
+       what we need to for a refresh?
+       - define "refresh"
+** Requirements Analysis
+   - parametric threshold for miss windows
+     - gross business rules -> tighter constraints
+     - relax the problem by accepting misses conditionally
+     - ex. 
+       - for priority 1 demands -> 0 day miss acceptable
+       - for priority 2 deamnds -> 10 day miss acceptable
+   - Smarter requirements bounds (fewer runs)
+     - Incremental fills vs. fail-first fills
+       - Dynamic programming formulation somewhere?
+     - JIT-supply distribution -> lower bound hueristic?
+       - If we follow a smiliar method to the old Ghosts, 
+         instead using just-in-time supply, we can establish
+         a theoretical lower bound per-run.
+         - Assuming dynamics and initial conditions don't undermine us.
+         - Can we prove that it perfectly matches supply to demand?
+   - Parallell / async work-stealing requirements runs:
+     - Implemented at a coarse LOD (by SRC).
+     - Baseline 25 min.
+       - 14 min @ 3 cores.
+       - 13 min @ 4 cores.
+       - 16 min @ 2 cores.
+   - Pre-processing -> demand compression / SRC Factoring
+     - Many SRCs have identical demand signals.
+     - We can factor them out and compress results of 
+       N runs into 1.
+     - Particularly effective for enablers, with large entity
+       volumes.
+   - Sensitivity Analysis
+     - Initial conditions
+       - Cycle time variation
+     - Conditional demand disabling.
