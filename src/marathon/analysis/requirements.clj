@@ -726,7 +726,7 @@
         (if (= mid lower)
           (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
             [true  true] (if (pos? lower) (converge :left  reqs lower)
-                             (converge :right  reqs lower))
+                             (converge :right  reqs upper))
             [false true] (converge :right reqs upper)
             (do (reset! rs reqstate)
               (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)])))))
