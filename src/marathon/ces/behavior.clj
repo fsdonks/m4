@@ -1642,7 +1642,10 @@
       (let [pos             (protocols/start-state (:policy @entity))
             wt              (immediate-wait-time @entity pos benv)
             _   (debug [:immediate-reset :from (:positionpolicy @entity) :to pos :wait-time wt])
-            _               (swap! entity #(assoc % :followoncode nil))
+            newbogbudget (u/max-bog @entity)
+            _               (swap! entity #(-> %
+                                               (assoc :followoncode nil)
+                                               (assoc-in [:currentcycle :bogbudget] newbogbudget)))
             ]
         (beval moving-beh (assoc benv :next-position pos
                                       :wait-time wt))))
