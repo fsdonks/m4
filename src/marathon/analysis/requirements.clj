@@ -47,7 +47,7 @@
      (spork.util.table/table-fields t)
      (->  (map parse-field
                (spork.util.table/table-fields  t)
-               (spork.util.table/table-columns t))           
+               (spork.util.table/table-columns t))
           (spork.util.table/conj-fields spork.util.table/empty-table)))))
 
 (defn set-field
@@ -59,14 +59,12 @@
 (defn zero-supply [t] (set-field t :Quantity 0))
 (defn increment-key [r k n] (update r k (fn [q] (+ q n))))
 
-;;use tbl/subtables-by to get this implemented.
-;;Useful for splitting up requirements states...
-;; (defn split-by-field
-;;   "Given a field to split on, creates n new databases, 
-;;    where each database contains tables (with the field) 
-;;    that have identical values for the field."
-;;   [tbls & {:keys [field tables]}]
-;;   (let [[base variable]
+(defn has-supply?
+  "Quick check to see if we have any entities with
+   the unit-entity component, indicating the presence
+   of a supply."
+  [ctx]
+  (pos? (count (store/get-domain ctx :unit-entity))))
 
 ;;Profiling for informing lower bounds and hueristics...
 ;;======================================================
@@ -384,7 +382,7 @@
                   dtype :bin}}]
   (let [make-distributor (fn [n] (fn [k] (* k n)))] 
     (->> (get-or tbls  distribution-table
-                 (->> (:SupplyRecords tbls)                                           
+                 (->> (:SupplyRecords tbls)
                       (tbl/table-records)
                       (filter :Enabled)
                       (compute-aggregate-supply)
@@ -418,18 +416,18 @@
 ;;as a record seq now, don't have to stick with
 ;;table...
 (defn apply-amounts
-  "Given a requirementstate ,reqstate, and 
-   a map of {component amount}, increments the 
-   supply records in reqstate where compo matches, 
+  "Given a requirementstate ,reqstate, and
+   a map of {component amount}, increments the
+   supply records in reqstate where compo matches,
    according to (+ (minimum-supply component) amount)"
   [reqstate compo-amounts]
   (let [mins (:minimum-supply reqstate)]
-    (update reqstate :supply          
+    (update reqstate :supply
             #(->> %
                   (map (fn [r]
                          (if-let [n (get compo-amounts (:Component r))]
                            (assoc r :Quantity (+ n (get mins (:Component r) 0)))
-                           r)                
+                           r)
                 ))))))
 
 ;;note: strange incidence of getting 50 instead of 25 for total on an
@@ -520,18 +518,37 @@
 ;;Returns the next requirement state, if we actually have a requirement.
 ;;Otherwise nil.
 ;;I think we can just use analysis/load-context...
+
+;;NOTE:
+;;We ran into a complication when computing or otherwise inferring "misses" from
+;;the original default-distance function. When no supply is present (in the case
+;;of no initial supply and a growth-step of 0), we end up with nil returned
+;;since history->ghosts returns nil if no misses exist, potentially misleading
+;;about the result of the misses.
+
+;;The fix is to return a more informative result: If we did not run a simulation
+;;(i.e., no history due to 0 initial supply), we return a useful value that
+;;indicates no-supply. Otherwise, if we have a history, we compute misses. If no
+;;misses are present, we return a value indicating no-misses. These values
+;;communicate the possible consequences of a run.
 (defn calculate-requirement
-  "Computes requirements from an initial set of tables.  Workhorse function for 
+  "Computes requirements from an initial set of tables.  Workhorse function for
    requirements analysis."
   ([reqstate distance-function]
    (calculate-requirement reqstate distance-function requirements-ctx))
-  ([{:keys [tables src steps supply] :as reqstate} distance-function tables->ctx]
-   (-> (update reqstate :tables assoc :SupplyRecords supply)
-       (tables->ctx)
-       (distance-function))))
+  ([{:keys [tables src steps supply peak] :as reqstate} distance-function tables->ctx]
+   (let [ctx  (-> (update reqstate :tables assoc :SupplyRecords supply)
+                  (tables->ctx))]
+     (if (has-supply? ctx)
+       ;;when there's supply (initial + grown) we run and search for
+       ;;the first instance of missed demand.  No instances indicate
+       ;;no misses.  So if distance-function returns nil, we return 0.
+       (distance-function ctx)
+       ;;When there is no supply, typical in situations with
+       ;;a zero-length growth step and no initial supply records,
+       ;;we return the peak demand as miss estimate.
+       peak))))
 
-;;calculate-requirement works on one requirement...
-;;to perform a requirements analysis, we want to 
 (def default-distance (comp history->ghosts a/marathon-stream))
 (def indexed-distance (comp history->indexed-ghosts a/marathon-stream))
 
@@ -645,6 +662,8 @@
                :or   {distance default-distance
                       init-lower 1
                       init-upper 10}}]
+  ;;TODO I think the first clause in and can now be replaced by
+  ;;(has-supply? ...)
   (if (and (pos? (reduce + (vals (:minimum-supply reqstate))))
            (not (calculate-requirement reqstate distance)))
     (do (println [:minimum-supply-sufficient])
@@ -699,6 +718,12 @@
 ;;We're wasting time on needless bisecting, when we haven't
 ;;established.
 (defn bisecting-convergence
+  "reqstate is a map of information for a basic requirements
+   run, which is used to create a parametric run based on
+   the initial supply, a growth-step n, and a distribution
+   of supply by component.  Reqstate also includes
+   a peak field, which lets us know what the peak demand is
+   for inferring the expected misses for a supply of 0."
   [reqstate & {:keys [distance init-lower init-upper log init-known]
                :or   {distance default-distance
                       init-lower 0
@@ -714,8 +739,11 @@
                      (get-or @known? n
                              (let [rtest (-> reqs
                                              (distribute (:src reqs) n))
+                                   ;;Found no missed demands, so zero! misses!
                                    res (or (calculate-requirement rtest distance) 0)
-                              _   (swap! known? assoc n res)]
+                                   _   (swap! known? assoc n res)
+                                   ;_   (when (zero? n) (println [:amount 0 res]))
+                                   ]
                           res)))
         _ (assert (not (neg?  (- init-upper init-lower))) "need a valid non-negative interval!")]
     (loop [reqs      reqstate
@@ -725,9 +753,19 @@
             mid   (+ lower hw)]
         (if (= mid lower)
           (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
-            [true  true] (if (pos? lower) (converge :left  reqs lower)
-                             (converge :right  reqs upper))
-            [false true] (converge :right reqs upper)
+            ;;In this case, BOTH guesses produce 0 misses!
+            ;;We want to take whichever guess is NOT 0,
+            ;;since 0 is not a valid guess.
+            [true  true]
+                (if (pos? lower)
+                  ;;lower is a valid guess, and is the minimum!
+                  (converge :left  reqs  lower)
+                  ;;lower is zero!, upper is the valid guess
+                  ;;and minimum! (1).
+                  (converge :right reqs upper))
+            [false true]
+                  ;;Upper is the only valid guess, and minimum!
+                  (converge :right reqs upper)
             (do (reset! rs reqstate)
               (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)])))))
           (let [reqs (update reqs :iteration inc)
@@ -788,7 +826,7 @@
 ;;in the supply records.
 ;;From there, we apply the growth step
 ;;by adding the rationals.
-;;Then we coerce prior to running...
+;;Then we coerce priorto running...
 
 ;;So, when we go to distribute
 
@@ -808,8 +846,10 @@
   (fn [[src compo->distros]]
     ;;for each src, we create a reqstate
     (if-let [peak (peaks src)]
-      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])                                     
-            reqstate       (load-src tbls src compo->distros)
+      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
+            ;;We now pack along the peak demand for extra context.
+            reqstate       (assoc (load-src tbls src compo->distros)
+                                  :peak peak)
             _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
             [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
         (if (== lower upper 0)
@@ -817,7 +857,6 @@
           [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
       (do (println [:skipping-src src :has-no-demand])
           [src nil])
-      
       )))
 
 (defn tables->requirements
