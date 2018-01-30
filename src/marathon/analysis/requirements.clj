@@ -526,11 +526,19 @@
 ;;since history->ghosts returns nil if no misses exist, potentially misleading
 ;;about the result of the misses.
 
-;;The fix is to return a more informative result: If we did not run a simulation
-;;(i.e., no history due to 0 initial supply), we return a useful value that
-;;indicates no-supply. Otherwise, if we have a history, we compute misses. If no
-;;misses are present, we return a value indicating no-misses. These values
-;;communicate the possible consequences of a run.
+;;The fix is to inject some additional information into the requirements
+;;context (that from which we derive a simulation context to test our
+;;growth step).  We add information about the peak demand, under
+;;:peak, and that provides a basis for - later in the pipeline -
+;;calculate-requirement to make a more informed decision about
+;;the results of a requirements run.
+
+;;If the context to-be-tested (the context resulting from distributing
+;;a sample growth step to the requirements context) contains
+;;some supply, we run through computing misses as before, using
+;;the user-supplied distance function.  We may return nil
+;;as a valid result, indicating no misses.
+
 (defn calculate-requirement
   "Computes requirements from an initial set of tables.  Workhorse function for
    requirements analysis."
