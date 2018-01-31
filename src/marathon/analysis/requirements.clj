@@ -450,11 +450,13 @@
                         })))))
 
 ;;This is an auxillary function to handle each run of the requirements analysis.
-;;Given a simulation that is already primed and loaded, and possibly an initial supply of units, calculate the
-;;units needed (the requirement), as represented by the amount of ghosts created by SRC.  The requirement is then
-;;applied to the distributor, which transforms the homogeneous supply of ghosts into a set of units that are to be added
-;;to the final result. The return is a dictionary of (SRC|Component, count) pairs.  This allows us to trivially update
-;;the supplytable, by incrementing.
+;;Given a simulation that is already primed and loaded, and possibly an initial
+;;supply of units, calculate the units needed (the requirement), as represented
+;;by the amount of ghosts created by SRC. The requirement is then applied to the
+;;distributor, which transforms the homogeneous supply of ghosts into a set of
+;;units that are to be added to the final result. The return is a dictionary of
+;;(SRC|Component, count) pairs. This allows us to trivially update the
+;;supplytable, by incrementing.
 
 ;;The idea here is to just layer on another fill step,
 ;;if there are unmet demands, we allow ghosts to be created and
