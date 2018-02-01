@@ -577,7 +577,7 @@
 ;;Can we pre-process the demand to get a better estimate?
 ;;That is, determine an initial seed - and pre-distribute
 ;;up to said seed - to get us closer to the goal to
-;;begin with?
+;;begin with
 
 ;;Lower-bound analysis indicates that the peak concurrent
 ;;demand is - assuming perfect usage of supply, i.e.

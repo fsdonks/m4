@@ -289,7 +289,8 @@
          finals  (store/gete ctx :DemandStore :finals)
          actives (store/gete ctx :DemandStore :activedemands)]
      (when (or (seq changes)
-               (finals t))
+               (finals t)
+               (= (sim/get-final-time ctx) t))
        (->> actives
             (keys)
             (map #(store/get-entity ctx %))
@@ -820,11 +821,15 @@
         grab-frames!  (fn [frm] (reduce (fn [acc {:keys [name grab]}]
                                           (grab frm))
                                         nil frame-state))
+        end-points   (juxt sim/get-final-time
+                           #(store/gete % :DemandStore :tlastdeactivation))
+        [tfinal tlastdemand]        (-> h first second end-points) 
         _ (reset! w (some #(when (= (:name %) :event-log) (:saver %)) frame-state))]
     (with-open [savers (io/->closer (map :saver frame-state))]
       (doseq [frm h]
-        (do (println [:day (first frm)])
-            (grab-frames! frm))))))
+        (let [[t ctx] frm]
+          (do (println [:day t :tfinal tfinal  :last-deactivation tlastdemand])
+              (grab-frames! frm)))))))
 
 ;;note:
 ;;spit-log! and spit-log moved to spork.sim.history

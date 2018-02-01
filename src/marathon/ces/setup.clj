@@ -74,22 +74,31 @@
             (tags/tag-subject acc Tag SRC))
           init-tags tagtbl))
 
+(defn ensure-numeric-parameter [ps k & {:keys [default] :or {default 0}}]
+  (let [res (get ps k default)]
+    (if (integer? res) ps
+        (let [n   (if (number? res)  res ;already an int
+                      (case res
+                        ("" nil) default
+                        (if (string? res)
+                          (clojure.edn/read-string res)
+                          (throw (Exception.
+                                  (str ["Non-integer" k
+                                        res]))))))]
+          (assoc ps k  (long n))))))
+
+(def default-params
+  {:DefaultRecoveryTime 0
+   :LastDayDefault      5001})
+
 (defn check-parameters
   "Ensures our numeric parameters are parsed/initialized.  
    Currently only here to provide a consistent default recovery 
    parameter."
   [ps]
-  (let [res (:DefaultRecoveryTime ps)]
-    (if (integer? res) ps
-      (let [n   (if (number? res)  res ;already an int
-                    (case res
-                      ("" nil) 0
-                      (if (string? res)
-                        (clojure.edn/read-string res)
-                        (throw (Exception.
-                                (str ["Non-integer recovery time "
-                                      res]))))))]
-      (assoc ps :DefaultRecoveryTime  (long n))))))
+  (reduce-kv (fn [acc k default]
+               (ensure-numeric-parameter acc k :default default))
+             ps default-params))
 
 ;;A simple function to automate buildings a map of parameters from a
 ;;table of parameters [ParameterName Value]+ and a table of SRC Tags,

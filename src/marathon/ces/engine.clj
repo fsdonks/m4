@@ -35,18 +35,27 @@
 
 ;#Auxillary functions, and legacy functions
 
+(def +default-last-day+ 4745)
 ;;Auxillary functions from the old simstate module
 ;;==================================================
 (defn guess-last-day 
   ([ctx lastday]
+   (let [params (store/get-entity ctx :parameters)]
      (if-let [first-non-zero
               (first (filter #(and (not (nil? %)) (pos? %))
                              [lastday 
-                              (-> ctx :state :parameters :last-day)
-                              (-> ctx :state :parameters :last-day-default)]))]
+                              (-> params :last-day)
+                              (-> params :last-day-default)
+                              (-> params :LastDayDefault)
+                              +default-last-day+]))]
        first-non-zero
-       0))
+       0)))
   ([ctx] (guess-last-day ctx 0)))
+
+(defn trigger-truncation! [ctx t tlast msg]
+  (core/trigger-event :Terminate "Simstate" "Simstate"
+     (str "Time " t "is past the last " msg ":"
+          tlast " in a truncated simulation, terminating!") nil ctx))
 
 ;;Predicate to determine if we continue drawing time from the stream, i . e . simulating.
 ;;If an endtime is specified, we use that in our conditional logic, else we keep working until
@@ -59,23 +68,25 @@
     (if (store/gete ctx :parameters :truncate-time)
       (let [tlastdemand (or (store/gete ctx :DemandStore :tlastdeactivation)
                             -1)
-            t (sim/get-time ctx)]        
-        (if (> t tlastdemand)
-          (if (neg? tlastdemand) 
-            (throw (Error. "No demands scheduled.  Latest deactivation never initialized!"))
-            (do (core/trigger-event :Terminate "Simstate" "Simstate"
-                   (str "Time " t "is past the last deactivation: "
-                        tlastdemand " in a truncated simulation, terminating!") nil ctx)
-                false))
-          true))
+            t  (sim/get-time ctx)]
+        (cond (> t tlastdemand)
+                (if (neg? tlastdemand)
+                  (throw (Error. "No demands scheduled.  Latest deactivation never initialized!"))
+                  (do (trigger-truncation! ctx t tlastdemand "deactivation")
+                      false))
+                (> t (or (sim/get-final-time ctx) t))
+                (do (trigger-truncation! ctx t (sim/get-final-time ctx) "last-default-day parameter")
+                    false)
+                :else true))
       (sim/has-time-remaining? ctx)))
 
 ;##Simulation Initialization
 (defn set-time
   "Initialize the start and stop time of the simulation context, based on 
    last-day."
-  [last-day ctx]  
- (sim/set-time-horizon 1 (guess-last-day ctx last-day) ctx))
+  [last-day ctx]
+  (let [ld (guess-last-day ctx last-day)]
+    (sim/set-time-horizon 1 (guess-last-day ctx last-day) ctx)))
 
 ;#Initialization
 ;Initialization consists of 3 tasks:    
