@@ -662,7 +662,11 @@
 ;We only need a dictionary<string,string>, or ::string->string
 (defn compose-policies [policyname period-policy-map child-policies]
   (reduce (fn [acc [period childname]] 
-            (protocols/add-policy acc period (get child-policies childname)))
+            (protocols/add-policy acc period
+              (or (get child-policies childname)
+                  (throw (Exception.
+                          (str [:building policyname
+                                :atomic-policy childname :unknown!]))))))
           (-> p/empty-policymap (assoc :name policyname)) 
           (seq period-policy-map)))
 
