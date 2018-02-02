@@ -277,6 +277,46 @@
 ;;sake....this should be fairly easy...it's simple io stuff.
 
 ;;we only need to capture this when demands change..
+(defn compo-fills
+  "Compute a map of {ACFilled RCFilled NGFilled OtherFilled
+   ACOverlapping RCOverlapping NGOverlapping OtherOverlapping}
+   from a demand."
+  [ctx units-assigned units-overlapping]
+  (let [compo-fills (->> units-assigned
+                         (keys)
+                         (map (fn [nm]
+                                (store/gete ctx nm :component)))
+                         (frequencies))
+        {:strs [AC RC NG Ghost]
+         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills
+        acfilled AC
+        rcfilled RC
+        ngfilled NG
+        ghostfilled Ghost
+        otherfilled (- (count units-assigned) (+ AC RC NG Ghost))
+        
+        compo-overlaps  (->> units-overlapping
+                             (keys)
+                             (map (fn [nm]
+                                    (store/gete ctx nm :component)))
+                             (frequencies))
+        {:strs [AC RC NG Ghost]
+         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-overlaps
+        acoverlap AC
+        rcoverlap RC
+        ngoverlap NG
+        ghostoverlap Ghost
+        otheroverlap (- (count units-overlapping) (+ AC RC NG Ghost))]
+    {:ACFilled     acfilled      
+     :RCFilled     rcfilled
+     :NGFilled     ngfilled     
+     :GhostFilled  ghostfilled
+     :OtherFilled  otherfilled
+     :ACOverlap    acoverlap
+     :RCOverlap    rcoverlap
+     :NGOverlap    ngoverlap
+     :GhostOverlap ghostoverlap
+     :OtherOverlap otheroverlap}))
 
 ;;If we can define trends as a map
 ;;or a reduction....
@@ -286,51 +326,64 @@
   ([t ctx]
    (let [qtr     (unchecked-inc (quot t 90)) ;;1-based quarters.
          changes (store/gete ctx :demand-watch :demands)
-         finals  (store/gete ctx :DemandStore :finals)
-         actives (store/gete ctx :DemandStore :activedemands)]
+         finals  (store/gete ctx :DemandStore  :finals)
+         actives (store/gete ctx :DemandStore  :activedemands)]
      (when (or (seq changes)
                (finals t)
                (= (sim/get-final-time ctx) t))
-       (->> actives
-            (keys)
-            (map #(store/get-entity ctx %))
-            (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
-                    (let [assigned     (:units-assigned    d)
-                          overlapping  (:units-overlapping d)
-                          ua           (count              assigned)
-                          uo           (count              overlapping)
-                          compo-fills  (->> assigned
-                                            (keys)
-                                            (map (fn [nm]
-                                                   (store/gete ctx nm :component)))
-                                            (frequencies))
-                        {:strs [AC RC NG Ghost]
-                         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]
-                      {:t             t
-                       :Quarter       qtr
-                       :SRC           (:src      d)
-                       :TotalRequired (:quantity d)
-                       :TotalFilled   (+ uo ua)
-                       :Overlapping   uo
-                       :Deployed      ua
-                       :DemandName    (:name d)
-                       :Vignette      vignette
-                       :DemandGroup   demandgroup
-                       :ACFilled      AC
-                       :RCFilled      RC
-                       :NGFilled      NG
-                       :GhostFilled   Ghost
-                       :OtherFilled   (- ua (+ AC RC NG Ghost))}
-            )))))))
+       (let [state-ref (store/gete ctx :demandtrends :state)
+             tprev  (or @state-ref (reset! state-ref 0))
+             dt     (-  t tprev)]
+         (->> actives
+              (keys)
+              (map #(store/get-entity ctx %))
+              (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+                      (let [assigned     (:units-assigned    d)
+                            overlapping  (:units-overlapping d)
+                            ua           (count              assigned)
+                            uo           (count              overlapping)
+                            ]
+                        (merge 
+                         {:t             t
+                          :Quarter       qtr
+                          :SRC           (:src      d)
+                          :TotalRequired (:quantity d)
+                          :TotalFilled   (+ uo ua)
+                          :Overlapping   uo
+                          :Deployed      ua
+                          :DemandName    (:name d)
+                          :Vignette      vignette
+                          :DemandGroup   demandgroup}
+                         (compo-fills ctx assigned overlapping)
+                         {:deltatT dt}
+                          
+                                        ;:ACFilled      AC
+                                        ;:RCFilled      RC
+                                        ;:NGFilled      NG
+                                        ;:GhostFilled   Ghost
+                                        ;:OtherFilled   (- ua (+ AC RC NG Ghost))
+                          
+                          )))))))))
   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
 
 (defn ->demand-trends      [h]  (->collect-samples demand-trends h))
 
 ;;this compute the demand-trends frame from the current frame.
 ;;useful idiom...This is a keyframe fyi.
-(defn frame->demand-trends [[t ctx]]
-  (demand-trends t ctx))
-
+;;Note: we want to track deltat between demandtrends observations,
+;;so I hacked together this bit to do so. We now maintain some
+;;frame-state in the metadata, a map of emitter-names to atoms.
+;;Only demntrends uses it now.  When grabbing a frame, we load
+;;up the frame-state, and append it to the frame's meta.
+;;Then allow demand-trends to do its thing.  If we produce
+;;output (emit frames), then we update the observation time
+;;in the atom to current time.  This is slightly hacky, but it's
+;;general and keeps the side-effecting state to the boundaries.
+(defn frame->demand-trends [[t ctx :as f]]
+  (let [state-ref (get-in (meta f) [:frame-state :demandtrends])]
+    (when-let [res (demand-trends t (store/assoce ctx :demandtrends :state state-ref))]
+      (do (reset! state-ref t)
+          res))))
 
 ;;Note: locations are really "policypositions", should rephrase
 ;;this....otherwise we get :locationname confused.  We actually
@@ -818,6 +871,8 @@
                                                (doseq [r res] (saver r))
                                                (saver res))))
                                  :saver saver})))
+        state (into {} (for [nm (map :name frame-state)]
+                         [nm (atom nil)]))
         grab-frames!  (fn [frm] (reduce (fn [acc {:keys [name grab]}]
                                           (grab frm))
                                         nil frame-state))
@@ -827,7 +882,8 @@
         _ (reset! w (some #(when (= (:name %) :event-log) (:saver %)) frame-state))]
     (with-open [savers (io/->closer (map :saver frame-state))]
       (doseq [frm h]
-        (let [[t ctx] frm]
+        (let [frm    (vary-meta frm assoc :frame-state state)
+              [t ctx] frm]
           (do (println [:day t :tfinal tfinal  :last-deactivation tlastdemand])
               (grab-frames! frm)))))))
 
@@ -850,9 +906,6 @@
 (def h (take 2 (marathon-stream  ep)))
 (def l (first  h))
 (def r (second h))
-
-
-
 
 )
 
@@ -889,7 +942,12 @@
    :RCFilled	   :int
    :NGFilled	   :int
    :GhostFilled	   :int
-   :OtherFilled	   :int})
+   :OtherFilled	   :int
+   :ACOverlap      :int
+   :RCOverlap      :int
+   :NGOverlap      :int
+   :GhostOverlap   :int
+   :OtherOverlap   :int})
 
 (def dt-fields   [:t
                   :Quarter
@@ -905,5 +963,11 @@
                   :RCFilled
                   :NGFilled
                   :GhostFilled
-                  :OtherFilled])
+                  :OtherFilled
+                  :ACOverlap
+                  :RCOverlap
+                  :NGOverlap
+                  :GhostOverlap
+                  :OtherOverlap
+                  ])
 )

@@ -1,4 +1,4 @@
-;;Collection of common schemas for Marathon data.
+;Collection of common schemas for Marathon data.
 ;;Also a place to document the canonical fields and
 ;;convey the semantics of the data.
 (ns marathon.schemas
@@ -371,4 +371,32 @@
    :RCFilled	
    :NGFilled	
    :GhostFilled	
-   :OtherFilled])
+   :OtherFilled
+   :ACOverlap
+   :RCOverlap
+   :NGOverlap
+   :GhostOverlap
+   :OtherOverlap])
+
+(def demandtrend
+  {:t  	        :int
+   :Quarter	:int
+   :SRC	        :text
+   :TotalRequired	:int
+   :TotalFilled	:int
+   :Overlapping	:int
+   :Deployed	        :int
+   :DemandName	:text
+   :Vignette	        :text
+   :DemandGroup	:text
+   :ACFilled	        :int
+   :RCFilled	        :int
+   :NGFilled	        :int
+   :GhostFilled	:int
+   :OtherFilled	:int
+   :ACOverlap  :int
+   :RCOverlap  :int
+   :NGOverlap  :int
+   :GhostOverlap :int
+   :OtherOverlap  :int
+   })

@@ -269,6 +269,7 @@
     :activedemands      {}  ;possibly replace with active component
     :eligbledemands     {}  ;forgot what this is...
     :changed            {}  ;indicates demands that changed, we can handle this better.
+    :changed-at         0   ;indicates the last time any demands changed. used for samples.
     :demandtraffic      nil ;supress demand traffic, maybe old
     :tryfill            true ;no idea...
     :loginfeasibles     true ;logging info
