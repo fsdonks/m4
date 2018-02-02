@@ -331,9 +331,6 @@
      (when (or (seq changes)
                (finals t)
                (= (sim/get-final-time ctx) t))
-       (let [state-ref (store/gete ctx :demandtrends :state)
-             tprev  (or @state-ref (reset! state-ref 0))
-             dt     (-  t tprev)]
          (->> actives
               (keys)
               (map #(store/get-entity ctx %))
@@ -343,7 +340,7 @@
                             ua           (count              assigned)
                             uo           (count              overlapping)
                             ]
-                        (merge 
+                        (merge
                          {:t             t
                           :Quarter       qtr
                           :SRC           (:src      d)
@@ -355,18 +352,26 @@
                           :Vignette      vignette
                           :DemandGroup   demandgroup}
                          (compo-fills ctx assigned overlapping)
-                         {:deltatT dt}
-                          
-                                        ;:ACFilled      AC
-                                        ;:RCFilled      RC
-                                        ;:NGFilled      NG
-                                        ;:GhostFilled   Ghost
-                                        ;:OtherFilled   (- ua (+ AC RC NG Ghost))
-                          
-                          )))))))))
+                          ))))))))
   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
 
 (defn ->demand-trends      [h]  (->collect-samples demand-trends h))
+
+(def ^:dynamic *lerp-demandtrends* true)
+(defn sample-demand-trends
+  "Helper function that lets us potentially interpolate our
+   sparsely sampled demands.  Has no effect if *lerp-demandtrends*
+   is disabled or the samples are adjacent."
+  [xs dt]
+  (when (seq xs)
+    (if (and (> dt 1) ;;non-adjacent sample
+             *lerp-demandtrends*)
+      ;;we need to expand the sample!
+      (let [t (:t (first xs))]
+        (apply concat
+               (for [tsample (map #(+ % t) (range dt))]
+                 (map (fn [r] (assoc r :t tsample :deltaT 1)) xs))))
+      (map #(assoc % :deltaT dt) xs))))
 
 ;;this compute the demand-trends frame from the current frame.
 ;;useful idiom...This is a keyframe fyi.
@@ -381,8 +386,23 @@
 ;;general and keeps the side-effecting state to the boundaries.
 (defn frame->demand-trends [[t ctx :as f]]
   (let [state-ref (get-in (meta f) [:frame-state :demandtrends])]
+    (when-let [res (seq (demand-trends t ctx))]
+      (let [pending  @state-ref
+            tprev   (or (:t (first pending)) 0)
+            dt      (- t tprev)
+            ;;update our pending batch to the new records,
+            ;;wait until we have a deltat
+            _       (reset! state-ref  (vec res))]
+        (concat (sample-demand-trends pending dt)
+                ;;ensure we collect the final sample, since we're reaching.
+                (when (= (sim/get-final-time ctx) t)
+                  (do (reset! state-ref nil) ;clean up, maybe not needed
+                      (sample-demand-trends res 1))
+                ))))))
+#_(defn frame->demand-trends [[t ctx :as f]]
+  (let [state-ref (get-in (meta f) [:frame-state :demandtrends])]
     (when-let [res (demand-trends t (store/assoce ctx :demandtrends :state state-ref))]
-      (do (reset! state-ref t)
+      (do (swap! state-ref assoc :tprev t)
           res))))
 
 ;;Note: locations are really "policypositions", should rephrase
