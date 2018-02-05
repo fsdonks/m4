@@ -127,10 +127,27 @@
        (s/def ~qualified (ss/ns-keys ~name :opt-un [~@(keys schema)]))
        )))
 
+;;this is a quick hack...
+(def optional-fields
+  {:DemandRecords [:Command
+                   :Location
+                   :DemandType
+                   :Theater
+                   :BOG
+                   :StartState
+                   :EndState
+                   :MissionLength :int?]
+   :SupplyRecords [:Command :Origin :Duration]})
 
+(defn patch-schema [nm schema]
+  [nm (if-let [optionals (get optional-fields nm)]
+        (reduce dissoc schema optionals)
+        schema)])
+        
 (def marathon-specs
-  (doseq [[nm schema] schemas/known-schemas]
-    (eval `(schema->spec ~nm ~schema))))
+  (doseq [[k v]  schemas/known-schemas]
+    (let [[nm schema] (patch-schema k v)]
+      (eval `(schema->spec ~nm ~schema)))))
 
 (defn known-specs []
   (into []
@@ -143,11 +160,11 @@
    If any invalid records are found, throws and exception
    and explanation.  Otherwise, returns nil."
   [nm xs]
-  (let [spec (keyword "marathon.spec" (name nm))
+  (let [spec (s/get-spec (keyword "marathon.spec" (name nm)))
         valid-row? (fn [r]
-                     (eval `(s/valid? ~spec ~r)))
+                     (s/valid? spec r))
         explain!  (fn [r]
-                    (eval `(s/explain ~spec ~r)))]
+                    (s/explain spec r))]
     (some->> (transduce (map-indexed vector)
                         (completing (fn [acc [idx r]]
                                       (if (valid-row? r)
@@ -164,3 +181,6 @@
              (throw)
              )))
 
+(defn validate-tables [xs]
+  (doseq [[nm t] xs]
+    (validate-records nm t)))
