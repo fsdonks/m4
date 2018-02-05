@@ -3,22 +3,18 @@
                  (if (.exists f)
                    (clojure.edn/read-string (slurp "order.edn"))
                    '[marathon.main])))
-(def version "4.1.4")
+(def version "4.1.5")
 (def capsule-name "marathon")
 (def capsule-jar (str  capsule-name "-" version ".jar"))
 
 ;;project definition...
-(defproject marathon "4.1.4-SNAPSHOT"
+(defproject marathon "4.1.5-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
                  [spork "0.2.0.8-SNAPSHOT"]
                  [proc  "0.2.4-SNAPSHOT"] ;;post processing.
                  ;;external libs
-;                 [com.taoensso/nippy "2.11.0-RC1"] ;temporarily added to tes serialization.
-                 ;;temporarily added to explore possible uses of inference...
-                 [datascript "0.15.0"]
-                 [org.clojure/core.logic "0.8.10"]
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
                  [alembic "0.3.2"]
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
@@ -26,6 +22,7 @@
                  ;;debating shifting to 1.9, spork is updated..
                  [clojure-future-spec "1.9.0-beta4"]
                  [org.clojure/test.check "0.9.0"]
+                 [irresponsible/spectra "0.2.1"]
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src" ;"../spork/src" "../nightclub/src" "../proc/src"

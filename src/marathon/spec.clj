@@ -8,6 +8,7 @@
 ;;here long term.
 (ns marathon.spec
   (:require [clojure.spec.alpha :as s]
+            [irresponsible.spectra :as ss]
             [clojure.spec.gen.alpha :as gen]
             [clojure.spec.test.alpha :as stest]
             [clojure.string :as str]
@@ -55,7 +56,7 @@
   (s/or :primitive ::clojure-primitive
         :collection ::clojure-collection))
 
-;; (s/def ::boolean #{true false})
+(s/def ::boolean #(instance? java.lang.Boolean %))
 ;; (s/def ::text string?)
 ;; (s/def ::double double?)
 ;; (s/def ::double? (maybe-type :double? float?))
@@ -87,48 +88,79 @@
     :text   string?
     })
 
-;;Coerces a spork.util.parsing schema
-;;into a clojure.spec. To do this, we want
-;;to ensure our map conforms to the defined
-;;specification.  Order of keys is unimportant.
+(defn kw->vec [k]
+  [(name k) (namespace k)])
+;;the trick with specs is to use qualified keys.
+;;what we'll do is create a fake namespace,
+;;and prepend it to all the keywords.
+;;when validating, we'll use the schema's
+;;namespace to check the keys.
+(defmacro schema->spec
+  "Defines a named schema in the current namespace,
+   according to name.  Similar to s/def, except
+   that the spec now references a schema map, or
+   a var bound to a schema map.  When validating,
+   the schema will check for the presence of
+   the keys in the map, and will validate using
+   the specs associated with the parsers defined in
+   marathon.spec/specs.
+   Returns a spec defined as name.  If name is already
+   a qualified keyword, acts identically to s/def,
+   otherwise creates a ns-qualified keyword from the
+   textual or unqualified keyword name."
+  [name schema]
+  (let [[name space] (if (string? name)
+                       [name nil]
+                       (kw->vec name))
+        qualified    (keyword (or space (str *ns*))
+                              name)
+        schema (cond (map? schema) schema
+                     (symbol? schema) (eval schema)
+                     :else (throw (Exception.
+                                   (str [:invalid-schema schema]))))]
+  `(do (ss/ns-defs ~name
+         ~@(apply concat
+             (for [[fld parser] (seq schema)]
+               [fld (or (get specs parser)
+                        (throw (Exception. (str [:unknown-field-type parser
+                                                 :for-field fld]))))])))
+       (s/def ~qualified (ss/ns-keys ~name :opt-un [~@(keys schema)]))
+       )))
 
-#_(defn schema->spec [schema]
-  (eval `(s/map-of keyword?
-                   (s/or   ~@(reduce (fn [acc x] (into acc x)) []
-                                     (for [[fld parser] (seq schema)]
-                                       [fld (get specs parser)]))
-                           ))))
 
-;;looks like what we "want" to do
-;;is create a template for defining ns-qualified
-;;specs, which live in their own namespace relative
-;;to the name of the schema we're using.
+(def marathon-specs
+  (doseq [[nm schema] schemas/known-schemas]
+    (eval `(schema->spec ~nm ~schema))))
 
-;; (ns marathon.schema.thing)
-;; (s/def ::field1 some-pred-or-spec)
-;; (s/def ::field2 some-pred-or-spec)
-;; (s/def ::thing
-;;   (s/keys :req-un [::field1
-;;                    ::field2]))
+(defn known-specs []
+  (into []
+        (for [nm (keys schemas/known-schemas)]
+          (keyword (str *ns*) (name nm))
+          )))
 
+(defn validate-records
+  "Validate a set of records using an associated m4 spec.
+   If any invalid records are found, throws and exception
+   and explanation.  Otherwise, returns nil."
+  [nm xs]
+  (let [spec (keyword "marathon.spec" (name nm))
+        valid-row? (fn [r]
+                     (eval `(s/valid? ~spec ~r)))
+        explain!  (fn [r]
+                    (eval `(s/explain ~spec ~r)))]
+    (some->> (transduce (map-indexed vector)
+                        (completing (fn [acc [idx r]]
+                                      (if (valid-row? r)
+                                        acc
+                                        (do (explain! r)
+                                            (reduced {:err (Exception. (str [:invalid-row!
+                                                                             :at idx
+                                                                             :in nm
+                                                                             ]))
+                                                      :idx idx})))))
+                        nil
+                        xs)
+             (:err)
+             (throw)
+             )))
 
-;;other option is to define a spec that
-;;cats together the fields we care about.
-;;process the kv pairs to see if they
-;;match.
-;;so, based on kv,
-;;we could dispatch using ::or
-
-#_(s/def ::kvp
-  (s/or ::field1 some-spec
-        ::field2 some-other-spec))
-
-;;another way...
-;;spec of kv tuples.
-;;k corresponds to v.
-
-#_(defn rows [schema]
-  (eval `(s/coll-of (schema->spec ~schema))))
-
-#_(let [rws (rows  (marathon.schemas/get-schema :DemandRecords))]
-  (eval `(s/def ::demand-records ~rws)))

@@ -170,7 +170,7 @@
     :draw-index
     :Group
     :DemandType
-    "Title 10_32"]
+    #_"Title 10_32"]
     :GhostProportionsAggregate
     [:Type
      [:Enabled :boolean]
