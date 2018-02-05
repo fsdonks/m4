@@ -106,7 +106,7 @@
 ;;If we use records, we get ordered fields automatically.  Better strategy.
 ;;generic supply record.  Should probably tie these to marathon.schemas
 (defrecord srecord [Type Enabled Quantity SRC Component OITitle
-                    Name Behavior CycleTime Policy Tags Spawntime Location Position Original])
+                    Name Behavior CycleTime Policy Tags SpawnTime Location Position Original])
 ;;outstreaam/mystream is output....canonically RequirementsGeneratedSupply.csv
 ;;may not use this guy...we'll see.
 (r/defrecord+ outrecord [[Iteration 0]
@@ -1014,7 +1014,7 @@
     (seq!! out)))
   )
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
-                    :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position #_:Original])
+                    :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position #_:Original])
 
 (defn requirements->table
   "Computes a finalized table of supply records representing the 

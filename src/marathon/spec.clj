@@ -136,11 +136,13 @@
                    :BOG
                    :StartState
                    :EndState
-                   :MissionLength :int?]
+                   :MissionLength]
    :SupplyRecords [:Command :Origin :Duration]})
+(def ignored-fields
+  {:PolicyRecords [:TimeStamp :Remarks]})
 
 (defn patch-schema [nm schema]
-  [nm (if-let [optionals (get optional-fields nm)]
+  [nm (if-let [optionals (concat (get optional-fields nm) (get ignored-fields nm))]
         (reduce dissoc schema optionals)
         schema)])
         
@@ -184,3 +186,10 @@
 (defn validate-tables [xs]
   (doseq [[nm t] xs]
     (validate-records nm t)))
+
+(defn validate-project
+  "Beta implementation of project-level
+   validation.  Soon to be introduced into
+   the load-project pipeline for marathon.project."
+  [p]
+  (validate-tables (dissoc (:tables p) :Parameters)))
