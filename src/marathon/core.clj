@@ -220,29 +220,26 @@
 
 (defn compute-peaks-dialogue []
   (request-path [the-path "Please select a file co-located in a folder with demand case files."]
-    (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
-                                               (repeat "\\")))
-          target (str dump-folder "peaks\\")          
-          _ (gui/alert (str "dumping peaks files to " target))]            
+    (let [dump-folder  (io/parent-path the-path)
+          target       (io/dir-path dump-folder "peaks")
+          _ (gui/alert (str "dumping peaks files to " target))]
       (stokeio/compute-peaks dump-folder target))))
 
-;;a quick hack to compute the deciles from a set of peaks, in case we 
-;;don't need to compute the peaks and the deciles again.  We may 
+;;a quick hack to compute the deciles from a set of peaks, in case we
+;;don't need to compute the peaks and the deciles again.  We may
 ;;separate this from the compute-peaks entirely.
 (defn compute-deciles-dialogue []
   (request-path [the-path "Please select a file co-located in a folder with demand peak files."]
-    (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
-                                               (repeat "\\")))
-          target dump-folder          
-          _ (gui/alert (str "dumping peaks stats to " target))]            
+    (let [dump-folder (io/parent-path the-path)
+          target dump-folder
+          _ (gui/alert (str "dumping peaks stats to " target))]
       (stokeio/compute-peak-stats dump-folder target))))
 
 (defn stoch-demand [wbpath]
-  (let [dump-folder (apply str (interleave (butlast (io/list-path wbpath))
-                                           (repeat "\\")))
-        _ (gui/alert (str "dumping to " dump-folder))]            
-    (spit-tables 
-     (helm/futures->tables 
+  (let [dump-folder  (io/parent-path wbpath)
+        _ (gui/alert (str "dumping to " dump-folder))]
+    (spit-tables
+     (helm/futures->tables
       (helm/xlsx->futures wbpath :ignore-dates? true :log? false)) dump-folder)))
 
 ;a quick plugin for stochastic demand generation.
@@ -254,36 +251,27 @@
   (request-path [wbpath "Please select the location of valid case-files."]
     (let [fl          (clojure.java.io/file wbpath)
           cases       {(str (io/fname fl) \_ "split.txt") (tbl/read-table fl)}
-          ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
-          dump-folder ;(if dump-same?
-          (apply str (interleave (butlast (io/list-path wbpath))
-                                 (repeat "\\")))
-          ;(select-folder))
-          _ (print (str "dumping to " dump-folder))]      
+          dump-folder  (io/parent-path wbpath)
+          _ (print (str "dumping to " dump-folder))]
       (spit-tables cases dump-folder))))
 
 ;;legacy auditing of marathon workbooks.....needs verification.
 (defn audit-project-dialogue []
-  (request-path [wbpath "Please select the location of valid case-files."]  
+  (request-path [wbpath "Please select the location of valid case-files."]
     (let [fl           (clojure.java.io/file wbpath)
           cases       {(str (io/fname fl) \_ "split.txt") (tbl/read-table fl)}
-          ;dump-same?  @(future (gui/yes-no-box "Dump cases in same location?"))
-          dump-folder ;(if dump-same?
-          (apply str (interleave (butlast (io/list-path wbpath))
-                                   (repeat "\\")))
-            ;(select-folder))
-            _ (print (str "dumping to " dump-folder))]      
+          dump-folder (io/parent-path wbpath)
+          _ (print (str "dumping to " dump-folder))]
       (spit-tables cases dump-folder))))
 
 (defn capacity-analysis [wbpath]
-  (let [pieces       (clojure.string/split wbpath #"\\")
-        root         (io/as-directory (clojure.string/join "\\" (butlast pieces)))
-        target       (last    pieces)
+  (let [root         (io/parent-path wbpath)
+        target       (last    (io/list-path wbpath))
         _            (println [:running :capacity-analysis :at wbpath])]
     (run/run-cases root [target])))
 
 (defn capacity-analysis-dialogue []
-    (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
+    (request-path [wbpath "Please select the location of a valid MARATHON project file."]
                   (capacity-analysis wbpath)))
 
 #_(defn interests-dialogue [wbpath]
@@ -299,11 +287,10 @@
                   (clojure.edn/read-string (slurp wbpath)))
     (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
         branches/branches)))
-                     
+
 (defn post-processed-run [wbpath]
-  (let [pieces       (clojure.string/split wbpath #"\\")
-        root         (io/as-directory (clojure.string/join "\\" (butlast pieces)))
-        destination  (clojure.string/replace wbpath ".xlsx" "\\")
+  (let [root         (io/parent-path wbpath)
+        destination  (clojure.string/replace wbpath ".xlsx" io/+separator+)
         ipath        (str root "interests.clj")
         interests    (if (io/file? ipath)
                           (do (println [:using-interests-at ipath])
@@ -327,20 +314,17 @@
 
 (defn debug-run-dialogue []
   (request-path [wbpath "Please select the location of a valid MARATHON project file."]
-    (let [pieces       (clojure.string/split wbpath #"\\")
-          root         (io/as-directory (clojure.string/join "\\" (butlast pieces)))
-          target       (last    pieces)
+    (let [root         (io/parent-path wbpath)
           dbgtgt       (str root "debug.txt")
           _ (println [:performing-debug-run :to dbgtgt])]
       (with-open [wrtr (clojure.java.io/writer dbgtgt)]
         (binding [*out* wrtr]
-          (marathon.ces.core/debugging                
-           (capacity-analysis wbpath)
-         ))))))
+          (marathon.ces.core/debugging
+           (capacity-analysis wbpath)))))))
 
 (defn debug-run-dialogue! []
   (request-path [wbpath "Please select the location of a valid MARATHON project file."] 
-     (marathon.ces.core/debugging!                
+     (marathon.ces.core/debugging!
       (capacity-analysis wbpath)
       )))
 
@@ -440,7 +424,7 @@
   (seesaw.core/invoke-now
    (binding [*ns* *ns*]
            (in-ns 'marathon.core)
-           (let [project-menu    (gui/map->reactive-menu "Project-Management"  
+           (let [project-menu    (gui/map->reactive-menu "Project-Management"
                                                          project-menu-spec)
                  processing-menu (gui/map->reactive-menu "Processing"
                                                          processing-menu-spec)
@@ -454,16 +438,16 @@
                                                (:view processing-menu)
                                                (:view scripting-menu)
                                                (:view debug-menu)
-                                               (:view help-menu))        
+                                               (:view help-menu))
                  menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
                                                       (-> processing-menu :control :event-stream)
                                                       (-> debug-menu   :control :event-stream)
                                                       (-> help-menu    :control :event-stream)
                                                       (-> scripting-menu :control :event-stream)
                                                       ])
-                 handle-menu    (menu-handler nil)                    
-                 _                 (->> menu-events 
-                                        (obs/subscribe  #(handle-menu %)))        
+                 handle-menu    (menu-handler nil)
+                 _                 (->> menu-events
+                                        (obs/subscribe  #(handle-menu %)))
                  ]
              (night/attach! :window-args
                             {:title   (str "MARATHON " +version+)

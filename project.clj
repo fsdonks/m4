@@ -12,7 +12,7 @@
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
-                 [spork "0.2.0.8-SNAPSHOT"]
+                 [spork "0.2.0.9-SNAPSHOT"]
                  [proc  "0.2.4-SNAPSHOT"] ;;post processing.
                  ;;external libs
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
