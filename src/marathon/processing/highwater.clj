@@ -5,8 +5,10 @@
 ;time-series set of reductions hiding in here somewhere...
 (ns marathon.processing.highwater
   (:require [spork.util [io :as io]
-                        [table :as tbl]
-                        [general :refer [clumps]]]))
+             [table :as tbl]
+             [general :refer [clumps]]]
+            [marathon.schemas :as s]
+            [marathon.schemas :as schemas]))
 
 ;;Highwater is a type of reduction performed on DemandTrends.txt, which is a
 ;;fairly large log file produced during simulation. The log file is in the
@@ -21,14 +23,55 @@
 ;;that is, the total number of entities filled or otherwise employed
 ;;by the demand.
 
-(defn altmain
+(defn trends
+  "Read the demandtrends in from a file. "
+  [infile]
+  (tbl/tabdelimited->records infile :schema schemas/demandtrend))
+
+(defn max-sample-by
+  "Find the maximum sample by f in collection xs."
+  [f xs]
+  (->> xs
+       (reduce (fn [[n sample :as acc] r]
+                 (let [k  (f r) ]
+                   (if (> k n)
+                     [k r]
+                     acc)))
+               [0 nil])))
+
+(defn samples->highwater
+  "Find the highwater mark for a sample of demantrends
+   ys,  by summing concurrent demands' TotalFilled quantities.
+   Return the subset of ys that intersects the highwater
+   sample."
+  [ys]
+  (->> (for [[t ys] (group-by :t ys)]
+         [t (reduce + 0 (map :TotalFilled ys))])
+       (max-sample-by second)
+       (second)))
+
+(defn quarterly-srcs->highwater-srcs
+  "Compute the max total-filled by src for the quaterly sample"
+  [xs]
+  (into [] (mapcat (fn [[src ys]]
+                     (let [[tmax n] (samples->highwater ys)]
+                       (filterv #(= (:t %) tmax) ys)
+                       )))
+        (group-by :SRC xs)))
+
+(defn highwater-marks [xs]
+  (transduce (comp (partition-by :Quarter)
+                   (map quarterly-srcs->highwater-srcs))
+             (completing (fn hw [acc highwater-samples]
+                           (into acc highwater-samples)))
+             [] xs))
+
+(defn highwater
   "Uses the table operations to handle i/o, rather than streaming everything.
    Wipes out outfile."
-  [infile outfile & {:keys [entry-processor]}]
-  (spit (clojure.java.io/writer (io/make-file! outfile))
-        (tbl/table->tabdelimited
-          (file->highwater-table infile :entry-processor entry-processor)))) 
-
+  [infile outfile]
+  (tbl/records->file (trends infile) outfile
+     :field-order schemas/demandtrend-fields))
 
 ;This is a process, I'd like to move it to a higher level script....
 (defn find-demandtrend-paths

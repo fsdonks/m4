@@ -272,7 +272,6 @@
        (filter identity)
        (map-indexed (fn [idx d] (assoc d :DeploymentID idx)))))
 
-
 ;;note: we may need to replicate the audit trail for completeness
 ;;sake....this should be fairly easy...it's simple io stuff.
 
@@ -294,7 +293,6 @@
         ngfilled NG
         ghostfilled Ghost
         otherfilled (- (count units-assigned) (+ AC RC NG Ghost))
-        
         compo-overlaps  (->> units-overlapping
                              (keys)
                              (map (fn [nm]
@@ -307,9 +305,9 @@
         ngoverlap NG
         ghostoverlap Ghost
         otheroverlap (- (count units-overlapping) (+ AC RC NG Ghost))]
-    {:ACFilled     acfilled      
+    {:ACFilled     acfilled
      :RCFilled     rcfilled
-     :NGFilled     ngfilled     
+     :NGFilled     ngfilled
      :GhostFilled  ghostfilled
      :OtherFilled  otherfilled
      :ACOverlap    acoverlap
@@ -318,13 +316,15 @@
      :GhostOverlap ghostoverlap
      :OtherOverlap otheroverlap}))
 
+(defn as-quarter [t] (unchecked-inc (quot t 90)))
+
 ;;If we can define trends as a map
 ;;or a reduction....
 ;;this is legacy support...
 ;;Note: this should work with our
 (defn demand-trends
   ([t ctx]
-   (let [qtr     (unchecked-inc (quot t 90)) ;;1-based quarters.
+   (let [qtr     (as-quarter t) ;;1-based quarters.
          changes (store/gete ctx :demand-watch :demands)
          finals  (store/gete ctx :DemandStore  :finals)
          actives (store/gete ctx :DemandStore  :activedemands)]
@@ -370,7 +370,9 @@
       (let [t (:t (first xs))]
         (apply concat
                (for [tsample (map #(+ % t) (range dt))]
-                 (map (fn [r] (assoc r :t tsample :deltaT 1)) xs))))
+                 (map (fn [r] (assoc r :t tsample
+                                       :Quarter (as-quarter tsample)
+                                       :deltaT 1)) xs))))
       (map #(assoc % :deltaT dt) xs))))
 
 ;;this compute the demand-trends frame from the current frame.
