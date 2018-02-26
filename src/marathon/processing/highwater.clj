@@ -45,8 +45,8 @@
    Return the subset of ys that intersects the highwater
    sample."
   [ys]
-  (->> (for [[t ys] (group-by :t ys)]
-         [t (reduce + 0 (map :TotalFilled ys))])
+  (->> (for [[t ys] (group-by #(get % :t) ys)]
+         [t (reduce + 0 (map #(get % :TotalFilled) ys))])
        (max-sample-by second)
        (second)))
 
@@ -55,49 +55,90 @@
   [xs]
   (into [] (mapcat (fn [[src ys]]
                      (let [[tmax n] (samples->highwater ys)]
-                       (filterv #(= (:t %) tmax) ys)
+                       (filterv #(= (get % :t) tmax) ys)
                        )))
-        (group-by :SRC xs)))
+        (group-by #(get % :SRC) xs)))
 
 (defn highwater-marks [xs]
-  (transduce (comp (partition-by :Quarter)
+  (transduce (comp (partition-by (fn [r] (get r :Quarter)))
                    (map quarterly-srcs->highwater-srcs))
              (completing (fn hw [acc highwater-samples]
                            (into acc highwater-samples)))
              [] xs))
 
+;;(into [] (tbl/tabdelimited->records "hw.txt" :schema schemas/demandtrend))))
+(defn empty-record [src q]
+  {:t (* q 90)
+   :Quarter q 
+   :SRC src
+   :TotalRequired 0
+   :TotalFilled 0
+   :Overlapping 0
+   :Deployed 0
+   :DemandName "none"
+   :Vignette "none"
+   :DemandGroup "none"
+   :ACFilled 0
+   :RCFilled 0
+   :NGFilled 0
+   :GhostFilled 0
+   :OtherFilled 0
+   :ACOverlap 0
+   :RCOverlap 0
+   :NGOverlap 0
+   :GhostOverlap 0
+   :OtherOverlap 0
+   :deltaT 0
+   }) 
+
+;;For a nice, consistent dataset, we'd like to have
+;;samples across quarters.
+(defn normalize-quarters [rs]
+  (let [qlast (:Quarter (last rs))]
+    (apply concat
+           (for [[src xs] (group-by :SRC rs)]
+             (let [m  (group-by :Quarter xs)]
+               (if (= (count m) qlast)
+                 xs
+                 (->> (range 1 (inc qlast))
+                      (filter #(not (m %)))
+                      (map #(empty-record src %))
+                      (concat xs)
+                      (sort-by :Quarter))))))))
+                
 (defn highwater
   "Uses the table operations to handle i/o, rather than streaming everything.
    Wipes out outfile."
   [infile outfile]
-  (tbl/records->file (trends infile) outfile
-     :field-order schemas/demandtrend-fields))
-
+  (-> (->>  (trends infile)
+       (highwater-marks)
+       (into [])
+       (normalize-quarters))
+      (tbl/records->file  outfile
+                          :field-order schemas/demandtrend-fields)))
+  
 ;This is a process, I'd like to move it to a higher level script....
 (defn find-demandtrend-paths
   "Sniff out paths to demand trends files from root."
   [root]
-  (map io/fpath (io/find-files root #(= (io/fname %) "DemandTrends.txt"))))
+  (map io/fpath (io/find-files (io/file-path root) #(= (io/fname %) "DemandTrends.txt"))))
 
 (defn highwater-batch
   "Computes high water for for each p in path. dumps a corresponding highwater.
    in the same directory, overwriting."
-  [paths & {:keys [entry-processor]}]
+  [paths]
   (doseq [source paths]
     (let [target (io/relative-path
                    (io/as-directory (io/fdir source)) ["highwater.txt"])]
       (if (io/fexists? (clojure.java.io/file source))
         (let [_ (println (str "Computing HighWater : " source" -> " target))] 
-            (do (highwater source target
-                  :entry-processor entry-processor)))
+            (do (highwater source target)))
         (println (str "Source file: " source" does not exist!"))))))
-
 
 (defn highwater-batch-from
   "Compiles a batch of highwater trends, from demand trends, from all demand
    trends files in folders or subfolders from root."
-  [root & {:keys [entry-processor]}]
-  (highwater-batch (find-demandtrend-paths root)
-         :entry-processor entry-processor))
+  [root]
+  (highwater-batch (find-demandtrend-paths root)))
 
 

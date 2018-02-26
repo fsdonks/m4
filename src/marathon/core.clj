@@ -6,6 +6,7 @@
                                        [io :as stokeio]
                                         ;[scraper :as scraper]
              ]
+            [marathon.processing [highwater :as hw]]
             [marathon [run :as run] [demo :as demo]]
             [marathon.analysis [requirements :as requirements]]
             [marathon.sampledata [branches :as branches]]
@@ -148,13 +149,13 @@
 
 (def processing-menu-spec
   {;"Clean"              "Cleans a run"
-   ;"High-Water"         "Computes HighWater trails"
    ;"Deployment-Vectors" "Analyzes deployments"
    ;;"Charts"             "Generate plots."   
    "Capacity-Analysis"     "Performs a capacity run (default)"
    "Requirements-Analysis" "Performs a Requirements Run"
-   "PostProcessed-Run"
-     "Capacity Analysis, post-process using Proc, rendering dwell/fill charts"
+   "PostProcessed-Run"     "Capacity Analysis, post-process using Proc, rendering dwell/fill charts"
+   "High-Water"             "Computes HighWater trails from DemandTrends."
+   "High-Water-Batch-From"  "Computes Multiple HighWater trails from any DemandTrends found from a root folder.."
    "Stochastic-Demand"     "Generate stochastic demand files from a casebook."
    "Compute-Peaks"         "Extract the peak concurrent demands from a folder."
    "Debug-Run"             "Runs the capacity analysis with output directed toward a file"
@@ -274,6 +275,24 @@
     (request-path [wbpath "Please select the location of a valid MARATHON project file."]
                   (capacity-analysis wbpath)))
 
+
+(defn high-water-batch-from [path]
+  (hw/highwater-batch-from (io/parent-path path)))
+
+(defn high-water-batch-from-dialogue []
+  (request-path [wbpath  "Please select the location of a valid MARATHON DemandTrends file,
+                          or a file co-located in a parent folder of one or more DemandTrends files.
+                          Child files and directories will be traversed, processing all DemandTrends.txt
+                          files discovered."]
+                (high-water-batch-from wbpath)))
+
+(defn high-water [path]
+    (hw/highwater-batch [(io/file-path path)]))
+
+(defn high-water-dialogue []
+    (request-path [wbpath "Please select the location of a valid MARATHON DemandTrends file."]
+                  (high-water wbpath)))
+
 #_(defn interests-dialogue [wbpath]
   (if  @(future (gui/yes-no-box "Would you like to select an interests file?"))
     (request-path [wbpath "Please select the location of a valid MARATHON interests file."]
@@ -348,7 +367,9 @@
    :postprocessed-run  '(post-processed-run-dialogue) 
    :load-script        '(load-file
                          (gui/input-box
-                          :prompt "Select a Clojure script"))})
+                          :prompt "Select a Clojure script"))
+   :high-water          '(high-water-dialogue)
+   :high-water-batch-from '(high-water-batch-from-dialogue)})
 
 ;;commands that have a file-path supplied.
 (defn contextual-command [e]
@@ -363,6 +384,8 @@
         :examine-project        `(~'run/examine-project ~path)
         :postprocessed-run      `(~'post-processed-run ~path) 
         :load-script            `(~'load-file ~path)
+        :high-water             `(~'high-water ~path)
+        :high-water-batch-from  `(~'high-water-batch-from ~path)
        `(throw (Exception. (str [:unknown-command! ~e])))))))
 
 ;;holy wow this is terrible.  must be a better way...
