@@ -26,7 +26,7 @@
         [clojure.repl])
   (:import [javax.swing JFrame UIManager]))
 
-(def +version+ "4.1.5-SNAPSHOT")
+(def +version+ "4.1.6-SNAPSHOT")
 
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
