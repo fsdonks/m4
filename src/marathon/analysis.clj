@@ -316,7 +316,15 @@
      :GhostOverlap ghostoverlap
      :OtherOverlap otheroverlap}))
 
-(defn as-quarter [t] (unchecked-inc (quot t 90)))
+(defn as-quarter
+  "Coerce a time in days into standard quarters."
+  [t] (unchecked-inc (quot t 90)))
+
+(defn tfinal
+  "Compute the estimated final-day from a demand
+   entity's start and duration"
+  [d]
+  (+ (get d :startday) (get d :duration) -1))
 
 ;;If we can define trends as a map
 ;;or a reduction....
@@ -325,34 +333,37 @@
 (defn demand-trends
   ([t ctx]
    (let [qtr     (as-quarter t) ;;1-based quarters.
-         changes (store/gete ctx :demand-watch :demands)
+         changes (store/gete ctx :demand-watch :demands) ;;map of {demand-name ..}
          finals  (store/gete ctx :DemandStore  :finals)
-         actives (store/gete ctx :DemandStore  :activedemands)]
+         actives (store/gete ctx :DemandStore  :activedemands)
+         finals? (finals t)]
      (when (or (seq changes)
-               (finals t)
+               finals?
                (= (sim/get-final-time ctx) t))
-         (->> actives
-              (keys)
-              (map #(store/get-entity ctx %))
-              (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
-                      (let [assigned     (:units-assigned    d)
-                            overlapping  (:units-overlapping d)
-                            ua           (count              assigned)
-                            uo           (count              overlapping)
-                            ]
-                        (merge
-                         {:t             t
-                          :Quarter       qtr
-                          :SRC           (:src      d)
-                          :TotalRequired (:quantity d)
-                          :TotalFilled   (+ uo ua)
-                          :Overlapping   uo
-                          :Deployed      ua
-                          :DemandName    (:name d)
-                          :Vignette      vignette
-                          :DemandGroup   demandgroup}
-                         (compo-fills ctx assigned overlapping)
-                          ))))))))
+       (->> actives
+            (keys)
+            (map #(store/get-entity ctx %))
+            (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+                    (let [assigned     (:units-assigned    d)
+                          overlapping  (:units-overlapping d)
+                          ua           (count              assigned)
+                          uo           (count              overlapping)
+                          ]
+                      (merge
+                       {:t             t
+                        :Quarter       qtr
+                        :SRC           (:src      d)
+                        :TotalRequired (:quantity d)
+                        :TotalFilled   (+ uo ua)
+                        :Overlapping   uo
+                        :Deployed      ua
+                        :DemandName    (:name d)
+                        :Vignette      vignette
+                        :DemandGroup   demandgroup
+                        :deltaT       (when (and finals? (= t (tfinal d))) 1)}
+                       (compo-fills ctx assigned overlapping)
+                       
+                       ))))))))
   ([ctx] (demand-trends (sim/get-time ctx) ctx)))
 
 (defn ->demand-trends      [h]  (->collect-samples demand-trends h))
@@ -367,13 +378,22 @@
     (if (and (> dt 1) ;;non-adjacent sample
              *lerp-demandtrends*)
       ;;we need to expand the sample!
-      (let [t (:t (first xs))]
+      (let [t      (:t (first xs))
+            copies (filter #(not (:deltaT %)) xs)]
         (apply concat
-               (for [tsample (map #(+ % t) (range dt))]
-                 (map (fn [r] (assoc r :t tsample
-                                       :Quarter (as-quarter tsample)
-                                       :deltaT 1)) xs))))
-      (map #(assoc % :deltaT dt) xs))))
+               (cons (map #(if-not (get % :deltaT)
+                             (assoc % :deltaT 1)
+                             %) xs)
+                     (when (seq copies)
+                       (for [tsample (map #(+ % t) (range 1 dt))]
+                         (map (fn [r] (assoc r :t tsample
+                                             :Quarter (as-quarter tsample)
+                                             :deltaT 1)) copies
+                              ))))))
+      ;;compute the "active" dt, i.e. the min of (+ t dt) (+ start duration)
+      (map #(if-not (get % :deltaT)
+              (assoc % :deltaT dt)
+              %) xs))))
 
 ;;this compute the demand-trends frame from the current frame.
 ;;useful idiom...This is a keyframe fyi.
@@ -385,27 +405,22 @@
 ;;Then allow demand-trends to do its thing.  If we produce
 ;;output (emit frames), then we update the observation time
 ;;in the atom to current time.  This is slightly hacky, but it's
-;;general and keeps the side-effecting state to the boundaries.
+;;general and keeps the side-effecting state to the boundaries. 
 (defn frame->demand-trends [[t ctx :as f]]
-  (let [state-ref (get-in (meta f) [:frame-state :demandtrends])]
-    (when-let [res (seq (demand-trends t ctx))]
-      (let [pending  @state-ref
+  (let [mf          (meta f)
+        state-ref   (get-in mf [:frame-state :demandtrends])
+        end-time    (get mf :end-time)]
+    (when-let [res (or (seq (demand-trends t ctx)) ;;new demandtrends to queue
+                     (and (= end-time t)  ;;last-day of sim, with pending trends
+                          (seq @state-ref)))] 
+      (let [pending  @state-ref  ;;pop prior trends
             tprev   (or (:t (first pending)) 0)
             dt      (- t tprev)
             ;;update our pending batch to the new records,
             ;;wait until we have a deltat
-            _       (reset! state-ref  (vec res))]
-        (concat (sample-demand-trends pending dt)
-                ;;ensure we collect the final sample, since we're reaching.
-                (when (= (sim/get-final-time ctx) t)
-                  (do (reset! state-ref nil) ;clean up, maybe not needed
-                      (sample-demand-trends res 1))
-                ))))))
-#_(defn frame->demand-trends [[t ctx :as f]]
-  (let [state-ref (get-in (meta f) [:frame-state :demandtrends])]
-    (when-let [res (demand-trends t (store/assoce ctx :demandtrends :state state-ref))]
-      (do (swap! state-ref assoc :tprev t)
-          res))))
+            _       (reset! state-ref  (vec res)) ;;push new trends
+            ]
+        (sample-demand-trends pending dt)))))
 
 ;;Note: locations are really "policypositions", should rephrase
 ;;this....otherwise we get :locationname confused.  We actually
@@ -900,11 +915,13 @@
                                         nil frame-state))
         end-points   (juxt sim/get-final-time
                            #(store/gete % :DemandStore :tlastdeactivation))
-        [tfinal tlastdemand]        (-> h first second end-points) 
+        [tfinal tlastdemand]        (-> h first second end-points)
+        end-time    (min tfinal tlastdemand)
         _ (reset! w (some #(when (= (:name %) :event-log) (:saver %)) frame-state))]
     (with-open [savers (io/->closer (map :saver frame-state))]
       (doseq [frm h]
-        (let [frm    (vary-meta frm assoc :frame-state state)
+        (let [frm    (vary-meta frm assoc :frame-state state
+                                          :end-time end-time)
               [t ctx] frm]
           (do (println [:day t :tfinal tfinal  :last-deactivation tlastdemand])
               (grab-frames! frm)))))))

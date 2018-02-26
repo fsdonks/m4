@@ -472,8 +472,9 @@
         newctx  (->> xs
                      (map add-final!)
                      (reduce (fn [acc d]
-                               (register-demand d acc)) ctx))]
-    (register-finals (persistent! @final-samples) newctx)))
+                               (register-demand d acc)) ctx))
+        tlast  (store/gete newctx :DemandStore :tlastdeactivation)]
+    (register-finals (conj (persistent! @final-samples) tlast) newctx)))
   
 ;;another way to look at this guy is that we're modifying disparate
 ;;domains via a transaction.  Specifically, we're working on multiple

@@ -143,15 +143,16 @@
   (let [ts (:tables prj)]
     (assoc prj :tables (marathon-tables->clean-tables ts))))
 
+;;note: excised legacy functionality.  we're not doing this currently.
 (defn add-highwater 
   "Computes the highwater tables.  Requires a path to demand-trends in the 
    project.  Adds highwater under tables.  The final highwater table 
    should not take too much memory, since it is a reduction of the original
    demand-trends table."
   [prj & {:keys [headers] 
-          :or {headers  (vec (map tbl/field->string 
+          #_:or #_{headers  (vec (map tbl/field->string 
                                   highwater/highwater-headers))}}]
-  (let [hw-table (tbl/stringify-field-names 
+  #_(let [hw-table (tbl/stringify-field-names 
                    (highwater/file->highwater-table 
                      (get-path prj :demand-trends)))]       
     ;join fields from the SRC definition table....
@@ -161,7 +162,8 @@
          (tbl/order-by [["t" :ascending]                         
                         ["DemandName" :ascending]])
          (tbl/order-fields-by headers)
-         (add-table prj :high-water))))                    
+         (add-table prj :high-water)))
+  prj)
 
 (defn audit-marathon-project
   "Automatically pushes a capacity run through the cleaning/auditing process.

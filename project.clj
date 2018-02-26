@@ -25,7 +25,7 @@
                  [irresponsible/spectra "0.2.1"]
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
-  :source-paths ["src" ;"../spork/src" "../nightclub/src" "../proc/src"
+  :source-paths ["src" "../spork/src" "../nightclub/src" "../proc/src"
                  ]
   :profiles {:uberjar {;:aot  [marathon.main]
                        :aot [marathon.main];~aot-order

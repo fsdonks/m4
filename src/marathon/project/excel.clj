@@ -126,7 +126,7 @@
    supply additional tables, or supply the :all keyword to get all tables."
   [wbpath & {:keys [tables] :or {tables
                                  marathon-workbook-schema}}]
-  (let [wb (xl/as-workbook wbpath)]
+  (let [wb (xl/as-workbook (io/file-path wbpath))]
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
                        (do (print "Loading" sheetname ". . . ")
