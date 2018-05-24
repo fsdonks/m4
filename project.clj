@@ -13,7 +13,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
                  [spork "0.2.0.9-SNAPSHOT"]
-                 [proc  "0.2.5-SNAPSHOT"] ;;post processing.
+                 [proc  "0.2.6-SNAPSHOT"] ;;post processing.
                  ;;external libs
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
                  [alembic "0.3.2"]
