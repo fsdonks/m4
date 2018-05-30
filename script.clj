@@ -160,6 +160,39 @@
            :overlap 0
            :mob 0})
 
+;;lame patch...
+
+(in-ns 'proc.risk)
+(def trend-styles
+  (assoc trend-styles
+  :current-11 {:series-label "Current Structure (x/y/z), AC1:1"
+                                        ;:points true
+               :width 5.0
+               :color :dark-blue
+                                        ;:point-size 10.0
+               }))
+
+(defn get-styling [label]
+  (or (get trend-styles label)
+      (throw (ex-info "unknown style!" {:label label
+                                        :expected (keys trend-styles)}))))
+
+(defn custom-label [label {:keys [ac-supply rc-supply ng-supply]}]
+  (let [lbl (:series-label (get-styling label)) ]
+    (clojure.string/replace lbl
+                            #"x|y|z" {"x" (str ac-supply) "y" (str rc-supply) "z" (str ng-supply)})))
+
+#_(defn normalize-fields [xs]
+  (map (fn [{:keys [fill] :as r}]
+         (assoc r :fill
+                (if (> (:fill r) 1)
+                  1.0 ;100
+                  (gen/float-trunc (:fill r) 2)
+                  #_(* (:fill r) 100))))
+       xs))
+(in-ns 'med.script)
+
+
 (defn simple-dwell-ratio
   "Computes the dwell portion of bog:dwell,
    and truncates floating-point results to
@@ -196,10 +229,10 @@
               :ac-supply ac-supply :rc-supply rc-supply
               :ng-supply ng-supply}
         base+ (risk/grow-by base {:ac 1 :rc 1 :ng 1})
-        base12 (risk/modify-policy base :ac ac12)]
+        base11 (risk/modify-policy base :ac ac11)]
     [(assoc base :case :current)
      (assoc base+ :case :growth)
-     (assoc base12 :case :current-12)]))
+     (assoc base11 :case :current-11)]))
 
 
 ;;now we want the cartesian product of our risk cases with a bunch
@@ -399,22 +432,74 @@
   (str "Risk to Mission for SRC: " src \newline oititle \newline
        \newline "AC/NG/AR = " structure  " , Demand = " demand))
 
+;;plot tweaks...
 (defn drop-legend [chrt]
-  (.removeSubtitle chrt (.getSubtitle chrt 0)))
+  (do (.removeSubtitle chrt (.getSubtitle chrt 0))
+      chrt))
+;;% in the format code will multiply by 100...
+;;we can just not multiply.
+
+;;allows us to trivially format our axes...
+(defn custom-format [formatter]
+  (proxy [java.text.NumberFormat] []
+    (^String format [number ^java.lang.StringBuffer result position]
+     (.append result (str (formatter number))))))
+
+(def formats
+  {:raw-percent (custom-format (fn [n] (str (long n) "%")))
+   :ratio       (custom-format (fn [n] (str "1:" (long n))))})
+
+(defprotocol INumberFormat
+  (as-number-format [n]))
+
+(extend-protocol INumberFormat
+  java.text.NumberFormat
+  (as-number-format [n] n)
+  java.text.DecimalFormat
+  (as-number-format [n] n)
+  clojure.lang.Keyword
+  (as-number-format [n]
+    (or (get formats n)
+        (throw (ex-info "unknown number format!?>!" {:format n}))))
+  clojure.lang.IFn
+  (as-number-format [n]
+    (custom-format n)))
+
+(defn set-format [axis fmt]
+  (doto axis
+    (.setNumberFormatOverride
+     ^java.lang.NumberFormat (as-number-format fmt))))
+
+(defn format-x [chart fmt]
+  (-> chart
+      (.getPlot)
+      (.getDomainAxis)
+      (set-format fmt))
+  chart)
+
+(defn format-y [chart fmt]
+  (-> chart
+      (.getPlot)
+      (.getRangeAxis)
+      (set-format fmt))
+  chart)
+
 
 (defn plot-experiment
   "Plots a single element of the output from case-records->trends,
    or a risk trend."
-  [[src {:keys [current #_growth current-12]} :as tr]]
+  [[src {:keys [current #_growth current-11]} :as tr]]
   (let [demand    (:demand current)
         oititle   (:oititle (:trend current))
         structure (get-structure tr)]
     (risk/simple-response (mapv (comp style-trend :trend)
-                                [current #_growth current-12])
+                                [current #_growth current-11])
                           :title (->title src demand oititle structure)
                           :y-label "RC Access, BOG:Dwell (1:x)")
-    (drop-legend @proc.risk/surface) ;;this is awful...
-    ))
+    (-> @proc.risk/surface
+        (drop-legend) ;;this is awful...
+        (format-x :raw-percent)
+        (format-y :ratio))))
 
 (defn spit-plots [xs & {:keys [root] :or {root "."}}]
   (doseq [x xs]
