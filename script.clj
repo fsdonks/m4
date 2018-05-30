@@ -25,12 +25,13 @@
             [marathon.schemas :as schemas]
             [spork.util [io :as io]
              [table :as tbl]
-             [general as gen]]
+             [general :as gen]]
             [spork.util.excel.core :as xl]
             [marathon.analysis :as analysis]))
 ;;this is where I stuck my test data. io/file-path will handle paths in
 ;;a smart, portable way, even path fragments.
 (def root (io/file-path "~/Documenrs/med"))
+(def root (io/file-path "~/repos/notional"))
 
 ;;Temporary hack around Craig's function to allow me to just use M4's project
 ;;reading functions to shove data directly into peak compoutation.
@@ -47,8 +48,8 @@
                                  (filter demand-filter)))
         periods (or periods (proc.util/load-periods path))
         peakfn  (fn [{:keys [actives]}] (apply + (map :Quantity actives)))]
-    (da/peak-times-by-period (fn [r] (group-by (:SRC r) demands periods
-                                               :StartDay :Duration peakfn)))))
+    (da/peak-times-by-period (fn [r] (group-fn (:SRC r))) demands periods
+                                               :StartDay :Duration peakfn)))
 
 (defn project->demand-peaks
   "Given a maratho project p, which is typically just a map with a
@@ -58,9 +59,9 @@
   (let [[periods demands] (->> p
                                :tables
                                ((juxt :PeriodRecords :DemandRecords))
-                               (mpv tbl/table-records))
+                               (mapv tbl/table-records))
         periods (filter #(not= (:Name %) "Initialization") periods)]
-    (->> (peaks-from nil :group-fn identity :periods periods :demand demands)
+    (->> (peaks-from nil :group-fn identity :periods periods :demands demands)
          (filter peak-filter))))
 
 (defn project->surge-peaks
@@ -70,17 +71,31 @@
 
 ;;define a path to the sample workbook.
 (def wbpath (io/file-path root "MARATHON_WKBK_21-25_Med.xlsx"))
+(def wbpath (io/file-path root "base-testdata-v7.xlsx"))
 
+;;notional testdata...
+(def test-srcs
+  #{"08300R000" "08317K000" "08420R000" "08429R000" "08430R000" "08453R000"
+    "08457R000" "08460R000" "08473R000" "08480K000" "08485R000" "08488K000"
+    "08527AA00" "08528RA00" "08528RB00" "08567RA00" "08640R000" "08641RA00"
+    "08641RB00" "08668R000" "08670R000" "08949R000" "08976R000" "08977R000"
+    "08978R000" "08979R000" "08988R000"})
 ;;Convenience function to load up the workbook on demand, without being
 ;;tied to a reload of the script.  Note the use of analysis/load-project:
 ;;the marathon.analysis namesapce has many useful high-level API functions
 ;;for working with inputs, manipulating them, simulating, collecting history,
 ;;etc. It's a good namespace to know!
 (defn test-proj []
-  (analysis/load-projecy wbpath))
+  (let [proj (analysis/load-project wbpath)
+        tbls (:tables proj)
+        f    (analysis/filter-srcs test-srcs)]
+    (->> tbls
+         f
+         (assoc proj :tables))))
 
 ;;eexample usage of surge peaks.
 #(def peaks (project->surge-peaks proj))
+
 
 (defn build-cases
   "Primary workhorse for deriving experiment cases from inputs.
@@ -131,21 +146,27 @@
            :mob 0})
 
 ;;Note: this is actually AC11 !
-(def ac12 {:policy :ac12
+(def ac11 {:policy :ac11
            :bog 9
            :cyclelength 18
            :overlap 0
            :mob 0})
 
+(def ac12 {:policy :ac12
+           :bog 9
+           :cyclelength 27
+           :overlap 0
+           :mob 0})
+
 (defn simple-dwell-ratio
-  "Computs the dwell portion of bog:dwell,
+  "Computes the dwell portion of bog:dwell,
    and truncates floating-point results to
    2 decimal places.  The degenerate case of
    1:0 is defined as 0."
   [bog cyclelength]
   (let [dwell (- cyclelength bog)]
     (if (pos? dwell)
-      (gen/float-trunc (/ 1.0 (/ bog dwell) 2))
+      (gen/float-trunc (/ 1.0 (/ bog dwell)) 2)
       0)))
 
 (defn policy-range
@@ -156,8 +177,8 @@
   [seed]
   (for [p (risk/policy-range seed :bound 1/9)]
     (let [dwellrat (simple-dwell-ratio (:bog p) (:cyclelength p))
-          policyname (str (subs (name (:policy p) 0 2)) "-1:" dwellrat)]
-      (assoc p :policy policy-name))))
+          policyname (str (subs (name (:policy p)) 0 2) "-1:" dwellrat)]
+      (assoc p :policy policyname))))
 
 ;;we just expand out our base case into multiple cases based
 ;;on an initial hack....future efforts will generalize this better.
@@ -187,7 +208,7 @@
   [r]
   (for [p (policy-range (:rc-policy r))]
     (assoc r :ng-policy p
-           :rc-policy p)))
+             :rc-policy p)))
 
 ;;For clean output later, we leverage the spork.util.table facilities
 ;;for spitting outputs and defining field order.  We'll build an
@@ -202,7 +223,7 @@
 
    :ng-supply :ng-expected :ng-bog
    :ng-cyclelength :ng-mob :ng-overlap :ng-dwell-ratio
-   
+
    :rc-supply :rc-expected :rc-bog
    :rc-cyclelength :rc-mob :rc-overlap :rc-dwell-ratio])
 
@@ -254,7 +275,7 @@
   "Given a demand and a esign, evaluates the fill for the supply relative to
   demand under policy.  Returns lots of information to inform the
   ubertable we build later.  THe primary response is 'fill'"
-  [demand {:keys [ac-supply ac-policy rc-supply rc-policy ng-supply ng-polict]
+  [demand {:keys [ac-supply ac-policy rc-supply rc-policy ng-supply ng-policy]
            :or {ac-supply 0 rc-supply 0 ng-supply 0}}]
   (let [ac (risk/algebraic-supply ac-supply ac-policy)
         rc (risk/algebraic-supply rc-supply rc-policy)
@@ -269,7 +290,7 @@
      :rc-available rc
      :ng-available ng
      :total-supply total-supply
-     :rounded-supply rounded-supply 
+     :rounded-supply rounded-supply
      :fill           (double (/ total-supply demand))
      :rounded-fill   (double (/ rounded-supply demand))}))
 
@@ -330,13 +351,15 @@
        (tbl/order-fields-by risk-fields)
        (tbl/paste-table!)))
 
+
 (defn case-records->trends
   "Computes input compatible wit the draft format
    expected by proc.risk for plotting risk trends on
    an assessment surface.  Given the output of cases->records,
    basically the ubertable records, bins the into
    [src {case {:demand ... :tren {r*}}}] for plotting."
-  (for [[src ys] (gorup-by :src res)]
+  [res]
+  (for [[src ys] (group-by :src res)]
     [src
      (into {}
            (let [groups (group-by :case ys)
@@ -365,7 +388,7 @@
           frm  (plot-experiment x)
           _    (Thread/sleep 100)
           surface @proc.risk/surface
-          _    (proc.charts/simple-save-jfree-cart surface path)
+          _    (proc.charts/simple-save-jfree-chart surface path)
           _    (println (str "spitting " path))
           _    (doto frm (.setVisible false) (.dispose))])))
 
