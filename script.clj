@@ -118,8 +118,10 @@
                         :SupplyRecords
                         tbl/table-records
                         (filter #(= (:SRC %) src))
-                        (group-by :Component))]
+                        (group-by :Component))
+            title (->  supply vals ffirst :OITitle)]
         (into {:src src
+               :oititle title
                :demand (:peak peak)
                :ac-supply 0 :rc-supply 0 :ng-supply 0}
               (for [[compo [r]] supply]
@@ -175,7 +177,7 @@
   until a target bound is met via proc.risk/policy-range.
   The default for our experiments is a 1:8 bog:dwell, so 1/9 works."
   [seed]
-  (for [p (risk/policy-range seed :bound 1/9)]
+  (for [p (risk/policy-range seed :bound 1/9 :step 5)]
     (let [dwellrat (simple-dwell-ratio (:bog p) (:cyclelength p))
           policyname (str (subs (name (:policy p)) 0 2) "-1:" dwellrat)]
       (assoc p :policy policyname))))
@@ -188,8 +190,8 @@
   there are actually 3 trends we'd also like to compute, where
   either supply or policy is deviated relative to a baseline of current
   supply."
-  [{:keys [src demand ac-supply rc-supply ng-supply] :as case}]
-  (let [base {:demand demand :src src
+  [{:keys [src oititle demand ac-supply rc-supply ng-supply] :as case}]
+  (let [base {:demand demand :src src :oititle oititle
               :ac-policy ac10 :rc-policy rc10 :ng-policy rc10
               :ac-supply ac-supply :rc-supply rc-supply
               :ng-supply ng-supply}
@@ -216,7 +218,8 @@
 ;;fields of that table. We don't "have" to have a field order, but if we
 ;;don't the order is arbitrary and could be confusing.
 (def risk-fields
-  [:idx :src :case :demand :total-supply :rounded-supply :fill :rounded-fill
+  [:idx :src :oititle :case :demand :total-supply :rounded-supply
+   :fill :rounded-fill
    :ac-policy :rc-policy :ng-policy
    :ac-supply :ac-expected :ac-bog
    :ac-cyclelength :ac-mob :ac-overlap :ac-dwell-ratio
@@ -357,13 +360,14 @@
    expected by proc.risk for plotting risk trends on
    an assessment surface.  Given the output of cases->records,
    basically the ubertable records, bins the into
-   [src {case {:demand ... :tren {r*}}}] for plotting."
+   [src {case {:demand ... :trend {r*}}}] for plotting."
   [res]
   (for [[src ys] (group-by :src res)]
     [src
      (into {}
            (let [groups (group-by :case ys)
-                 base   (first (:current groups))]
+                 base   (first (:current groups))
+                 oititle (:oititle base)]
              (for [[case zs] groups]
                (let [zs (sort-by :idx zs)]
                  [case {:demand (:demand base)
@@ -371,15 +375,46 @@
                                     (map (fn [r]
                                            (assoc r :bdr (:ng-dwell-ratio r))))
                                     (risk/experiment->trend case)
+                                    ((fn [r] (assoc r :oititle oititle)))
                                     (risk/add-label base))}]))))]))
+;;quick hack to get us to a styled trend..
+(defn style-trend [tr]
+  (-> tr
+      (dissoc :points :point-size)
+      ((fn [r] (if (:dash r) (assoc r :dash 10.0 :width 3.0) r)))
+      (update :series-label (fn [r](clojure.string/replace r  #"\(.*\)" "" )))))
+
+;;extremely hackish way to extract force structure from trend, this is dumb,
+;;but lets us move the structure from series label to title for now...
+(defn get-structure [tr]
+  (-> (->> tr
+           second
+           vals
+           (map (comp  :series-label :trend))
+           (map (fn [r] (first (re-seq  #"\(.*\)" r))))
+           first)
+      (clojure.string/replace   #"\(|\)" "")))
+
+(defn ->title [src demand oititle structure]
+  (str "Risk to Mission for SRC: " src \newline oititle \newline
+       \newline "AC/NG/AR = " structure  " , Demand = " demand))
+
+(defn drop-legend [chrt]
+  (.removeSubtitle chrt (.getSubtitle chrt 0)))
 
 (defn plot-experiment
   "Plots a single element of the output from case-records->trends,
    or a risk trend."
-  [[src {:keys [current growth current-12]}]]
-  (let [demand (:demand current)]
-    (risk/simple-response (mapv :trend [current growth current-12])
-                          :title (str src " Risk to Mission (Demand = " demand ")"))))
+  [[src {:keys [current #_growth current-12]} :as tr]]
+  (let [demand    (:demand current)
+        oititle   (:oititle (:trend current))
+        structure (get-structure tr)]
+    (risk/simple-response (mapv (comp style-trend :trend)
+                                [current #_growth current-12])
+                          :title (->title src demand oititle structure)
+                          :y-label "RC Access, BOG:Dwell (1:x)")
+    (drop-legend @proc.risk/surface) ;;this is awful...
+    ))
 
 (defn spit-plots [xs & {:keys [root] :or {root "."}}]
   (doseq [x xs]
