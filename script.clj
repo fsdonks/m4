@@ -21,17 +21,20 @@
 ;;and numerous other dependencies shipped along with M4).
 (ns med.script
   (:require [proc [risk :as risk]
-             [demandanalysis :as da]]
+                  [demandanalysis :as da]
+                  [charts]]
             [marathon.schemas :as schemas]
             [spork.util [io :as io]
              [table :as tbl]
              [general :as gen]]
             [spork.util.excel.core :as xl]
-            [marathon.analysis :as analysis]))
+            [marathon.analysis :as analysis]
+            [incanter.core :as i]))
 ;;this is where I stuck my test data. io/file-path will handle paths in
 ;;a smart, portable way, even path fragments.
-(def root (io/file-path "~/Documenrs/med"))
-(def root (io/file-path "~/repos/notional"))
+#_(def root (io/file-path "~/Documents/med"))
+#_(def root (io/file-path "~/repos/notional/"))
+(def root (io/file-path "~/workspacenew/notional/"))
 
 ;;Temporary hack around Craig's function to allow me to just use M4's project
 ;;reading functions to shove data directly into peak compoutation.
@@ -48,8 +51,8 @@
                                  (filter demand-filter)))
         periods (or periods (proc.util/load-periods path))
         peakfn  (fn [{:keys [actives]}] (apply + (map :Quantity actives)))]
-    (da/peak-times-by-period (fn [r] (group-fn (:SRC r))) demands periods
-                                               :StartDay :Duration peakfn)))
+    (da/peak-times-by-period
+     (fn [r] (group-fn (:SRC r))) demands periods :StartDay :Duration peakfn)))
 
 (defn project->demand-peaks
   "Given a maratho project p, which is typically just a map with a
@@ -70,16 +73,18 @@
   (project->demand-peaks p :peak-filter #(= (:period %) "Surge")))
 
 ;;define a path to the sample workbook.
-(def wbpath (io/file-path root "MARATHON_WKBK_21-25_Med.xlsx"))
+#_(def wbpath (io/file-path root "MARATHON_WKBK_21-25_Med.xlsx"))
 (def wbpath (io/file-path root "base-testdata-v7.xlsx"))
 
-;;notional testdata...
+;;notional testdata
 (def test-srcs
-  #{"08300R000" "08317K000" "08420R000" "08429R000" "08430R000" "08453R000"
-    "08457R000" "08460R000" "08473R000" "08480K000" "08485R000" "08488K000"
-    "08527AA00" "08528RA00" "08528RB00" "08567RA00" "08640R000" "08641RA00"
-    "08641RB00" "08668R000" "08670R000" "08949R000" "08976R000" "08977R000"
-    "08978R000" "08979R000" "08988R000"})
+  #{"08317K000" "08979R000" "08453R000" "08976R000" "08988R000"
+    "08668R000" "08528RA00" "08457R000" "08429R000" "08977R000"
+    "08641RB00" "08949R000" "08670R000" "08978R000" "08488K000"
+    "08473R000" "08527AA00" "08480K000" "08300R000" "08460R000"
+    "08430R000" "08485R000" "08528RB00" "08641RA00" "08567RA00"
+    "08420R000" "08640R000"})
+
 ;;Convenience function to load up the workbook on demand, without being
 ;;tied to a reload of the script.  Note the use of analysis/load-project:
 ;;the marathon.analysis namesapce has many useful high-level API functions
@@ -93,10 +98,9 @@
          f
          (assoc proj :tables))))
 
-;;eexample usage of surge peaks.
-#(def peaks (project->surge-peaks proj))
-
-
+;;example usage of surge peaks.
+#_(def peaks (project->surge-peaks proj))
+  
 (defn build-cases
   "Primary workhorse for deriving experiment cases from inputs.
    The idea heer is to manage everything in canonical marathon inputs
@@ -119,7 +123,7 @@
                         tbl/table-records
                         (filter #(= (:SRC %) src))
                         (group-by :Component))
-            title (->  supply vals ffirst :OITitle)]
+            title   (-> supply vals ffirst :OITitle)]
         (into {:src src
                :oititle title
                :demand (:peak peak)
@@ -135,6 +139,8 @@
 ;;are consistent....will need to adapt for M4 though for consistentcy.
 ;;What we'd like to eventually do is define coercions for M4 policies/policy
 ;;records.
+
+;;these are duplicates from proc.risk, for now.
 (def rc10 {:policy :rc10
            :bog 9
            :cyclelength 9
@@ -147,7 +153,6 @@
            :overlap 0
            :mob 0})
 
-;;Note: this is actually AC11 !
 (def ac11 {:policy :ac11
            :bog 9
            :cyclelength 18
@@ -160,41 +165,8 @@
            :overlap 0
            :mob 0})
 
-;;lame patch...
-
-(in-ns 'proc.risk)
-(def trend-styles
-  (assoc trend-styles
-  :current-11 {:series-label "Current Structure (x/y/z), AC1:1"
-                                        ;:points true
-               :width 5.0
-               :color :dark-blue
-                                        ;:point-size 10.0
-               }))
-
-(defn get-styling [label]
-  (or (get trend-styles label)
-      (throw (ex-info "unknown style!" {:label label
-                                        :expected (keys trend-styles)}))))
-
-(defn custom-label [label {:keys [ac-supply rc-supply ng-supply]}]
-  (let [lbl (:series-label (get-styling label)) ]
-    (clojure.string/replace lbl
-                            #"x|y|z" {"x" (str ac-supply) "y" (str rc-supply) "z" (str ng-supply)})))
-
-#_(defn normalize-fields [xs]
-  (map (fn [{:keys [fill] :as r}]
-         (assoc r :fill
-                (if (> (:fill r) 1)
-                  1.0 ;100
-                  (gen/float-trunc (:fill r) 2)
-                  #_(* (:fill r) 100))))
-       xs))
-(in-ns 'med.script)
-
-
 (defn simple-dwell-ratio
-  "Computes the dwell portion of bog:dwell,
+  "Computs the dwell portion of bog:dwell,
    and truncates floating-point results to
    2 decimal places.  The degenerate case of
    1:0 is defined as 0."
@@ -204,14 +176,18 @@
       (gen/float-trunc (/ 1.0 (/ bog dwell)) 2)
       0)))
 
+;;var to control how fine our steps are.  defaults
+;;to 1 month increments.
+(def ^:dynamic *step-size* 1)
+
 (defn policy-range
   "Given a seed policy definition (assumably a 1:0 type),
   generates a sequence of policies with increased dwell times
   until a target bound is met via proc.risk/policy-range.
   The default for our experiments is a 1:8 bog:dwell, so 1/9 works."
   [seed]
-  (for [p (risk/policy-range seed :bound 1/9 :step 5)]
-    (let [dwellrat (simple-dwell-ratio (:bog p) (:cyclelength p))
+  (for [p (risk/policy-range seed :bound 1/9 :step *step-size*)]
+    (let [dwellrat   (simple-dwell-ratio (:bog p) (:cyclelength p))
           policyname (str (subs (name (:policy p)) 0 2) "-1:" dwellrat)]
       (assoc p :policy policyname))))
 
@@ -223,12 +199,12 @@
   there are actually 3 trends we'd also like to compute, where
   either supply or policy is deviated relative to a baseline of current
   supply."
-  [{:keys [src oititle demand ac-supply rc-supply ng-supply] :as case}]
+  [{:keys [src demand ac-supply rc-supply ng-supply oititle] :as case}]
   (let [base {:demand demand :src src :oititle oititle
               :ac-policy ac10 :rc-policy rc10 :ng-policy rc10
               :ac-supply ac-supply :rc-supply rc-supply
               :ng-supply ng-supply}
-        base+ (risk/grow-by base {:ac 1 :rc 1 :ng 1})
+        base+  (risk/grow-by base {:ac 1 :rc 1 :ng 1})
         base11 (risk/modify-policy base :ac ac11)]
     [(assoc base :case :current)
      (assoc base+ :case :growth)
@@ -252,18 +228,18 @@
 ;;don't the order is arbitrary and could be confusing.
 (def risk-fields
   [:idx :src :oititle :case :demand :total-supply :rounded-supply
-   :fill :rounded-fill
+   :fill :rounded-fill :lower-fill :upper-fill
    :ac-policy :rc-policy :ng-policy
    :ac-supply :ac-expected :ac-bog
    :ac-cyclelength :ac-mob :ac-overlap :ac-dwell-ratio
 
    :ng-supply :ng-expected :ng-bog
    :ng-cyclelength :ng-mob :ng-overlap :ng-dwell-ratio
-
+   
    :rc-supply :rc-expected :rc-bog
    :rc-cyclelength :rc-mob :rc-overlap :rc-dwell-ratio])
 
-;;Again, for pirposes of creating our table, we take the nested-map
+;;Again, for purposes of creating our table, we take the nested-map
 ;;representation and unpack it into a "wide" table.  This aux function
 ;;helps us do that.
 (defn risk-case->record [{:keys [ac-policy rc-policy ng-policy] :as r}]
@@ -299,6 +275,11 @@
         policy-case (risk-case->policy-excursions risk-case)]
     policy-case))
 
+(defn pad [n & {:keys [proportion] :or
+                {proportion 0.2}}]
+    [(* (- 1 proportion) n)
+     (* (+ 1 proportion) n)])
+
 ;;since we have a nice batch of design points,
 ;;we can just eval the design (much like marathon.processing.stoke)
 ;;in fact, we can/maybe should plug this into stoke....
@@ -308,7 +289,7 @@
 ;;but we'd like to be able to swap that out for a dynamic method
 ;;(using M4).
 (defn fill-performance
-  "Given a demand and a esign, evaluates the fill for the supply relative to
+  "Given a demand and a design, evaluates the fill for the supply relative to
   demand under policy.  Returns lots of information to inform the
   ubertable we build later.  THe primary response is 'fill'"
   [demand {:keys [ac-supply ac-policy rc-supply rc-policy ng-supply ng-policy]
@@ -321,14 +302,18 @@
                         (:expected-supply ng))
         rounded-supply  (+ (Math/round (:expected-supply ac))
                            (Math/round (:expected-supply rc))
-                           (Math/round (:expected-supply ng)))]
+                           (Math/round (:expected-supply ng)))
+        [lower upper] (pad demand)
+        ]
     {:ac-available ac
      :rc-available rc
      :ng-available ng
      :total-supply total-supply
-     :rounded-supply rounded-supply
+     :rounded-supply rounded-supply 
      :fill           (double (/ total-supply demand))
-     :rounded-fill   (double (/ rounded-supply demand))}))
+     :rounded-fill   (double (/ rounded-supply demand))
+     :lower-fill     (double (/ total-supply lower)) 
+     :upper-fill     (double (/ total-supply upper))}))
 
 ;;convenience function
 (defn design->fill
@@ -387,13 +372,12 @@
        (tbl/order-fields-by risk-fields)
        (tbl/paste-table!)))
 
-
 (defn case-records->trends
   "Computes input compatible wit the draft format
    expected by proc.risk for plotting risk trends on
    an assessment surface.  Given the output of cases->records,
    basically the ubertable records, bins the into
-   [src {case {:demand ... :trend {r*}}}] for plotting."
+   [src {case {:demand ... :tren {r*}}}] for plotting."
   [res]
   (for [[src ys] (group-by :src res)]
     [src
@@ -408,50 +392,77 @@
                                     (map (fn [r]
                                            (assoc r :bdr (:ng-dwell-ratio r))))
                                     (risk/experiment->trend case)
-                                    ((fn [r] (assoc r :oititle oititle)))
-                                    (risk/add-label base))}]))))]))
-;;quick hack to get us to a styled trend..
+                                    (#(assoc % :oititle oititle))
+                                    (risk/add-label base))
+                        :lower-upper (->> zs
+                                          (mapv (fn [{:keys [lower-fill upper-fill ng-dwell-ratio]}]
+                                                  {:lower (gen/float-trunc lower-fill 3)
+                                                   :upper (gen/float-trunc upper-fill 3)
+                                                   :dwell ng-dwell-ratio}))) }]))))]))
+
+;;adding derivative trends here...
+;;we want to define dashed-trends based on effectively computed fields.
+;;one option is to add computed fields, then extract additional trends
+;;from them later.
+
+
+(def paren-re #"\(.*\)")
+(def open-or-close-re #"\(|\)")
+
+;;eliminate everything between and including open/close paranthesis.
+(defn strip-expr
+  [txt]
+  (clojure.string/replace txt paren-re  ""))
+
+(defn strip-parens
+  [txt]
+  (clojure.string/replace txt open-or-close-re ""))
+
+;;quick hack to get us a styled trend..
 (defn style-trend [tr]
   (-> tr
       (dissoc :points :point-size)
       ((fn [r] (if (:dash r) (assoc r :dash 10.0 :width 3.0) r)))
-      (update :series-label (fn [r](clojure.string/replace r  #"\(.*\)" "" )))))
+      (update :series-label strip-expr)))
 
 ;;extremely hackish way to extract force structure from trend, this is dumb,
 ;;but lets us move the structure from series label to title for now...
 (defn get-structure [tr]
-  (-> (->> tr
-           second
-           vals
-           (map (comp  :series-label :trend))
-           (map (fn [r] (first (re-seq  #"\(.*\)" r))))
-           first)
-      (clojure.string/replace   #"\(|\)" "")))
+  (->> tr
+       second
+       vals
+       (map (comp :series-label :trend))
+       (map (fn [r] (first (re-seq paren-re r))))
+       first
+       strip-parens))
 
 (defn ->title [src demand oititle structure]
   (str "Risk to Mission for SRC: " src \newline oititle \newline
-       \newline "AC/NG/AR = " structure  " , Demand = " demand))
+       \newline "AC/NG/AR = " structure " , Demand = " demand " (NDS)"))
 
 ;;plot tweaks...
 (defn drop-legend [chrt]
   (do (.removeSubtitle chrt (.getSubtitle chrt 0))
       chrt))
-;;% in the format code will multiply by 100...
+;;% in the format code will multply by 100...
 ;;we can just not multiply.
 
 ;;allows us to trivially format our axes...
+;;TODO : move to incanter.charts or cljfreechart...
 (defn custom-format [formatter]
   (proxy [java.text.NumberFormat] []
     (^String format [number ^java.lang.StringBuffer result position]
      (.append result (str (formatter number))))))
 
+;;TODO : move to incanter.charts or cljfreechart...
 (def formats
   {:raw-percent (custom-format (fn [n] (str (long n) "%")))
    :ratio       (custom-format (fn [n] (str "1:" (long n))))})
 
+;;TODO : move to incanter.charts or cljfreechart...
 (defprotocol INumberFormat
   (as-number-format [n]))
-
+;;TODO : move to incanter.charts or cljfreechart...
 (extend-protocol INumberFormat
   java.text.NumberFormat
   (as-number-format [n] n)
@@ -465,11 +476,13 @@
   (as-number-format [n]
     (custom-format n)))
 
+;;TODO : move to incanter.charts or cljfreechart...
 (defn set-format [axis fmt]
   (doto axis
     (.setNumberFormatOverride
      ^java.lang.NumberFormat (as-number-format fmt))))
 
+;;TODO : move to incanter.charts or cljfreechart...
 (defn format-x [chart fmt]
   (-> chart
       (.getPlot)
@@ -477,6 +490,7 @@
       (set-format fmt))
   chart)
 
+;;TODO : move to incanter.charts or cljfreechart...
 (defn format-y [chart fmt]
   (-> chart
       (.getPlot)
@@ -484,24 +498,77 @@
       (set-format fmt))
   chart)
 
+;;TODO : move to incanter.charts or cljfreechart...
+(defn pathify-lines [chart]
+  (doseq [{:keys [renderer]} (proc.risk/series-seq (.getPlot chart))]
+    (.setDrawSeriesLineAsPath renderer true))
+  chart)
+
+(defn add-lower-upper  [chart lower-upper]
+  (let [percent  (fn [n] (* n 100))
+        lowers   (->> lower-upper
+                       (map (comp percent :lower)))        
+        uppers  (->>  lower-upper
+                      (map (comp percent :upper)))
+        dwell   (map :dwell lower-upper)
+        lower-dwell (for [[lower dwell] (map vector lowers dwell)
+                          :when (<= lower 100)]
+                      [lower dwell])
+        upper-dwell (for [[upper dwell] (map vector uppers dwell)
+                          :when (<= upper 100)]
+                      [upper dwell])]
+    (-> chart
+        (risk/append-lines (map first lower-dwell) (map second lower-dwell)
+                           :color :black :dash 4.0 :width 2)
+        (risk/append-lines (map first upper-dwell) (map second upper-dwell)
+                           :color :black :dash 4.0 :width 2))))
+
+(def custom-orange (incanter.charts/chart-color [255 192 0]))
+
+(def custom-styles
+  {:growth  {:series-label "Growth (x+1/y+1/z+1), AC1:0"
+             ;:points true
+             :width 5.0
+             :color :blue
+             ;:point-size 10.0
+             }
+   :current   {:series-label "Current Structure (x/y/z), AC1:0" 
+               ;:points true
+               :width 5.0
+               ;:dash 10.0
+               :color :black
+               ;:point-size 10.0
+               }
+   :current-11 {:series-label "Current Structure (x/y/z), AC1:1"
+                ;:points true
+                :width 5.0                         
+                :color custom-orange #_:dark-blue
+                ;:point-size 10.0
+                }
+   :current-12 {:series-label "Current Structure (x/y/z), AC1:2"
+                :points true
+                :width 5.0                         
+                :color :dark-blue
+                :point-size 10.0}})
 
 (defn plot-experiment
   "Plots a single element of the output from case-records->trends,
    or a risk trend."
-  [[src {:keys [current #_growth current-11]} :as tr]]
-  (let [demand    (:demand current)
-        oititle   (:oititle (:trend current))
+  [[src {:keys [current #_growth current-11] } :as tr]]
+  (let [demand  (:demand current)
+        oititle (:oititle (:trend current))
         structure (get-structure tr)]
-    (risk/simple-response (mapv (comp style-trend :trend)
-                                [current #_growth current-11])
-                          :title (->title src demand oititle structure)
-                          :y-label "RC Access, BOG:Dwell (1:x)")
-    (-> @proc.risk/surface
-        (drop-legend) ;;this is awful...
+    (-> (risk/simple-response (mapv (comp style-trend :trend)
+                                    [current #_growth current-11])
+                              :title (->title src demand oititle structure))
+        (add-lower-upper (:lower-upper current))
+        (drop-legend)
         (format-x :raw-percent)
-        (format-y :ratio))))
+        (format-y :ratio)
+        pathify-lines
+        i/view)))
 
-(defn spit-plots [xs & {:keys [root] :or {root "."}}]
+(defn spit-plots [xs & {:keys [root trend-styles] :or {root "."}}]
   (doseq [x xs]
     (let [src  (first x)
           path (io/relative-path root [(str src ".png")])
@@ -535,22 +602,28 @@
       (io/make-folders! fp)
       (spit-plots xs :root fp)
       (plot-pptx fp :filename filename)
-      (pr [:moving from to])
+      (println [:moving from to])
       (move from to))))
 
 ;;this is the big shebang
 ;;call it with a path to an m4 project, and it'll result in charts!
-(defn wb->plots [wbpath & {:keys [outpath retain?]}]
-  (let [outpath (or (when outpath (io/file-path outpath))
+(defn wb->plots [wb & {:keys [outpath retain? trend-styles]
+                       :or {trend-styles custom-styles}}]
+  (let [wbpath (if (string? wb) wb
+                   (or (-> wb :paths :Parameters first)
+                       (throw (ex-info "Expected a workbook path or a project!"
+                                       {:wb (type wb)}))))
+        outpath (or (when outpath (io/file-path outpath))
                     (io/file-path (io/parent-path wbpath)
                                   "surfaces.pptx"))
         filename (io/fname outpath)]
-    (-> wbpath
-        analysis/load-project
-        all-cases
-        cases->records
-        case-records->trends
-        (emit-plots :retain? retain? :filename filename))
-    (move (io/file-path "." filename)
-          (io/file-path outpath))))
-  
+    (binding [proc.risk/*trend-styles* trend-styles]
+      (-> (if (string? wb)
+            (analysis/load-project wbpath)
+            wb)
+          all-cases
+          cases->records
+          case-records->trends
+          (emit-plots :retain? retain? :filename filename))
+      (move (io/file-path "." filename)
+            (io/file-path outpath)))))
