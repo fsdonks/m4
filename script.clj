@@ -518,8 +518,10 @@
                           :when (<= upper 100)]
                       [upper dwell])]
     (-> chart
-        (risk/append-lines (map first lower-dwell) (map second lower-dwell) :color :black :dash 7.0 :width 3 )
-        (risk/append-lines (map first upper-dwell) (map second upper-dwell) :color :black :dash 7.0 :width 3 ))))
+        (risk/append-lines (map first lower-dwell) (map second lower-dwell)
+                           :color :black :dash 4.0 :width 2)
+        (risk/append-lines (map first upper-dwell) (map second upper-dwell)
+                           :color :black :dash 4.0 :width 2))))
 
 (def custom-orange (incanter.charts/chart-color [255 192 0]))
 
