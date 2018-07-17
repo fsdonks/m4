@@ -303,17 +303,16 @@
         rounded-supply  (+ (Math/round (:expected-supply ac))
                            (Math/round (:expected-supply rc))
                            (Math/round (:expected-supply ng)))
-        [lower upper] (pad demand)
-        ]
+        [lower upper] (pad demand)]
     {:ac-available ac
      :rc-available rc
      :ng-available ng
      :total-supply total-supply
      :rounded-supply rounded-supply 
-     :fill           (double (/ total-supply demand))
-     :rounded-fill   (double (/ rounded-supply demand))
-     :lower-fill     (double (/ total-supply lower)) 
-     :upper-fill     (double (/ total-supply upper))}))
+     :fill           (if (= demand 0) 0 (double (/ total-supply demand)))
+     :rounded-fill   (if (= demand 0) 0 (double (/ rounded-supply demand)))
+     :lower-fill     (if (= lower 0.0) 0 (double (/ total-supply lower)) )
+     :upper-fill     (if (= upper 0.0) 0 (double (/ total-supply upper)))}))
 
 ;;convenience function
 (defn design->fill
