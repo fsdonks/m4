@@ -32,6 +32,9 @@
                        :main  marathon.main
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
                        }}
+  :plugin-repositories ~(if (.exists (java.io.File. "//227rhpcbld3/FS/"))
+                          [["central" {:url "file:////227rhpcbld3/FS/dev/jars/.m2/repository/"}]]
+                          [])
   :plugins [[lein-capsule "0.2.1"]]
   ;;; Capsule plugin configuration section, optional
   :capsule {:application {:name    ~capsule-name
