@@ -2865,9 +2865,9 @@ net.brehaut.ClojureTools = (function (SH) {
     build_tree: build_tree
   };
 })(SyntaxHighlighter);
-</script><title>marathon -- Marginalia</title></head><body><div class="docs"><div class="header"><h1 class="project-name">marathon</h1><h2 class="project-version">4.1.0-SNAPSHOT</h2><br /><p>An Integrated Suite of Rotational Analysis Tools.</p>
+</script><title>marathon -- Marginalia</title></head><body><div class="docs"><div class="header"><h1 class="project-name">marathon</h1><h2 class="project-version">4.1.6-SNAPSHOT</h2><br /><p>An Integrated Suite of Rotational Analysis Tools.</p>
 </div>
-<div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.8.0</td></tr><tr><td class="dep-name">spork</td><td class="dotted"><hr /></td><td class="dep-version">0.2.0.5-SNAPSHOT</td></tr><tr><td class="dep-name">proc</td><td class="dotted"><hr /></td><td class="dep-version">0.2.2-SNAPSHOT</td></tr><tr><td class="dep-name">datascript</td><td class="dotted"><hr /></td><td class="dep-version">0.15.0</td></tr><tr><td class="dep-name">org.clojure/core.logic</td><td class="dotted"><hr /></td><td class="dep-version">0.8.10</td></tr><tr><td class="dep-name">joinr/swingrepl</td><td class="dotted"><hr /></td><td class="dep-version">1.4.2-SNAPSHOT</td></tr></table></div>
+<div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.8.0</td></tr><tr><td class="dep-name">spork</td><td class="dotted"><hr /></td><td class="dep-version">0.2.0.9-SNAPSHOT</td></tr><tr><td class="dep-name">proc</td><td class="dotted"><hr /></td><td class="dep-version">0.2.6-SNAPSHOT</td></tr><tr><td class="dep-name">joinr/nightclub</td><td class="dotted"><hr /></td><td class="dep-version">0.0.1-SNAPSHOT</td></tr><tr><td class="dep-name">alembic</td><td class="dotted"><hr /></td><td class="dep-version">0.3.2</td></tr><tr><td class="dep-name">eigenhombre/splasher</td><td class="dotted"><hr /></td><td class="dep-version">0.0.2</td></tr><tr><td class="dep-name">clojure-future-spec</td><td class="dotted"><hr /></td><td class="dep-version">1.9.0-beta4</td></tr><tr><td class="dep-name">org.clojure/test.check</td><td class="dotted"><hr /></td><td class="dep-version">0.9.0</td></tr><tr><td class="dep-name">irresponsible/spectra</td><td class="dotted"><hr /></td><td class="dep-version">0.2.1</td></tr></table></div>
 </div><div class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#marathon.documentation">marathon.documentation</a></li><li><a href="#marathon.prelude">marathon.prelude</a></li><li><a href="#marathon.core">marathon.core</a></li><li><a href="#marathon.project">marathon.project</a></li><li><a href="#marathon.project.excel">marathon.project.excel</a></li><li><a href="#marathon.ces.core">marathon.ces.core</a></li><li><a href="#marathon.ces.engine">marathon.ces.engine</a></li><li><a href="#marathon.ces.fill">marathon.ces.fill</a></li><li><a href="#marathon.ces.deployment">marathon.ces.deployment</a></li><li><a href="#marathon.ces.demand">marathon.ces.demand</a></li><li><a href="#marathon.ces.supply">marathon.ces.supply</a></li><li><a href="#marathon.ces.policy">marathon.ces.policy</a></li><li><a href="#marathon.ces.policyio">marathon.ces.policyio</a></li><li><a href="#marathon.analysis">marathon.analysis</a></li><li><a href="#marathon.analysis.requirements">marathon.analysis.requirements</a></li><li><a href="#marathon.data.store">marathon.data.store</a></li><li><a href="#marathon.data.protocols">marathon.data.protocols</a></li><li><a href="#marathon.fill.filldata">marathon.fill.filldata</a></li><li><a href="#marathon.demand.demanddata">marathon.demand.demanddata</a></li><li><a href="#marathon.supply.unitdata">marathon.supply.unitdata</a></li><li><a href="#marathon.policy.policydata">marathon.policy.policydata</a></li><li><a href="#marathon.data.cycle">marathon.data.cycle</a></li><li><a href="#marathon.data.period">marathon.data.period</a></li><li><a href="#marathon.processing.highwater">marathon.processing.highwater</a></li><li><a href="#marathon.processing.forgereader">marathon.processing.forgereader</a></li><li><a href="#marathon.processing.helmet.core">marathon.processing.helmet.core</a></li><li><a href="#marathon.processing.helmet.collision">marathon.processing.helmet.collision</a></li><li><a href="#marathon.processing.helmet.split">marathon.processing.helmet.split</a></li></ul></div></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.documentation" name="marathon.documentation"><h1 class="project-name">marathon.documentation</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><h2>Note for Folks Viewing From a Browser</h2>
 
 <p>If you're reading this, and you want to enable the syntax highlighting for
@@ -3067,22 +3067,25 @@ and diverse simulation of the supply-policy-demand dynamics.</p>
                                        [io :as stokeio]
                                         ;[scraper :as scraper]
              ]
-            [marathon.run :as run]
+            [marathon.processing [highwater :as hw]]
+            [marathon [run :as run] [demo :as demo]]
             [marathon.analysis [requirements :as requirements]]
+            [marathon.sampledata [branches :as branches]]
             [clojure       [pprint :as pprint]
                            [set :as set]]
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
             [spork.events  [observe :as obs]
                            [native :as swing-events]]
-            ;[piccolotest.repl :as repl]
-            [org.dipert.swingrepl.main])
+            [nightclub [core :as night]]
+            [nightcode [repl :as repl]]
+            [seesaw.core])
   (:use [spork.util.mailbox] ;;should be able to deprecate this.
         [marathon.processing.post]
         [marathon.project]
         [clojure.repl])
-  (:import [javax.swing JFrame]) ;Bah!
-  ;(:gen-class :main true))</pre></div><div class="docs">
+  (:import [javax.swing JFrame UIManager]))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(def +version+ &quot;4.1.6-SNAPSHOT&quot;)</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))</pre></div><div class="docs"><p>From Stuart Sierra's blog post, for catching otherwise "slient" exceptions
 Since we're using multithreading and the like, and we don't want
@@ -3100,11 +3103,11 @@ exceptions to get silently swallowed</p>
 </div><div class="codes"><pre class="brush: clojure">(defn select-file []
   (let [p (gui/select-file (active-path))]
     (do (add-path! p)
-      p)))</pre></div><div class="docs">
+         p)))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn select-folder []
   (let [p (gui/select-folder (active-path))]
     (do (add-path! p)
-      p)))</pre></div><div class="docs">
+        p)))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn notify [msg]
   (fn [] (gui/alert msg)))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn not-implemented 
@@ -3127,10 +3130,11 @@ environment. </p>
                        {sorted true}}]    
     (gui/-&gt;swing-table (tbl/table-fields t)
                        (tbl/table-rows t) 
-                       :sorted sorted))</pre></div><div class="docs"><p>Creates a swing-repl that we can send code to for remote 
+                       :sorted sorted))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">#_(defn repl-panel
+  &quot;Creates a swing-repl that we can send code to for remote 
    evaluation, or allow the user to interactively eval 
-   expressions.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn repl-panel
+   expressions.&quot;
   ([opts]
    (org.dipert.swingrepl.main/make-repl-jconsole
     (merge org.dipert.swingrepl.main/default-opts opts)))
@@ -3139,8 +3143,9 @@ environment. </p>
      (.setPreferredSize (java.awt.Dimension. w h))))
   ([w h opts]
    (doto (repl-panel opts)
-         (.setPreferredSize (java.awt.Dimension. w h)))))</pre></div><div class="docs"><p>Probably need to modify this....</p>
-</div><div class="codes"><pre class="brush: clojure">(def project-routes 
+         (.setPreferredSize (java.awt.Dimension. w h)))))
+;;Probably need to modify this....
+(def project-routes 
   {:clear-project (message-handler 
                     (assoc-in env 
                         [:state :current-project] {})) ;state-&gt;msg-&gt;state   
@@ -3179,11 +3184,13 @@ environment. </p>
     })</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(def processing-menu-spec
   {;&quot;Clean&quot;              &quot;Cleans a run&quot;
-   ;&quot;High-Water&quot;         &quot;Computes HighWater trails&quot;
    ;&quot;Deployment-Vectors&quot; &quot;Analyzes deployments&quot;
    ;;&quot;Charts&quot;             &quot;Generate plots.&quot;   
    &quot;Capacity-Analysis&quot;     &quot;Performs a capacity run (default)&quot;
    &quot;Requirements-Analysis&quot; &quot;Performs a Requirements Run&quot;
+   &quot;PostProcessed-Run&quot;     &quot;Capacity Analysis, post-process using Proc, rendering dwell/fill charts&quot;
+   &quot;High-Water&quot;             &quot;Computes HighWater trails from DemandTrends.&quot;
+   &quot;High-Water-Batch-From&quot;  &quot;Computes Multiple HighWater trails from any DemandTrends found from a root folder..&quot;
    &quot;Stochastic-Demand&quot;     &quot;Generate stochastic demand files from a casebook.&quot;
    &quot;Compute-Peaks&quot;         &quot;Extract the peak concurrent demands from a folder.&quot;
    &quot;Debug-Run&quot;             &quot;Runs the capacity analysis with output directed toward a file&quot;
@@ -3218,7 +3225,9 @@ environment. </p>
                         (assoc acc name 
                                (gui/map-&gt;reactive-menu name spec))))]
     (mvc/make-modelview nil menus 
-      {:menu-events (obs/multimerge-obs (vals menus))})))       </pre></div><div class="docs"><p>This is helmet specific.</p>
+      {:menu-events (obs/multimerge-obs (vals menus))})))       </pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn yes-no-box [msg]
+  (gui/swing! (seesaw.core/confirm msg :option-type :yes-no)))</pre></div><div class="docs"><p>This is helmet specific.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn casekey-&gt;filename [[case-name future]]
   (str case-name \_ future &quot;.txt&quot;))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn spit-tables [futures path]
@@ -3235,80 +3244,143 @@ environment. </p>
      ~body))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn compute-peaks-dialogue []
   (request-path [the-path &quot;Please select a file co-located in a folder with demand case files.&quot;]
-    (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
-                                               (repeat &quot;\\&quot;)))
-          target (str dump-folder &quot;peaks\\&quot;)          
-          _ (gui/alert (str &quot;dumping peaks files to &quot; target))]            
-      (stokeio/compute-peaks dump-folder target))))</pre></div><div class="docs"><p>a quick hack to compute the deciles from a set of peaks, in case we 
-don't need to compute the peaks and the deciles again.  We may 
+    (let [dump-folder  (io/parent-path the-path)
+          target       (io/dir-path dump-folder &quot;peaks&quot;)
+          _ (gui/alert (str &quot;dumping peaks files to &quot; target))]
+      (stokeio/compute-peaks dump-folder target))))</pre></div><div class="docs"><p>a quick hack to compute the deciles from a set of peaks, in case we
+don't need to compute the peaks and the deciles again.  We may
 separate this from the compute-peaks entirely.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn compute-deciles-dialogue []
   (request-path [the-path &quot;Please select a file co-located in a folder with demand peak files.&quot;]
-    (let [dump-folder (apply str (interleave (butlast (io/list-path the-path))
-                                               (repeat &quot;\\&quot;)))
-          target dump-folder          
-          _ (gui/alert (str &quot;dumping peaks stats to &quot; target))]            
-      (stokeio/compute-peak-stats dump-folder target))))</pre></div><div class="docs"><p>a quick plugin for stochastic demand generation.</p>
+    (let [dump-folder (io/parent-path the-path)
+          target dump-folder
+          _ (gui/alert (str &quot;dumping peaks stats to &quot; target))]
+      (stokeio/compute-peak-stats dump-folder target))))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn stoch-demand [wbpath]
+  (let [dump-folder  (io/parent-path wbpath)
+        _ (gui/alert (str &quot;dumping to &quot; dump-folder))]
+    (spit-tables
+     (helm/futures-&gt;tables
+      (helm/xlsx-&gt;futures wbpath :ignore-dates? true :log? false)) dump-folder)))</pre></div><div class="docs"><p>a quick plugin for stochastic demand generation.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn stoch-demand-dialogue []
   (request-path [wbpath &quot;Please select the location of valid case-book.&quot;]
-    (let [dump-folder (apply str (interleave (butlast (io/list-path wbpath))
-                                               (repeat &quot;\\&quot;)))
-          _ (gui/alert (str &quot;dumping to &quot; dump-folder))]            
-      (spit-tables 
-       (helm/futures-&gt;tables 
-        (helm/xlsx-&gt;futures wbpath :ignore-dates? true :log? false)) dump-folder))))</pre></div><div class="docs">
+     (stoch-demand wbpath)))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn clean-demand-dialogue []
   (request-path [wbpath &quot;Please select the location of valid case-files.&quot;]
     (let [fl          (clojure.java.io/file wbpath)
           cases       {(str (io/fname fl) \_ &quot;split.txt&quot;) (tbl/read-table fl)}
-          ;dump-same?  @(future (gui/yes-no-box &quot;Dump cases in same location?&quot;))
-          dump-folder ;(if dump-same?
-          (apply str (interleave (butlast (io/list-path wbpath))
-                                 (repeat &quot;\\&quot;)))
-          ;(select-folder))
-          _ (print (str &quot;dumping to &quot; dump-folder))]      
+          dump-folder  (io/parent-path wbpath)
+          _ (print (str &quot;dumping to &quot; dump-folder))]
       (spit-tables cases dump-folder))))</pre></div><div class="docs"><p>legacy auditing of marathon workbooks.....needs verification.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn audit-project-dialogue []
-  (request-path [wbpath &quot;Please select the location of valid case-files.&quot;]  
+  (request-path [wbpath &quot;Please select the location of valid case-files.&quot;]
     (let [fl           (clojure.java.io/file wbpath)
           cases       {(str (io/fname fl) \_ &quot;split.txt&quot;) (tbl/read-table fl)}
-          ;dump-same?  @(future (gui/yes-no-box &quot;Dump cases in same location?&quot;))
-          dump-folder ;(if dump-same?
-          (apply str (interleave (butlast (io/list-path wbpath))
-                                   (repeat &quot;\\&quot;)))
-            ;(select-folder))
-            _ (print (str &quot;dumping to &quot; dump-folder))]      
+          dump-folder (io/parent-path wbpath)
+          _ (print (str &quot;dumping to &quot; dump-folder))]
       (spit-tables cases dump-folder))))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn capacity-analysis [wbpath]
-  (let [pieces       (clojure.string/split wbpath #&quot;\\&quot;)
-        root         (io/as-directory (clojure.string/join &quot;\\&quot; (butlast pieces)))
-        target       (last    pieces)
+  (let [root         (io/parent-path wbpath)
+        target       (last    (io/list-path wbpath))
         _            (println [:running :capacity-analysis :at wbpath])]
     (run/run-cases root [target])))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn capacity-analysis-dialogue []
-    (request-path [wbpath &quot;Please select the location of a valid MARATHON project file.&quot;]  
+    (request-path [wbpath &quot;Please select the location of a valid MARATHON project file.&quot;]
                   (capacity-analysis wbpath)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn high-water-batch-from [path]
+  (hw/highwater-batch-from (io/parent-path path)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn high-water-batch-from-dialogue []
+  (request-path [wbpath  &quot;Please select the location of a valid MARATHON DemandTrends file,
+                          or a file co-located in a parent folder of one or more DemandTrends files.
+                          Child files and directories will be traversed, processing all DemandTrends.txt
+                          files discovered.&quot;]
+                (high-water-batch-from wbpath)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn high-water [path]
+    (hw/highwater-batch [(io/file-path path)]))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn high-water-dialogue []
+    (request-path [wbpath &quot;Please select the location of a valid MARATHON DemandTrends file.&quot;]
+                  (high-water wbpath)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">#_(defn interests-dialogue [wbpath]
+  (if  @(future (gui/yes-no-box &quot;Would you like to select an interests file?&quot;))
+    (request-path [wbpath &quot;Please select the location of a valid MARATHON interests file.&quot;]
+                  (clojure.edn/read-string (slurp wbpath)))
+    (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
+        branches/branches)))
+(defn interests-dialogue [wbpath]
+  (if (yes-no-box &quot;Would you like to select an interests file?&quot;)
+    (request-path [wbpath &quot;Please select the location of a valid MARATHON interests file.&quot;]
+                  (clojure.edn/read-string (slurp wbpath)))
+    (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
+        branches/branches)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn post-processed-run [wbpath]
+  (let [root         (io/parent-path wbpath)
+        destination  (clojure.string/replace wbpath &quot;.xlsx&quot; io/+separator+)
+        ipath        (str root &quot;interests.clj&quot;)
+        interests    (if (io/file? ipath)
+                          (do (println [:using-interests-at ipath])
+                              (clojure.edn/read-string (slurp ipath)))
+                          (interests-dialogue wbpath))
+        _            (println [:running :post-processed-analysis :at wbpath])]
+    (demo/run-it :root        wbpath
+                 :destination destination
+                 :interests   interests)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn post-processed-run-dialogue []
+    (request-path [wbpath &quot;Please select the location of a valid MARATHON project file.&quot;]  
+                  (post-processed-run wbpath)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn requirements-analysis [wbpath]
+  (requirements/requirements-run wbpath))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn requirements-analysis-dialogue []
     (request-path [wbpath &quot;Please select the location of a valid MARATHON requirements project file.&quot;]  
-                  (requirements/requirements-run wbpath)))</pre></div><div class="docs">
+           (requirements-analysis wbpath)))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn debug-run-dialogue []
   (request-path [wbpath &quot;Please select the location of a valid MARATHON project file.&quot;]
-    (let [pieces       (clojure.string/split wbpath #&quot;\\&quot;)
-          root         (io/as-directory (clojure.string/join &quot;\\&quot; (butlast pieces)))
-          target       (last    pieces)
+    (let [root         (io/parent-path wbpath)
           dbgtgt       (str root &quot;debug.txt&quot;)
           _ (println [:performing-debug-run :to dbgtgt])]
       (with-open [wrtr (clojure.java.io/writer dbgtgt)]
         (binding [*out* wrtr]
-          (marathon.ces.core/debugging                
+          (marathon.ces.core/debugging
            (capacity-analysis wbpath)))))))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn debug-run-dialogue! []
   (request-path [wbpath &quot;Please select the location of a valid MARATHON project file.&quot;] 
-     (marathon.ces.core/debugging!                
+     (marathon.ces.core/debugging!
       (capacity-analysis wbpath))))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn examine-project-dialogue []
   (request-path [wbpath &quot;Please select the location of a valid MARATHON project file.&quot;] 
-     (run/examine-project wbpath)))</pre></div><div class="docs"><p>Default menu-handling function.  Handles events coming from the 
+     (run/examine-project wbpath)))</pre></div><div class="docs"><p>commands that have a single meaning; typically dialogue-driven.</p>
+</div><div class="codes"><pre class="brush: clojure">(def commands
+  {:stochastic-demand  '(stoch-demand-dialogue)
+   :compute-peaks      '(compute-peaks-dialogue) 
+   :say-hello          '(println &quot;hello!&quot;)
+   :capacity-analysis  '(capacity-analysis-dialogue)
+   :requirements-analysis  '(requirements-analysis-dialogue)
+   :debug-run          '(debug-run-dialogue)
+   :examine-project    '(examine-project-dialogue)
+   :search-for         '(pprint/pprint
+                         (apropos
+                          (gui/input-box
+                                    :prompt &quot;Enter A Topic&quot;)))
+   :postprocessed-run  '(post-processed-run-dialogue) 
+   :load-script        '(load-file
+                         (gui/input-box
+                          :prompt &quot;Select a Clojure script&quot;))
+   :high-water          '(high-water-dialogue)
+   :high-water-batch-from '(high-water-batch-from-dialogue)})</pre></div><div class="docs"><p>commands that have a file-path supplied.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn contextual-command [e]
+  (when-let [cmd (:command e)]
+    (let [path (:path e)]
+      (case cmd
+        :stochastic-demand      `(~'stoch-demand ~path)
+        :compute-peaks          '(compute-peaks-dialogue) 
+        :capacity-analysis      `(~'capacity-analysis ~path)
+        :requirements-analysis  `(~'requirements-analysis ~path)
+        :debug-run              `(~'debug-run ~path)
+        :examine-project        `(~'run/examine-project ~path)
+        :postprocessed-run      `(~'post-processed-run ~path) 
+        :load-script            `(~'load-file ~path)
+        :high-water             `(~'high-water ~path)
+        :high-water-batch-from  `(~'high-water-batch-from ~path)
+       `(throw (Exception. (str [:unknown-command! ~e])))))))</pre></div><div class="docs"><p>Default menu-handling function.  Handles events coming from the 
    swing menu, which are typically just keywords, and dispatches them 
    to the appropriate command.</p>
 
@@ -3316,126 +3388,96 @@ separate this from the compute-peaks entirely.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn menu-handler
   [rpl]
   (fn [e]
-    (let [expr 
-          (case e
-            :stochastic-demand  '(stoch-demand-dialogue)
-            :compute-peaks      '(compute-peaks-dialogue) 
-            :say-hello          '(println &quot;hello!&quot;)
-            :capacity-analysis  '(capacity-analysis-dialogue)
-            :requirements-analysis  '(requirements-analysis-dialogue)
-            :debug-run          '(debug-run-dialogue)
-            :examine-project    '(examine-project-dialogue)
-            :search-for         '(pprint/pprint
-                                  (apropos
-                                   (gui/input-box
-                                    :prompt &quot;Enter A Topic&quot;)))
-            :load-script        '(load-file
-                                  (gui/input-box
-                                   :prompt &quot;Select a Clojure script&quot;))
-            `(~'println ~e))]
-      (org.dipert.swingrepl.main/send-repl rpl (str expr)))))</pre></div><div class="docs"><p>work on separating out from the jframe.
-(defn hub-panel []
-  (let [rpl             (repl/repl-panel 800 600)
-        project-menu    (gui/map->reactive-menu "Project-Management" <br />
-                                               project-menu-spec)
-        processing-menu (gui/map->reactive-menu "Processing"
-                                                processing-menu-spec)
-        debug-menu      (gui/map->reactive-menu "Debug"
-                                                debug-menu-spec)
-        main-menu       (gui/menu-bar (:view project-menu)
-                                      (:view processing-menu)
-                                      (:view debug-menu))
-        menu-events     (obs/multimerge-obs [(-> project-menu :control :event-stream)
-                                             (-> processing-menu :control :event-stream)
-                                             (-> debug-menu   :control :event-stream)])
-        textlog         (gui/label "Idle")
-        audit           (gui/button "Clear" (fn [_] 
-                                              (obs/notify! menu-events :clear)))
-        handle-menu       (atom  (menu-handler rpl))
-        reflect-selection (->> menu-events 
-                               (obs/subscribe  #(gui/change-label textlog %)))
-        _                 (->> menu-events 
-                               (obs/subscribe  #(@handle-menu %))) <br />
-        ]
-    (mvc/make-modelview 
-      (agent {:state (if project {:current-project project} {})
-              :routes (merge default-routes project-routes)}) <br />
-      (gui/display (->> (close-beh 
-                          (gui/empty-frame "Marathon Project Management")) 
-                        (gui/add-menu main-menu)
-                        )
-                   (gui/stack textlog <br />
-                              rpl
-                              audit))
-      {:menu-events menu-events
-       :repl rpl
-       :handle-menu handle-menu
-       :set-handler (fn [f] (reset! handle-menu (menu-handler rpl)))})))</p>
-</div><div class="codes"></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn hub [&amp; {:keys [project exit? repl-options]}]
-  (let [close-beh (if exit?
-                    (fn [^JFrame fr] 
-                      (doto fr
-                        (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)))
-                      identity)
-        rpl             (repl-panel 800 600)
-        project-menu    (gui/map-&gt;reactive-menu &quot;Project-Management&quot;  
-                                               project-menu-spec)
-        processing-menu (gui/map-&gt;reactive-menu &quot;Processing&quot;
-                                                processing-menu-spec)
-        debug-menu      (gui/map-&gt;reactive-menu &quot;Debug&quot;
-                                                debug-menu-spec)
-        scripting-menu  (gui/map-&gt;reactive-menu &quot;Scripting&quot;
-                                                scripting-menu-spec)
-        help-menu       (gui/map-&gt;reactive-menu &quot;Help&quot;
-                                                help-menu-spec)
-        main-menu       (gui/menu-bar (:view project-menu)
-                                      (:view processing-menu)
-                                      (:view scripting-menu)
-                                      (:view debug-menu)
-                                      (:view help-menu))        
-        menu-events     (obs/multimerge-obs [(-&gt; project-menu :control :event-stream)
-                                             (-&gt; processing-menu :control :event-stream)
-                                             (-&gt; debug-menu   :control :event-stream)
-                                             (-&gt; help-menu    :control :event-stream)
-                                             (-&gt; scripting-menu :control :event-stream)
-                                             ])
-        textlog         (gui/label &quot;Idle&quot;)
-        audit           (gui/button &quot;Clear&quot; (fn [_] 
-                                              (obs/notify! menu-events :clear)))
-        handle-menu       (atom  (menu-handler rpl))
-        reflect-selection (-&gt;&gt; menu-events 
-                               (obs/subscribe  #(gui/change-label textlog %)))
-        _                 (-&gt;&gt; menu-events 
-                               (obs/subscribe  #(@handle-menu %)))        
-        ]
-    (mvc/make-modelview 
-      (agent {:state (if project {:current-project project} {})
-              :routes (merge default-routes project-routes)})       
-      (gui/display (-&gt;&gt; (close-beh 
-                          (gui/empty-frame &quot;Marathon Project Management&quot;)) 
-                        (gui/add-menu main-menu))
-                   (gui/stack textlog  
-                              rpl
-                              audit))
-      {:menu-events menu-events
-       :repl rpl
-       :handle-menu handle-menu
-       :set-handler (fn [f] (reset! handle-menu (menu-handler rpl)))})))</pre></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn reset-handler! [h]
-  (let [h (:control h)
-        r (:repl h)]
-    (reset! (:handle-menu h) (menu-handler r))))</pre></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn -main [&amp; args]
-  (hub :exit? true))</pre></div><div class="docs"><p>Just some mucking around with parallel mapping stuff.
-Didn't see a boost.  Need to tweak this guy.
-(defn chunked-pmap [f size coll]
-  (->> coll 
-       (partition-all size)
-       (pmap (comp doall 
-                   (partial map f)))
-       (apply concat)))</p>
-</div><div class="codes"></div><div class="spacer docs">&nbsp;</div><div class="codes"></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.project" name="marathon.project"><h1 class="project-name">marathon.project</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><p>Project management functions.
+    (let [expr (or (get commands e)
+                   (contextual-command e))]
+      (repl/echo-repl! expr))))</pre></div><div class="docs"><p>Defines the popup context menu displayed when right-clicking on files
+   in the project tree, to provide quick access to common tasks and avoid
+   the file dialogue process...</p>
+
+<p>provide a popup menu that shows processing options for a selected file.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn project-context-menu
+  [{:keys [name file] :as nd}]
+  (let [{:keys [view control]}
+        (gui/map-&gt;reactive-menu &quot;Processing&quot;
+                                processing-menu-spec :popup? true)
+        handle-menu (menu-handler nil)]
+    (-&gt;&gt; control
+         :event-stream
+         (obs/map-obs (fn [e] {:path (io/fpath file)
+                               :command e}))
+         (obs/subscribe #(handle-menu %)))
+    view))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(def pop-fn (atom project-context-menu))</pre></div><div class="docs"><p>Slight hack to install a popup context menu to the project window
+  (right-click currently yields a menu identical to processing...).</p>
+</div><div class="codes"><pre class="brush: clojure">(defn install-popups!
+  [&amp; {:keys [on-popup] :or {on-popup (fn [s] (@pop-fn s))}}]
+  (let [show-popup!
+          (fn show-popup! [^java.awt.event.MouseEvent e]
+            (let [x (.getX e)
+                  y (.getY e)
+                  ^javax.swing.JTree t (.getSource e)
+                  ^javax.swing.tree.TreePath path (.getPathForLocation t x y)]
+              (when path
+                (let [;_ (reset! last-path path)
+                      tgt (.. path getLastPathComponent getUserObject)]
+                   (.show (on-popup tgt) t x y)))))]
+    (-&gt;&gt; (spork.events.native/mouse-observer
+                (nightcode.ui/get-project-tree))
+         (:clicked)
+         (obs/filter-obs spork.events.native/right-button?)
+         (obs/subscribe show-popup!))))</pre></div><div class="docs"><p>Creates the graphical interface for M4, including project browser, file editors,
+   a REPL, and a menu-bars for common processing tasks.</p>
+
+<p>TODO: migrate the rest of this to seesaw, get rid of the old redundant
+crud...</p>
+</div><div class="codes"><pre class="brush: clojure">(defn hub
+  [&amp; {:keys [project exit? repl-options]}]
+  (seesaw.core/invoke-now
+   (binding [*ns* *ns*]
+           (in-ns 'marathon.core)
+           (let [project-menu    (gui/map-&gt;reactive-menu &quot;Project-Management&quot;
+                                                         project-menu-spec)
+                 processing-menu (gui/map-&gt;reactive-menu &quot;Processing&quot;
+                                                         processing-menu-spec)
+                 debug-menu      (gui/map-&gt;reactive-menu &quot;Debug&quot;
+                                                         debug-menu-spec)
+                 scripting-menu  (gui/map-&gt;reactive-menu &quot;Scripting&quot;
+                                                         scripting-menu-spec)
+                 help-menu       (gui/map-&gt;reactive-menu &quot;Help&quot;
+                                                         help-menu-spec)
+                 main-menu       (gui/menu-bar (:view project-menu)
+                                               (:view processing-menu)
+                                               (:view scripting-menu)
+                                               (:view debug-menu)
+                                               (:view help-menu))
+                 menu-events     (obs/multimerge-obs [(-&gt; project-menu :control :event-stream)
+                                                      (-&gt; processing-menu :control :event-stream)
+                                                      (-&gt; debug-menu   :control :event-stream)
+                                                      (-&gt; help-menu    :control :event-stream)
+                                                      (-&gt; scripting-menu :control :event-stream)
+                                                      ])
+                 handle-menu    (menu-handler nil)
+                 _                 (-&gt;&gt; menu-events
+                                        (obs/subscribe  #(handle-menu %)))
+                 ]
+             (night/attach! :window-args
+                            {:title   (str &quot;MARATHON &quot; +version+)
+                             :menubar main-menu
+                             :on-close (if exit? :exit :dispose)})
+             (add-watch nightcode.ui/root :popup
+                        (fn [_ _ _ _]
+                          (seesaw.core/invoke-later (install-popups!))
+                          (remove-watch nightcode.ui/root :popup)))))))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn -main [&amp; args]  (hub :exit? true))</pre></div><div class="docs"><p>Return a popup menu as a function of the input...</p>
+</div><div class="codes"><pre class="brush: clojure">(comment ;popup testing stuff
+  (defn ^javax.swing.JPopupMenu item-&gt;menu
+    [{:keys [name file] :as nd}]
+    (doto ^javax.swing.JPopupMenu (javax.swing.JPopupMenu.)
+      (.add (javax.swing.JMenuItem.  (or
+                                      (io/fpath file) 
+                                      &quot;nothing&quot;)))))
+  ;;tree user objects are files
+  ;;(def last-path (atom nil)))</pre></div><div class="spacer docs">&nbsp;</div><div class="codes"></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.project" name="marathon.project"><h1 class="project-name">marathon.project</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><p>Project management functions.
 Provides protocols and schemas for manipulating Marathon projects
 in a variety of formats.  Current implements include Excel workbooks,
 Clojure serialized data, and tab delimited files.  JSON and XML are
@@ -3754,7 +3796,7 @@ disadvantages to this...</p>
 </div><div class="codes"><pre class="brush: clojure">(defn marathon-book-&gt;marathon-tables
   [wbpath &amp; {:keys [tables] :or {tables
                                  marathon-workbook-schema}}]
-  (let [wb (xl/as-workbook wbpath)]
+  (let [wb (xl/as-workbook (io/file-path wbpath))]
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
                        (do (print &quot;Loading&quot; sheetname &quot;. . . &quot;)
@@ -3895,7 +3937,8 @@ largely ignored.</p>
             [spork.ai [core        :as ai]
                       [behaviorcontext :as b]
                       [messaging]]             
-            [marathon.data.store       :as simstate]
+            [marathon.data [store       :as simstate]
+                           [protocols   :as protocols]]
             [clojure.core.reducers     :as r]
             [clojure.pprint :as pprint]))</pre></div><div class="docs"><h1>Convenience Imports from spork.sim.core</h1>
 
@@ -4319,7 +4362,7 @@ We'll see what use case pops up for this type of query.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn visualize-subscriptions [ctx] 
   (inspect/tree-view (:subscriptions (get-policystore ctx))))</pre></div><div class="docs"><p>TODO# define a visualization protocol, extend it to core datatypes...</p>
 </div><div class="codes"><pre class="brush: clojure">(defn visualize-unit [u]   (inspect/tree-view u))    
-(defn visualize-policy [p] (jung/view-graph (:positiongraph p) jung/fr))</pre></div><div class="docs"><h1>Shared Functions</h1>
+(defn visualize-policy [p] (jung/view-graph (protocols/get-position-graph p) jung/fr))</pre></div><div class="docs"><h1>Shared Functions</h1>
 </div><div class="codes"></div><div class="docs"><p>These functions were extracted due to use across multiple domains.  I may 
 refactor them into core services, but for now, relocating them in sim.core 
 allows every system access to them.</p>
@@ -4458,7 +4501,17 @@ Can probably extend this to allow for arbitrary predicate functions (later).</p>
                    new-idx))))</pre></div><div class="docs"><p>TODO de-duplicate this from marathon.data.protocols
 look into replacing this with a universal constant, or upperbound
 for longs</p>
-</div><div class="codes"><pre class="brush: clojure">(def ^:constant +inf+ 9999999)</pre></div><div class="docs"><h2>Developer Notes</h2>
+</div><div class="codes"><pre class="brush: clojure">(def ^:constant +inf+ 9999999)</pre></div><div class="docs"><p>Ensures that x is a 'finite' value, relative to
+   the sentinel constant for infinity +inf+, in that
+   x &lt; +inf+.  If not, returns a default, assumably
+   finite value.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn finite-else
+  [x default]
+  (if (&lt; x +inf+)
+    x
+    default))</pre></div><div class="docs"><p>moved from marathon.ces.entityfactory</p>
+</div><div class="codes"><pre class="brush: clojure">(def ^:constant +max-cycle-length+     10000)
+(def ^:constant +default-cycle-length+ 1095)</pre></div><div class="docs"><h2>Developer Notes</h2>
 </div><div class="codes"></div><div class="docs"><h1>Transitioning from Effectful Simulation and State Updating</h1>
 
 <p>One problem area in the port from VBA->Clojure was the handling of 
@@ -4621,17 +4674,25 @@ of each logical subsystem. </p>
             [marathon      [observers :as obs]]
             [spork.sim     [simcontext :as sim]]
             [spork.entitysystem [store :as store]]))</pre></div><div class="docs"><h1>Auxillary functions, and legacy functions</h1>
-</div><div class="codes"></div><div class="docs"><h1>Auxillary functions from the old simstate module</h1>
+</div><div class="codes"></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(def +default-last-day+ 4745)</pre></div><div class="docs"><h1>Auxillary functions from the old simstate module</h1>
 </div><div class="codes"><pre class="brush: clojure">(defn guess-last-day 
   ([ctx lastday]
+   (let [params (store/get-entity ctx :parameters)]
      (if-let [first-non-zero
               (first (filter #(and (not (nil? %)) (pos? %))
                              [lastday 
-                              (-&gt; ctx :state :parameters :last-day)
-                              (-&gt; ctx :state :parameters :last-day-default)]))]
+                              (-&gt; params :last-day)
+                              (-&gt; params :last-day-default)
+                              (-&gt; params :LastDayDefault)
+                              +default-last-day+]))]
        first-non-zero
-       0))
-  ([ctx] (guess-last-day ctx 0)))</pre></div><div class="docs"><p>Predicate to determine if we continue drawing time from the stream, i . e . simulating.
+       0)))
+  ([ctx] (guess-last-day ctx 0)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn trigger-truncation! [ctx t tlast msg]
+  (core/trigger-event :Terminate &quot;Simstate&quot; &quot;Simstate&quot;
+     (str &quot;Time &quot; t &quot;is past the last &quot; msg &quot;:&quot;
+          tlast &quot; in a truncated simulation, terminating!&quot;) nil ctx))</pre></div><div class="docs"><p>Predicate to determine if we continue drawing time from the stream, i . e . simulating.
 If an endtime is specified, we use that in our conditional logic, else we keep working until
 no more eventful days are upon us.</p>
 </div><div class="codes"></div><div class="docs"><p>This is costing us a lot of time in profiling.  Almost 1/3 of the simulation
@@ -4641,22 +4702,24 @@ THis is a pretty weak port....</p>
     (if (store/gete ctx :parameters :truncate-time)
       (let [tlastdemand (or (store/gete ctx :DemandStore :tlastdeactivation)
                             -1)
-            t (sim/get-time ctx)]        
-        (if (&gt; t tlastdemand)
-          (if (neg? tlastdemand) 
-            (throw (Error. &quot;No demands scheduled.  Latest deactivation never initialized!&quot;))
-            (do (core/trigger-event :Terminate &quot;Simstate&quot; &quot;Simstate&quot;
-                   (str &quot;Time &quot; t &quot;is past the last deactivation: &quot;
-                        tlastdemand &quot; in a truncated simulation, terminating!&quot;) nil ctx)
-                false))
-          true))
+            t  (sim/get-time ctx)]
+        (cond (&gt; t tlastdemand)
+                (if (neg? tlastdemand)
+                  (throw (Error. &quot;No demands scheduled.  Latest deactivation never initialized!&quot;))
+                  (do (trigger-truncation! ctx t tlastdemand &quot;deactivation&quot;)
+                      false))
+                (&gt; t (or (sim/get-final-time ctx) t))
+                (do (trigger-truncation! ctx t (sim/get-final-time ctx) &quot;last-default-day parameter&quot;)
+                    false)
+                :else true))
       (sim/has-time-remaining? ctx)))</pre></div><div class="docs"><p>Initialize the start and stop time of the simulation context, based on 
    last-day.</p>
 
 <h2>Simulation Initialization</h2>
 </div><div class="codes"><pre class="brush: clojure">(defn set-time
-  [last-day ctx]  
- (sim/set-time-horizon 1 (guess-last-day ctx last-day) ctx))</pre></div><div class="docs"><h1>Initialization</h1>
+  [last-day ctx]
+  (let [ld (guess-last-day ctx last-day)]
+    (sim/set-time-horizon 1 (guess-last-day ctx last-day) ctx)))</pre></div><div class="docs"><h1>Initialization</h1>
 
 <p>Initialization consists of 3 tasks: <br />
 1. Prep the system for day 0 <br />
@@ -5117,7 +5180,9 @@ or have the SRC map to a pattern....</p>
       :src-and-group  (rule-&gt;supply-rule category) ;[(sink-label (first category)) (second category)]
                                         ;For complex categories that contain information in a map structure, we 
                                         ;will have a way to parse the supply rule, which could be arbitrarily complex.
-      :rule-map       (rule-&gt;supply-rule category)))
+      :rule-map       (rule-&gt;supply-rule category)
+      (throw (Exception. (str [:unknown-demand-category (supply-cat demand category)
+                               {:demand demand :category category}])))))
   ([demand] (derive-supply-rule demand  (get demand :src))))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn clean-source-rule [v]
   (-&gt; v
@@ -5155,7 +5220,7 @@ that exist in the unit's policy....</p>
   (fn [u]
     (protocols/next-position (:policy u) st)))      </pre></div><div class="docs"><p>Note: this is pretty crucial for the fill process, it provides all of
 the ordering and filtering context, derived from the demand record.</p>
-</div><div class="codes"></div><div class="docs"><p>compute a compatible supply category based on the demand.</p>
+</div><div class="codes"></div><div class="docs"><p>compute a compatible supply catesgory based on the demand.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn derive-category [d supply-category]
   (if (vector? supply-category)
     (let [[src groups] supply-category]
@@ -6226,8 +6291,9 @@ as valid times, otherwise we miss them in demandtrends.</p>
         newctx  (-&gt;&gt; xs
                      (map add-final!)
                      (reduce (fn [acc d]
-                               (register-demand d acc)) ctx))]
-    (register-finals (persistent! @final-samples) newctx)))</pre></div><div class="docs"><p>another way to look at this guy is that we're modifying disparate
+                               (register-demand d acc)) ctx))
+        tlast  (store/gete newctx :DemandStore :tlastdeactivation)]
+    (register-finals (conj (persistent! @final-samples) tlast) newctx)))</pre></div><div class="docs"><p>another way to look at this guy is that we're modifying disparate
 domains via a transaction.  Specifically, we're working on multiple
 things simultaneously.</p>
 </div><div class="codes"></div><div class="docs"><p>Maybe we create a transactional system that understands how to
@@ -7862,7 +7928,11 @@ dictionary/hashmap ensures that only unique values for period names are entered
 We only need a dictionary<string,string>, or ::string->string</p>
 </div><div class="codes"><pre class="brush: clojure">(defn compose-policies [policyname period-policy-map child-policies]
   (reduce (fn [acc [period childname]] 
-            (protocols/add-policy acc period (get child-policies childname)))
+            (protocols/add-policy acc period
+              (or (get child-policies childname)
+                  (throw (Exception.
+                          (str [:building policyname
+                                :atomic-policy childname :unknown!]))))))
           (-&gt; p/empty-policymap (assoc :name policyname)) 
           (seq period-policy-map)))</pre></div><div class="docs"><p>TODO -> add existence checks for child policies.
 A constructor for building a sequential policy from a collection of policies. 
@@ -8354,19 +8424,66 @@ so we just extract that and boom.</p>
        (filter identity)
        (map-indexed (fn [idx d] (assoc d :DeploymentID idx)))))</pre></div><div class="docs"><p>note: we may need to replicate the audit trail for completeness
 sake....this should be fairly easy...it's simple io stuff.</p>
-</div><div class="codes"></div><div class="docs"><p>we only need to capture this when demands change..</p>
-</div><div class="codes"></div><div class="docs"><p>If we can define trends as a map
+</div><div class="codes"></div><div class="docs"><p>Compute a map of {ACFilled RCFilled NGFilled OtherFilled
+   ACOverlapping RCOverlapping NGOverlapping OtherOverlapping}
+   from a demand.</p>
+
+<p>we only need to capture this when demands change..</p>
+</div><div class="codes"><pre class="brush: clojure">(defn compo-fills
+  [ctx units-assigned units-overlapping]
+  (let [compo-fills (-&gt;&gt; units-assigned
+                         (keys)
+                         (map (fn [nm]
+                                (store/gete ctx nm :component)))
+                         (frequencies))
+        {:strs [AC RC NG Ghost]
+         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills
+        acfilled AC
+        rcfilled RC
+        ngfilled NG
+        ghostfilled Ghost
+        otherfilled (- (count units-assigned) (+ AC RC NG Ghost))
+        compo-overlaps  (-&gt;&gt; units-overlapping
+                             (keys)
+                             (map (fn [nm]
+                                    (store/gete ctx nm :component)))
+                             (frequencies))
+        {:strs [AC RC NG Ghost]
+         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-overlaps
+        acoverlap AC
+        rcoverlap RC
+        ngoverlap NG
+        ghostoverlap Ghost
+        otheroverlap (- (count units-overlapping) (+ AC RC NG Ghost))]
+    {:ACFilled     acfilled
+     :RCFilled     rcfilled
+     :NGFilled     ngfilled
+     :GhostFilled  ghostfilled
+     :OtherFilled  otherfilled
+     :ACOverlap    acoverlap
+     :RCOverlap    rcoverlap
+     :NGOverlap    ngoverlap
+     :GhostOverlap ghostoverlap
+     :OtherOverlap otheroverlap}))</pre></div><div class="docs"><p>Coerce a time in days into standard quarters.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn as-quarter
+  [t] (unchecked-inc (quot t 90)))</pre></div><div class="docs"><p>Compute the estimated final-day from a demand
+   entity's start and duration</p>
+</div><div class="codes"><pre class="brush: clojure">(defn tfinal
+  [d]
+  (+ (get d :startday) (get d :duration) -1))</pre></div><div class="docs"><p>If we can define trends as a map
 or a reduction....
 this is legacy support...
 Note: this should work with our</p>
 </div><div class="codes"><pre class="brush: clojure">(defn demand-trends
   ([t ctx]
-   (let [qtr     (unchecked-inc (quot t 90)) ;;1-based quarters.
-         changes (store/gete ctx :demand-watch :demands)
-         finals  (store/gete ctx :DemandStore :finals)
-         actives (store/gete ctx :DemandStore :activedemands)]
+   (let [qtr     (as-quarter t) ;;1-based quarters.
+         changes (store/gete ctx :demand-watch :demands) ;;map of {demand-name ..}
+         finals  (store/gete ctx :DemandStore  :finals)
+         actives (store/gete ctx :DemandStore  :activedemands)
+         finals? (finals t)]
      (when (or (seq changes)
-               (finals t))
+               finals?
+               (= (sim/get-final-time ctx) t))
        (-&gt;&gt; actives
             (keys)
             (map #(store/get-entity ctx %))
@@ -8375,33 +8492,71 @@ Note: this should work with our</p>
                           overlapping  (:units-overlapping d)
                           ua           (count              assigned)
                           uo           (count              overlapping)
-                          compo-fills  (-&gt;&gt; assigned
-                                            (keys)
-                                            (map (fn [nm]
-                                                   (store/gete ctx nm :component)))
-                                            (frequencies))
-                        {:strs [AC RC NG Ghost]
-                         :or   {AC 0 RC 0 NG 0 Ghost 0}} compo-fills]
-                      {:t             t
-                       :Quarter       qtr
-                       :SRC           (:src      d)
-                       :TotalRequired (:quantity d)
-                       :TotalFilled   (+ uo ua)
-                       :Overlapping   uo
-                       :Deployed      ua
-                       :DemandName    (:name d)
-                       :Vignette      vignette
-                       :DemandGroup   demandgroup
-                       :ACFilled      AC
-                       :RCFilled      RC
-                       :NGFilled      NG
-                       :GhostFilled   Ghost
-                       :OtherFilled   (- ua (+ AC RC NG Ghost))})))))))
+                          ]
+                      (merge
+                       {:t             t
+                        :Quarter       qtr
+                        :SRC           (:src      d)
+                        :TotalRequired (:quantity d)
+                        :TotalFilled   (+ uo ua)
+                        :Overlapping   uo
+                        :Deployed      ua
+                        :DemandName    (:name d)
+                        :Vignette      vignette
+                        :DemandGroup   demandgroup
+                        :deltaT       (when (and finals? (= t (tfinal d))) 1)}
+                       (compo-fills ctx assigned overlapping)))))))))
   ([ctx] (demand-trends (sim/get-time ctx) ctx)))</pre></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn -&gt;demand-trends      [h]  (-&gt;collect-samples demand-trends h))</pre></div><div class="docs"><p>this compute the demand-trends frame from the current frame.
-useful idiom...This is a keyframe fyi.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn frame-&gt;demand-trends [[t ctx]]
-  (demand-trends t ctx))</pre></div><div class="docs"><p>Note: locations are really "policypositions", should rephrase
+</div><div class="codes"><pre class="brush: clojure">(defn -&gt;demand-trends      [h]  (-&gt;collect-samples demand-trends h))</pre></div><div class="docs"><p>Helper function that lets us potentially interpolate our
+   sparsely sampled demands.  Has no effect if <em>lerp-demandtrends</em>
+   is disabled or the samples are adjacent.</p>
+</div><div class="codes"><pre class="brush: clojure">(def ^:dynamic *lerp-demandtrends* true)
+(defn sample-demand-trends
+  [xs dt]
+  (when (seq xs)
+    (if (and (&gt; dt 1) ;;non-adjacent sample
+             *lerp-demandtrends*)
+      ;;we need to expand the sample!
+      (let [t      (:t (first xs))
+            copies (filter #(not (:deltaT %)) xs)]
+        (apply concat
+               (cons (map #(if-not (get % :deltaT)
+                             (assoc % :deltaT 1)
+                             %) xs)
+                     (when (seq copies)
+                       (for [tsample (map #(+ % t) (range 1 dt))]
+                         (map (fn [r] (assoc r :t tsample
+                                             :Quarter (as-quarter tsample)
+                                             :deltaT 1)) copies))))))
+      ;;compute the &quot;active&quot; dt, i.e. the min of (+ t dt) (+ start duration)
+      (map #(if-not (get % :deltaT)
+              (assoc % :deltaT dt)
+              %) xs))))</pre></div><div class="docs"><p>this compute the demand-trends frame from the current frame.
+useful idiom...This is a keyframe fyi.
+Note: we want to track deltat between demandtrends observations,
+so I hacked together this bit to do so. We now maintain some
+frame-state in the metadata, a map of emitter-names to atoms.
+Only demntrends uses it now.  When grabbing a frame, we load
+up the frame-state, and append it to the frame's meta.
+Then allow demand-trends to do its thing.  If we produce
+output (emit frames), then we update the observation time
+in the atom to current time.  This is slightly hacky, but it's
+general and keeps the side-effecting state to the boundaries. </p>
+</div><div class="codes"><pre class="brush: clojure">(defn frame-&gt;demand-trends [[t ctx :as f]]
+  (let [mf          (meta f)
+        state-ref   (get-in mf [:frame-state :demandtrends])
+        end-time    (get mf :end-time)]
+    (when-let [res (or (seq (demand-trends t ctx)) ;;new demandtrends to queue
+                     (and (= end-time t)  ;;last-day of sim, with pending trends
+                          (seq @state-ref)))] 
+      (let [pending  @state-ref  ;;pop prior trends
+            tprev   (or (:t (first pending)) 0)
+            dt      (- t tprev)
+            ;;update our pending batch to the new records,
+            ;;wait until we have a deltat
+            _       (reset! state-ref  (vec res)) ;;push new trends
+            ]
+        (sample-demand-trends pending dt)))))</pre></div><div class="docs"><p>Note: locations are really "policypositions", should rephrase
 this....otherwise we get :locationname confused.  We actually
 do want policy-position changes....Another option is
 for us to reconcile locations with known-locations
@@ -8595,13 +8750,13 @@ This is the core of doing a "run"...</p>
   [t xs]
   (-&gt;&gt; xs
        (as-stream)
-       (history/time-before)))</pre></div><div class="docs"><p>Given a sequence of frames, returns the context prior to 
+       (history/time-before t)))</pre></div><div class="docs"><p>Given a sequence of frames, returns the context prior to 
    evaluating the step-function at t.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn day-of
   [t xs]
   (-&gt;&gt; xs
        (as-stream)
-       (history/time-of)))</pre></div><div class="docs"><p>Take one step from the current context.  Useful for interactive 
+       (history/time-of t)))</pre></div><div class="docs"><p>Take one step from the current context.  Useful for interactive 
    debugging or searching.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn step-1
   [ctx]
@@ -8804,14 +8959,23 @@ broadcasts the history sequence to any interested subscribers.</p>
                                                (doseq [r res] (saver r))
                                                (saver res))))
                                  :saver saver})))
+        state (into {} (for [nm (map :name frame-state)]
+                         [nm (atom nil)]))
         grab-frames!  (fn [frm] (reduce (fn [acc {:keys [name grab]}]
                                           (grab frm))
                                         nil frame-state))
+        end-points   (juxt sim/get-final-time
+                           #(store/gete % :DemandStore :tlastdeactivation))
+        [tfinal tlastdemand]        (-&gt; h first second end-points)
+        end-time    (min tfinal tlastdemand)
         _ (reset! w (some #(when (= (:name %) :event-log) (:saver %)) frame-state))]
     (with-open [savers (io/-&gt;closer (map :saver frame-state))]
       (doseq [frm h]
-        (do (println [:day (first frm)])
-            (grab-frames! frm))))))</pre></div><div class="docs"><p>note:
+        (let [frm    (vary-meta frm assoc :frame-state state
+                                          :end-time end-time)
+              [t ctx] frm]
+          (do (println [:day t :tfinal tfinal  :last-deactivation tlastdemand])
+              (grab-frames! frm)))))))</pre></div><div class="docs"><p>note:
 spit-log! and spit-log moved to spork.sim.history</p>
 </div><div class="codes"><pre class="brush: clojure">(util/import-vars 
    [spork.sim.history
@@ -8854,7 +9018,12 @@ Actual output from a Marathon run will include....</p>
    :RCFilled	   :int
    :NGFilled	   :int
    :GhostFilled	   :int
-   :OtherFilled	   :int})
+   :OtherFilled	   :int
+   :ACOverlap      :int
+   :RCOverlap      :int
+   :NGOverlap      :int
+   :GhostOverlap   :int
+   :OtherOverlap   :int})
 (def dt-fields   [:t
                   :Quarter
                   :SRC
@@ -8869,7 +9038,13 @@ Actual output from a Marathon run will include....</p>
                   :RCFilled
                   :NGFilled
                   :GhostFilled
-                  :OtherFilled]))</pre></div><div class="spacer docs">&nbsp;</div><div class="codes"></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.analysis.requirements" name="marathon.analysis.requirements"><h1 class="project-name">marathon.analysis.requirements</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><p>Requirements Analysis implementation.</p>
+                  :OtherFilled
+                  :ACOverlap
+                  :RCOverlap
+                  :NGOverlap
+                  :GhostOverlap
+                  :OtherOverlap
+                  ]))</pre></div><div class="spacer docs">&nbsp;</div><div class="codes"></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.analysis.requirements" name="marathon.analysis.requirements"><h1 class="project-name">marathon.analysis.requirements</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><p>Requirements Analysis implementation.</p>
 </div><div class="codes"><pre class="brush: clojure">(ns marathon.analysis.requirements
   (:require [spork.util [record :as r] [table :as tbl] [io :as io] [temporal :as temporal]]
             [spork.sim [simcontext :as sim]]
@@ -8909,22 +9084,19 @@ Actual output from a Marathon run will include....</p>
      (spork.util.table/table-fields t)
      (-&gt;  (map parse-field
                (spork.util.table/table-fields  t)
-               (spork.util.table/table-columns t))           
+               (spork.util.table/table-columns t))
           (spork.util.table/conj-fields spork.util.table/empty-table)))))</pre></div><div class="docs"><p>Replace the values associated with field k in t, with 0 values.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn set-field
   [t k v]
   (let [n (tbl/count-rows t)]
     (tbl/conj-field  [k (vec (repeat n v))] t)))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn zero-supply [t] (set-field t :Quantity 0))
-(defn increment-key [r k n] (update r k (fn [q] (+ q n))))</pre></div><div class="docs"><p>use tbl/subtables-by to get this implemented.
-Useful for splitting up requirements states...
-(defn split-by-field
-  "Given a field to split on, creates n new databases, 
-   where each database contains tables (with the field) 
-   that have identical values for the field."
-  [tbls &amp; {:keys [field tables]}]
-  (let [[base variable]</p>
-</div><div class="codes"></div><div class="docs"><h1>Profiling for informing lower bounds and hueristics...</h1>
+(defn increment-key [r k n] (update r k (fn [q] (+ q n))))</pre></div><div class="docs"><p>Quick check to see if we have any entities with
+   the unit-entity component, indicating the presence
+   of a supply.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn has-supply?
+  [ctx]
+  (pos? (count (store/get-domain ctx :unit-entity))))</pre></div><div class="docs"><h1>Profiling for informing lower bounds and hueristics...</h1>
 </div><div class="codes"><pre class="brush: clojure">(defn daily-totals [actives]
   (reduce (fn daily [acc {:keys [SRC Quantity]}]
             (update acc SRC #(+ (or % 0) Quantity)))
@@ -8956,7 +9128,7 @@ If so....we should be able to reduce the required number of runs...
 </div><div class="codes"></div><div class="docs"><p>If we use records, we get ordered fields automatically.  Better strategy.
 generic supply record.  Should probably tie these to marathon.schemas</p>
 </div><div class="codes"><pre class="brush: clojure">(defrecord srecord [Type Enabled Quantity SRC Component OITitle
-                    Name Behavior CycleTime Policy Tags Spawntime Location Position Original])</pre></div><div class="docs"><p>outstreaam/mystream is output....canonically RequirementsGeneratedSupply.csv
+                    Name Behavior CycleTime Policy Tags SpawnTime Location Position Original])</pre></div><div class="docs"><p>outstreaam/mystream is output....canonically RequirementsGeneratedSupply.csv
 may not use this guy...we'll see.</p>
 </div><div class="codes"><pre class="brush: clojure">(r/defrecord+ outrecord [[Iteration 0]
                          [SRC ]
@@ -9191,7 +9363,7 @@ for them, which will show up in post processing.</p>
                   dtype :bin}}]
   (let [make-distributor (fn [n] (fn [k] (* k n)))] 
     (-&gt;&gt; (get-or tbls  distribution-table
-                 (-&gt;&gt; (:SupplyRecords tbls)                                           
+                 (-&gt;&gt; (:SupplyRecords tbls)
                       (tbl/table-records)
                       (filter :Enabled)
                       (compute-aggregate-supply)
@@ -9212,9 +9384,9 @@ we have the supply records in reqstate/supply
 goal is to update the quantities incrementally.</p>
 </div><div class="codes"></div><div class="docs"><p>this creates a map of {compo amount}</p>
 </div><div class="codes"><pre class="brush: clojure">(defn compute-amounts [reqstate src n]
-  (distribute-by (:distributions reqstate) n))</pre></div><div class="docs"><p>Given a requirementstate ,reqstate, and 
-   a map of {component amount}, increments the 
-   supply records in reqstate where compo matches, 
+  (distribute-by (:distributions reqstate) n))</pre></div><div class="docs"><p>Given a requirementstate ,reqstate, and
+   a map of {component amount}, increments the
+   supply records in reqstate where compo matches,
    according to (+ (minimum-supply component) amount)</p>
 
 <p>Replacement method for an earlier hack.  We now separate the process of calculating and applying
@@ -9227,12 +9399,12 @@ table...</p>
 </div><div class="codes"><pre class="brush: clojure">(defn apply-amounts
   [reqstate compo-amounts]
   (let [mins (:minimum-supply reqstate)]
-    (update reqstate :supply          
+    (update reqstate :supply
             #(-&gt;&gt; %
                   (map (fn [r]
                          (if-let [n (get compo-amounts (:Component r))]
                            (assoc r :Quantity (+ n (get mins (:Component r) 0)))
-                           r)                ))))))</pre></div><div class="docs"><p>note: strange incidence of getting 50 instead of 25 for total on an
+                           r)))))))</pre></div><div class="docs"><p>note: strange incidence of getting 50 instead of 25 for total on an
 initial bisection step...
 I think we're misusing :total-ghosts, not sure we even need it.
 So, each time we add supply, we conceptually take a growth step.</p>
@@ -9250,11 +9422,13 @@ So, each time we add supply, we conceptually take a growth step.</p>
                         :added  amounts
                         :total  total ;n
                         })))))</pre></div><div class="docs"><p>This is an auxillary function to handle each run of the requirements analysis.
-Given a simulation that is already primed and loaded, and possibly an initial supply of units, calculate the
-units needed (the requirement), as represented by the amount of ghosts created by SRC.  The requirement is then
-applied to the distributor, which transforms the homogeneous supply of ghosts into a set of units that are to be added
-to the final result. The return is a dictionary of (SRC|Component, count) pairs.  This allows us to trivially update
-the supplytable, by incrementing.</p>
+Given a simulation that is already primed and loaded, and possibly an initial
+supply of units, calculate the units needed (the requirement), as represented
+by the amount of ghosts created by SRC. The requirement is then applied to the
+distributor, which transforms the homogeneous supply of ghosts into a set of
+units that are to be added to the final result. The return is a dictionary of
+(SRC|Component, count) pairs. This allows us to trivially update the
+supplytable, by incrementing.</p>
 </div><div class="codes"></div><div class="docs"><p>The idea here is to just layer on another fill step,
 if there are unmet demands, we allow ghosts to be created and
 used to fill.  This is different than the scheme in vba, where
@@ -9304,23 +9478,46 @@ determine this easily by selecting entities with a
                                [t xs]))))
        (filter identity)
        ;(filter pos?)
-       (first)))</pre></div><div class="docs"><p>Computes requirements from an initial set of tables.  Workhorse function for 
-   requirements analysis.</p>
-
-<p>I think we'll prefer to work with the history, so probably using a marathon-stream
+       (first)))</pre></div><div class="docs"><p>I think we'll prefer to work with the history, so probably using a marathon-stream
 instead of this approach...
 TODO: Replace event-step-marathon with the appropriate simreducer or whatnot.
 Returns the next requirement state, if we actually have a requirement.
 Otherwise nil.
 I think we can just use analysis/load-context...</p>
+</div><div class="codes"></div><div class="docs"><p>NOTE:
+We ran into a complication when computing or otherwise inferring "misses" from
+the original default-distance function. When no supply is present (in the case
+of no initial supply and a growth-step of 0), we end up with nil returned
+since history->ghosts returns nil if no misses exist, potentially misleading
+about the result of the misses.</p>
+</div><div class="codes"></div><div class="docs"><p>The fix is to inject some additional information into the requirements
+context (that from which we derive a simulation context to test our
+growth step).  We add information about the peak demand, under
+:peak, and that provides a basis for - later in the pipeline -
+calculate-requirement to make a more informed decision about
+the results of a requirements run.</p>
+</div><div class="codes"></div><div class="docs"><p>If the context to-be-tested (the context resulting from distributing
+a sample growth step to the requirements context) contains
+some supply, we run through computing misses as before, using
+the user-supplied distance function.  We may return nil
+as a valid result, indicating no misses.</p>
+</div><div class="codes"></div><div class="docs"><p>Computes requirements from an initial set of tables.  Workhorse function for
+   requirements analysis.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn calculate-requirement
   ([reqstate distance-function]
    (calculate-requirement reqstate distance-function requirements-ctx))
-  ([{:keys [tables src steps supply] :as reqstate} distance-function tables-&gt;ctx]
-   (-&gt; (update reqstate :tables assoc :SupplyRecords supply)
-       (tables-&gt;ctx)
-       (distance-function))))</pre></div><div class="docs"><p>calculate-requirement works on one requirement...
-to perform a requirements analysis, we want to </p>
+  ([{:keys [tables src steps supply peak] :as reqstate} distance-function tables-&gt;ctx]
+   (let [ctx  (-&gt; (update reqstate :tables assoc :SupplyRecords supply)
+                  (tables-&gt;ctx))]
+     (if (has-supply? ctx)
+       ;;when there's supply (initial + grown) we run and search for
+       ;;the first instance of missed demand.  No instances indicate
+       ;;no misses.  So if distance-function returns nil, we return 0.
+       (distance-function ctx)
+       ;;When there is no supply, typical in situations with
+       ;;a zero-length growth step and no initial supply records,
+       ;;we return the peak demand as miss estimate.
+       peak))))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(def default-distance (comp history-&gt;ghosts a/marathon-stream))
 (def indexed-distance (comp history-&gt;indexed-ghosts a/marathon-stream))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(def prior (atom nil))</pre></div><div class="docs"><p>So, this is actually pretty good for smallish requirements..
@@ -9334,7 +9531,7 @@ growth-steps of 1....and we end up with tons of iterations.</p>
 </div><div class="codes"></div><div class="docs"><p>Can we pre-process the demand to get a better estimate?
 That is, determine an initial seed - and pre-distribute
 up to said seed - to get us closer to the goal to
-begin with?</p>
+begin with</p>
 </div><div class="codes"></div><div class="docs"><p>Lower-bound analysis indicates that the peak concurrent
 demand is - assuming perfect usage of supply, i.e.
 no rotational policy in place, we need at least
@@ -9416,6 +9613,8 @@ we grow proportionally from there (there's a fixed amount to begin with).</p>
                :or   {distance default-distance
                       init-lower 1
                       init-upper 10}}]
+  ;;TODO I think the first clause in and can now be replaced by
+  ;;(has-supply? ...)
   (if (and (pos? (reduce + (vals (:minimum-supply reqstate))))
            (not (calculate-requirement reqstate distance)))
     (do (println [:minimum-supply-sufficient])
@@ -9426,7 +9625,8 @@ we grow proportionally from there (there's a fixed amount to begin with).</p>
            upper     init-upper]
       (let [reqs  (-&gt; reqs
                       (distribute (:src reqs) upper)
-                      (update  :iteration inc))]
+                      (update  :iteration inc))
+            _ (println [:guessing-bounds [lower upper] :at upper])]
         (if-let [res (calculate-requirement reqs distance)] ;;naive growth.
           (do (println [:guessing-bounds [lower upper] :at upper :got res])
               (recur reqstate (inc upper)  (* 2 upper)))
@@ -9455,32 +9655,45 @@ we grow proportionally from there (there's a fixed amount to begin with).</p>
             (distribute (:src reqstate) dist)
             (update :iteration inc)            
             (recur))
-      reqs))))</pre></div><div class="docs"><p>Currently 2x slower than ic....wonder if we can speed this
+      reqs))))
+(def rs (atom nil))</pre></div><div class="docs"><p>Currently 2x slower than ic....wonder if we can speed this
 up?  Problem is, we end up doing a lot of higher-supply
 runs, which hurts performance.  Doing more volume of
 work than IC.  IC makes many small jumps.  BS
 makes some large jumps, and some small jumps.</p>
-</div><div class="codes"></div><div class="docs"><p>We need to modify this to figure out the bounds first.
+</div><div class="codes"></div><div class="docs"><p>reqstate is a map of information for a basic requirements
+   run, which is used to create a parametric run based on
+   the initial supply, a growth-step n, and a distribution
+   of supply by component.  Reqstate also includes
+   a peak field, which lets us know what the peak demand is
+   for inferring the expected misses for a supply of 0.</p>
+
+<p>We need to modify this to figure out the bounds first.
 We're wasting time on needless bisecting, when we haven't
 established.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn bisecting-convergence
-  [reqstate &amp; {:keys [distance init-lower init-upper log]
+  [reqstate &amp; {:keys [distance init-lower init-upper log init-known]
                :or   {distance default-distance
                       init-lower 0
                       init-upper 10
                       log println
                      }}]
-  (let [known?     (atom {})
+  (let [known?     (atom (or init-known {}))
         converge   (fn [dir reqs n]
                      (do (log [:converged dir n])
                          (distribute reqs (:src reqstate) n)))
         amount     (fn amt [reqs n]
                      ;(log [:amount n])
                      (get-or @known? n
-                        (let [res (or (calculate-requirement reqs distance) 0)
-                              _   (swap! known? assoc n res)]
+                             (let [rtest (-&gt; reqs
+                                             (distribute (:src reqs) n))
+                                   ;;Found no missed demands, so zero! misses!
+                                   res (or (calculate-requirement rtest distance) 0)
+                                   _   (swap! known? assoc n res)
+                                   ;_   (when (zero? n) (println [:amount 0 res]))
+                                   ]
                           res)))
-        _ (assert (not= init-lower init-upper) &quot;need a valid interval!&quot;)]
+        _ (assert (not (neg?  (- init-upper init-lower))) &quot;need a valid non-negative interval!&quot;)]
     (loop [reqs      reqstate
            lower init-lower
            upper init-upper]
@@ -9488,15 +9701,24 @@ established.</p>
             mid   (+ lower hw)]
         (if (= mid lower)
           (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
-            [true  true] (if (pos? lower) (converge :left  reqs lower)
-                             (converge :right  reqs lower))
-              [false true] (converge :right reqs upper)              
-              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)]))))
+            ;;In this case, BOTH guesses produce 0 misses!
+            ;;We want to take whichever guess is NOT 0,
+            ;;since 0 is not a valid guess.
+            [true  true]
+                (if (pos? lower)
+                  ;;lower is a valid guess, and is the minimum!
+                  (converge :left  reqs  lower)
+                  ;;lower is zero!, upper is the valid guess
+                  ;;and minimum! (1).
+                  (converge :right reqs upper))
+            [false true]
+                  ;;Upper is the only valid guess, and minimum!
+                  (converge :right reqs upper)
+            (do (reset! rs reqstate)
+              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)])))))
           (let [reqs (update reqs :iteration inc)
-                rtest  (-&gt; reqstate
-                           (distribute (:src reqstate) mid))
-                res (amount rtest mid)
-                _   (log [:guessing [lower upper] :at mid :got res])]
+                res  (amount reqs mid)
+                _    (log [:guessing [lower upper] :at mid :got res])]
             (if (pos? res)
               (recur reqs mid upper)
               (recur reqs lower mid))))))))</pre></div><div class="docs"><p>The iterative convergence function is a fixed-point function that implements the algorithm described in the declarations section.
@@ -9540,13 +9762,12 @@ Perhaps, we store the actual value
 in the supply records.
 From there, we apply the growth step
 by adding the rationals.
-Then we coerce prior to running...</p>
+Then we coerce priorto running...</p>
 </div><div class="codes"></div><div class="docs"><p>So, when we go to distribute</p>
 </div><div class="codes"></div><div class="docs"><p>Maybe we have search do the work of creating
 the context?
 So the context is local to the search state..</p>
-</div><div class="codes"></div><div class="docs"><p>Given a database of distributions, and the required tables for a marathon 
-   project, computes a sequence of [src {compo requirement}] for each src.</p>
+</div><div class="codes"></div><div class="docs"><p>Helper function for our parallel requirements computation.</p>
 
 <p>We have an alternate implementation....
 This is our entry point....
@@ -9554,6 +9775,23 @@ Note: If we filter out all demands, i.e. we have an src in
 proportions that's not in the demand, and we're left with no
 demands, we should skip the src and accumulate a warning or
 something.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn requirements-by
+  [tbls peaks search n]
+  (fn [[src compo-&gt;distros]]
+    ;;for each src, we create a reqstate
+    (if-let [peak (peaks src)]
+      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
+            ;;We now pack along the peak demand for extra context.
+            reqstate       (assoc (load-src tbls src compo-&gt;distros)
+                                  :peak peak)
+            _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
+            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
+        (if (== lower upper 0)
+          [src reqstate]
+          [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
+      (do (println [:skipping-src src :has-no-demand])
+          [src nil]))))</pre></div><div class="docs"><p>Given a database of distributions, and the required tables for a marathon 
+   project, computes a sequence of [src {compo requirement}] for each src.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn tables-&gt;requirements
   [tbls &amp; {:keys [dtype search src-filter]
            :or {search bisecting-convergence ;iterative-convergence
@@ -9570,40 +9808,16 @@ something.</p>
                       (demands-&gt;src-peaks))
         n       (atom (count peaks))]
     (-&gt;&gt; distros
-         (map (fn [[src compo-&gt;distros]] ;;for each src, we create a reqstate
-                 (if-let [peak (peaks src)]
-                   (let [_ (println [:computing-requirements src :remaining (swap! n dec)])                                     
-                         reqstate       (load-src tbls src compo-&gt;distros)
-                         _              (println [:growing-by dtype :from (:minimum-supply reqstate)])
-                         [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
-                     (if (== lower upper 0)
-                       [src reqstate]
-                       [src (search reqstate :init-lower lower :init-upper upper)]))
-                   (do (println [:skipping-src src :has-no-demand])
-                       [src nil])))))))</pre></div><div class="docs"><p>Helper function for our parallel requirements computation.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn requirements-by
-  [tbls peaks search n]
-  (fn [[src compo-&gt;distros]]
-    ;;for each src, we create a reqstate
-    (if-let [peak (peaks src)]
-      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
-            ;src-filter (a/filter-srcs [src])
-            ;src-tables (src-filter     tbls) ;alters SupplyRecords, DemandRecords                                       
-            reqstate   (load-src tbls src compo-&gt;distros)
-                        #_(-&gt;requirements-state src-tables ;create the searchstate.
-                                             src compo-&gt;distros)
-            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
-        [src (search reqstate :init-lower lower :init-upper upper :log (fn [msg]
-                                                                         (println (str [src msg]))))])
-      (do (println [:skipping-src src :has-no-demand])
-          [src nil]))))</pre></div><div class="docs"><p>Returns a (blocking!) lazy sequence read from a channel.</p>
+         (map (requirements-by tbls peaks search n)))))</pre></div><div class="docs"><p>Returns a (blocking!) lazy sequence read from a channel.  Throws on err values</p>
 
 <p>https://gist.github.com/stathissideris/8659706</p>
 </div><div class="codes"><pre class="brush: clojure">(defn seq!! 
    [c] 
    (lazy-seq 
-    (when-let [v (async/&lt;!! c)] 
-      (cons v (seq!! c)))))</pre></div><div class="docs"><p>Trying to avoid the crap that's happening
+    (when-let [v (async/&lt;!! c)]
+      (if (instance? Throwable v)
+        (throw v)
+        (cons v (seq!! c))))))</pre></div><div class="docs"><p>Trying to avoid the crap that's happening
 with pipeline...we get stalled out on
 long-running tasks, when we could still be making
 progress...</p>
@@ -9649,7 +9863,9 @@ progress...</p>
                    out
                    f
                    in)]
-    (seq!! out)))</pre></div><div class="docs"><p>Given a database of distributions, and the required tables for a marathon 
+    (seq!! out)))</pre></div><div class="docs"><p>a little box type for our requirements runs...</p>
+</div><div class="codes"><pre class="brush: clojure">(defn -&gt;error [input ^Throwable e]
+  (Throwable. (str input) e))</pre></div><div class="docs"><p>Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src.</p>
 
 <p>using core.async to pipeline this dude...</p>
@@ -9672,22 +9888,42 @@ progress...</p>
         out     (async/chan 10)
         in      (async/chan 10)
         _       (async/onto-chan in (seq distros))
-        pipe    #_(async/pipeline-blocking
-                   (.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
-                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
-                   out
-                   (map src-distros-&gt;requirements)
-                   in)
-                 (producer-&gt;consumer
+        require-or-err  (fn require-or-err [distros]
+                          (try  (src-distros-&gt;requirements  distros)
+                                (catch Exception e
+                                  (do (async/go (async/close! in))
+                                      (-&gt;error distros e)))))
+        pipe    (producer-&gt;consumer
                     2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
                                         ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
                    out
-                   src-distros-&gt;requirements
+                   require-or-err #_src-distros-&gt;requirements
                    in)
         ]
     (seq!! out)))</pre></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
-                    :Behavior :CycleTime :Policy :Tags :Spawntime :Location :Position :Original])</pre></div><div class="docs"><p>Computes a finalized table of supply records representing the 
+</div><div class="codes"><pre class="brush: clojure">(comment ;;pc test
+  (defn pc []
+    (let [out     (async/chan 10)
+          in      (async/chan 10)
+          _       (async/onto-chan in  (range 100))
+          break (rand-int 100)
+          f-or-err  (fn f-or-err [n]
+                      (try  (if (= n break)
+                              (throw (Exception. (str [:error! n])))
+                               n)
+                            (catch Exception e
+                              (do (async/go (async/close! in))
+                                  (-&gt;error n e)))))
+          pipe    (producer-&gt;consumer
+                   2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
+                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
+                   out
+                   f-or-err #_src-distros-&gt;requirements
+                   in)
+        ]
+    (seq!! out))))
+(def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
+                    :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position #_:Original])</pre></div><div class="docs"><p>Computes a finalized table of supply records representing the 
    required supply.</p>
 </div><div class="codes"><pre class="brush: clojure">(defn requirements-&gt;table
   [rs]
@@ -9695,8 +9931,8 @@ progress...</p>
        (filter second) ;eliminating nil resultsx
        (mapcat (comp :supply second))       
        (tbl/records-&gt;table)
-;       (tbl/order-fields-by supply-fields)
-       (tbl/map-field :Quantity long)))</pre></div><div class="docs"><p>Primary function to compute  requirements analysis.  Reads requirements 
+       (tbl/map-field :Quantity long)
+       (tbl/order-fields-by supply-fields)))</pre></div><div class="docs"><p>Primary function to compute  requirements analysis.  Reads requirements 
    project from inpath, computes requirement, and spits results to a tsv 
    table in the same root folder as inpath, requirements.txt</p>
 </div><div class="codes"><pre class="brush: clojure">(defn requirements-run
@@ -9706,10 +9942,10 @@ progress...</p>
                   (butlast)
                   (clojure.string/join &quot;/&quot;))
         outpath (str base &quot;/requirements.txt&quot;)]
-    (do (println [&quot;Analyzing requirements for&quot; inpath])        
+    (do (println [&quot;Analyzing requirements for&quot; inpath])
         (-&gt;&gt; (-&gt; (a/load-requirements-project inpath)
                  (:tables)
-                 (tables-&gt;requirements  :search iterative-convergence-shared)
+                 (tables-&gt;requirements-async  :search bisecting-convergence)
                  (requirements-&gt;table)
                  (tbl/table-&gt;tabdelimited))
              (spit outpath))
@@ -9802,7 +10038,174 @@ progress...</p>
   (def clength 2190)
   (defn inits [n] (for [[c q] (distribute-by distros n) :when (pos? q)] (marathon.ces.entityfactory/intervals q clength)))
   (defn init-points [n] (apply concat (map-indexed (fn [i xs] (let [x (+ (* i 0.1) i)] (map vector (repeat x) (rest xs)))) (inits n))))
-  (defn init-chart [n] (let [xs (init-points n)] (i/view (c/scatter-plot (map first xs) (map second xs))))))</pre></div><div class="docs"><p>'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
+  (defn init-chart [n] (let [xs (init-points n)] (i/view (c/scatter-plot (map first xs) (map second xs))))))</pre></div><div class="docs"><p>Primary function to compute  requirements analysis.  Reads requirements 
+   project from inpath, computes requirement, and spits results to a tsv 
+   table in the same root folder as inpath, requirements.txt</p>
+</div><div class="codes"><pre class="brush: clojure">(comment ;debugging a wierd case with new policies.
+  (def p (io/hpath  &quot;Documents\\m4sampledata\\leereqs\\m4\\testdata-v6-leebug.xlsx&quot;))
+(defn requirements-run
+  [inpath]
+  (let [inpath (clojure.string/replace inpath #&quot;\\&quot; &quot;/&quot;)
+        base (-&gt;&gt; (clojure.string/split inpath #&quot;/&quot;)
+                  (butlast)
+                  (clojure.string/join &quot;/&quot;))
+        outpath (str base &quot;/requirements.txt&quot;)]
+    (do (println [&quot;Analyzing requirements for&quot; inpath])        
+        (-&gt;&gt; (-&gt; (a/load-requirements-project inpath)
+                 (:tables)
+                 (tables-&gt;requirements :search bisecting-convergence)
+                 (requirements-&gt;table)
+                 (tbl/table-&gt;tabdelimited))
+             (spit outpath))
+        (println [&quot;Spit requirements to &quot; outpath]))))
+;;Performing a requirements run manually to replicate the error..
+;; marathon.analysis.requirements&gt; (requirements-run p)
+;; [Analyzing requirements for C:/Users/thomas.l.spoon/Documents/m4test/testdata-v6-leebug.xlsx]
+;; Loading CompositePolicyRecords . . . done.
+;; Loading DemandRecords . . . done.
+;; Loading SuitabilityRecords . . . (missing).
+;; Loading PolicyTemplates . . . (missing).
+;; Loading SRCTagRecords . . . done.
+;; Loading Parameters . . . done.
+;; Loading PolicyDefs . . . (missing).
+;; Loading PolicyRecords . . . done.
+;; Loading SupplyRecords . . . done.
+;; Loading RelationRecords . . . done.
+;; Loading GhostProportionsAggregate . . . done.
+;; Loading PeriodRecords . . . done.
+;; [:computing-requirements 10527RF00 :remaining 0]
+;; [:computing-initial-supply]
+;; [:growing-by :proportional :from {AC 0, RC 15}]
+;; [:guessing-bounds [0 16] :at 16 :got 1]
+;; [:guessing-bounds [17 32] :at 32 :got 1]
+;; Exception [:unit &quot;19_10527RF00_AC&quot; :invalid-deployer &quot;Must have
+;; bogbudget &gt; 0, \n cycletime in deployable window, or be eligible or
+;; a followon deployment&quot;] marathon.ces.deployment/deploy-unit
+;; (deployment.clj:92)
+  ;;Synopsis
+  ;;========
+  ;;The requirements analysis was trying to peform a 2-stage
+  ;;search, and failed during the first stage due to exception thrown
+  ;;trying to deploy entity 19.  During the first stage, bounding, the
+  ;;algorithm is just trying to find an upper and lower bound by
+  ;;multiple runs, doubling the interval each time.  That sets us of
+  ;;for bection search.  Each run is a capacity analysis run (for
+  ;;regardless of phase), where we are only running a single SRC,
+  ;;and have a parametric supply, where for each compo:
+  ;;current-supply(compo,src,step) =
+  ;;    initial-supply(compo,src) + GhostProportionsAggregate(compo,src) * step
+  ;;We basically replace the corresponding supply records, then run a
+  ;;capacity analysis trying to find missed demand.  During the simulation
+  ;;run, as soon as we find any missed demand, we stop and report the misses
+  ;;(fail early), so we don't waste time on a failed supply.
+  ;;In this case, the run errored out before we failed or completed....
+  ;;Now the question is why?  
+  ;;we learn that the unit is this guy from our convenient error message.
+  (def bad-unit &quot;4_10527RF00_AC&quot; #_&quot;19_10527RF00_AC&quot;)  
+  (def bad-src &quot;10527RF00&quot;)
+  ;;Recreating the initial conditions for interactive forensic analysis.
+  ;;====================================================================
+  ;;let's alter the supply to do a capacity analysis with the same supply
+  ;;we errored on, then use our analysis functions to get the state of
+  ;;play when our problem happened.  We'll interactively dissect things
+  ;;rather than sift through event logs hoping for history (we can still
+  ;;do that too though).
+  ;;move to marathon.analysis
+  (defn alter-supply [src-compo-&gt;quantity]
+    (fn [tbls]
+      (-&gt;&gt; (:SupplyRecords  tbls)
+           (tbl/table-records)
+           (map (fn [{:keys [SRC Component] :as r}]
+                  (if-let [q (src-compo-&gt;quantity [SRC Component])]
+                    (assoc r :Quantity q :Enabled true)
+                    r)))
+           (tbl/records-&gt;table)           
+           (assoc tbls :SupplyRecords))))
+  ;;we know the error occurs during requirements analysis search at n=64,
+  ;;so, let's define a function that gets our context, and overrides the
+  ;;input supply table to have said record (currently a Quantity = 1)
+  ;;have a quantity of 64 (and be enabled).  This should replicate
+  ;;our capacity run that bombed.  We can pass that function in via
+  ;;the :table-xform optional keyword argument and it will be run
+  ;;as a &quot;pre-process&quot; step on our input tables prior to initializing
+  ;;the simulation context from the resulting output.
+  (defn error-ctx []
+    (a/load-context
+      &quot;C:/Users/thomas.l.spoon/Documents/m4test/testdata-v6-leebug.xlsx&quot;
+      #_:table-xform
+      #_(alter-supply {[bad-src &quot;AC&quot;] 6 #_32
+                     [bad-src &quot;RC&quot;] 90
+                     })))
+  ;;we can get the context the day before the error...
+  (def prior (a/day-before-error (a/marathon-stream (error-ctx))))
+  ;;[:error-occurs-in-next-frame]
+  ;;In this context, a frame is a time-indexed pair of simulation contexts,
+  ;;which sequentially form a history...
+  ;;[t ctx]
+  (def t (first prior))
+  (println [:day-before t])
+  ;;Note: we typically don't want to print the context, since it's typically
+  ;;really verbose (especially with lots of entities).  We have several
+  ;;means of visualizing and querying it though. In short: avoid evaluating
+  ;;or otherwise print the ctx at the repl, it might occupy your repl for a
+  ;;bit.
+  (def ctx (second prior))
+  ;;We are effectively, at the beginning of the day prior to the error
+  ;;occurring.  Let's see what unit 19 is doing now...
+  ;;Using the function from marathon.ces.core/current-entity, we can
+  ;;get a map representing the entity at the current point in time.
+  ;;This is useful, because in a discrete event context, the entity's
+  ;;statistics won't technically change until it next update...the entity
+  ;;is effectively frozen, but we know it's in a state that implies
+  ;;time-varying metrics, and we'd like a view of the entity as of 1822...
+  ;;current-entity lets us get a view of the entity as it exists &quot;now&quot;,
+  ;;namely with linearly interpolated stats for it's various time-dependent
+  ;;metrics, like cycle duration, time in cycle, bog, dwell, etc.
+  (def e (core/current-entity ctx bad-unit))
+  ;; marathon.analysis.requirements&gt; (keys e)
+  ;; (:oi-title :cycles :policystack :statedata :home :deployment-index
+  ;; :locationname :interactive :deployable :speed :cycletime
+  ;; :unit-entity :name :dt :unit-index :deployable-bucket :supply :type
+  ;; :behavior :src :state :icon :positionpolicy :component :policy
+  ;; :dwell-time-when-deployed :oititle :default-recovery :last-update
+  ;; :date-to-reset :currentcycle :label :spawntime :deployable-cat
+  ;; :locationhistory :physical :position :location :velocity)
+  ;;we can print out the entity to the repl by evaluating it....
+  ;;however, the policy data structure is typically pretty verbose...
+  ;;let's elide it...
+  ;;marathon.ces.unit/summary provides a nice short description of the
+  ;;typical essentials..
+  ;; marathon.analysis.requirements&gt; (marathon.ces.unit/summary e)
+  ;; {:bog 0, :nextstate #{:c2 :dwelling},
+  ;;  :location-history [&quot;Train&quot;
+  ;;                     &quot;Ready&quot;
+  ;;                     [&quot;Ready&quot; :deployable] &quot;Available&quot;
+  ;;                     &quot;9424_Shiloh_10527RF00_[761...769]&quot;
+  ;;                     &quot;9425_Shiloh_10527RF00_[769...809]&quot;
+  ;;                     &quot;9426_Shiloh_10527RF00_[809...841]&quot;
+  ;;                     &quot;9427_Shiloh_10527RF00_[841...1995]&quot; &quot;Reset&quot;
+  ;;                     [&quot;Reset&quot; :deployable]
+  ;;                     &quot;Train&quot; &quot;Ready&quot;],
+  ;;  :cycletime 674, :name &quot;19_10527RF00_AC&quot;,
+  ;;  :positionstate #{:c2 :dwelling},
+  ;;  :deployable? nil,
+  ;;  :duration 56,
+  ;;  :src   &quot;10527RF00&quot;,
+  ;;  :dwell 675,
+  ;;  :positionpolicy &quot;Ready&quot;,
+  ;;  :policy   &quot;TAA_2024_Requirements_AC&quot;,
+  ;;  :statestart 0,
+  ;;  :statehistory [],
+  ;;  :timeinstate 0,
+  ;;  :curstate #{:c2 :dwelling},
+  ;;  :location &quot;Ready&quot;}
+  ;;We can see the entity - at time 1822 - is dwelling.  The location history
+  ;;provides a view of where it's been, to include policy locations and deployments.
+  (def pol (marathon.data.protocols/get-active-policy (:policy e)))
+  ;;marathon.analysis.requirements&gt; (:name pol)
+  ;;&quot;TAA19-23_AC_1:2&quot;
+  ;;Looks like he's transitioned his policy.  
+  ;;Waiting in Ready (not yet deployable according to policy)...)</pre></div><div class="docs"><p>'TOM Change 3 August -> implemented a bracketing algorithm not unlike binary search.
 'This is meant to be performed on a single SRC, i.e. a single independent requirement.
 'Bisection requires an src as the arguement.
 Public Sub Bisect(sim As TimeStep_Engine, ns As Collection, left As Dictionary, right As Dictionary, Iteration As Long)</p>
@@ -10292,6 +10695,7 @@ a resulting seq of entities.</p>
     :activedemands      {}  ;possibly replace with active component
     :eligbledemands     {}  ;forgot what this is...
     :changed            {}  ;indicates demands that changed, we can handle this better.
+    :changed-at         0   ;indicates the last time any demands changed. used for samples.
     :demandtraffic      nil ;supress demand traffic, maybe old
     :tryfill            true ;no idea...
     :loginfeasibles     true ;logging info
@@ -11654,10 +12058,31 @@ we can provide uic, src, and component and we're fine...</p>
       :dwell-expected  dwelltime
       :mob-expected  MOBtime
       :tstart t
-      :tfinal (+ t policyduration)))</pre></div><div class="docs"><p>Modifies oldcycle, assumably in the context of a policy change.  Returns the 
+      :tfinal (+ t policyduration)))</pre></div><div class="docs"><p>'TOM Change 20 April 2012
+'Added BOGBudget as a modified field, since it did not exist before.  We used to just base everything off
+'of MAXbog, which was bogtime in this function, but now we incorporate the notional of BOGBudget, or a
+'or a cumulative bog capacity in a cycle.
+'TOM change 2 Sep 2011
+'mutate the current cycle object to reflect changes in expectations
+Public Function modify(bogtime As Long, dwelltime As Long, policyduration As Long, Optional MOBtime As Single, Optional bogbudget As Long) As TimeStep_CycleRecord
+Set modify = Me</p>
+</div><div class="codes"></div><div class="docs"><p>With modify
+    .BOGExpected = bogtime
+    .BDRExpected = 1 / ((bogtime + MOBtime) / (policyduration - (bogtime + MOBtime)))
+    .DurationExpected = policyduration
+    .DwellExpected = dwelltime
+    If .DwellExpected > 1095 And MOBtime = 0 Then
+        If .DwellExpected &lt;> 9999999 Then Err.Raise 101, , "wierd "
+    End If
+    .MOBexpected = MOBtime
+    .bogbudget = bogbudget
+End With</p>
+</div><div class="codes"></div><div class="docs"><p>Modifies oldcycle, assumably in the context of a policy change.  Returns the 
    result of the modification, as a new cycle.</p>
+
+<p>End Function</p>
 </div><div class="codes"><pre class="brush: clojure">(defn ^cyclerecord modify-cyclerecord
-  [cyclerec bogtime dwelltime policyduration MOBtime]
+  [cyclerec bogtime dwelltime policyduration MOBtime bogbudget]
   (if (and (&gt; dwelltime 1095)  (zero? MOBtime) (not (= :inf dwelltime)))
     (throw (Exception. &quot;Expected dwell time is abnormal...&quot;))
     (let [bogmob (+ bogtime MOBtime)]
@@ -11668,7 +12093,7 @@ we can provide uic, src, and component and we're fine...</p>
          :duration-expected policyduration
          :dwell-expected  dwelltime
          :mob-expected MOBtime
-         ;:bogbudget bogbudget
+         :bogbudget bogbudget
          }))))</pre></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(defn ^cyclerecord cycle-add-traversal [cyclerec t startlocation endlocation]
   (let [trav  [t startlocation endlocation]       
@@ -11755,328 +12180,124 @@ Wend</p>
 
 <p>End Function</p>
 </div><div class="codes"></div><div class="spacer docs">&nbsp;</div><div class="codes"></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.processing.highwater" name="marathon.processing.highwater"><h1 class="project-name">marathon.processing.highwater</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><p>This namespace could probably be changed into a more general stream-processing
-library.  It was built as a single-purpose script, namely to process a large 
+library.  It was built as a single-purpose script, namely to process a large
 time series, sampling by quarter, to produce a series of peaks in the data
-and a much smaller set of data to examine.  There's definitely a general 
+and a much smaller set of data to examine.  There's definitely a general
 time-series set of reductions hiding in here somewhere...</p>
-</div><div class="codes"></div><div class="docs">
 </div><div class="codes"><pre class="brush: clojure">(ns marathon.processing.highwater
-  (:use [spork.util.record 
-           :only [defrecord+ with-record merge-from record-headers]]
-        [spork.util.general :only [clumps]])
-  (:require [spork.util [io :as io] 
-                        [table :as tbl]]))</pre></div><div class="docs"><p>Note -> we're maintaining backward compatibility with the older version
-of trend here.  We didn't always capture the AC/RC/NG/Ghost, etc. fill data.
-Newer versions may have that information.  In order to process older datasets,
-we want to keep these fields optional.</p>
-</div><div class="codes"><pre class="brush: clojure">(defrecord+ trend [t 
-                   Quarter 
-                   SRC 
-                   TotalRequired 
-                   TotalFilled 
-                   Overlapping
-                   Deployed 
-                   DemandName 
-                   Vignette 
-                   DemandGroup
-                   OITitle
-                   [ACFilled 0] 
-                   [RCFilled 0] 
-                   [NGFilled 0] 
-                   [GhostFilled 0] 
-                   [OtherFilled 0]])</pre></div><div class="docs"><p>Something for later...
-(def field-parsers {:long  #(java.lang.Long/parseLong %)
-                   :double #(java.lang.Double/parseDouble %)
-                   :bool  #(java.lang.Boolean/parseBoolean %)
-                   :string identity})</p>
-
-<p>(defn record-parser [field-specs]
- (let [parsers (vec (map #(get field-parsers % tbl/parse-string-nonscientific) 
-                         field-specs))
- (fn [^string x]
-   (loop [acc []
-          (tbl/split-by-tab x)</p>
-</div><div class="codes"></div><div class="docs"><p>TODO -> turn this into a macro for reading records.
-given a vec of strings, return a trend, fast...</p>
-</div><div class="codes"><pre class="brush: clojure">(defn ^trend read-trend [xs]
-    (-&gt;trend  
-      (java.lang.Long/parseLong (nth xs 0)) ;t  
-      (java.lang.Long/parseLong (nth xs 1)) ;Quarter
-      (nth xs 2) ;SRC 
-      (java.lang.Long/parseLong (nth xs 3)) ;TotalRequired 
-      (java.lang.Long/parseLong (nth xs 4)) ;TotalFilled 
-      (java.lang.Long/parseLong (nth xs 5)) ;Overlapping
-      (java.lang.Long/parseLong (nth xs 6)) ;Deployed 
-      (nth xs 7) ;DemandName 
-      (nth xs 8) ;Vignette 
-      (nth xs 9) ;DemandGroup
-      (nth xs 10) ;OITitle
-      (java.lang.Long/parseLong (nth xs 11)) ;[ACFilled 0] 
-      (java.lang.Long/parseLong (nth xs 12)) ;[RCFilled 0] 
-      (java.lang.Long/parseLong (nth xs 13)) ;[NGFilled 0] 
-      (java.lang.Long/parseLong (nth xs 14)) ;[GhostFilled 0] 
-      (java.lang.Long/parseLong (nth xs 15)))) ;[OtherFilled 0]]</pre></div><div class="docs"><p>[OtherFilled 0]]</p>
-</div><div class="codes"></div><div class="docs"><p>an experiment.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn ^trend read-trend-arr [^String x]
-  (let [xs (.split x &quot;\t&quot;)]
-    (-&gt;trend  
-      (java.lang.Long/parseLong (aget xs 0)) ;t  
-      (java.lang.Long/parseLong (aget xs 1)) ;Quarter
-      (aget xs 2) ;SRC 
-      (java.lang.Long/parseLong (aget xs 3)) ;TotalRequired 
-      (java.lang.Long/parseLong (aget xs 4)) ;TotalFilled 
-      (java.lang.Long/parseLong (aget xs 5)) ;Overlapping
-      (java.lang.Long/parseLong (aget xs 6)) ;Deployed 
-      (aget xs 7) ;DemandName 
-      (aget xs 8) ;Vignette 
-      (aget xs 9) ;DemandGroup
-      (aget xs 10) ;OITitle
-      (java.lang.Long/parseLong (aget xs 11)) ;[ACFilled 0] 
-      (java.lang.Long/parseLong (aget xs 12)) ;[RCFilled 0] 
-      (java.lang.Long/parseLong (aget xs 13)) ;[NGFilled 0] 
-      (java.lang.Long/parseLong (aget xs 14)) ;[GhostFilled 0] 
-      (java.lang.Long/parseLong (aget xs 15))))) ;[OtherFilled 0]]</pre></div><div class="docs"><p>[OtherFilled 0]]</p>
-</div><div class="codes"></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(def highwater-headers [:t :Quarter :SRC :TotalRequired :TotalFilled :Overlapping 
-                        :Deployed :DemandName :Vignette :DemandGroup :OITitle 
-                        :ACFilled :RCFilled :NGFilled :GhostFilled :OtherFilled])
-(def headers   (record-headers trend))
-(def fieldkeys (vec (map keyword headers)))</pre></div><div class="docs"><p>A Qtrend is a type alias for a tuple of Quarter, an Int, and a
-   list of Trends. This associates a list of trends to a particular
-   Quarter.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn Qtrend
-  [q trs] 
-  [q trs])</pre></div><div class="docs"><p>convert a list of stringified fields into a trend</p>
-</div><div class="codes"><pre class="brush: clojure">(defn readTrend
-  [coll &amp; {:keys [fieldnames] :or {fieldnames fieldkeys}}]
-  ;;probably killing us in performance too...
-;    (if (= fieldnames fieldkeys) ;default fields
-  (read-trend (tbl/split-by-tab coll)))</pre></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn tabLine     [coll] (clojure.string/join \tab  coll))</pre></div><div class="docs"><p>(defn trendString [tr]   (str (tabLine (vals tr)) \newline))
-Modified to avoid call to str.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn trendString [tr]  (tabLine (vals tr)))</pre></div><div class="docs"><p>convert a nested list of trend fields into a list of trends.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn trendList
-  [coll &amp; [fieldnames]]
-  (if fieldnames 
-    (map (fn [c] (readTrend c :fieldnames fieldnames)) coll) ;if fieldnames provided, use.
-    (map readTrend coll))) ;else, use default fieldnames.</pre></div><div class="docs"><p>else, use default fieldnames.</p>
-</div><div class="codes"></div><div class="docs"><p>convert a sample time into a quarter</p>
-</div><div class="codes"><pre class="brush: clojure">(defn asQuarter
-  [t] (inc (quot t 90)))</pre></div><div class="docs"><p>Extract the trend's quarter</p>
-</div><div class="codes"><pre class="brush: clojure">(defn trendQuarter
-  [tr] (asQuarter (:t tr)))</pre></div><div class="docs"><p>Group a list of Trends by quarters, returning a list of Quarterly Trends.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn groupByQuarter
-  [trs]
-  (-&gt;&gt; (clumps trendQuarter trs)
-    (map (fn [[q trs]] (Qtrend q trs)))))</pre></div><div class="docs"><p>turn a list of trends into a Map of (src,t), v or a SampleMap
-   where v is the sum of totalfilled for all trends of src at time t.
-   Each quarter, we compute a set of samples keyed by the SRC and the
-   sampletime of the trend, that maps to the total number of units filling
-   demands for SRC on day t. There are instances where multiple samples for
-   an SRC occur on the same day in the data, which we handle by summing.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn sampleQuarter
-  [[q ts]]
-  (let [sample (fn [acc {:keys [SRC t TotalFilled]}]
-                 (if-let [v (get acc [SRC t])]
-                   (assoc! acc [SRC t] (+ TotalFilled v))
-                   (assoc! acc [SRC t] TotalFilled)))]
-    (persistent! (reduce sample (transient {}) ts))))</pre></div><div class="docs"><p>For each SRC, we want to find a time t, where t has the highest number of uni
-   filling demands, relative to every other t in the sample set.
-   return a map of (SRC -> t) where t is the time the highest totalfilled
-   sample for the SRC.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn maxSamples
-  [samplemap]
-  (let [maxf (fn [m [[s t] newval]]
-               (if-let [[oldt oldval] (get m s)]
-                 (if (or (&gt; newval oldval)
-                         (and (= newval oldval) (&lt; t oldt)))
-                   (assoc! m s [t newval])
-                   m)
-                 (assoc! m s [t newval])))]
-    (persistent! (reduce maxf (transient {}) samplemap))))</pre></div><div class="docs"><p>highTrend is a filter function, that, given a corresponding map, will tell us
-   if a Trend is indeed the highest trend in all the land!</p>
-</div><div class="codes"><pre class="brush: clojure">(defn highTrend
-  [srcmap {:keys [SRC t]}]
-  (let [[tbest ] (get srcmap SRC)]
-    (= tbest t)))</pre></div><div class="docs"><p>getHighTrends ties everything together for trends in a Quarter.
-   The high trends are defined as all trends in the quarter, where the
-   trend is identified as a highTrend, in the context of a heightmap.
-   heightmap is defined as the maximum sampling, of the samplequarter of
-   the quarterly trend.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn getHighTrends
-  [[qtr trends :as qtrend]]
-  (let [heightmap ((comp maxSamples sampleQuarter) qtrend)]
-    (filter (partial highTrend heightmap) trends)))</pre></div><div class="docs"><p>We can represent our final computation as a lazy mapping of getHighTrends
-   to a list of QTrends ... </p>
-</div><div class="codes"><pre class="brush: clojure">(defn highWaterMarks
-  [trends]
-  (map getHighTrends (concat (groupByQuarter trends))))</pre></div><div class="docs"><p>Where xs is a tab delimited line sequence, and the first value of 
-   xs is a row of headers, returns a lazy seq of trend records using the 
-   headers in the first row.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn readTrends
+  (:require [spork.util [io :as io]
+             [table :as tbl]
+             [general :refer [clumps]]]
+            [marathon.schemas :as s]
+            [marathon.schemas :as schemas]))</pre></div><div class="docs"><p>Highwater is a type of reduction performed on DemandTrends.txt, which is a
+fairly large log file produced during simulation. The log file is in the
+tab-delimited format.</p>
+</div><div class="codes"></div><div class="docs"><p>Demandtrends are organized by time - so we have multiple trends sampled
+at a point in time - with potentially many SRCs across many demands.
+Our goal is to break up these interwoven signals [t SRC] into
+k separate signals - one for each SRC.  From there, we'd like to
+find - for each SRC - the samples occuring within a quarter that
+represent the high-water mark of active demand for deployed entities:
+that is, the total number of entities filled or otherwise employed
+by the demand.</p>
+</div><div class="codes"></div><div class="docs"><p>Read the demandtrends in from a file. </p>
+</div><div class="codes"><pre class="brush: clojure">(defn trends
+  [infile]
+  (tbl/tabdelimited-&gt;records infile :schema schemas/demandtrend))</pre></div><div class="docs"><p>Find the maximum sample by f in collection xs.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn max-sample-by
+  [f xs]
+  (-&gt;&gt; xs
+       (reduce (fn [[n sample :as acc] r]
+                 (let [k  (f r) ]
+                   (if (&gt; k n)
+                     [k r]
+                     acc)))
+               [0 nil])))</pre></div><div class="docs"><p>Find the highwater mark for a sample of demantrends
+   ys,  by summing concurrent demands' TotalFilled quantities.
+   Return the subset of ys that intersects the highwater
+   sample.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn samples-&gt;highwater
+  [ys]
+  (-&gt;&gt; (for [[t ys] (group-by #(get % :t) ys)]
+         [t (reduce + 0 (map #(get % :TotalFilled) ys))])
+       (max-sample-by second)
+       (second)))</pre></div><div class="docs"><p>Compute the max total-filled by src for the quaterly sample</p>
+</div><div class="codes"><pre class="brush: clojure">(defn quarterly-srcs-&gt;highwater-srcs
   [xs]
-  (let [fields (vec (map keyword (tbl/split-by-tab (first xs))))]
-    (trendList (rest xs) fields)))</pre></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn addHeaders [trends] (cons (str (tabLine headers) \newline) trends))</pre></div><div class="docs"><p>Given a lookup-map of {primarykeyval {fieldname expr}}, and a primary key, 
-   returns a function that intersects fields from lookup-map and a record. <br />
-   The resulting value should be identical to the record (field-wise), except 
-   field values may be changed or computed by the intersection. </p>
-</div><div class="codes"><pre class="brush: clojure">(defn intersect-fields
-  [lookup-map primarykey]  
-  (fn [record] 
-    (merge-from record 
-      (get lookup-map (get record primarykey)))))</pre></div><div class="docs"><p>this is a simple query....</p>
-</div><div class="codes"><pre class="brush: clojure">(def testlookup 
-  {&quot;SRC1&quot; {:SRC &quot;SRC1&quot;, :OITitle &quot;Little SRC&quot;, :STR 5}
-   &quot;SRC2&quot; {:SRC &quot;SRC2&quot;, :OITitle &quot;Medium SRC&quot;, :STR 10}
-   &quot;SRC3&quot; {:SRC &quot;SRC3&quot;, :OITitle &quot;Big SRC&quot;,    :STR 20}})</pre></div><div class="docs"><p>These operations will be replaced with more abstract SQL-like operations, 
-once I get a library for it built....</p>
-</div><div class="codes"></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn src-lookup [srcmap]
-  (fn [m] 
-    (intersect-fields m srcmap :SRC)))</pre></div><div class="docs"><p>Adds a few computed fields to our entry.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn compute-strengths
-  [m]
-  (let [? (fn [f] (get m f))
-        strength (? :STR)]  
-    {:ACStr (*  strength (? :ACFilled)) 
-     :RCStr (* strength (? :NGFilled))
-     :GhostStr (* strength (? :GhostFilled)) 
-     :OtherStr (* strength (? :OtherFilled))
-     :TotalStr (* strength (? :TotalFilled))
-     :RequiredStr (* strength (? :TotalRequired))})) </pre></div><div class="docs"><p>Produces an entry processor that tacks on strength, OITitle, and computes 
-   compo-specific strengths.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn append-src-data
-  [srcmap]
-  (comp compute-strengths (src-lookup srcmap))) </pre></div><div class="docs">
-</div><div class="codes"><pre class="brush: clojure">(defn file-&gt;trends [inpath]
-  (with-open [rdr (clojure.java.io/reader inpath)]
-    (vec (readTrends (line-seq rdr)))))</pre></div><div class="docs"><p>Given an lazy sequence of trend records, compiles the highwater trends from
-   demandtrends.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn trends-&gt;highwater-records
-  [rawtrends &amp; {:keys [entry-processor]}]
-  (for [q (highWaterMarks rawtrends)
-        trendrec (map (if entry-processor entry-processor identity) q)]
-    trendrec))</pre></div><div class="docs"><p>Composition that produces an ITable from a lazy sequence of raw demand 
-   trends, where the table is a fully computed set of highwater records.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn trends-&gt;highwater-table
-  [rawtrends &amp; {:keys [entry-processor]}]
-  (tbl/records-&gt;table
-    (trends-&gt;highwater-records rawtrends :entry-processor entry-processor)))</pre></div><div class="docs"><p>Given a path to a demand trends file, computes highwater trends and returns
-   an ITable data structure from util.table </p>
-</div><div class="codes"><pre class="brush: clojure">(defn file-&gt;highwater-table
-  [path &amp; {:keys [entry-processor]}]
-  (trends-&gt;highwater-table (file-&gt;trends path) 
-                           :entry-processor entry-processor))</pre></div><div class="docs"><p>this version is -120 seconds, take about 1 gb of ram.
-Look at swapping out non-cached streams with lazy sequences.</p>
-</div><div class="codes"></div><div class="docs"><p>Changed trendString implementation to use clojure.string libs
-which use string builders.  Might switch the entire implementation 
-use clojure.string/join, I still need to profile this dude.</p>
-</div><div class="codes"></div><div class="docs"><p>Given an input file and an output file, compiles the highwater trends from
-   demandtrends.  If lookup-map (a map of {somekey {field1 v1 field2 v2}} is 
-   supplied, then the supplied field values will be merged with the entries 
-   prior to writing.  We typically use this for passing in things like 
-   OITitle and STR (strength) in a simple lookuptable, usually keyed by src.
-   This pattern will probably be extracted into a higher order postprocess 
-   function or macro....</p>
-</div><div class="codes"><pre class="brush: clojure">(defn main
-  [infile outfile &amp; {:keys [entry-processor]}]
-    (with-open [lazyin  (clojure.java.io/reader infile)
-                lazyout (clojure.java.io/writer (io/make-file! outfile))]
-      (binding [*out* lazyout]
-        (do (println (tabLine headers))
-          (doseq [t (-&gt; (vec (readTrends (line-seq lazyin))) 
-                        (trends-&gt;highwater-records 
-                          :entry-processor entry-processor))]
-                (println (trendString t))))))) ;modified to avoid stringcat.</pre></div><div class="docs"><p>modified to avoid stringcat.</p>
-</div><div class="codes"></div><div class="docs"><p>Uses the table operations to handle i/o, rather than streaming everything.
+  (into [] (mapcat (fn [[src ys]]
+                     (let [[tmax n] (samples-&gt;highwater ys)]
+                       (filterv #(= (get % :t) tmax) ys))))
+        (group-by #(get % :SRC) xs)))</pre></div><div class="docs">
+</div><div class="codes"><pre class="brush: clojure">(defn highwater-marks [xs]
+  (transduce (comp (partition-by (fn [r] (get r :Quarter)))
+                   (map quarterly-srcs-&gt;highwater-srcs))
+             (completing (fn hw [acc highwater-samples]
+                           (into acc highwater-samples)))
+             [] xs))</pre></div><div class="docs"><p>(into [] (tbl/tabdelimited->records "hw.txt" :schema schemas/demandtrend))))</p>
+</div><div class="codes"><pre class="brush: clojure">(defn empty-record [src q]
+  {:t (* q 90)
+   :Quarter q 
+   :SRC src
+   :TotalRequired 0
+   :TotalFilled 0
+   :Overlapping 0
+   :Deployed 0
+   :DemandName &quot;none&quot;
+   :Vignette &quot;none&quot;
+   :DemandGroup &quot;none&quot;
+   :ACFilled 0
+   :RCFilled 0
+   :NGFilled 0
+   :GhostFilled 0
+   :OtherFilled 0
+   :ACOverlap 0
+   :RCOverlap 0
+   :NGOverlap 0
+   :GhostOverlap 0
+   :OtherOverlap 0
+   :deltaT 0
+   }) </pre></div><div class="docs"><p>For a nice, consistent dataset, we'd like to have
+samples across quarters.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn normalize-quarters [rs]
+  (let [qlast (:Quarter (last rs))]
+    (apply concat
+           (for [[src xs] (group-by :SRC rs)]
+             (let [m  (group-by :Quarter xs)]
+               (if (= (count m) qlast)
+                 xs
+                 (-&gt;&gt; (range 1 (inc qlast))
+                      (filter #(not (m %)))
+                      (map #(empty-record src %))
+                      (concat xs)
+                      (sort-by :Quarter))))))))</pre></div><div class="docs"><p>Uses the table operations to handle i/o, rather than streaming everything.
    Wipes out outfile.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn altmain
-  [infile outfile &amp; {:keys [entry-processor]}]
-  (spit (clojure.java.io/writer (io/make-file! outfile))
-        (tbl/table-&gt;tabdelimited
-          (file-&gt;highwater-table infile :entry-processor entry-processor)))) </pre></div><div class="docs"><p>Sniff out paths to demand trends files from root.</p>
+</div><div class="codes"><pre class="brush: clojure">(defn highwater
+  [infile outfile]
+  (-&gt; (-&gt;&gt;  (trends infile)
+       (highwater-marks)
+       (into [])
+       (normalize-quarters))
+      (tbl/records-&gt;file  outfile
+                          :field-order schemas/demandtrend-fields)))</pre></div><div class="docs"><p>Sniff out paths to demand trends files from root.</p>
 
 <p>This is a process, I'd like to move it to a higher level script....</p>
-</div><div class="codes"><pre class="brush: clojure">(defn findDemandTrendPaths
+</div><div class="codes"><pre class="brush: clojure">(defn find-demandtrend-paths
   [root]
-  (map io/fpath (io/find-files root #(= (io/fname %) &quot;DemandTrends.txt&quot;))))</pre></div><div class="docs"><p>Computes high water for for each p in path. dumps a corresponding highwater.
+  (map io/fpath (io/find-files (io/file-path root) #(= (io/fname %) &quot;DemandTrends.txt&quot;))))</pre></div><div class="docs"><p>Computes high water for for each p in path. dumps a corresponding highwater.
    in the same directory, overwriting.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn batch
-  [paths &amp; {:keys [entry-processor]}]
+</div><div class="codes"><pre class="brush: clojure">(defn highwater-batch
+  [paths]
   (doseq [source paths]
-    (let [target (io/relative-path 
+    (let [target (io/relative-path
                    (io/as-directory (io/fdir source)) [&quot;highwater.txt&quot;])]
       (if (io/fexists? (clojure.java.io/file source))
-        (do (println (str &quot;Computing HighWater : &quot; source&quot; -&gt; &quot; target))
-            (main source target 
-                  :entry-processor entry-processor))
-        (println (str &quot;Source file: &quot; source&quot; does not exist!&quot;))))))</pre></div><div class="docs"><p>Computes high water for for each p in path. dumps a corresponding highwater.
-   in the same directory, overwriting.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn alt-batch
-  [paths &amp; {:keys [entry-processor]}]
-  (doseq [source paths]
-    (let [target (io/relative-path 
-                   (io/as-directory (io/fdir source)) [&quot;highwater.txt&quot;])]
-      (if (io/fexists? (clojure.java.io/file source))
-        (let [_ (println (str &quot;Computing HighWater : &quot; source&quot; -&gt; &quot; target))]          
-            (do (altmain source target 
-                  :entry-processor entry-processor)))
-        (println (str &quot;Source file: &quot; source&quot; does not exist!&quot;))))))</pre></div><div class="docs"><p>Compiles a batch of highwater trends, from demand trends, from all demand 
+        (let [_ (println (str &quot;Computing HighWater : &quot; source&quot; -&gt; &quot; target))] 
+            (do (highwater source target)))
+        (println (str &quot;Source file: &quot; source&quot; does not exist!&quot;))))))</pre></div><div class="docs"><p>Compiles a batch of highwater trends, from demand trends, from all demand
    trends files in folders or subfolders from root.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn batch-from
-  [root &amp; {:keys [entry-processor]}]
-  (batch (findDemandTrendPaths root) 
-         :entry-processor entry-processor))</pre></div><div class="docs"><p>Compiles a batch of highwater trends, from demand trends, from all demand 
-   trends files in folders or subfolders from root.</p>
-</div><div class="codes"><pre class="brush: clojure">(defn alt-batch-from
-  [root &amp; {:keys [entry-processor]}]
-  (alt-batch (findDemandTrendPaths root) 
-         :entry-processor entry-processor))</pre></div><div class="docs"><p>Generates a fake stream of entries</p>
-
-<p>testing</p>
-</div><div class="codes"><pre class="brush: clojure">(comment 
-(defn fake-entries
-  [src-count demand-count &amp; {:keys [tstart interval] 
-                             :or {tstart 0
-                                  interval 10}}]
-  (let [fake-demand-name (memoize (fn [src d] (str &quot;Demand&quot; &quot;_&quot; src &quot;_&quot; d)))
-        empty-entry      {:TotalRequired 1
-                          :TotalFilled 1
-                          :Overlapping 0
-                          :Deployed 1                          
-                          :Vignette    &quot;Sample&quot;
-                          :DemandGroup &quot;SampleGroup&quot;
-                          :ACFilled 1
-                          :RCFilled 0
-                          :NGFilled 0
-                          :GhostFilled 0 
-                          :OtherFilled 0}
-        fake-entry       (fn [src d t] 
-                           (map-&gt;trend 
-                             (merge empty-entry 
-                                    {:DemandName (fake-demand-name src d)
-                                     :SRC     src
-                                     :OITitle src
-                                     :t t 
-                                     :Quarter (inc (quot t 90))})))]
-    (-&gt;&gt; (iterate #(+ % interval) tstart)
-         (mapcat #(for [src (range src-count)
-                        d   (range demand-count)]
-                    (fake-entry src d %)))
-         (concat))))
-;;generate a fake table for testing and profiling purposes.
-;;Note, it takes about 5 million entries for this guy.  ugh.
-(defn fake-table [n]  
-  (-&gt;&gt; (tbl/records-&gt;table (take n (fake-entries 2 10)))
-       (tbl/order-fields-by highwater-headers)))
-(def workdir &quot;C:\\Users\\tom\\Documents\\Marathon_NIPR\\&quot;)
-(def batchdir 
-  &quot;C:\\Users\\thomas.spoon\\Documents\\TAA 15-19\\Unconstrained Runs&quot;)
-(def testfile (io/relative-path workdir [&quot;bcttrends.txt&quot;]))
-(def bigfile  (io/relative-path workdir [&quot;dtrendsfull.txt&quot;]))
-(def testout  (io/relative-path workdir [&quot;hw.txt&quot;]))
-(def bigout   (io/relative-path workdir [&quot;highwater.txt&quot;])))</pre></div><div class="spacer docs">&nbsp;</div><div class="codes"></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.processing.forgereader" name="marathon.processing.forgereader"><h1 class="project-name">marathon.processing.forgereader</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><p>A set of utilities for processing data; derived from an ad-hoc script.
+</div><div class="codes"><pre class="brush: clojure">(defn highwater-batch-from
+  [root]
+  (highwater-batch (find-demandtrend-paths root)))</pre></div><div class="spacer docs">&nbsp;</div><div class="codes"></div><div class="docs"><div class="docs-header"><a class="anchor" href="#marathon.processing.forgereader" name="marathon.processing.forgereader"><h1 class="project-name">marathon.processing.forgereader</h1><a class="toc-link" href="#toc">toc</a></a></div></div><div class="codes"></div><div class="docs"><p>A set of utilities for processing data; derived from an ad-hoc script.
 FORGE data comes in a couple of important tables, specifically phases, 
 tracks, and events.  The forgereader provides a library for processing these
 tables, and producing </p>
@@ -13014,7 +13235,7 @@ include this in a later run...</p>
                                         (fn [acc k v] (assoc! acc k (assoc v :DayRule n))) (transient {}) splitmap)))]
     (-&gt;&gt; (map new-split splitnums)
          (map-indexed (fn [idx sm] (-&gt;&gt; (split-future sm xs :exclude? exclude?)
-                                        (map #(assoc % :SplitCase (nth splitnums idx)))))))))</pre></div><div class="spacer docs">&nbsp;</div><div class="codes"></div></body><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a>marginalia.html$floating_toc_html@238ad8c</div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
+                                        (map #(assoc % :SplitCase (nth splitnums idx)))))))))</pre></div><div class="spacer docs">&nbsp;</div><div class="codes"></div></body><div class="footer">Generated by <a href="https://github.com/fogus/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a>marginalia.html$floating_toc_html@aa5455e</div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
 SyntaxHighlighter.all();
 
 // hackity hack
