@@ -17,7 +17,7 @@
    is compatible with web browsers, and can be imported to 
    Excel.  The visualization looks like a unit 'patch chart'."
   [rootpath]
-  (do (println [:building-patches (str rootpath "patches.htm")])
+  (do (println [:building-patches (io/file-path rootpath "patches.htm")])
       (try (patches/locations->patches rootpath)
            (catch Exception e
              (println [:skipping-patches :no-location-samples])))))
@@ -52,8 +52,7 @@
         target-path)
        (build-patches target-path))))
 
-(def root "C:\\Users\\1143108763.C\\Documents\\srm\\cleaninput\\runs\\")
-(def root "C:\\Users\\tspoon\\Documents\\srm\\tst\\notionalv2\\")
+(def root "~/Documents/srm/tst/notionalv2/")
 
 (def srm "srmbase.xlsx")
 (def arf "arfbase.xlsx")
@@ -69,9 +68,9 @@
    (doseq [x xs]
      (println [:running x])
      (let [nm  (strip    x)
-           in  (str folder x)
-           out (str folder nm "\\")
-           _   (io/hock (str out "timestamp.txt") (System/currentTimeMillis))]
+           in  (io/file-path folder x)
+           out (io/file-path folder nm)
+           _   (io/hock (io/file-path out "timestamp.txt") (System/currentTimeMillis))]
        (do-audited-run in out))))
   ([xs] (run-cases root xs)))
 

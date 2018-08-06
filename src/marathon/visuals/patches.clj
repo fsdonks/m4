@@ -7,8 +7,10 @@
             [spork.geometry.shapes :as s]
             [spork.graphics2d.canvas :as canv]
             [clojure.core.reducers :as r]
-            [spork.util.table :as tbl]
+            [spork.util [table :as tbl]
+                        [io :as io]]
             [clojure.pprint :refer [cl-format]]
+            [marathon.visuals [styling :as styling]]
              ))
 
 ;;(table-by  :unitid  :Quarter (fn [r] [(:category r) (:operation r)]))
@@ -373,8 +375,8 @@
                          ->uic]
                         rows)))))
 
-(def srm-style
-  {"R_C2" {:background :LightGreen, :color :black},
+(def srm-style styling/srm-style
+  #_{"R_C2" {:background :LightGreen, :color :black},
    "PL_C4" {:background :LightYellow, :color :black},
    ":recovery" {:background :DarkYellow, :color :black},
    "MA_DA_C1" {:background :DarkBlue, :color :white},
@@ -402,7 +404,7 @@
    })
 
 (def html-style
-  (into {}
+  {} #_(into {}
         (for [[k {:keys [background color]}] srm-style]
           [k {:background (html-color background)
               :color      (html-color color)}])))
@@ -451,8 +453,8 @@
              (take-while (fn [r] (< (:Quarter r) +quarter-limit+))))
         (chunk-table (juxt :src :component :name))
         (patch-file  outpath)))
-  ([root] (let [inpath  (str root "locsamples.txt")
-                outpath (str root "patches.htm")]
+  ([root] (let [inpath  (io/file-path root "locsamples.txt")
+                outpath (io/file-path root "patches.htm")]
             (locations->patches inpath outpath))))
 
 (comment ;testing

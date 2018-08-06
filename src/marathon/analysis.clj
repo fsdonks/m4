@@ -596,24 +596,6 @@
         :else (throw (Exception.
                       (str "Invalid MARATHON sim context " x)))))
 
-#_(defn marathon-stream
-  "Create a stream of simulation states, indexed by time.
-   Optionally, set the maximum simulation time, define transformations
-   on the project tables, like src filters, provide a custom step function,
-   and choose to generate auditing information upon initializing the
-   stream."
-  [path-or-ctx & {:keys [tmax table-xform step-function audit? audit-path events?]
-                  :or {tmax 5001
-                       table-xform identity
-                       step-function engine/sim-step
-                       audit? false}}]
-  (let [ctx (as-context path-or-ctx :table-xform table-xform :audit? audit?
-                   :audit-path audit-path :events? events?)] 
-  (-> (->> ctx
-           (->history-stream tmax step-function)
-           (end-of-day-history))
-      (merge-meta (meta ctx)))))
-
 (defn marathon-stream ;;refactored.
   "Create a stream of simulation states, indexed by time.
    Optionally, set the maximum simulation time, define transformations
@@ -753,7 +735,7 @@
 ;;a patch set for 13 years.
 
 (def all-outputs #{:history
-                   :locsamples
+                   :location-samples ;:locsamples
                    :locations
                    :depsamples
                    :deployment-records
@@ -803,9 +785,10 @@
 ;;        (println [:fix-memory-leak-when-serializing!])
 ;;        (write-history h hpath)))
 
-;; (defmethod emit-frame :location-samples [t frm]
-;;   (do (println [:spitting-location-samples lpath])
-;;       (tbl/records->file (->location-samples h) lpath)))
+(defmethod emit-frame :location-samples [t frm]
+   #_(do (println [:spitting-location-samples lpath])
+         (tbl/records->file (->location-samples h) lpath))
+  (frame->location-samples frm))
 
 (defmethod emit-frame :locations [t frm]
   (frame->location-records frm))
@@ -932,21 +915,6 @@
    [spork.sim.history
     spit-log
     spit-log!])
-
-
-(comment
-;;testing
-(def ep "C:\\Users\\tspoon\\Documents\\srm\\notionalbase.xlsx")
-;;local diff.
-(def ep "C:\\Users\\1143108763.C\\srm\\notionalbase.xlsx")
-
-(def ctx (load-context ep))
-
-(def h (take 2 (marathon-stream  ep)))
-(def l (first  h))
-(def r (second h))
-
-)
 
 ;;We can compare the event logs too...
 ;;See where history diverges.

@@ -6,31 +6,32 @@
 (defn ->color [[r g b]] (java.awt.Color. (int r) (int g) (int b)))
 (def palette
   (->>
-   {:DarkYellow	[255	255	0]
+   {:DarkYellow 	[255	255	0]
     :LightYellow	[255	255	153]
-    :DarkGreen	[0	102	0]
-    :LightGreen	[146	208	80]
-    :DarkBlue	[0	0	255]
-    :LightBlue	[0	255	255]
-    :red        [255 0 0]
-    :green      [0 176 80] 
-    :black      [0 0 0]
-    :orange     [237 125 49] ; [255 192 0]
-    :yellow     [255 255 0]
-    :white      [255 255 255]
-    }
+    :DarkGreen	 [0	102	0]
+    :LightGreen	 [146	208	80]
+    :DarkBlue	 [0	0	255]
+    :LightBlue	 [0	255	255]
+    :red         [255 0 0]
+    :green       [0 176 80] 
+    :black       [0 0 0]
+    :orange      [237 125 49] ; [255 192 0]
+    :yellow      [255 255 0]
+    :white       [255 255 255]
+    :DarkPurple	 [112	48	160]	
+    :LightPurple	[205	193	218]}
    (map (fn [[lbl c]] [lbl (->color c)]))
    (into {})))
 
 (def colors
-  {"MP_DA_C1"		:DarkBlue
-   "MA_DA_C1"		:DarkBlue
-   "MA_DA_C2"		:DarkBlue
-   "MD_DA_C1"		:DarkBlue
-   "MD_DA_C2"		:DarkBlue
-   "MP_NDA_C3"		:LightBlue
-   "MA_NDA_C3"		:LightBlue
-   "MD_NDA_C3"		:LightBlue
+  {"MP_DA_C1"		:DarkPurple
+   "MA_DA_C1"		:DarkPurple
+   "MA_DA_C2"		:DarkPurple
+   "MD_DA_C1"		:DarkPurple
+   "MD_DA_C2"		:DarkPurple
+   "MP_NDA_C3"		:LightPurple
+   "MA_NDA_C3"		:LightPurple
+   "MD_NDA_C3"		:LightPurple
    "R_C1"		:DarkGreen
    "R_C2"		:LightGreen
    "PB_C3"		:DarkYellow
@@ -45,19 +46,19 @@
 
 (def srm-style
   {"R_C2" {:background :LightGreen, :color :black},
-   "PL_C4" {:background :LightYellow, :color :black},
+   "PL_C4" {:background :LightYellow, :color :red},
    ":recovery" {:background :DarkYellow, :color :black},
-   "MA_DA_C1" {:background :DarkBlue, :color :white},
-   "MA_DA_C2" {:background :DarkBlue, :color :white},
-   "PB_C4" {:background :DarkYellow, :color :black},
-   "MP_DA_C1" {:background :DarkBlue, :color :white},
-   "MD_DA_C1" {:background :DarkBlue, :color :white},
-   "PT_C4" {:background :LightYellow, :color :black},
-   "MD_DA_C2" {:background :DarkBlue, :color :black},
-   "MD_NDA_C3" {:background :LightBlue, :color :black},
-   "MA_NDA_C3" {:background :LightBlue, :color :black},
+   "MA_DA_C1" {:background :DarkPurple, :color :white},
+   "MA_DA_C2" {:background :DarkPurple, :color :white},
+   "PB_C4" {:background :DarkYellow, :color :red},
+   "MP_DA_C1" {:background :DarkPurple, :color :white},
+   "MD_DA_C1" {:background :DarkPurple, :color :white},
+   "PT_C4" {:background :LightYellow, :color :red},
+   "MD_DA_C2" {:background :DarkPurple, :color :black},
+   "MD_NDA_C3" {:background :LightPurple, :color :black},
+   "MA_NDA_C3" {:background :LightPurple, :color :black},
    "R_C1" {:background :DarkGreen, :color :white},
-   "MP_NDA_C3" {:background :LightBlue, :color :black},
+   "MP_NDA_C3" {:background :LightPurple, :color :black},
    "PB_C3" {:background :DarkYellow, :color :black}
    "Reset"        {:background :red :color :black}
    "Train"        {:background :orange :color :black}
@@ -67,8 +68,9 @@
    "Available"  {:background :green   :color :black}
    "DeMobilization" {:background :red :color :black}
    "DeMobilizing" {:background :red :color :black}
-   "Deployed"     {:background :DarkBlue :color :white}
-   "Overlapping"   {:background :DarkBlue :color :white}
+   "Deployed"     {:background :DarkPurple :color :white}
+   "Overlapping"   {:background :DarkPurple :color :white}
+   "R_C3"  {:background :LightYellow, :color :red}
    })
 
 
