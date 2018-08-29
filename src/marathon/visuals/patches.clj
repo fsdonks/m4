@@ -167,7 +167,8 @@
 
 (defn ->color [[r g b]] (java.awt.Color. (int r) (int g) (int b)))
 (def palette
-  (->>
+   styling/palette
+  #_(->>
    {:DarkYellow	[255	255	0]
     :LightYellow	[255	255	153]
     :DarkGreen	[0	102	0]
@@ -184,8 +185,8 @@
    (map (fn [[lbl c]] [lbl (->color c)]))
    (into {})))
 
-(def colors
-  {"MP_DA_C1"		:DarkBlue
+(def colors styling/colors
+  #_{"MP_DA_C1"		:DarkBlue
    "MA_DA_C1"		:DarkBlue
    "MA_DA_C2"		:DarkBlue
    "MD_DA_C1"		:DarkBlue
@@ -404,7 +405,7 @@
    })
 
 (def html-style
-  {} #_(into {}
+  (into {}
         (for [[k {:keys [background color]}] srm-style]
           [k {:background (html-color background)
               :color      (html-color color)}])))
