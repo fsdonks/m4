@@ -84,11 +84,8 @@
   ["marathon.data.store"
    "marathon.data.protocols" ;sketchy.
    "marathon.fill.filldata"
-   "marathon.demand.demanddata"
-   "marathon.supply.unitdata"
    "marathon.policy.policydata"
    "marathon.data.cycle"
-   "marathon.data.period"   ;Note, this is duplicated in marathon.sim.policy
    ])
 
 ;;#High Level Simulation Functions in Marathon
