@@ -21,7 +21,7 @@
             [seesaw.core]
             )
   (:use [spork.util.mailbox] ;;should be able to deprecate this.
-        [marathon.processing.post]
+        ;[marathon.processing.post]
         [marathon.project]
         [clojure.repl])
   (:import [javax.swing JFrame UIManager]))
