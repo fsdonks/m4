@@ -19,6 +19,7 @@
                  [proc  "0.2.6-SNAPSHOT"]
                  [stoke "0.1.0-SNAPSHOT"]
                  [helmet "0.1.0-SNAPSHOT"]
+                 [demand_builder "0.1.0-SNAPSHOT"]
                  ;;external libs
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
                  [alembic "0.3.2"]
