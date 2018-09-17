@@ -12,7 +12,7 @@
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
-                 [spork "0.2.0.9-SNAPSHOT"]
+                 [spork "0.2.1.0-SNAPSHOT"]
                  ;;schemas / specs
                  [marathon-schemas "4.1.6-SNAPSHOT"]
                  ;;post processing.
