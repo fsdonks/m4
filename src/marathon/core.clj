@@ -13,6 +13,7 @@
                            [set :as set]]
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
+            [spork.data.orderedmap :as om]
             [spork.events  [observe :as obs]
                            [native :as swing-events]]
             [nightclub [core :as night]]
@@ -34,7 +35,7 @@
   (Thread/setDefaultUncaughtExceptionHandler
    (reify Thread$UncaughtExceptionHandler
      (uncaughtException [_ thread ex]
-       (when @noisy 
+       (when @noisy
          (binding [*out* out]
            (println ["Uncaught Exception on" (.getName thread) ex])))))))
 
@@ -68,7 +69,8 @@
                        :sorted sorted))
 
 (def project-menu-spec
-  {"Examine-Project"    "Provides a visual presentation of a project."
+  (om/ordered-hash-map
+   "Examine-Project"    "Provides a visual presentation of a project."
   ;  "Save-Project"    "Saves a project into the project path."
   ;  "Save-Project-As" "Saves a currently-loaded project into path."
  ;   "Convert-Project" "Convert a project from one format to another."
@@ -76,10 +78,11 @@
  ;   "Migrate-Project" "Port data from a legacy version of marathon to a new one."
    ; "Audit-Project"   "Audits the current project."
    ; "Audit-Projects"  "Audits multiple projects"
-    })
+    ))
 
 (def processing-menu-spec
-  {;"Clean"              "Cleans a run"
+  (om/ordered-hash-map
+   ;"Clean"              "Cleans a run"
    ;"Deployment-Vectors" "Analyzes deployments"
    ;;"Charts"             "Generate plots."
    "Capacity-Analysis"     "Performs a capacity run (default)"
@@ -93,10 +96,11 @@
    "Demand-Builder"        "Open the processing gui for the Demand Builder application."
 ;;   "Custom"             "Run a custom script on the project"
 ;;   "Eval"               "Evaluate an expression in the context"
-   })
+   ))
 
 (def debug-menu-spec
-  {"Debug-Run"
+  (om/ordered-hash-map
+   "Debug-Run"
       "Performs a capacity analysis with copious amounts of debug info."
     "Debug-Run-Heavy"
        "Capacity Analysis With ai-behavior level output."
@@ -107,16 +111,19 @@
  ;   "Migrate-Project" "Port data from a legacy version of marathon to a new one."
    ; "Audit-Project"   "Audits the current project."
    ; "Audit-Projects"  "Audits multiple projects"
-    })
+    ))
 
 (def scripting-menu-spec
-  {"Load-Script" "Load a clojure script into the environment."})
+  (om/ordered-hash-map
+   "Load-Script" "Load a clojure script into the environment."))
 (def help-menu-spec
-  {"Search-For" "Interactive Help"})
+  (om/ordered-hash-map
+   "Search-For" "Interactive Help"))
 
 (def preferences-menu-spec
-  {"Update" "Check for updates to Marathon."
-   "Eval"   "Evaluate an expression in the context"})
+  (om/ordered-hash-map
+   "Update" "Check for updates to Marathon."
+   "Eval"   "Evaluate an expression in the context"))
 
 (defn reactive-menu-system
   "Given a map of menu specs, builds a menu-system model with an integrated
