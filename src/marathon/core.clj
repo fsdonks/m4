@@ -3,9 +3,8 @@
                         [io :as io]]
             [helmet [core :as helm]]
             [stoke  [core :as stoke]
-                    [io :as stokeio]
-                     ;[scraper :as scraper]
-             ]
+             [io :as stokeio]]
+            [demand_builder [core :as builder]]
             [marathon.processing [highwater :as hw]]
             [marathon [run :as run] [demo :as demo]]
             [marathon.analysis [requirements :as requirements]]
@@ -20,9 +19,7 @@
             [nightcode [repl :as repl]]
             [seesaw.core]
             )
-  (:use [spork.util.mailbox] ;;should be able to deprecate this.
-        ;[marathon.processing.post]
-        [marathon.project]
+  (:use [marathon.project]
         [clojure.repl])
   (:import [javax.swing JFrame UIManager]))
 
@@ -43,7 +40,7 @@
 
 (def  path-history   (atom [(System/getProperty "user.dir")]))
 (defn add-path! [p]  (swap! path-history conj p))
-(defn active-path [] (last @path-history))  
+(defn active-path [] (last @path-history))
 
 (defn select-file []
   (let [p (gui/select-file (active-path))]
@@ -58,86 +55,20 @@
 (defn notify [msg]
   (fn [] (gui/alert msg)))
 
-(defn not-implemented 
+(defn not-implemented
   ([msg] (fn [] (gui/alert (str msg " Not Implemented"))))
   ([] (not-implemented "")))
 
 
-;project-manager is a simple agent that maintains internal state. 
-;we design the event handling functions as simple events that the user enters,
-;can communicate them to project-manager. 
-
-;Project-manager then routes tasks, using the currently-loaded project as its 
-;environment. 
-(defn project-mvc [routes init-state]
-  {:model (agent {:state init-state
-                  :routes routes})
-   :view nil 
-   :control route-message})
-
-(def sample-path 
-  "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling")
-(def sample 
-  "C:\\Users\\thomas.spoon\\Documents\\Marathon_NIPR\\OngoingDevelopment\\smallsampling\\MPI_3.760298326.xlsm")
-
 ;This is a hack, need a more elegant solution.
-(defn tbl->view [t & {:keys [sorted] :or 
-                       {sorted true}}]    
+(defn tbl->view [t & {:keys [sorted] :or
+                       {sorted true}}]
     (gui/->swing-table (tbl/table-fields t)
-                       (tbl/table-rows t) 
+                       (tbl/table-rows t)
                        :sorted sorted))
 
-#_(defn repl-panel
-  "Creates a swing-repl that we can send code to for remote 
-   evaluation, or allow the user to interactively eval 
-   expressions."
-  ([opts]
-   (org.dipert.swingrepl.main/make-repl-jconsole
-    (merge org.dipert.swingrepl.main/default-opts opts)))
-  ([w h]
-   (doto (repl-panel {})
-     (.setPreferredSize (java.awt.Dimension. w h))))
-  ([w h opts]
-   (doto (repl-panel opts)
-         (.setPreferredSize (java.awt.Dimension. w h)))))
-
-;;Probably need to modify this....
-(def project-routes 
-  {:clear-project (message-handler 
-                    (assoc-in env 
-                        [:state :current-project] {})) ;state->msg->state   
-   :load-project (message-handler
-                   (assoc-in env 
-                      [:state :current-project]
-                        (load-project msg-data))) ;state->msg->state   
-   :save-project (message-handler  
-                   (pass-through #(save-project % msg-data))) ;state->msg->state
-   
-   :view-project (effect (not-implemented :view-project)) ;state->msg->state
-   
-   :view-table   (pass-through 
-                     #(gui/view (tbl->view (get-table (:current-project state)
-                                           msg-data)
-                                :sorted true)
-                                :title (str msg-data))) ;state->msg->state   
-   :add-table    (message-handler
-                   (let [[name table] msg-data]
-                     (assoc-in env [:state :current-project] 
-                       (add-table (:current-project state)
-                          msg-data))))}) ;state->msg->state
-
-(comment 
-
-
-  (def project-manager
-    (project-mvc (merge default-routes project-routes)   {}))
-  
-  (def sample-table {:First ["Tom"]
-                     :Last  ["Spoon"]})
-)
-
-(def project-menu-spec  
-  {"Examine-Project"    "Provides a visual presentation of a project."   
+(def project-menu-spec
+  {"Examine-Project"    "Provides a visual presentation of a project."
   ;  "Save-Project"    "Saves a project into the project path."
   ;  "Save-Project-As" "Saves a currently-loaded project into path."
  ;   "Convert-Project" "Convert a project from one format to another."
@@ -150,7 +81,7 @@
 (def processing-menu-spec
   {;"Clean"              "Cleans a run"
    ;"Deployment-Vectors" "Analyzes deployments"
-   ;;"Charts"             "Generate plots."   
+   ;;"Charts"             "Generate plots."
    "Capacity-Analysis"     "Performs a capacity run (default)"
    "Requirements-Analysis" "Performs a Requirements Run"
    "PostProcessed-Run"     "Capacity Analysis, post-process using Proc, rendering dwell/fill charts"
@@ -159,11 +90,12 @@
    "Stochastic-Demand"     "Generate stochastic demand files from a casebook."
    "Compute-Peaks"         "Extract the peak concurrent demands from a folder."
    "Debug-Run"             "Runs the capacity analysis with output directed toward a file"
+   "Demand-Builder"        "Open the processing gui for the Demand Builder application."
 ;;   "Custom"             "Run a custom script on the project"
 ;;   "Eval"               "Evaluate an expression in the context"
    })
 
-(def debug-menu-spec  
+(def debug-menu-spec
   {"Debug-Run"
       "Performs a capacity analysis with copious amounts of debug info."
     "Debug-Run-Heavy"
@@ -188,14 +120,14 @@
 
 (defn reactive-menu-system
   "Given a map of menu specs, builds a menu-system model with an integrated
-   event stream that has a unique event for each menu item selected.  Returns 
+   event stream that has a unique event for each menu item selected.  Returns
    an event stream that is a union or merge of all the menu events."
   [specs]
   (let [menus (reduce (fn [acc [name spec]]
-                        (assoc acc name 
+                        (assoc acc name
                                (gui/map->reactive-menu name spec))))]
-    (mvc/make-modelview nil menus 
-      {:menu-events (obs/multimerge-obs (vals menus))})))       
+    (mvc/make-modelview nil menus
+      {:menu-events (obs/multimerge-obs (vals menus))})))
 
 (defn yes-no-box [msg]
   (gui/swing! (seesaw.core/confirm msg :option-type :yes-no)))
@@ -205,10 +137,10 @@
   (str case-name \_ future ".txt"))
 
 (defn spit-tables [futures path]
-  (let [root-dir (io/as-directory path)]        
+  (let [root-dir (io/as-directory path)]
     (doseq [[case-key tbl] futures]
       (let [file-name (casekey->filename case-key)]
-        (io/hock  (io/relative-path root-dir [file-name]) 
+        (io/hock  (io/relative-path root-dir [file-name])
                   (tbl/table->tabdelimited tbl))))))
 
 (defmacro with-alert [alert body]
@@ -293,13 +225,6 @@
     (request-path [wbpath "Please select the location of a valid MARATHON DemandTrends file."]
                   (high-water wbpath)))
 
-#_(defn interests-dialogue [wbpath]
-  (if  @(future (gui/yes-no-box "Would you like to select an interests file?"))
-    (request-path [wbpath "Please select the location of a valid MARATHON interests file."]
-                  (clojure.edn/read-string (slurp wbpath)))
-    (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
-        branches/branches)))
-
 (defn interests-dialogue [wbpath]
   (if (yes-no-box "Would you like to select an interests file?")
     (request-path [wbpath "Please select the location of a valid MARATHON interests file."]
@@ -321,14 +246,14 @@
                  :interests   interests)))
 
 (defn post-processed-run-dialogue []
-    (request-path [wbpath "Please select the location of a valid MARATHON project file."]  
+    (request-path [wbpath "Please select the location of a valid MARATHON project file."]
                   (post-processed-run wbpath)))
 
 (defn requirements-analysis [wbpath]
   (requirements/requirements-run wbpath))
 
 (defn requirements-analysis-dialogue []
-    (request-path [wbpath "Please select the location of a valid MARATHON requirements project file."]  
+    (request-path [wbpath "Please select the location of a valid MARATHON requirements project file."]
            (requirements-analysis wbpath)))
 
 (defn debug-run-dialogue []
@@ -342,62 +267,71 @@
            (capacity-analysis wbpath)))))))
 
 (defn debug-run-dialogue! []
-  (request-path [wbpath "Please select the location of a valid MARATHON project file."] 
+  (request-path [wbpath "Please select the location of a valid MARATHON project file."]
      (marathon.ces.core/debugging!
       (capacity-analysis wbpath)
       )))
 
 (defn examine-project-dialogue []
-  (request-path [wbpath "Please select the location of a valid MARATHON project file."] 
+  (request-path [wbpath "Please select the location of a valid MARATHON project file."]
      (run/examine-project wbpath)))
+
+;;todo:
+;;map out demand-builder subtasks...
+(defn demand-builder-dialogue
+  []
+  (builder/gui :exit? false))
 
 ;;commands that have a single meaning; typically dialogue-driven.
 (def commands
-  {:stochastic-demand  '(stoch-demand-dialogue)
-   :compute-peaks      '(compute-peaks-dialogue) 
-   :say-hello          '(println "hello!")
-   :capacity-analysis  '(capacity-analysis-dialogue)
-   :requirements-analysis  '(requirements-analysis-dialogue)
-   :debug-run          '(debug-run-dialogue)
-   :examine-project    '(examine-project-dialogue)
-   :search-for         '(pprint/pprint
+  '{:stochastic-demand  (stoch-demand-dialogue)
+    :compute-peaks      (compute-peaks-dialogue)
+    :say-hello          (println "hello!")
+    :capacity-analysis  (capacity-analysis-dialogue)
+    :requirements-analysis  (requirements-analysis-dialogue)
+    :debug-run          (debug-run-dialogue)
+    :examine-project    (examine-project-dialogue)
+    :search-for         (pprint/pprint
                          (apropos
                           (gui/input-box
-                                    :prompt "Enter A Topic")))
-   :postprocessed-run  '(post-processed-run-dialogue) 
-   :load-script        '(load-file
+                           :prompt "Enter A Topic")))
+    :postprocessed-run  (post-processed-run-dialogue)
+    :load-script        (load-file
                          (gui/input-box
                           :prompt "Select a Clojure script"))
-   :high-water          '(high-water-dialogue)
-   :high-water-batch-from '(high-water-batch-from-dialogue)})
+    :high-water          (high-water-dialogue)
+    :high-water-batch-from (high-water-batch-from-dialogue)
+    :demand-builder        (demand-builder-dialogue)})
 
 ;;commands that have a file-path supplied.
+;;TODO: look into shifting from map-dispatch
+;;to multimethods.  Think that would be easier
+;;to extend.
 (defn contextual-command [e]
   (when-let [cmd (:command e)]
     (let [path (:path e)]
       (case cmd
         :stochastic-demand      `(~'stoch-demand ~path)
-        :compute-peaks          '(compute-peaks-dialogue) 
+        :compute-peaks          '(compute-peaks-dialogue)
         :capacity-analysis      `(~'capacity-analysis ~path)
         :requirements-analysis  `(~'requirements-analysis ~path)
         :debug-run              `(~'debug-run ~path)
         :examine-project        `(~'run/examine-project ~path)
-        :postprocessed-run      `(~'post-processed-run ~path) 
+        :postprocessed-run      `(~'post-processed-run ~path)
         :load-script            `(~'load-file ~path)
         :high-water             `(~'high-water ~path)
         :high-water-batch-from  `(~'high-water-batch-from ~path)
-       `(throw (Exception. (str [:unknown-command! ~e])))))))
+        `(throw (Exception. (str [:unknown-command! ~e])))))))
 
 ;;holy wow this is terrible.  must be a better way...
 (defn menu-handler
-  "Default menu-handling function.  Handles events coming from the 
-   swing menu, which are typically just keywords, and dispatches them 
+  "Default menu-handling function.  Handles events coming from the
+   swing menu, which are typically just keywords, and dispatches them
    to the appropriate command."
-  [rpl]
-  (fn [e]
-    (let [expr (or (get commands e)
-                   (contextual-command e))]
-      (repl/echo-repl! expr))))
+  [e]
+  (let [expr (or (get commands e)
+                 (contextual-command e))]
+    (repl/echo-repl! expr)))
 
 ;;provide a popup menu that shows processing options for a selected file.
 (defn project-context-menu
@@ -407,13 +341,12 @@
   [{:keys [name file] :as nd}]
   (let [{:keys [view control]}
         (gui/map->reactive-menu "Processing"
-                                processing-menu-spec :popup? true)
-        handle-menu (menu-handler nil)]
+                                processing-menu-spec :popup? true)]
     (->> control
          :event-stream
          (obs/map-obs (fn [e] {:path (io/fpath file)
                                :command e}))
-         (obs/subscribe #(handle-menu %)))
+         (obs/subscribe menu-handler))
     view))
 
 (def pop-fn (atom project-context-menu))
@@ -468,9 +401,8 @@
                                                       (-> help-menu    :control :event-stream)
                                                       (-> scripting-menu :control :event-stream)
                                                       ])
-                 handle-menu    (menu-handler nil)
                  _                 (->> menu-events
-                                        (obs/subscribe  #(handle-menu %)))
+                                        (obs/subscribe  menu-handler))
                  ]
              (night/attach! :window-args
                             {:title   (str "MARATHON " +version+)
