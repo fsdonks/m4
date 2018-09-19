@@ -12,14 +12,19 @@
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.8.0"]
 ;                 [org.clojure.contrib/standalone "1.3.0-alpha4"]
-                 [spork "0.2.1.0-SNAPSHOT"]
+                 [spork "0.2.1.1-SNAPSHOT"]
                  ;;schemas / specs
-                 [marathon-schemas "4.1.6-SNAPSHOT"]
+                 [marathon-schemas "4.1.6-SNAPSHOT"
+                  :exclusions [spork]]
                  ;;post processing.
-                 [proc  "0.2.6-SNAPSHOT"]
-                 [stoke "0.1.0-SNAPSHOT"]
-                 [helmet "0.1.0-SNAPSHOT"]
-                 [demand_builder "0.1.0-SNAPSHOT"]
+                 [proc  "0.2.6-SNAPSHOT"
+                  :exclusions [spork]]
+                 [stoke "0.1.0-SNAPSHOT"
+                  :exclusions [spork]]
+                 [helmet "0.1.0-SNAPSHOT"
+                  :exclusions [spork]]
+                 [demand_builder "0.1.0-SNAPSHOT"
+                  :exclusions [spork]]
                  ;;external libs
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
                  ;[alembic "0.3.2"]
