@@ -31,9 +31,9 @@
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
                  ;;spec libs, compatible with clojure 1.8
                  ;;debating shifting to 1.9, spork is updated..
-                 [clojure-future-spec "1.9.0-beta4"]
-                 [org.clojure/test.check "0.9.0"]
-                 [irresponsible/spectra "0.2.1"]
+                 ;; [clojure-future-spec "1.9.0-beta4"]
+                 ;; [org.clojure/test.check "0.9.0"]
+                 ;; [irresponsible/spectra "0.2.1"]
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src" "../spork/src" "../nightclub/src" "../proc/src"
