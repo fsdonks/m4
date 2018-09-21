@@ -13,7 +13,7 @@
                            [set :as set]]
             [spork.cljgui.components [swing :as gui]]
             [spork         [mvc :as mvc]]
-            [spork.data.orderedmap :as om]
+            [spork.data    [orderedmap :as ordered]]
             [spork.events  [observe :as obs]
                            [native :as swing-events]]
             [nightclub [core :as night]]
@@ -69,7 +69,7 @@
                        :sorted sorted))
 
 (def project-menu-spec
-  (om/ordered-hash-map
+  (ordered/ordered-hash-map
    "Examine-Project"    "Provides a visual presentation of a project."
   ;  "Save-Project"    "Saves a project into the project path."
   ;  "Save-Project-As" "Saves a currently-loaded project into path."
@@ -81,7 +81,7 @@
     ))
 
 (def processing-menu-spec
-  (om/ordered-hash-map
+  (ordered/ordered-hash-map
    ;"Clean"              "Cleans a run"
    ;"Deployment-Vectors" "Analyzes deployments"
    ;;"Charts"             "Generate plots."
@@ -99,7 +99,7 @@
    ))
 
 (def debug-menu-spec
-  (om/ordered-hash-map
+  (ordered/ordered-hash-map
    "Debug-Run"
       "Performs a capacity analysis with copious amounts of debug info."
     "Debug-Run-Heavy"
@@ -114,14 +114,14 @@
     ))
 
 (def scripting-menu-spec
-  (om/ordered-hash-map
+  (ordered/ordered-hash-map
    "Load-Script" "Load a clojure script into the environment."))
 (def help-menu-spec
-  (om/ordered-hash-map
+  (ordered/ordered-hash-map
    "Search-For" "Interactive Help"))
 
 (def preferences-menu-spec
-  (om/ordered-hash-map
+  (ordered/ordered-hash-map
    "Update" "Check for updates to Marathon."
    "Eval"   "Evaluate an expression in the context"))
 

@@ -554,7 +554,7 @@
         root (or root (proj/project-path proj))
         event-saver (when events?
                       (init-frame-saver
-                       :event-log (str root "eventlog.txt") :strict? true)) 
+                       :event-log (io/file-path root "eventlog.txt") :strict? true)) 
         ctx  (load-context proj :table-xform table-xform
                                 :lastday lastday
                                 :observer-routes observer-routes
