@@ -18,6 +18,7 @@
                            [native :as swing-events]]
             [nightclub [core :as night]]
             [nightcode [repl :as repl]]
+            [proc [demandanalysis :as da]]
             [seesaw.core]
             )
   (:use [marathon.project]
@@ -288,6 +289,23 @@
 (defn demand-builder-dialogue
   []
   (builder/gui :exit? false))
+
+
+;;sparkcharts...
+;;currently mimicing the api from da.
+(comment
+(defn emit-spark-charts
+  "Load spark charts from a marathon audit trail directory specified by in and
+   save all spark charts to the out directory.
+   Calling an optional function f on each chart before saving."
+  [in out & {:keys [group-fn f phase-lines? bounds]
+             :or {group-fn (fn [s] "All")
+                  f identity
+                  phase-lines? true
+                  bounds nil}}]
+  (da/dump-spark-charts (io/as-directory outdir)
+                        (io/as-directory outdir)))
+)
 
 ;;commands that have a single meaning; typically dialogue-driven.
 (def commands
