@@ -78,12 +78,15 @@
             :infminus ;cyclelength is infinite, but cycletime is effectively less than targetted cycle.
             :infplus  ;cyclelength is infinite, cycletime is > than targetting cycle.
             )
-          (throw (Exception. "unknown length case!")))))))               
+          (throw (Exception. "unknown length case!")))))))
 
 
 ;;Tom change 24 Sep 2012 -> added to deal with infinite cycle transitions.  Provides a projection function to determine
 ;;how far a unit will project, proportionally, onto a cycle it;;s changing to.
+
 (defn compute-proportion [t lengtha lengthb]
+  (throw (ex-info "DEPRECATED" '{:function marathon.ces.policyops/compute-proportion
+                                 :prefer   marathon.ces.behavior/compute-proportion}))
   (case (length-type t lengtha lengthb)
     :normal (/ t lengtha) ;;produces (ctA * clB)/Cla
     :equiv  -1     ;;infinite, not defined
@@ -132,9 +135,12 @@
                (ensure-positive #(str "nonpositive in modified-routes" 
                                       {:from from :to to :overlap overlap :deltas deltas :x %}))
                (vector from to)))
-        rts))        
+        rts))
 
+;;TODO DEPRECATED, remove.
 (defn compute-cycle-length [p]
+  (throw (ex-info "DEPRECATED" '{:function marathon.ces.policyops/compute-cycle-length
+                                 :prefer   marathon.data.protocols/compute-cycle-length}))
   (let [{:keys [startstate endstate positiongraph]} p
         res  (graph/depth-first-search positiongraph startstate endstate {:weightf graph/arc-weight})
         lngth (get-in res [:distance endstate])]
@@ -704,7 +710,10 @@
 
 ;;computes the cycle length assuming startnode and end-node are
 ;;adjacent members of a cycle.
+;;TODO remove, DEPRECATED.
 (defn cycle-length [g startnode endnode]
+  (throw (ex-info "DEPRECATED" '{:function marathon.ces.policyops/cycle-length
+                                 :prefer   marathon.data.protocols/compute-cycle-length}))
   (when-let [w (graph/arc-weight g endnode startnode)]
     (-> (graph/depth-first-search g startnode endnode {:weightf graph/arc-weight})
         (:distance)

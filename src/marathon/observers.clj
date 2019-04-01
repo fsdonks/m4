@@ -315,19 +315,19 @@
 ;;sense to knock the :changed component out of the demandstore
 ;;and just have the demand management register changes to the
 ;;demand-watch directly.  Right now, that'd require some architectural
-;;munging, not a headache, but a little redesign. 
+;;munging, not a headache, but a little redesign.
 (defn commit-demands! [ctx edata  _]
   (if-let [demands (some-n? (store/gete ctx :DemandStore :changed))]
       (-> ctx
           (store/assoce      :demand-watch :demands  demands)
-          ;;clear the changed demand component in the demandstore.          
-          )      
+          ;;clear the changed demand component in the demandstore.
+          )
     ctx))
 
 ;;Clear out the observed demand changes at the beginning of each day by dropping
 ;;the component.
 (defn drop-demands! [ctx _ _]
-  (-> ctx 
+  (-> ctx
       (store/assoce :demand-watch :demands nil)
       (store/assoce :DemandStore :changed {})))
 
@@ -409,16 +409,16 @@
         ;_ (println [:position name frompos topos])
         ]
     (do (if @storage
-          (swap! storage  #(push-cell % topos))            
+          (swap! storage  #(push-cell % topos))
           (reset! storage (->cell frompos topos)))
         ctx)))
 
 ;;(defproperty movement)
-(defn movement-handler [ctx edata _] 
+(defn movement-handler [ctx edata _]
   (let [[name fromloc toloc] (:data edata)
         [ctx storage]        (core/get-ephemeral ctx  name :location-delta nil)]
     (do (if @storage
-          (swap! storage  #(push-cell % toloc))            
+          (swap! storage  #(push-cell % toloc))
           (reset! storage (->cell fromloc toloc)))
         ctx)))
 
@@ -440,20 +440,20 @@
      ~@expr))
 (defn state-handler [ctx edata _] 
   (unrolled-let
-   [[name fromloc toloc] (:data edata)        
+   [[name fromloc toloc] (:data edata)
     [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
    (do (if @storage
-         (swap! storage  #(push-cell % toloc))            
+         (swap! storage  #(push-cell % toloc))
          (reset! storage (->cell fromloc toloc)))
        ctx)))
 )
 
 ;legacy version looks cleaner....
-(defn state-handler [ctx edata _] 
-  (let [[name fromloc toloc] (:data edata)        
+(defn state-handler [ctx edata _]
+  (let [[name fromloc toloc] (:data edata)
          [ctx storage]        (core/get-ephemeral ctx  name :state-delta nil)]
     (do (if @storage
-          (swap! storage  #(push-cell % toloc))            
+          (swap! storage  #(push-cell % toloc))
           (reset! storage (->cell fromloc toloc)))
         ctx)))
 
@@ -464,7 +464,7 @@
     (persistent! coll)
     coll))
 
-;;update all of the persistent crud 
+;;update all of the persistent crud
 (defn commit!
   [ctx xs]
   (reduce (fn [ctx c]
