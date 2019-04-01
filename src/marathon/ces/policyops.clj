@@ -80,24 +80,10 @@
             )
           (throw (Exception. "unknown length case!")))))))
 
-
-;;Tom change 24 Sep 2012 -> added to deal with infinite cycle transitions.  Provides a projection function to determine
-;;how far a unit will project, proportionally, onto a cycle it;;s changing to.
-
-(defn compute-proportion [t lengtha lengthb]
-  (throw (ex-info "DEPRECATED" '{:function marathon.ces.policyops/compute-proportion
-                                 :prefer   marathon.ces.behavior/compute-proportion}))
-  (case (length-type t lengtha lengthb)
-    :normal (/ t lengtha) ;;produces (ctA * clB)/Cla
-    :equiv  -1     ;;infinite, not defined
-    :infplus 0.9   ;;scaling factor is arbitrary
-    :infminus -1)) 
-
 (defn project-cycle-time [proportion t length]
   (cond  (neg? proportion) t
          (pos? proportion) (* proportion length)
          :else (throw (Exception. "Uknown case for projecting cycle time!"))))
-    
 
 ;;Aux function, may be able to get rid of this...
 (defn get-delta [position deltas] (get deltas position 0))
@@ -136,16 +122,6 @@
                                       {:from from :to to :overlap overlap :deltas deltas :x %}))
                (vector from to)))
         rts))
-
-;;TODO DEPRECATED, remove.
-(defn compute-cycle-length [p]
-  (throw (ex-info "DEPRECATED" '{:function marathon.ces.policyops/compute-cycle-length
-                                 :prefer   marathon.data.protocols/compute-cycle-length}))
-  (let [{:keys [startstate endstate positiongraph]} p
-        res  (graph/depth-first-search positiongraph startstate endstate {:weightf graph/arc-weight})
-        lngth (get-in res [:distance endstate])]
-    (+ lngth (graph/arc-weight positiongraph endstate startstate))))    
-
 
 (defn altered-routes [routes deltas]
   `[~@ (for [[from to time] routes]
@@ -707,18 +683,6 @@
 ;;remove excess....
 (defn register-ghost-template [name  maxbog & {:keys [overlap]}]
    (ghost :name name :stats {:maxbog maxbog :maxdwell +inf+ :mindwell 0 :startdeployable 0 :stopdeployable +inf+}))
-
-;;computes the cycle length assuming startnode and end-node are
-;;adjacent members of a cycle.
-;;TODO remove, DEPRECATED.
-(defn cycle-length [g startnode endnode]
-  (throw (ex-info "DEPRECATED" '{:function marathon.ces.policyops/cycle-length
-                                 :prefer   marathon.data.protocols/compute-cycle-length}))
-  (when-let [w (graph/arc-weight g endnode startnode)]
-    (-> (graph/depth-first-search g startnode endnode {:weightf graph/arc-weight})
-        (:distance)
-        (get endnode)
-        (+ w))))      
 
 ;;adding a bunch of default templates, these are basically just
 ;;aliases....
