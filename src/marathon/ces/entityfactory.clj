@@ -435,35 +435,6 @@
                 (map identity #_inc))
              units)))
 
-;;legacy
-#_(defn distribute-cycle-times [units policy]
-    (let [clength (generic/cycle-length policy)
-          clength (if (> clength +max-cycle-length+) +default-cycle-length+ clength)
-          uniform-interval (atom (compute-interval clength (count units)))
-          last-interval (atom (- @uniform-interval))
-          remaining     (atom (count units))
-          next-interval (fn [] (let [nxt (long (+ @last-interval @uniform-interval))
-                                     nxt (if (> nxt clength) 0 nxt)]
-                                 (do (when (< @remaining clength)
-                                       (reset! uniform-interval 
-                                               (compute-interval clength  @remaining)))
-                                     (reset! last-interval nxt)
-                                     (swap! remaining dec)
-                                     nxt)))]                                              
-      (reduce (fn [acc  unit]
-                (let [cycletime (next-interval)
-                      unit      (assoc unit :cycletime cycletime)]
-                  (do (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")
-                      (conj acc unit))))
-              []
-              units)))
-
-
-    
-    
-
-
-
 ;;This is just a stub.  We currently hardwire behaviors, 
 ;;but will allow more extension in the future.  The legacy 
 ;;behavior system required an inherited object model implementation, 

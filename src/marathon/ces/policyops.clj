@@ -659,6 +659,15 @@
                                 +inf+)))))
              m m))
 
+;;users can specify a cyclelength to use for determining proportions.
+;;The caveat is that the prescribed length must be <= the pathlength
+;;between startstate and endstate for purposes of computing normalized
+;;proportions for policy changes..
+(defn add-finite-cyclelength [p deltas]
+  (if-let [fl  (deltas :cyclelength)]
+    (assoc p :finite-cyclelength fl)
+    p))
+
 ;;Note: if we don't go through this template, we don't get deployable times set,
 ;;we we end up with policies that can't deploy.  I had the same problem with
 ;;AdaptAC.
@@ -668,16 +677,12 @@
                 stats      (if overlap (assoc stats :overlap overlap) stats)
                 stats      (clamp-stats name stats)
                 base       (ctor :deltas deltas :stats stats)
-                baselength (core/compute-cycle-length base)
-                ;;users can specify a cyclelength to use for determining proportions.
-                ;;The caveat is that the prescribed length must be <= the pathlength
-                ;;between startstate and endstate for purposes of computing normalized
-                ;;proportions for policy changes..
-                prescribed-length (deltas :cyclelength +inf+)
+                baselength (core/compute-cycle-length base)            
                ]
             (-> base
                 (core/set-deployable (:startdeployable stats) (:stopdeployable stats))
-                (assoc  :cyclelength (min prescribed-length baselength +inf+))))
+                (assoc  :cyclelength (min baselength +inf+))
+                (add-finite-cyclelength deltas)))
           (throw (Exception. (str "Unknown template: " name))))
         (catch Exception e
           (throw (Exception. (str  [:trying   [name maxdwell mindwell maxbog startdeployable stopdeployable]
