@@ -163,7 +163,10 @@
         es      (store/select-entities ctx
                     :from   [:unit-entity]
                     :where #(and (src-map (:src %))
-                                 (marathon.ces.unit/can-non-bog? %)))]
+                                 (marathon.ces.unit/can-non-bog? %)
+                                 (or (= "RC" (:component %))
+                                        (= "NG" (:component %)))
+                                 ))]
     (into {}
           (for [[src xs]  (group-by :src es)]
             [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))]))))
@@ -959,7 +962,7 @@
 ;;Find all deployable units that match the category "SRC=SRC3"
 (defn find-supply [{:keys [src cat order-by where collect-by] :or 
                     {src :any cat :default} :as env} ctx] 
-    (let [order-by (eval-order    order-by)
+  (let [order-by (eval-order    order-by)
           where    (eval-filter   where)
           t        (core/get-time ctx)] 
       (with-query-env env                                                                           
@@ -1018,10 +1021,10 @@
 ;;apparently identical.
 (def hld [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 
+(def min-dwell [when-fenced #_when-followon min-proportional-dwell min-unit-weight])
 ;;new rules....should be able to compose these...
 ;;By default, we get substituable, globally-available supply using our
 ;;existing query.  
-
 
 ;;Example rules:
 
