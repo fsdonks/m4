@@ -1017,6 +1017,7 @@
 ;; title32	[(where-compo "NG") mindwell]
 
 (def uniform  [when-fenced #_when-followon max-proportional-dwell min-unit-weight])
+(def min-dwell  [when-fenced #_when-followon min-proportional-dwell min-unit-weight])
 (def ac-first [when-fenced #_when-followon AC max-proportional-dwell min-unit-weight])
 (def rc-first [when-fenced #_when-followon RC max-proportional-dwell min-unit-weight])
 (def ng-first [when-fenced #_when-followon NG max-proportional-dwell min-unit-weight])

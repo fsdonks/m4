@@ -275,7 +275,8 @@
            "NG"        query/ng-first
            "RCAD"      query/RCAD
            "RCAD-BIG"  query/RCAD-BIG
-           "UNIFORM"   query/uniform}]
+           "UNIFORM"   query/uniform
+           "MIN-DWELL" query/min-dwell}]
     (reduce-kv (fn [acc nm r]
                  (assoc acc (keyword nm) r))
                m m)))
