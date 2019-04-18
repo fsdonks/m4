@@ -290,8 +290,12 @@
 ;;Tom Hack 26 May 2016
 ;;If we're not SRM demand, i.e. the category is something other than
 ;;SRM, we use the default category so as to not restrict our fill.
-
-(def restricted-categories #{"SRM" :SRM "NonBOG" :NonBOG})
+(def restricted-categories 
+  {"SRM" "SRM" 
+   :SRM  :SRM
+   "NonBOG" "NonBOG" 
+   "NonBOG-RC-Only" "NonBOG" 
+   :NonBOG :NonBOG})
 
 ;;Ensures that we only allow StartStates
 ;;that exist in the unit's policy....
@@ -308,7 +312,7 @@
     (let [[src groups] supply-category]
       (groups (:demandgroup d)))
     (let [c (get d :category :default)]
-      (if (restricted-categories c) c
+      (or (when (restricted-categories c) c)
           :default))))
 
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
