@@ -158,11 +158,13 @@
 ;;that will unintentionally drag additional supply into the
 ;;mix that we don't want.
 (defn compute-nonbog [{:keys [src cat order-by where collect-by] :or 
-                      {src :any cat :default} :as env} ctx]
+                       {src :any cat :default where identity} :as env}
+                      ctx]
   (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
         es      (store/select-entities ctx
                     :from   [:unit-entity]
-                    :where #(and (src-map (:src %))
+                    :where #(and (where %)
+                                 (src-map (:src %))
                                  (marathon.ces.unit/can-non-bog? %)))]
     (into {}
           (for [[src xs]  (group-by :src es)]
@@ -176,14 +178,22 @@
 ;;deployable supply or not).
 (def computed-categories
   {"NonBOG"
-     (fn [env  ctx]
-       (lazy-merge
-        (compute-nonbog env ctx) ;;<-merge these in
-        (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                            :deployable-buckets
-                            :default])))
-   ;"Title32" compute-title32
-   })
+      (fn [env ctx]
+          (lazy-merge
+            (compute-nonbog env ctx) ;;<-merge these in
+            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                :deployable-buckets
+                                :default])))   
+   "NonBOG-RC-Only"
+        (fn [{:keys [where] :as env}  ctx]
+          (lazy-merge
+            (compute-nonbog 
+              (assoc env :where 
+                (fn [u] (not= (:component u) "AC")))
+               ctx) ;;<-merge these in
+            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                :deployable-buckets
+                                :default])))})
 
 (defn computed [cat] (computed-categories cat))
 

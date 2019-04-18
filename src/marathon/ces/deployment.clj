@@ -34,8 +34,10 @@
 ;;easy way to rewire common states.
 (def demand-effect-categories
   {"NonBOG" {:wait-time   999999
-             :wait-state  :waiting #_#{:waiting :non-bogging}}})
-
+             :wait-state  :waiting}
+   "NonBOG-RC-Only" 
+       {:wait-time   999999
+        :wait-state  :waiting}})
 
 (defn location-based-policy? [d]
   (and (:StartState d) (:EndState d)))
@@ -61,7 +63,7 @@
         effects (wait-based-policy? demand)
         ]
     (cond (location-based-policy? demand)  (u/location-based-deployment unit demand ctx) ;;allow location to override policy.
-          effects               (u/pseudo-deploy unit effects t ctx) ;;nonbog and the like.
+          effects      (u/pseudo-deploy unit effects t ctx) ;;nonbog and the like.
           followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
                              newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
                          (u/re-deploy-unit  newunit  demand t newctx))
@@ -78,7 +80,8 @@
 ;;This provides forensics if our deployment throws an exception,
 ;;not worried about collecting garbage.  Used in deploy-unit only.
 (def last-deploy (atom nil))
-(defn non-bog? [d] (= (:category d) "NonBOG"))
+;;this is hacky; should be data-driven.
+(defn non-bog? [d] (#{"NonBOG" "NonBOG-RC-Only"} (:category d)))
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
 (defn deploy-unit

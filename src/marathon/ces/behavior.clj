@@ -2481,6 +2481,12 @@
 
 ;;Another potential garbage leak!
 (def wbm (atom nil))
+(defn compute-wait-position [unit]
+  (let [p           (:policy    unit)
+        current-pos (:positionpolicy unit)
+        ct          (:cycletime unit)]
+    (protocols/get-position p ct)))
+
 (befn wait-based-beh {:keys [entity statedata wait-based-info ctx] :as benv}
   (when  wait-based-info
     (let [{:keys [demand wait-time wait-state]} wait-based-info
@@ -2491,12 +2497,19 @@
                         :timeinstate    0}
           location-change  {:from-location  (:locationname @entity)
                             :to-location     name}
- ;         position-change {:from-position (:positionpolicy @entity)
- ;                          :to-position   StartState}
+          position        (:positionpolicy @entity)
+          position-change (when (= position :followon)
+                            ;;we need to compute a position change to
+                            ;;make sure the unit reverts to its
+                            ;;former position, not stay in followon AND wait.
+                            ;;this will cause problems.
+                            {:from-position position
+                             :to-position   (compute-wait-position @entity)})
           _  (debug [:wait-based
                        {:name (:name @entity)
                         :state-change state-change
                         :location-change location-change
+                        :position-change position-change
                         :wait-time wait-time}])
           ;; _ (throw (Exception. (str [:about-to-wait  {:name (:name @entity)
           ;;                                             :state-change state-change
@@ -2504,8 +2517,10 @@
           ;;                                             :wait-time wait-time}])))
           ]
       (->seq [(->alter #(assoc % :state-change state-change
-                               :location-change location-change))
+                               :location-change location-change
+                               :position-change position-change))
               change-location
+              change-position
               change-state-beh
               (->alter (fn [benv]
                          (let [u (deref (:entity benv))
