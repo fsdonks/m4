@@ -90,7 +90,8 @@
 ;;the Finite Cycle Length Goal proposal.
 (defn cycle-stats [policy]
   {:max-bog      (pol/max-bog policy)
-   :max-dwell    (core/finite-else (pol/max-dwell policy)
+   :max-dwell    (core/finite-else #_(pol/max-dwell policy)
+                                   (pol/expected-dwell policy)
                                    core/+default-cycle-length+)
    :cycle-length (pol/cycle-length policy)
    :max-mob      (pol/max-mob policy)})

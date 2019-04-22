@@ -426,7 +426,10 @@
 ;;#Potential Digression from M3
 (defn distribute-cycle-times [units policy]
   (let [clength (generic/cycle-length policy)
-        clength (if (> clength core/+max-cycle-length+) core/+default-cycle-length+ clength)]                                              
+        clength (if (> clength core/+max-cycle-length+)
+                  (or (core/finite-else (generic/expected-dwell policy)
+                                        core/+default-cycle-length+))
+                  clength)]
     (mapv  (fn [cycletime  unit]
              (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")                          
              (assoc unit :cycletime cycletime))
