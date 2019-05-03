@@ -162,7 +162,8 @@
 (defn append-relationtable [g tbl]
   (reduce (fn [acc {:keys [Recepient Donor Cost Relation]}]
             (case (clojure.string/lower-case (clojure.string/trim  Relation))
-              "sub"        (relate acc Recepient Donor {:weight Cost :relation :substitution})
+              ("sub" "substitution")
+                (relate acc Recepient Donor {:weight Cost :relation :substitution})
               "equivalence" (relate acc Recepient Donor {:weight 0 :relation :equivalence})
               (throw (Exception. (str "unrecognized relation: " Relation)))))
           g (r/filter :Enabled tbl)))
