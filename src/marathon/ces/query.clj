@@ -1024,7 +1024,10 @@
 ;;(def ar-first [when-fenced when-followon AR max-proportional-dwell])
 ;;TODO: Revisit the definitions here, potentially using a better candidate for
 ;;predicate equality.  The inversion/flipping stuff is potentially awkward.
-(def not-ac   #(is-not (:component %) "AC"))
+(def not-ac  [ #(is-not (:component %) "AC") max-proportional-dwell
+              min-unit-weight])
+(def not-ac-min  [ #(is-not (:component %) "AC") min-proportional-dwell
+              min-unit-weight])
 (def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 ;;apparently identical.
 (def hld [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
