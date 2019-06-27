@@ -10,7 +10,7 @@
 ;;project definition...
 (defproject marathon "4.1.7-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
-  :dependencies [[org.clojure/clojure "1.10.0"]
+  :dependencies [[org.clojure/clojure "1.10.1"]
                  [spork "0.2.1.1-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
