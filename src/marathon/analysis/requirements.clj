@@ -140,23 +140,26 @@
 ;;extends? no longer works as God intended.
 ;;Prefer satisfies? with memoization for now.
 ;;inst? is coming in 1.9.
-(def inst?
+;;edit: inst? came in 
+(def sat?
+  "A simple work-around for quick detection of instance supported
+   protocols, like satisfies?, except we maintain a cache.  Possible
+   deprecation target."
   (memoize (fn [protocol x]
              (satisfies? protocol x))))
 
 (def bad (atom nil))
 
 (defn distribute-by [f n]
-  (let [tf f #_(type f)]
-    (cond (#_extends? inst? IDistributor tf)
-            (distribute- f n)
-          (#_extends? inst? clojure.core.protocols/IKVReduce tf)
-            (reduce-kv (fn [acc k prop]
-                         (assoc acc k (* prop n))) {} f)
-          (fn? f) (f n)
-          :else
-          (do (reset! bad f)
-              (throw (Exception. (str "unknown distributor!" f)))))))
+  (cond (sat? IDistributor f)
+          (distribute- f n)
+        (sat? clojure.core.protocols/IKVReduce f)
+          (reduce-kv (fn [acc k prop]
+                       (assoc acc k (* prop n))) {} f)
+        (fn? f) (f n)
+        :else
+        (do (reset! bad f)
+            (throw (Exception. (str "unknown distributor!" f))))))
 
 ;;Requirements State
 ;;==================
