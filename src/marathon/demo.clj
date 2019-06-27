@@ -24,14 +24,16 @@
    :SRC3   ["SRC3" ["SRC3"]]
    :SRC4   ["SRC4" ["SRC4"]]})
 
-(defn run-it [& {:keys [root  destination interests]
+(defn run-it [& {:keys [root  destination interests vis ppt]
                  :or {root   full-path
                       destination  out-path
                       interests test-interests
-                      }}]
+                      vis true}}]
   (do (run/do-audited-run  root           destination)
       (proc/run-sample!    destination    :interests interests)
-      (proc/do-charts-from destination    :interests interests)))
+      (proc/do-charts-from destination
+          :interests interests :vis vis :ppt ppt
+                           :save-dwell ppt :save-fill ppt)))
 
 (comment
   (def ctx (a/load-context full-path))

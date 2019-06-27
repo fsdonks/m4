@@ -30,137 +30,6 @@
              [schemas   :as schemas]
              [observers :as obs]]))
 
-(comment
-;;ripped from clojure.core.reducers temporarily...
-(defn- do-curried
-  [name doc meta args body]
-  (let [cargs (vec (butlast args))]
-    `(defn ~name ~doc ~meta
-       (~cargs (fn [x#] (~name ~@cargs x#)))
-       (~args ~@body))))
-
-(defn try-seq
-  "Tries to coerce x to a seq, returning nil if unable.
-   Useful wrapper around seq, since some fundamental types
-   like String and others cannot implement seq and are 
-   handled via hardcoded dispatch."
-  [x]
-  (try (seq x)
-       (catch Exception e nil)))
-
-(defmacro juxt-map [m]
-  `(fn [v#]
-      (reduce-kv (fn [acc# k# f#]
-                   (assoc acc# k# (f# v#)))  {}
-                   ~m)))
-
-(defmacro  defcurried
-  "Builds another arity of the fn that returns a fn awaiting the last
-  param"
-  [name doc meta args & body]
-  (do-curried name doc meta args body))
-;;Note: there's a problem with the compile-time trick here...
-;;in-ns, used in spork.util.reducers, actually produces
-;;Huh...well, we'll have to cop this.
-;;we're going to add in iterate, range, and friends
-;;Reducers patch for Clojure courtesy of Alan Malloy, CLJ-992, Eclipse Public License
-(defcurried r-iterate
-  "A reducible collection of [seed, (f seed), (f (f seed)), ...]"
-  {:added "1.5"}
-  [f seed]
-  (reify
-    clojure.core.protocols/CollReduce
-    (coll-reduce [this f1] (clojure.core.protocols/coll-reduce this f1 (f1)))
-    (coll-reduce [this f1 init]
-      (loop [ret (f1 init seed), seed seed]
-        (if (reduced? ret)
-          @ret
-          (let [next (f seed)]
-            (recur (f1 ret next) next)))))
-
-    clojure.lang.Seqable
-    (seq [this]
-      (seq (clojure.core/iterate f seed)))))
-
-(defn merge-meta [obj m]
-  (with-meta obj (merge (get meta obj) m)))
-
-;;#Move these into core...#
-(defn ->simreducer [stepf init]
-  (r/take-while identity (r-iterate (fn [ctx]
-                                       (when  (engine/keep-simulating? ctx)
-                                          (let [init ctx
-                                                t  (sim/get-time ctx)
-                                                processed  (stepf t  ctx)
-                                                nxt        (sim/advance-time processed)]
-                                            (merge-meta nxt {:start-end {:t t
-                                                                        :start init
-                                                                        :end processed}}))))
-                                    init)))
-
-;;I think we want to convert this into a stream with the simulation
-;;state.  So, instead of just [t ctx], we get [t ctx :begin|:end]
-;;That way, other streams can filter on either begin/end or use both.
-
-;;A wrapper for an abstract simulation.  Can produce a sequence of
-;;simulation states; reducible.
-(defn ->simulator [stepf seed]
-  (let [simred (->simreducer stepf seed)]
-    (reify
-      clojure.lang.Seqable
-      (seq [this]
-        (take-while identity (iterate (fn [ctx]
-                                        (when  (engine/keep-simulating? ctx)
-                                          (let [init       ctx
-                                                t          (sim/get-time     ctx)
-                                                processed  (stepf t          ctx)
-                                                nxt        (sim/advance-time processed)]
-                                            (merge-meta nxt {:start-end {:t t
-                                                                        :start init
-                                                                        :end processed}}))))
-                                      seed)))
-      clojure.core.protocols/CollReduce
-      (coll-reduce [this f1]   (reduce f1 simred))
-      (coll-reduce [_ f1 init] (reduce f1 init simred)))))
-
-(defn ->history-stream [tfinal stepf init-ctx]
-  (->> init-ctx
-       (->simulator stepf)
-       (map (fn [ctx] [(core/get-time ctx) ctx]))
-       (take-while
-        (fn [^clojure.lang.Indexed v]
-          (<= (.nth v 0) tfinal)))
-       ))
-
-;;Now using transducers.
-(defn ->history [tfinal stepf init-ctx]
-  (into {} (comp (map (fn [ctx] [(core/get-time ctx) ctx]))
-                 (take-while #(<= (first %) tfinal)))
-        (->simulator stepf init-ctx)))
-
-(defn ending [h t] (get (meta (get h t) :end  )))
-(defn start  [h t] (get (meta (get h t) :start)))
-
-;;most metrics should be collected at the end of the
-;;day.  For debugging and verification purposes, we'd
-;;like to have the history at the beginning of each day.
-;;We technically provide access to both via the history stream.
-;;we embed the previous day's sample in the meta.
-(defn end-of-day-history [h]
-  (->> h
-       (map #(:start-end (meta (second %))))
-       (filter identity)
-       (map (fn [{:keys [t start end]}]
-              [t end]))))
-
-(defn expanded-history [h]
-  (mapcat (fn [[t ctx]]
-            (let [{:keys [start end]} (get (meta ctx) :start-end)]
-              [[t start  :start]
-               [t end :end]])) h))
-
-)
-
 ;;Note: we probably want to vary the resolution
 ;;here, currently we're hardwired to sample
 ;;every day.  Based on the post-processing
@@ -510,6 +379,14 @@
 
 ;;API Definition
 ;;==============
+
+;;We add a dynamic var for our table-xform defaults.
+;;This provides a simple global hook for transforming
+;;multiple runs the same way, e.g. for programmatic
+;;xforms.
+
+(def ^:dynamic *table-xform* identity)
+
 (defn load-project [p & {:keys [tables]}]
   (if tables
     (proj/load-project p :tables tables)
@@ -532,7 +409,7 @@
    setup and initialization.
    "
   [p & {:keys [table-xform lastday observer-routes init-ctx]
-        :or {table-xform identity
+        :or {table-xform *table-xform*
              observer-routes obs/default-routes
              init-ctx core/debugsim}}]
    (->  (setup/simstate-from ;;allows us to pass maps in, hackey
@@ -542,12 +419,15 @@
         (engine/initialize-sim :observer-routes observer-routes
                                :lastday lastday)))
 
-;TimeStamp	SRC	Reason
+;;patched to allow the audited tables to derive from
+;;transformed project tables.  Cleans up a disconnect
+;;between inputs in the run, and the audited inputs
+;;from the project.
 (defn load-audited-context
   "Like analysis/load-context, except we perform some io in the parent folder.
    Generates 'AUDIT_...' files from raw inputs and computed input."
   [path-or-proj & {:keys [root table-xform lastday observer-routes init-ctx events?]
-                   :or {table-xform identity
+                   :or {table-xform *table-xform*
                         observer-routes obs/default-routes
                         }}]
   (let [proj (proj/load-project path-or-proj)

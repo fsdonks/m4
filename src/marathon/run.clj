@@ -45,7 +45,7 @@
    computes the marathon history for the run, producing results 
    into the target path.  Default outputs will be derived from 
    the simulation history, including a compressed history."
-  [from-path target-path & {:keys [table-xform] :or {table-xform identity}}]
+  [from-path target-path & {:keys [table-xform] :or {table-xform a/*table-xform*}}]
   (core/debugging 
    (do (a/spit-history!
         (a/marathon-stream from-path :audit? true :audit-path target-path :events? true

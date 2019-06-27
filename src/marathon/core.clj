@@ -29,6 +29,14 @@
 
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
+
+;;new global chart options for controlling visualization
+;;and rendering of multiple runs.  simplifies configuration
+;;and scripting.  Default mirrors legacy behavior,
+;;visuals are displayed, but no pptx is emitted.
+(def ^:dynamic *chart-ops* {:vis true
+                            :ppt nil})
+
 ;;From Stuart Sierra's blog post, for catching otherwise "slient" exceptions
 ;;Since we're using multithreading and the like, and we don't want
 ;;exceptions to get silently swallowed
@@ -240,7 +248,7 @@
     (do (println [:using-default-interests 'marathon.sampledata.branches/branches])
         branches/branches)))
 
-(defn post-processed-run [wbpath]
+(defn default-post-processed-run [wbpath]
   (let [root         (io/parent-path wbpath)
         destination  (clojure.string/replace wbpath ".xlsx" io/+separator+)
         ipath        (str root "interests.clj")
@@ -251,7 +259,17 @@
         _            (println [:running :post-processed-analysis :at wbpath])]
     (demo/run-it :root        wbpath
                  :destination destination
-                 :interests   interests)))
+                 :interests   interests
+                 :vis         (:vis *chart-ops*)
+                 :ppt         (:ppt *chart-ops*))))
+
+;;this adds location-samples to the default outputs...do we always
+;;want to do that?  curious to see if there's any big overhead.
+;;we brought them back into scope for some niche analysis.
+(defn post-processed-run [wbpath]
+  (binding [marathon.analysis/*outputs*
+             (conj marathon.analysis/*outputs* :location-samples)]
+    (default-post-processed-run wbpath)))
 
 (defn post-processed-run-dialogue []
     (request-path [wbpath "Please select the location of a valid MARATHON project file."]

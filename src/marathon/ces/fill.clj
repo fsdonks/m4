@@ -277,8 +277,8 @@
            "RCAD-BIG"  query/RCAD-BIG
            "UNIFORM"   query/uniform
            "MIN-DWELL" query/min-dwell
-           "NOT-AC-MIN" query/not-ac-min
-           "NOT-AC" query/not-ac}]
+           "NOT-AC-MIN" query/NOT-AC-MIN
+           "NOT-AC"     query/NOT-AC}]
     (reduce-kv (fn [acc nm r]
                  (assoc acc (keyword nm) r))
                m m)))
