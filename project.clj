@@ -28,7 +28,7 @@
                  [joinr/nightclub "0.0.1-SNAPSHOT"]
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
                  ]
-  :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
+  :jvm-opts ^:replace ["-Xmx100g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src" "../spork/src" "../nightclub/src" "../proc/src"
                  ]
   :profiles {:uberjar {;:aot  [marathon.main]

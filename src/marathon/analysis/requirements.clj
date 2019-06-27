@@ -828,6 +828,10 @@
     (->requirements-state src-tables ;create the searchstate.
                           src compo->distros)))
 
+(defn maybe-println [msg]
+  (when (> (rand) 0.6)
+    (println msg)))
+
 ;;So, need a way to apply the step-function to the
 ;;current supply, compute new supply records, etc.
 ;;should be keeping a running tally of the
@@ -860,12 +864,12 @@
             ;;We now pack along the peak demand for extra context.
             reqstate       (assoc (load-src tbls src compo->distros)
                                   :peak peak)
-            _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
+            _              (maybe-println [:growing-by :proportional :from (:minimum-supply reqstate)])
             [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
         (if (== lower upper 0)
           [src reqstate]
           [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
-      (do (println [:skipping-src src :has-no-demand])
+      (do (maybe-println [:skipping-src src :has-no-demand])
           [src nil])
       )))
 
@@ -973,16 +977,24 @@
                       (demands->src-peaks))
         n       (atom (count peaks))
         src-distros->requirements  (requirements-by tbls peaks search n)
-        out     (async/chan 10)
-        in      (async/chan 10)
-        _       (async/onto-chan in (seq distros))
+        n       (+ 2 (* (.availableProcessors (Runtime/getRuntime)) 2))
+        results (atom 0)
+        _       (add-watch results :count (fn [_ _ old new]
+                                            (println (str "---------"
+                                                          [:completed new]
+                                                          "---------"))))
+
+        out     (async/chan n (map (fn [x] (do (swap! results inc) x))))
+        in      (async/chan n)
+        _       (async/onto-chan in (sort-by (fn [[src _]] (- (get peaks src 0)))
+                                             (seq distros)))
         require-or-err  (fn require-or-err [distros]
                           (try  (src-distros->requirements  distros)
                                 (catch Exception e
                                   (do (async/go (async/close! in))
                                       (->error distros e)))))
         pipe    (producer->consumer
-                    2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
+                    n ;; Parallelism factor
                                         ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
                    out
                    require-or-err #_src-distros->requirements
@@ -1032,11 +1044,9 @@
    project from inpath, computes requirement, and spits results to a tsv 
    table in the same root folder as inpath, requirements.txt"
   [inpath]
-  (let [inpath (clojure.string/replace inpath #"\\" "/")
-        base (->> (clojure.string/split inpath #"/")
-                  (butlast)
-                  (clojure.string/join "/"))
-        outpath (str base "/requirements.txt")]
+  (let [inpath (io/file-path inpath)
+        base   (io/parent-path inpath)
+        outpath (io/file-path base "requirements.txt")]
     (do (println ["Analyzing requirements for" inpath])
         (->> (-> (a/load-requirements-project inpath)
                  (:tables)
