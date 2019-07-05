@@ -1029,7 +1029,7 @@
 ;;implies max dwell.
 ;;shifting to capitalizing compound rules...
 (def NOT-AC      [when-fenced not-ac max-proportional-dwell min-unit-weight])
-(def NOT-AC-MIN  [when-fenced not-ac min-proportional-dwell min-unit-weight]
+(def NOT-AC-MIN  [when-fenced not-ac min-proportional-dwell min-unit-weight])
   
 (def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 ;;apparently identical.
