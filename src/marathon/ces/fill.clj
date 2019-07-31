@@ -253,6 +253,8 @@
 ;  ([demand ctx] (derive-supply-rule demand (marathon.sim.core/get-fillstore ctx) (get demand :src))))
 
 
+;;aux functions for coercing from "user defined input"
+;;for sourcing rules into clean clojurfied input.
 (defn clean-source-rule [v]
   (-> v
       (clojure.string/upper-case)
@@ -265,46 +267,26 @@
       k
       (clean! k))))
 
-;;#TODO elevate stock queries into user-defined rules.
-(def stock-queries
-  (let [m {"AC-FIRST"  query/ac-first
-           "AC"        query/ac-first
-           "RC-FIRST"  query/rc-first
-           "RC"        query/rc-first
-           "NG-FIRST"  query/ng-first
-           "NG"        query/ng-first
-           "RCAD"      query/RCAD
-           "RCAD-BIG"  query/RCAD-BIG
-           "UNIFORM"   query/uniform
-           "MIN-DWELL" query/min-dwell
-           "NOT-AC-MIN" query/NOT-AC-MIN
-           "NOT-AC"     query/NOT-AC}]
-    (reduce-kv (fn [acc nm r]
-                 (assoc acc (keyword nm) r))
-               m m)))
-
 (defn resolve-source-first [sf]
-  (if-let [r  (get stock-queries (parse-source-rule sf))]
+  (if-let [r  (get @query/stock-queries (parse-source-rule sf))]
     r
     (throw (Exception. (str "unknown source-first rule: " sf)))))
-
-
 
 ;;Tom Hack 26 May 2016
 ;;If we're not SRM demand, i.e. the category is something other than
 ;;SRM, we use the default category so as to not restrict our fill.
-(def restricted-categories 
-  {"SRM" "SRM" 
+(def restricted-categories
+  {"SRM" "SRM"
    :SRM  :SRM
-   "NonBOG" "NonBOG" 
-   "NonBOG-RC-Only" "NonBOG" 
+   "NonBOG" "NonBOG"
+   "NonBOG-RC-Only" "NonBOG"
    :NonBOG :NonBOG})
 
 ;;Ensures that we only allow StartStates
 ;;that exist in the unit's policy....
 (defn has-transition? [st]
   (fn [u]
-    (protocols/next-position (:policy u) st)))      
+    (protocols/next-position (:policy u) st)))
 
 ;;Note: this is pretty crucial for the fill process, it provides all of
 ;;the ordering and filtering context, derived from the demand record.

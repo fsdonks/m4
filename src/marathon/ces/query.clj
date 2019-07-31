@@ -625,14 +625,15 @@
 
 ;;Basic value-based orderings.  These provide numbers we can easily
 ;;compare on.
-(key-valuations cycletime  :cycletime                
+(key-valuations cycletime  :cycletime
                 bog-budget unit/get-bog-budget
                 dwell      unit/get-dwell
                 bog        unit/get-bog 
                 proportional-dwell unit/normalized-dwell
                 relative-cycletime (fn [u] (float (/ (:cycletime u) (unit/get-cyclelength u))))
                 unit-index  :unit-index
-                unit-weight :unit-weight)
+                unit-weight :unit-weight
+                mod-level   :mod)
 
 ;;predicates...
 
@@ -967,11 +968,11 @@
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
-(defn find-supply [{:keys [src cat order-by where collect-by] :or 
-                    {src :any cat :default} :as env} ctx] 
+(defn find-supply [{:keys [src cat order-by where collect-by] :or
+                    {src :any cat :default} :as env} ctx]
     (let [order-by (eval-order    order-by)
           where    (eval-filter   where)
-          t        (core/get-time ctx)] 
+          t        (core/get-time ctx)]
       (with-query-env env                                                                           
         (as-> (->> (find-feasible-supply (compute-supply env ctx) (core/get-fillmap ctx) 
                                          cat src  (fn [nm]                                                    
@@ -1034,6 +1035,67 @@
 (def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 ;;apparently identical.
 (def hld [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
+
+;;this is a generic distance metric...
+(defn distance [f n]
+  #(Math/abs (double (- n (f % )))))
+
+(defn mod-distance [n] (distance :mod n))
+
+;;may not need these....we probably want to customize the demand's source first
+;;based on its mod level, e.g. let the data drive it.
+(def MOD1 [(mod-distance 1) uniform])
+(def MOD2 [(mod-distance 2) uniform])
+(def MOD3 [(mod-distance 3) uniform])
+
+;;#TODO elevate stock queries into user-defined rules.
+;;#MOVE TO ces.query
+(def stock-queries (atom {}))
+
+(defn- register-sourcing-rule!
+  [k rule]
+  (when-let [r (get @stock-queries k)]
+    (println [:overwriting-sourcing-rule k]))
+  (swap! stock-queries assoc k rule))
+
+(defn register-rule!
+  "Associate k with a sourcing rule, e.g.
+   a means to sort a selection of entities to
+   establish a total ordering for fill queries.
+   k may be a keyword or a string; both will be
+   registered.  This should make the rule
+   available as meaningful input within
+   a DemandRecord's :source-first field."
+  [k rule]
+  (cond (string? k) (do (register-sourcing-rule! k rule)
+                        (register-sourcing-rule! (keyword k) rule))
+        (keyword? k) (do (register-sourcing-rule! k rule)
+                         (register-sourcing-rule! (name k) rule))
+        :else (throw (ex-info "expected string or keyword for source-first rule key!"
+                              {:k k :rule rule}))))
+
+(def +default-rules+
+  {"AC-FIRST"   ac-first
+   "AC"         ac-first
+   "RC-FIRST"   rc-first
+   "RC"         rc-first
+   "NG-FIRST"   ng-first
+   "NG"         ng-first
+   "RCAD"       RCAD
+   "RCAD-BIG"   RCAD-BIG
+   "UNIFORM"    uniform
+   "MIN-DWELL"  min-dwell
+   "NOT-AC-MIN" NOT-AC-MIN
+   "NOT-AC"     NOT-AC
+
+   "MOD1"       MOD1
+   "MOD2"       MOD2
+   "MOD3"       MOD3})
+
+(doseq [[k r] +default-rules+]
+  (register-rule! k r))
+
+
 
 ;;new rules....should be able to compose these...
 ;;By default, we get substituable, globally-available supply using our

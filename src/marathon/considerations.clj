@@ -381,3 +381,50 @@
                               :y-label "Normalized Dwell"))
       ))
 )
+
+
+;;Introducing Modernization
+;;=========================
+
+;;So we have a new requirement to add an addtionaly dimension of state
+;;and sorting criterion: modernization.
+
+;;We have multiple mod-levels (assume n, although we know of 3).
+;;Units have an associated mod level, which is orthogonal to
+;;SRC (although it may correlate).
+
+;;Mod levels affect us in multiple ways:
+
+;;Demands may prefer units of a particuar capability (SRC) AND have
+;;some mod preference (or filter).
+
+;;Supply may have an associated mod level.
+
+;;When filling demand, we need to express sourcefirst criteria that
+;;includes modernization as a consideration.
+
+;;There's a loose notion of substitution, although here we subordinate
+;;mod to capability and have a more general notion of mod distance.
+
+;;Mod distance is defined as the absolute value of the difference
+;;between the mod of the demand and the mod of the supply.
+
+;;We generally try to minimize mod distance, and use the highest mod
+;;levels after that.  So a loose sorting rule would be:
+;;[min-mod-distance max-mod-level ...]
+
+;;So, assuming we have static conditions (mod levels and preferences
+;;are set in the initial conditions and don't change), then we can
+;;express these rules in terms of sourcing criteria and demand types.
+
+;;The problem we currently run into with such a scheme is that there
+;;are some pre-baked assumptions regarding demand categorization,
+;;source-first criteria, etc.  We had some special rules.
+
+;;So, one goal is to generalize the process of defining filtering
+;;and sorting criterion, and allowing users to express these
+;;rules via input.  We're mostly there....
+
+;;Our goal is to have something like this..
+
+
