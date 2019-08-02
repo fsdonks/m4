@@ -489,10 +489,11 @@
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata
   [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-           ] :as r}]
-  (if (= Behavior "SRM")    ;;hackish way to go about things...
-   (srm-record->unitdata r)
-   (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin)))
+           Mod] :as r}]
+  (-> (if (= Behavior "SRM")    ;;hackish way to go about things...
+        (srm-record->unitdata r)
+        (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin))
+      (assoc :mod (if (and Mod (pos? Mod)) Mod 3))))
 
 ;;Ideally, we'll unify this in the near future, for now it's srm specific.
 ;;we can have the unit behavior handle assigning policy.  From the start, we know

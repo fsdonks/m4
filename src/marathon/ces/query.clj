@@ -183,7 +183,7 @@
             (compute-nonbog env ctx) ;;<-merge these in
             (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                                 :deployable-buckets
-                                :default])))   
+                                :default])))
    "NonBOG-RC-Only"
         (fn [{:keys [where] :as env}  ctx]
           (lazy-merge
@@ -193,7 +193,19 @@
                ctx) ;;<-merge these in
             (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                                 :deployable-buckets
-                                :default])))})
+                                :default])))
+   ;;Added to provide a filtering criteria for modernized demands.
+   "Modernization"
+   (fn [{:keys [where] :as env}  ctx]
+     (lazy-merge
+      (compute-nonbog
+       (assoc env :where
+              (fn [u] (>= (get u :mod) 2)))
+       ctx) ;;<-merge these in
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default])))
+   })
 
 (defn computed [cat] (computed-categories cat))
 
@@ -1040,13 +1052,17 @@
 (defn distance [f n]
   #(Math/abs (double (- n (f % )))))
 
-(defn mod-distance [n] (distance :mod n))
+(defn mod-distance [n]
+  (distance #(or (get % :mod)
+                 (throw (ex-info "expected a :mod key, none found!" {:in %}))) n))
 
 ;;may not need these....we probably want to customize the demand's source first
 ;;based on its mod level, e.g. let the data drive it.
 (def MOD1 [(mod-distance 1) uniform])
 (def MOD2 [(mod-distance 2) uniform])
 (def MOD3 [(mod-distance 3) uniform])
+
+(def MOD1-Target-AC [(mod-distance 1) AC min-proportional-dwell min-unit-weight])
 
 ;;#TODO elevate stock queries into user-defined rules.
 ;;#MOVE TO ces.query
@@ -1090,7 +1106,9 @@
 
    "MOD1"       MOD1
    "MOD2"       MOD2
-   "MOD3"       MOD3})
+   "MOD3"       MOD3
+
+   "MOD1-TARGET-AC" MOD1-Target-AC})
 
 (doseq [[k r] +default-rules+]
   (register-rule! k r))

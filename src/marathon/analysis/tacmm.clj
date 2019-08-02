@@ -54,6 +54,7 @@
 ;;start with a sample context.
 
 (def path (io/file-path "../notional/base-testdata-v8.xlsx"))
+(def modpath (io/file-path "../notional/mod-testdata.xlsx"))
 
 ;;a dumb pre-processor to modernize the
 ;;demand mod levels consistently.
@@ -68,6 +69,9 @@
 
 ;;Similarly modernized unit entity mod levels.
 ;;Assume 1/2 are 2, 1/2 are 3.
+;;This is equivalent to having "MOD1" or "MOD2"
+;;in the SourceFirst criteria.
+
 (defn mod-demand  [ctx]
   (->> (c/demand-names ctx)
        (reduce (fn [acc id]
@@ -81,16 +85,20 @@
                ctx)))
 
 
-(def ctx (-> (a/load-context path)
+(def mod-demand
+  "Type	Enabled	Priority	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Title 10_32	OITitle
+DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modernization	10	OI18")
+
+(def ctx (-> (a/load-context modpath)
              mod-supply
-             mod-demand))
+             #_mod-demand))
 
 ;;we now have a modernized supply and demand.
 ;;This is artificial, but it works (assuming we
 ;;can inject the mod information into the inputs).
 
 ;;given a demand, we assoc a mod level with it.  Assume this is a given.
-(def d (store/get-entity ctx "8815_Shiloh_01205K000_[761...769]"))
+(def d (store/get-entity ctx "2_Pearl_01205K000_[1...3651]"))
 
 
 ;;explicit queries, exercising the functionality.
@@ -137,7 +145,6 @@
 (def feasibles (->> ctx
                     (marathon.ces.query/find-supply (marathon.ces.fill/demand->rule d))
                     (map (comp (juxt :name :mod marathon.ces.unit/normalized-dwell) second))))
-
 
 ;; #_(["28_01205K000_NG" 2 0.888767]
 ;;    ["10_01205K000_AC" 2 0.817351]

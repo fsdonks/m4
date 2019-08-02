@@ -892,6 +892,29 @@
         (increment-deployments)
         (wait-at info ctx))))
 
+;;casting modernization as  location-based deployment.
+;;This is based off the SRM style of location-based
+;;behavior, where the demand is assumed to provide
+;;the metadata we need, keys for
+;;[name MissionLength BOG StartState EndState overlap timeinstate]
+;;We'll simplify this and define a high-level API for mods.
+;;Modernization equates to a location-based deployment,
+;;where the StartState is :modernizing, the EndState
+;;is :modernized.  These two state map to corresponding
+;;behaviors, which (by default) push the unit into
+;;an immediate deployable status.  Unsure how to balance
+;;this...
+(defn modernize [unit demand t ctx]
+  (let [p   (:policy unit)
+        location-info (assoc demand
+                             :StartState    :modernizing
+                             :EndState      :modernized
+                             :MissionLength (get demand :MissionLength 365)
+                             :BOG           false
+                             :overlap       0
+                             :timeinstate   0
+                             )]
+    (location-based-deployment unit location-info ctx)))
 
 ;'Probably pull unit's changelocation into here as well.
 ;Public Sub changeLocation(unit As TimeStep_UnitData, newlocation As String, Optional context As TimeStep_SimContext)

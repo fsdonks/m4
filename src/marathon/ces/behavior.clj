@@ -491,6 +491,7 @@
 ;;NOTE: this causes a problem with composite policies...
 ;;We need to memoize based on a finer criteria, based on the
 ;;active policy name...
+;;Added another default for :modernizing-deployable, indicat
 (def get-next-position
   (memo2-policy
    (fn get-next-position [policy position]
@@ -960,7 +961,7 @@
 ;;deltat being the timeinstate.
 (befn spawning-beh ^behaviorenv {:keys [to-position cycletime tupdate statedata entity ctx]
                                  :as  benv}
-      (when (spawning? statedata)     
+      (when (spawning? statedata)
         (let [ent @entity
               ;;we're now tracking default recovery in our context.
               {:keys [positionpolicy policy]} ent
@@ -1581,6 +1582,20 @@
             (swap! entity  #(u/add-bog % deltat))
             (success benv))))
 
+(befn modernizing-beh  ^behaviorenv {:keys [entity statedata deltat] :as benv}
+      (when (and (pos? deltat)
+                 (= (spork.ai.machine/remaining  statedata)
+                    deltat))
+        (let [unit @entity
+              uname  (:name unit)
+              from   (:mod unit)
+              to     (dec from)
+              _      (swap! entity assoc :mod to)]
+          (->> benv
+               (log!  (core/msg "Modernized unit " (:name unit) " from " from  " to " to) )
+               success))))
+
+
 ;;This is a little weak; we're loosely hard coding
 ;;these behaviors.  It's not terrible though.
 (befn special-state {:keys [entity statedata] :as benv}
@@ -1596,9 +1611,13 @@
                                        (->if (fn [{:keys [entity]}]
                                                (zero? (u/get-bog @entity)))
                                              try-deferred-policy-change)])
-                               
                                ;reset-beh
                                ])
+
+;; I think we need to implement these.
+;;        :modernizing   modernizing-beh
+;;        :modernized    modernized-beh
+
         ;:waiting       (success benv) ;up-to-date
         (fail benv)))
 
@@ -2140,6 +2159,7 @@
 
    :waiting        (echo :waiting-state) #_(->seq [(echo :waiting-state)
                                                    defer-policy-change])
+   :modernizing    modernizing-beh
    })
 
 
@@ -2518,7 +2538,9 @@
           ]
       (->seq [(->alter #(assoc % :state-change state-change
                                :location-change location-change
-                               :position-change position-change))
+                               :position-change position-change
+                               :wait-time    (when (and wait-time (< wait-time 999999))
+                                               wait-time)))
               change-location
               change-position
               change-state-beh
@@ -2529,7 +2551,8 @@
                                _ (swap! (:ctx benv) #(supply/update-deploy-status u nil nil %))
                                ;_ (reset! wbm u)
                                _ :ballz #_(throw (Exception. (str [:ballz])))]
-                            benv)))]))))
+                           benv)))
+              wait]))))
 
 
 

@@ -280,7 +280,11 @@
    :SRM  :SRM
    "NonBOG" "NonBOG"
    "NonBOG-RC-Only" "NonBOG"
-   :NonBOG :NonBOG})
+   :NonBOG :NonBOG
+   ;;I think we want to do this.
+   "Modernization" "NonBOG"
+   :Modernization "NonBOG"
+   })
 
 ;;Ensures that we only allow StartStates
 ;;that exist in the unit's policy....

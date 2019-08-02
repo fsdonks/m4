@@ -35,9 +35,16 @@
 (def demand-effect-categories
   {"NonBOG" {:wait-time   999999
              :wait-state  :waiting}
-   "NonBOG-RC-Only" 
+   "NonBOG-RC-Only"
        {:wait-time   999999
-        :wait-state  :waiting}})
+        :wait-state  :waiting}
+   ;;Added a new category for Modernization
+   ;;Default is to wait 365 days.
+   "Modernization"
+   {:wait-time   365
+    :wait-state  #{:waiting :modernizing}
+    }
+   })
 
 (defn location-based-policy? [d]
   (and (:StartState d) (:EndState d)))
@@ -81,7 +88,7 @@
 ;;not worried about collecting garbage.  Used in deploy-unit only.
 (def last-deploy (atom nil))
 ;;this is hacky; should be data-driven.
-(defn non-bog? [d] (#{"NonBOG" "NonBOG-RC-Only"} (:category d)))
+(defn non-bog? [d] (#{"NonBOG" "NonBOG-RC-Only" "Modernization"} (:category d)))
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
 (defn deploy-unit
