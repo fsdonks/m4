@@ -178,3 +178,40 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;  ["11_01205K000_AC" 3 0.908675]
 ;;  ["27_01205K000_NG" 3 0.832876]
 ;;  ["29_01205K000_NG" 3 0.944109])
+
+
+;;let's define some custom output for our tacmm listener.
+
+
+(def acu (->> ctx c/units (some #(when (= (:component %) "AC") %)) :name))
+
+;;This is a dumb way to collect state, but effective and simple relative
+;;to clojure semantics.  The "better" way is to define frame emitters
+;;similar to marathon.ces.analysis
+
+(defn frame->state-samples [[t ctx]]
+  (for [{:keys [name src locationname positionpolicy state mod]} (c/units ctx)]
+    {:t t
+     :src  src
+     :name name
+     :locationname locationname
+     :positionpolicy positionpolicy
+     :state state
+     :readiness (or (first (clojure.set/intersection
+                            #{:c1 :c2 :c3 :c4 :c5}
+                            state))
+                    (if (get state :modernizing) :c4))
+     :mod   mod}))
+
+(defn history->state [h tgt]
+  (let [flds [:t :src :name :locationname :positionpolicy
+              :state :readiness :mod]]
+    (-> (mapcat frame->state-samples h)
+        (tbl/records->file tgt :field-order flds))))
+
+(comment
+
+  (history->state (a/as-stream ctx) "mods.txt")
+  )
+
+;;(defmethod a/emit-frame )

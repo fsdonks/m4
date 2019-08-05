@@ -345,7 +345,11 @@
 (def demand-filters
   {:default nil
    "Modernization-AC"
-   (fn [u] (= (:component u) "AC"))
+   (fn [u] (and (= (:component u) "AC")
+                (>= (get u :mod) 2)))
+
+   "Modernization"
+   (fn [u] (>= (get u :mod) 2))
    })
 
 
