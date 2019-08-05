@@ -343,7 +343,7 @@
 ;;NOTE: Additional State to Keep Track of
 ;;TODO: Define an API for these and /or an intepreter
 (def demand-filters
-  {:default nil
+  {:default (fn [_] true)
    "Modernization-AC"
    (fn [u] (and (= (:component u) "AC")
                 (>= (get u :mod) 2)))
