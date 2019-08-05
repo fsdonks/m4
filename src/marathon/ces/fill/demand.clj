@@ -188,7 +188,9 @@
 ;;for now (5 August 2018), we go with option 1 to expidite results.
 
 (defn fill-hierarchically [ctx]
-  (fill-demands-with fill-category ctx :stop-early? false))
+  (fill-demands-with
+   (fn exhaustive-fill [store category ctx]
+     (fill-category store category ctx :stop-early? false)) ctx))
 
 ;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 ;;get-followon-keys returns a set of "buckets" in the supply that correspond
