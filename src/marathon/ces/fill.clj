@@ -362,7 +362,7 @@
               :name (get d :name)
               :order-by (resolve-source-first (get d :source-first "uniform"))
               :required (d/required d)
-              :where    (demand-filters category)
+              :where    (get demand-filters category identity)
               }]
      (if  (or (= category :default) (nil? (:StartState d)))
            r
