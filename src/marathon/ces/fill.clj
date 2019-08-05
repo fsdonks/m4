@@ -309,6 +309,46 @@
       (or (when (restricted-categories c) c)
           :default))))
 
+;;TOM Notes 5 Aug 2019
+;;We have a decent framework for expressing supply constraints,
+;;computed supply, preferences, and substitutions.  What we
+;;lack is a clear mapping of :demand/category to
+;;applicable filters.  "Right now" we had Rotational, SRM,
+;;NonBOG, and variants of NonBOG (RC-Only).
+
+;;What we'd like is a simple extension that tracks the
+;;filters associated Categories.  Since SourceFirst
+;;defines order-by, Categories define both filters AND
+;;additional computed supply.  Computed supply has its
+;;own implicit filters (per legacy implementation).
+
+;;The ideal end-state is to have these concepts unified
+;;and expressed via  simple data model (e.g. the current
+;;map-based structure) that is then associated with the
+;;high-level rules denoted by simple strings, as well
+;;as having a more expressive DSL encoded as EDN
+;;vectors and maps to allow inline forms to define
+;;said criterion.
+
+
+;;For now, we simply extend the projection of
+;;demand->rule to include a static set of
+;;mappings from Category->Filter.
+;;This is the simple, dumb way to implementat
+;;said functionality, but it also makes it
+;;easy to extend in the aforementioned
+;;direction in the future.
+
+
+;;NOTE: Additional State to Keep Track of
+;;TODO: Define an API for these and /or an intepreter
+(def demand-filters
+  {:default nil
+   "Modernization-AC"
+   (fn [u] (= (:component u) "AC"))
+   })
+
+
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
 (defn demand->rule
   ([d supply-category]
@@ -318,13 +358,14 @@
               :name (get d :name)
               :order-by (resolve-source-first (get d :source-first "uniform"))
               :required (d/required d)
+              :where    (demand-filters category)
               }]
      (if  (or (= category :default) (nil? (:StartState d)))
-       r
-       ;;we have a preference for startstate...
-       (assoc r :where  (has-transition? (:StartState d))))))
+           r
+            ;;we have a preference for startstate...
+          (assoc r :where  (has-transition? (:StartState d))))))
   ([d] (demand->rule d :default)))
-      
+
 
 ;;##Finding and Ordering Supply  
 

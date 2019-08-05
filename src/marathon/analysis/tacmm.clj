@@ -141,9 +141,40 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 (def modrule (marathon.ces.fill/demand->rule dmod))
 (def modw     (:where modrule identity))
 
-(def mod-feasibles (->> ctx
+(def mod-ac-feasibles (->> ctx
                         (marathon.ces.query/find-supply
-                           (assoc modrule :where (fn [u] (= (:component u) "AC"))))
+                           modrule)
                         (map (comp (juxt :name :mod marathon.ces.unit/normalized-dwell) second))))
 
+;; (["2_01205K000_AC" 2 0.09041]
+;;  ["4_01205K000_AC" 2 0.272146]
+;;  ["6_01205K000_AC" 2 0.453881]
+;;  ["8_01205K000_AC" 2 0.635616]
+;;  ["10_01205K000_AC" 2 0.817351]
+;;  ["1_01205K000_AC" 3 0.0]
+;;  ["3_01205K000_AC" 3 0.181735]
+;;  ["5_01205K000_AC" 3 0.36347]
+;;  ["7_01205K000_AC" 3 0.545205]
+;;  ["9_01205K000_AC" 3 0.72694]
+;;  ["11_01205K000_AC" 3 0.908675])
 
+(def mod-any-feasibles
+  (->> ctx
+       (marathon.ces.query/find-supply
+        (assoc modrule :where nil))
+       (map (comp (juxt :name :mod marathon.ces.unit/normalized-dwell) second))))
+
+;; (["2_01205K000_AC" 2 0.09041]
+;;  ["4_01205K000_AC" 2 0.272146]
+;;  ["6_01205K000_AC" 2 0.453881]
+;;  ["8_01205K000_AC" 2 0.635616]
+;;  ["10_01205K000_AC" 2 0.817351]
+;;  ["28_01205K000_NG" 2 0.888767]
+;;  ["1_01205K000_AC" 3 0.0]
+;;  ["3_01205K000_AC" 3 0.181735]
+;;  ["5_01205K000_AC" 3 0.36347]
+;;  ["7_01205K000_AC" 3 0.545205]
+;;  ["9_01205K000_AC" 3 0.72694]
+;;  ["11_01205K000_AC" 3 0.908675]
+;;  ["27_01205K000_NG" 3 0.832876]
+;;  ["29_01205K000_NG" 3 0.944109])
