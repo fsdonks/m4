@@ -195,6 +195,8 @@
                                 :deployable-buckets
                                 :default])))
    ;;Added to provide a filtering criteria for modernized demands.
+   ;;We never modernize mod 1, since that's considered the absolute
+   ;;highest mod level.
    "Modernization"
    (fn [{:keys [where] :as env}  ctx]
      (lazy-merge
