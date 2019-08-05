@@ -281,9 +281,14 @@
    "NonBOG" "NonBOG"
    "NonBOG-RC-Only" "NonBOG"
    :NonBOG :NonBOG
+
    ;;I think we want to do this.
    "Modernization" "NonBOG"
    :Modernization "NonBOG"
+
+   ;;Added ac-only class of modernization demands.
+   "Modernization-AC" "NonBOG"
+   :Modernization-AC "NonBOG"
    })
 
 ;;Ensures that we only allow StartStates

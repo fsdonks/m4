@@ -892,6 +892,8 @@
         (increment-deployments)
         (wait-at info ctx))))
 
+
+;;TBD
 ;;casting modernization as  location-based deployment.
 ;;This is based off the SRM style of location-based
 ;;behavior, where the demand is assumed to provide
@@ -904,7 +906,10 @@
 ;;behaviors, which (by default) push the unit into
 ;;an immediate deployable status.  Unsure how to balance
 ;;this...
-(defn modernize [unit demand t ctx]
+;;Not used currently, went with psuedo deployment
+;;based on demand-category effects.
+
+#_(defn modernize [unit demand t ctx]
   (let [p   (:policy unit)
         location-info (assoc demand
                              :StartState    :modernizing

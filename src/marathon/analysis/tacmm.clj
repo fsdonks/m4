@@ -98,7 +98,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;can inject the mod information into the inputs).
 
 ;;given a demand, we assoc a mod level with it.  Assume this is a given.
-(def d (store/get-entity ctx "2_Pearl_01205K000_[1...3651]"))
+(def d (store/get-entity ctx "2_Bob_01205K000_[1...3651]"))
 
 
 ;;explicit queries, exercising the functionality.
@@ -121,24 +121,6 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;  ["27_01205K000_NG" 3 1520]
 ;;  ["9_01205K000_AC" 3 796])
 
-#_{:category "Rotational",
-   :overlap 45,
-   :units-overlapping {},
-   :name "8815_Shiloh_01205K000_[761...769]",
-   :operation "II Kahn",
-   :duration 8,
-   :src "01205K000",
-   :title "OI18",
-   :demandgroup "Jenny",
-   :vignette "Shiloh",
-   :startday 761,
-   :priority 8815,
-   :quantity 1,
-   :units-assigned {},
-   :location "8815_Shiloh_01205K000_[761...769]",
-   :fills {},
-   :source-first "Uniform"}
-
 ;;This is more typical of how things actually work.
 ;;We project a demand onto a rule, and then use that rule
 ;;to inform how to find supply.
@@ -152,3 +134,16 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;    ["11_01205K000_AC" 3 0.908675]
 ;;    ["27_01205K000_NG" 3 0.832876]
 ;;    ["9_01205K000_AC" 3 0.72694])
+
+(def dmod (->> ctx c/demands (some (fn [{:keys [source-first] :as r}]
+                                     (when (= source-first "MOD1-Target-AC")
+                                       r)))))
+(def modrule (marathon.ces.fill/demand->rule dmod))
+(def modw     (:where modrule identity))
+
+(def mod-feasibles (->> ctx
+                        (marathon.ces.query/find-supply
+                           (assoc modrule :where (fn [u] (= (:component u) "AC"))))
+                        (map (comp (juxt :name :mod marathon.ces.unit/normalized-dwell) second))))
+
+

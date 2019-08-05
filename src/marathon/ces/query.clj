@@ -207,12 +207,24 @@
       (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                           :deployable-buckets
                           :default])))
+   "Modernization-AC"
+   (fn [{:keys [where] :as env}  ctx]
+     (lazy-merge
+      (compute-nonbog
+       (assoc env :where
+              (fn [u] (and (= (:component u ) "AC")
+                           (>= (get u :mod) 2))))
+       ctx) ;;<-merge these in
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default])))
+
    })
 
 (defn computed [cat] (computed-categories cat))
 
-;;Reducer/seq that provides an abstraction layer for implementing 
-;;queries over deployable supply.  I really wish I had more time 
+;;Reducer/seq that provides an abstraction layer for implementing
+;;queries over deployable supply.  I really wish I had more time
 ;;to hack out a better macro for the reducers, but this works for now.
 ;;Deployers provides a view of the deployable supply partitioned by
 ;;category and src.  We'll likely have even more categories later,
