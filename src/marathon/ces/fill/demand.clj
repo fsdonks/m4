@@ -145,8 +145,50 @@
       ctx (dem/unfilled-categories (core/get-demandstore ctx))))
 
 ;;Implements the default hierarchal, stop-early fill scheme.
+;;NOTE: With the advent of compo-specific and other constraints (e.g.
+;;modernization limits for mod demands), we introduced a subtle
+;;bug by violating the long-standing assumptions of our hierarchical
+;;fill process...
+
+;;Assuming full access to supply, we could prove - for a given
+;;category of demand such as Rotational, SRC A, that if we couldn't
+;;fill with "that input" then every lower priority demand wouldn't
+;;get filled either.  This works great so long as there are no
+;;constraints on supply "between" demands.  If a higher priority
+;;demand is filling with a relatively tight constraint, and can't
+;;be filled, this does not preclude the possibility that a "lower"
+;;priority demand of a different category with relaxed constraints
+;;cannot be filled.  This leads to us stopping trying to fill demand
+;;due to effectively artificial constraints on lower priority demands.
+;;This problem first manifested visibly in the modernization case,
+;;where high-priority mod demands - with compo-specific constraints -
+;;were successful in modernizing the supply.  Eventually, once
+;;no non-modern supply existed and the demand couldn't be filled,
+;;the "normal" but lower priority demands  were effectively truncated.
+;;This created the appearance of missing gobs of demands from an
+;;instant forward, despite seemingly having plenty of supply (and
+;;modernized too!).
+
+;;Solutions:
+
+;;1 - do not optimize the fill process, and set the :stop-early? default to
+;;    false. This will incur costs during filling, but they may be negligible in
+;;    the grand scheme. Need profiling to determine.
+
+;;2 - Attempt to fill as in 1, except maintain a map of categories that have
+;;    been unsuccesfully fillled. If we fail to fill a category, we add it to
+;;    the empties and continue to scan through the demands. If we run into a
+;;    lower-priority demand of the same category, we can prune it (by ignoring
+;;    it) since we've proven it unfillable based on the objective hierarchy.
+
+;;3 - Fill as in 2, but maintain the empties map between fills (absent
+;;    changes in supply.  This an additional optimization, but requires
+;;    managing state and book-keeping that could be error prone.
+
+;;for now (5 August 2018), we go with option 1 to expidite results.
+
 (defn fill-hierarchically [ctx]
-  (fill-demands-with fill-category ctx))
+  (fill-demands-with fill-category ctx :stop-early? false))
 
 ;;Implements the try-to-fill-all-demands, using only follow-on-supply scheme.
 ;;get-followon-keys returns a set of "buckets" in the supply that correspond
