@@ -148,9 +148,9 @@
 ;;It'd be nice to be able to define basic templates 
 
 (def default-positions 
-  {reset     #{:dwelling :c5} 
-   train     #{:dwelling :c4}
-   ready     #{:dwelling :c2} 
+  {reset     #{:dwelling :c4}
+   train     #{:dwelling :c3}
+   ready     #{:dwelling :c2}
    available #{:dwelling :c1}
    deployed       :bogging
    Overlapping    :overlapping
