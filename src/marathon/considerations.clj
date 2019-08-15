@@ -466,7 +466,7 @@
 ;;input during marathon.ces.entityfactory/units-from-records,
 ;;or have a different processing pipeline.
 
-;;One obvious implementation is to define a cycle-distribution-key
+;;One obvious implementation is to define a cycle-init-key
 ;;for the input, namely [src component policy], which can
 ;;be associated as an entity component or tracked as meta.
 ;;We could then group the units by this key, and push the
@@ -476,5 +476,14 @@
 ;;naming of units between runs (and legacy testing), so we'd like
 ;;to preserve the order of the records and the resulting unit names.
 
+;;Solution:
+;;We created a new function, initialize-cycle-times, which
+;;leverages distribute-cycle-times according to some information
+;;now compted in create-units, where unit records have a
+;;:cycle-init-key of ^{:policy some-policy}[src compo (policy-name some-policy)]
+
+;;initialize-cycle-times no groups by cycle-init-key, and
+;;assigns cycle times (where applicable, e.g. for quantities > 1)
+;;via distribute-cycle-times.
 
 
