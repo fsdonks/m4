@@ -581,6 +581,10 @@
 ;;batch unit creation, since we now how the possibility
 ;;of having multiple unit batches -specified by different mods-
 ;;that should be distributed along the same cyclelength.
+;;Instead of calling distribute-cycle-times here directly,
+;;we'll defer it to later, but track units needing init
+;;by incorporating a cycle-init-key component that denotes
+;;the batches of entities.
 
 ;;We can extract the supply dependencies, and the ghost arg,
 ;;if we provide the behavior to be used.
@@ -594,20 +598,16 @@
                     "Auto" (choose-policy pname compo pstore
                                           (pstore->params pstore) src)
                     (plcy/find-policy pname pstore))
-        p         (marathon.data.protocols/policy-name policy)]
-    (if (pos? amount)
-        (loop [idx idx
-               acc []]
-          (if (== idx bound)
-            (distribute-cycle-times acc policy)
-            (let [nm       (generate-name idx src compo)
-                  new-unit (-> (assoc base-record :Name nm)
-                               (record->unitdata)
-                               (assoc :unit-index idx)
-                               (assoc :cycle-init-key [src compo p])) ;;added UnitIndex
-                  ]
-              (recur (unchecked-inc idx)
-                     (conj acc new-unit))))))))
+        p         (marathon.data.protocols/policy-name policy)
+        k         (with-meta [src compo p] {:policy policy})]
+    (when (pos? amount)
+      (into [] (map (fn [idx]
+                      (let [nm       (generate-name idx src compo)]
+                        (-> (assoc base-record :Name nm)
+                            (record->unitdata)
+                            (assoc :unit-index idx);;added UnitIndex
+                            (assoc :cycle-init-key k)))))
+               (range idx bound)))))
 
 (defn valid-supply-record? [r]
   (and (:Enabled r) (pos? (:Quantity r))))
@@ -634,6 +634,19 @@
   [initial-count]
   (->> (ints-from 2147483647 0)
        (drop initial-count)))
+
+;;Tom added 19 Aug 2019
+;;We now have a processing step that groups the unit records by :cycle-init-key
+;;and defines cyclelengths for each unit.
+
+(defn initialize-cycle-times [xs]
+  (->> (for [[k us] (group-by :cycle-init-key xs)]
+         (if-not k
+           us
+           (let [[src compo p] k
+                 policy        (-> k meta :policy)]
+             (distribute-cycle-times us policy))))
+       (apply concat)))
 
 ;;Given a set of raw unit records, create a set of unitdata that has
 ;;all the information necessary for initialization, i.e. lifecycle, 
@@ -668,6 +681,7 @@
                           (rassoc :unit-index @unit-count) ;;Add UnitIndex 3/8/2017
                           (conj-unit  acc)))) (transient []))
          (persistent!)
+         initialize-cycle-times
          (mapv (fn [weight unit] ;;added random-weights
                 (assoc unit :unit-weight weight)) (weights-from initial-count))
          )))
