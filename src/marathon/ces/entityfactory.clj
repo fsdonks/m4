@@ -1,19 +1,19 @@
 
-;;The entity factory is a port of legacy functions used to read 
-;;entity information from tabular sets of data according to 
-;;the marathon data schemas.  The factory's primary function is 
-;;to project records onto entities (i.e. units and demands) 
-;;as well as serve as a hub for registering entities and 
-;;scheduling things like initial starting conditions.  
-;;The entityfactory could probably be broken apart, 
-;;but it's legacy functionality would have to go somewhere. 
-;;For now, we'll keep it in a similar namespace, but as 
-;;opportunities arise, we may be able to abastract out 
+;;The entity factory is a port of legacy functions used to read
+;;entity information from tabular sets of data according to
+;;the marathon data schemas.  The factory's primary function is
+;;to project records onto entities (i.e. units and demands)
+;;as well as serve as a hub for registering entities and
+;;scheduling things like initial starting conditions.
+;;The entityfactory could probably be broken apart,
+;;but it's legacy functionality would have to go somewhere.
+;;For now, we'll keep it in a similar namespace, but as
+;;opportunities arise, we may be able to abastract out
 ;;functionality.
 (ns marathon.ces.entityfactory
-  (:require [marathon        [schemas :as s]]            
+  (:require [marathon        [schemas :as s]]
             [marathon.data.protocols :as generic] ;rename
-            [marathon.data   [cycle :as cyc]                              
+            [marathon.data   [cycle :as cyc]
                              [store :as store]]
             [marathon.demand [demanddata :as d]]
             [marathon.ces.demand :as demand]
@@ -22,7 +22,7 @@
             [spork.ai.behaviorcontext :as base]
             [marathon.supply [unitdata :as u]]
             [marathon.ces.supply :as supply]
-            [marathon.ces.policy :as plcy]            
+            [marathon.ces.policy :as plcy]
 ;;            [marathon.sim.engine :as engine]
             [spork.sim.simcontext :as sim]
             [marathon.ces.core :as core]
@@ -31,63 +31,63 @@
 
 
 ;;*Entity Orders
-;;The entity factory used to be an object that maintained 
-;;a reference to a parent simulation context.  This allowed 
-;;it to interpret data, like  a set of demand 
-;;records, into the act of creating demand entities, 
+;;The entity factory used to be an object that maintained
+;;a reference to a parent simulation context.  This allowed
+;;it to interpret data, like  a set of demand
+;;records, into the act of creating demand entities,
 ;;notifying the simulation context that the a new demand had been
 ;;registered, and registering the demand with the demandstore.
-;;Most of this was accomplished via side effects, so creating, 
+;;Most of this was accomplished via side effects, so creating,
 ;;and loading entities, was fairly imperative and stateful.
 
 ;;Going forward, we're going to break up the distiction between
-;;these responsibilities, and communicate the results via 
-;;EntityOrders.  An EntityOrder is merely a record that 
-;;the entity factory can intepret, given a context, to yield 
-;;a new context.  In this case, the context is our stock 
-;;simcontext.  Seen as an interpreter, our entityfactory 
-;;evalutates orders relative to the simulation context, returning 
-;;a new simulation context.  We define new kinds of EntityOrders 
+;;these responsibilities, and communicate the results via
+;;EntityOrders.  An EntityOrder is merely a record that
+;;the entity factory can intepret, given a context, to yield
+;;a new context.  In this case, the context is our stock
+;;simcontext.  Seen as an interpreter, our entityfactory
+;;evalutates orders relative to the simulation context, returning
+;;a new simulation context.  We define new kinds of EntityOrders
 ;;to allow for different types of entities to be built.
 
-;;In the scheme of our IO processes, this means we care about 
-;;a lower layer of functions that read raw data - typically 
-;;in the form of tab delimited text, and convert that data 
+;;In the scheme of our IO processes, this means we care about
+;;a lower layer of functions that read raw data - typically
+;;in the form of tab delimited text, and convert that data
 ;;into some kind of EntityOrder that our factory can recognize.
 
 ;;Ideally, we end up with a simple interface for "Creating" entities
-;;in the simulation, where entity creation may involve an arbitrarily 
+;;in the simulation, where entity creation may involve an arbitrarily
 ;;complex sequence of updates.
 
 ;;*Basic Functions
-;;Many of our functions are concerned with IO, that is, reading 
+;;Many of our functions are concerned with IO, that is, reading
 ;;tab-delimited text records, and creating entity orders from them.
 
 ;;For now, we're using dynamic scope...
 (def ^:dynamic *ctx* core/emptysim)
 
-;;I think we may want to make the entityfactory functions operate 
+;;I think we may want to make the entityfactory functions operate
 ;;on a dynamic var.  That should make the calling code clearer...
-;;There are events where we trigger notifications and such, for 
-;;logging purposes.  Maybe we we only check if the context is 
+;;There are events where we trigger notifications and such, for
+;;logging purposes.  Maybe we we only check if the context is
 ;;actually bound, and then do something.
 
-;;The original procedure actually mutated the context 
-;;as demand records were parsed.  We can decouple this step by 
-;;creating a sequence of entity creation actions, i.e. entity 
+;;The original procedure actually mutated the context
+;;as demand records were parsed.  We can decouple this step by
+;;creating a sequence of entity creation actions, i.e. entity
 ;;orders, that can be processed into state changes.
 
-;;For instance: 
+;;For instance:
 
-;;This is technically a bottleneck at the moment; Not terrible, but 
-;;we may look at more efficient ways of doing it.  It's the check for 
-;;duplicate demands that's slowing us; The partitioning may be done 
+;;This is technically a bottleneck at the moment; Not terrible, but
+;;we may look at more efficient ways of doing it.  It's the check for
+;;duplicate demands that's slowing us; The partitioning may be done
 ;;more smartly, or without building two collections.
-(defn partition-dupes 
+(defn partition-dupes
   "Returns a pair of [uniques, dupes] based on the key function"
   [keyfn xs]
   (let [known (java.util.HashSet.)
-        res  (reduce (fn [acc x]              
+        res  (reduce (fn [acc x]
                        (let [uniques (first acc)
                              dupes   (second acc)
                              k (keyfn x)]
@@ -100,18 +100,19 @@
     [(persistent! (first res)) (persistent! (second res))]))
 
 ;;added positivity check for pre-run filtering.
-(defn valid-record? 
-  ([r params] 
-     (and (:Enabled r) 
+(defn valid-record?
+  ([r params]
+     (and (:Enabled r)
           (core/in-scope? params (:SRC r))
           (pos? (:Quantity r))))
   ([r] (valid-record? r (core/get-parameters *ctx*))))
 
-(defn demand-key 
+(defn demand-key
   ([{:keys [SRC Vignette Operation Priority StartDay Duration]}]
      (demand-key SRC Vignette Operation Priority StartDay Duration))
-  ([SRC Vignette Operation Priority StartDay Duration] 
-     (clojure.string/join "" [Priority "_"  Vignette "_" SRC "_["  StartDay "..."  (+ StartDay Duration) "]"])))
+  ([SRC Vignette Operation Priority StartDay Duration]
+   (clojure.string/join "" [Priority "_"  Vignette "_" SRC
+                            "_["  StartDay "..."  (+ StartDay Duration) "]"])))
 
 (def extra-fields
   '[Command
@@ -124,11 +125,11 @@
     MissionLength])
 
 ;;Could inline for speed, may be unnecessary...
-(defn create-demand   
-  "Produces a validated demand from the inputs.  We enforce invariants about 
+(defn create-demand
+  "Produces a validated demand from the inputs.  We enforce invariants about
    demanddata here to ensure that invalid values are caught and excepted."
-  [DemandKey SRC  Priority StartDay Duration Overlap Category 
-   SourceFirst Quantity  OITitle Vignette Operation  DemandGroup]  
+  [DemandKey SRC  Priority StartDay Duration Overlap Category
+   SourceFirst Quantity  OITitle Vignette Operation  DemandGroup]
   (let [empty-op  (core/empty-string? Operation)
         empty-vig (core/empty-string? Vignette)
         idx       (if (or empty-op empty-vig) (core/next-idx) 0)
@@ -145,18 +146,18 @@
      Duration ;the total time the demand is activated.
      Overlap  ;the demand-specific overlap requirement, if any
      Category ;descriptor for deployed unit behavior over-rides.
-     SourceFirst  ;descriptor for supply preference. 
+     SourceFirst  ;descriptor for supply preference.
      Quantity  ;the total amount of entities required to fill the demand.
      OITitle   ;formerly OITitle.  Long-form description of the src capability.
      vig  ;Descriptor of the force list that generated this demand entity.
      op ;Fine-grained, unique description of the demand.
-     DemandGroup ;Ket that associates a demand with other linked demands.  
+     DemandGroup ;Ket that associates a demand with other linked demands.
      )))
 
 ;;This is hacky, should clean on parsing...
 (defn clean-nils [drec flds]
   (reduce (fn [acc k]
-            (if-let [v (get acc k)]              
+            (if-let [v (get acc k)]
               (if (and (string? v)
                        (or (= v "nil")
                            (= (clojure.string/trim v) "")))
@@ -175,13 +176,13 @@
                     `(~v (~type ~v))))]
      ~@expr))
 
-(defn record->demand 
+(defn record->demand
   "Basic io function for converting raw records to demanddata."
-  [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category 
+  [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category
            SourceFirst Quantity  OITitle Vignette Operation  DemandGroup
            ] :as rec}]
   (coerce [[Priority StartDay Duration Overlap Quantity] long]
-    (-> (create-demand DemandKey SRC Priority StartDay Duration Overlap Category 
+    (-> (create-demand DemandKey SRC Priority StartDay Duration Overlap Category
                        SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup)
       ;this is a slightly hacked way to do it, but it's passable...
         (merge (select-keys rec [:Command
@@ -198,12 +199,12 @@
 
 ;;#Optimization: we can use reducers here instead of seqs.
 
-;;Returns a set of demand data, derived from recs, with 
+;;Returns a set of demand data, derived from recs, with
 ;;duplicate records attached as meta data.
-(defn demands-from-records [recs ctx]  
+(defn demands-from-records [recs ctx]
   (let [in-scope?   (get (core/get-parameters ctx) :SRCs-In-Scope identity)
-        [uniques dupes]  
-            (->> recs 
+        [uniques dupes]
+            (->> recs
                  (r/filter #(and (valid-record? % (core/get-parameters ctx))
                                  (in-scope? (:SRC %))))
                  (partition-dupes demand-key))]
@@ -214,7 +215,7 @@
 (defn notify-duplicate-demands! [dupes ctx]
   (let [name (:name (core/get-demandstore *ctx*))]
     (reduce (fn [ctx dup]
-              (sim/trigger-event :Initialize name name 
+              (sim/trigger-event :Initialize name name
                      (core/msg "Demand " (:DemandKey dup) " had duplicates in source data.") nil ctx))
             ctx
             dupes)))
@@ -224,40 +225,40 @@
   (let [msg (core/msg  "Demand " (:name d) " Initialized")]
     (sim/trigger-event :Intialize :DemandStore :DemandStore msg nil ctx)))
 
-;;Do we need to worry about naming here? 
+;;Do we need to worry about naming here?
 ;;Seems like associate-demand could be done inside demand ops...
 
-;;Updates the demand index according to the contents of 
-;;demandmanager, providing unique names for duplicate 
-;;demands.  Threads the demand through the context 
+;;Updates the demand index according to the contents of
+;;demandmanager, providing unique names for duplicate
+;;demands.  Threads the demand through the context
 ;;and returns the resulting context.
-(defn load-demands 
+(defn load-demands
   ([record-source ctx]
      (let [rs    (demands-from-records (core/as-records record-source) ctx)
            dupes (get (meta rs) :duplicates)]
-       (->> (reduce (fn [acc d] 
-                      (initialized-demand!                        
+       (->> (reduce (fn [acc d]
+                      (initialized-demand!
                          (demand/register-demand d acc) d))
                     ctx rs)
             (notify-duplicate-demands! dupes))))
-  ([record-source demandstore ctx] 
+  ([record-source demandstore ctx]
      (load-demands record-source (core/set-demandstore ctx demandstore))))
 
-(defn load-demands! 
+(defn load-demands!
   ([record-source ctx]
      (let [rs    (demands-from-records (core/as-records record-source) ctx)
            dupes (get (meta rs) :duplicates)]
        (->> ctx
-            (demand/register-demands! 
-             (fn [d acc] 
-               (initialized-demand! d acc))  rs)             
+            (demand/register-demands!
+             (fn [d acc]
+               (initialized-demand! d acc))  rs)
             (notify-duplicate-demands! dupes))))
-  ([record-source demandstore ctx] 
+  ([record-source demandstore ctx]
      (load-demands record-source (core/set-demandstore ctx demandstore))))
- 
-(defn ungrouped? [grp] 
-  (when grp 
-      (or (core/empty-string? grp) 
+
+(defn ungrouped? [grp]
+  (when grp
+      (or (core/empty-string? grp)
           (= (clojure.string/upper-case grp) "UNGROUPED"))))
 
 ;;#Unit Entity Creation
@@ -273,14 +274,14 @@
 ;;We can probably push this off to a policy default table.  It used
 ;;to mean that we had this interpreted into policy objects, all
 ;;initialized in a singleton class at runtime initiaion.  Now that
-;;it's pulled out of the class, we can probably interpret it easier 
-;;and then use a policy parser to point at the correct policies in 
+;;it's pulled out of the class, we can probably interpret it easier
+;;and then use a policy parser to point at the correct policies in
 ;;the policystore.
-(def ^:constant +policy-defaults+ 
+(def ^:constant +policy-defaults+
   {"Ghost" {:special :SpecialGhostPolicy
             :default :DefaultGhostPolicy}
    "AC"    {:special :SpecialACPolicy
-            :default :DefaultACPolicy}          
+            :default :DefaultACPolicy}
    "RC"    {:special :SpecialRCPolicy
              :default :DefaultRCPolicy}
    "NG"   {:special :SpecialNGPolicy
@@ -293,24 +294,24 @@
       p
       (throw (Exception. (str ["No Default Policy for " policytype component]))))))
 
-;;Note -> we're not mutating anything here.  We can pass in a 
+;;Note -> we're not mutating anything here.  We can pass in a
 ;;parameters.
-(defn choose-policy 
-  "Tries to fetch an associated policy, and upon failing, selects a 
-   default policy based on the component/src and whether the SRC is 
+(defn choose-policy
+  "Tries to fetch an associated policy, and upon failing, selects a
+   default policy based on the component/src and whether the SRC is
    tagged as being special."
   [policyname component policystore parameters src]
-  (let [policy-type  (if (or (core/empty-string? src) 
+  (let [policy-type  (if (or (core/empty-string? src)
                              (not (core/special-src? (:tags parameters) src)))
                        :default
                        :special)]
     (if-let [p (or (get-in policystore [:policies policyname])
                    (and (not= "Auto" policyname) ;added check to policyname
                         (plcy/find-policy policyname policystore)))]
-      p 
+      p
       (if-let [res (get-in +policy-defaults+ [component policy-type])]
         (plcy/find-policy  (get parameters res) policystore)
-        (throw (Exception. (str "Default Policy is set at "  
+        (throw (Exception. (str "Default Policy is set at "
                                 policyname  " which does not exist!")))))))
 
 (defn policy? [x] (satisfies? marathon.data.protocols/IRotationPolicy x))
@@ -320,19 +321,19 @@
   (if (has-policy? unit) unit
       (let [p (choose-policy (:policy unit) (:component unit) policystore params (:src unit))]
         (assoc unit :policy p))))
-             
+
 
 ;;Given a unit, initialize it's currentcycle based on policy information
 
 ;;Units maintain direct references to policies, but they do not
-;;actively subscribe directly to the policy.  Rather, the policy 
-;;store maintains a map of {policyname #{subscribers}}, we 
-;;can even do this via tags in the tagbase, but it's already 
-;;there in the policy store.  That way, when we invoke the 
-;;policy subscription service, we should have an couple of updates: 
+;;actively subscribe directly to the policy.  Rather, the policy
+;;store maintains a map of {policyname #{subscribers}}, we
+;;can even do this via tags in the tagbase, but it's already
+;;there in the policy store.  That way, when we invoke the
+;;policy subscription service, we should have an couple of updates:
 ;;the unit now has a reference to the policy it subscribes to (
-;;to make unit querying and updating easier), and the policystore 
-;;has an association between the unit and the policy its 
+;;to make unit querying and updating easier), and the policystore
+;;has an association between the unit and the policy its
 ;;subscribed to.
 
 ;;I think this guy should be elevated.
@@ -341,10 +342,10 @@
 ;;We need access to multiple spheres of influence.  We used to just
 ;;mutate away and let the changes propgate via effects.  No mas.
 ;;Returns a policystore update and a unit update.
-;;#TODO Implement policy->cycle-record 
+;;#TODO Implement policy->cycle-record
 ;;#TODO Populate unit's first cycle.
 (defn policy->cycle-record [p cycletime t  name src compo]
-  (cyc/make-cyclerecord :uic-name name :src src :component compo 
+  (cyc/make-cyclerecord :uic-name name :src src :component compo
                         :policyname        (generic/policy-name p)
                         :duration-expected (generic/cycle-length p)
                         :available-time    (generic/max-bog p)
@@ -352,26 +353,26 @@
                         :dwell-expected    (generic/cycle-length p)
                         :bogbudget         (generic/bog-budget p)
                         :mob-expected      (generic/max-mob p)
-                        :tstart            t 
+                        :tstart            t
                         :tfinal            (+ t (generic/cycle-length p))
                         :duration          cycletime
                         :dwell             cycletime))
 
-;;Moving this to spawning behavior...       
-(defn initialize-cycle 
-  "Given a unit's policy, subscribes the unit with said policy, 
-   updates the unit's state to initial conditions, broadcasts 
-   any movement via event triggers, returning the 
+;;Moving this to spawning behavior...
+(defn initialize-cycle
+  "Given a unit's policy, subscribes the unit with said policy,
+   updates the unit's state to initial conditions, broadcasts
+   any movement via event triggers, returning the
    new unit and a new policystore."
   [unit policy ghost ctx]
   (let [;_ (println :raw-position (:name unit) (:positionpolicy unit))
         currentpos (let [p (:positionpolicy unit)]
                       (when (not= p :spawn) p))
-        newpos (if (not ghost) 
+        newpos (if (not ghost)
                  (or currentpos (generic/get-position policy (:cycletime unit)))
                  "Spawning")
         ]
-    (-> unit       
+    (-> unit
         (merge {:policy policy
                 :positionpolicy newpos
                 :locationname  "Spawning"
@@ -381,10 +382,10 @@
 
 ;;Computes the intervals between units distributed along a lifecylce.
 ;;Used to uniformly disperse units in a deterministic fashion.
-(defn compute-interval [clength unitcount]  
-  (if (or (zero? clength) (zero? unitcount)) 
+(defn compute-interval [clength unitcount]
+  (if (or (zero? clength) (zero? unitcount))
     (throw (Error.  "Cannot have zero length cycle or 0 units"))
-    (if (< unitcount clength) 
+    (if (< unitcount clength)
       (quot clength unitcount)
       (quot clength (dec clength)))))
 
@@ -397,17 +398,17 @@
 ;;until we hit the magic #  n < clength.
 
 ;;#Potential Digression from M3
-;;Replaces the inner logic 
+;;Replaces the inner logic
 #_(defn intervals [n clength]
   (let [remaining        (atom n)
         uniform-interval (atom (compute-interval clength n))
-        last-interval    (atom (- @uniform-interval))        
+        last-interval    (atom (- @uniform-interval))
         next-interval    (fn [remaining]
-                           (let [nxt (long (+ @last-interval @uniform-interval))                                      
+                           (let [nxt (long (+ @last-interval @uniform-interval))
                                  nxt (if (> nxt clength) 0 nxt)]
                              (do (when (and (< remaining clength)
                                             (zero? nxt))
-                                   (reset! uniform-interval 
+                                   (reset! uniform-interval
                                            (compute-interval clength  remaining)))
                                  (reset! last-interval nxt)
                                  nxt)))]
@@ -431,17 +432,17 @@
                                         core/+default-cycle-length+))
                   clength)]
     (mapv  (fn [cycletime  unit]
-             (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")                          
+             (assert  (not (neg? cycletime)) "Negative cycle time during distribution.")
              (assoc unit :cycletime cycletime))
            ;;Added for consistency with legacy eversion....not technically incorrect.
            (->> (intervals (count units) clength)
                 (map identity #_inc))
              units)))
 
-;;This is just a stub.  We currently hardwire behaviors, 
-;;but will allow more extension in the future.  The legacy 
-;;behavior system required an inherited object model implementation, 
-;;but now we don't have to worry about that.  We'll probably just 
+;;This is just a stub.  We currently hardwire behaviors,
+;;but will allow more extension in the future.  The legacy
+;;behavior system required an inherited object model implementation,
+;;but now we don't have to worry about that.  We'll probably just
 ;;have a map of functions, or types that can fulfill the unit behavior
 ;;protocol.
 (defn find-behavior
@@ -453,14 +454,14 @@
 ;;The unit is considered unattached because it is not registered with a supply "yet".  Thus, its parent is
 ;;nothing. parametrically create a new unit.
 (defn create-unit [name src oititle component cycletime policy behavior & {:keys [home speed]}]
-  (into 
+  (into
    (store/unit
     name ;id of the unit entity; for now we'll stick with the name.
-    name ;unit entity's unique name. corresponds to a UIC 
+    name ;unit entity's unique name. corresponds to a UIC
     src ;unit entity's type, or capability it can supply.
     component ;unit entity's membership in supply.
     policy  ;the policy the entity is currently following.
-    ;;[] ;a stack of any pending policy changes. was statestack..                                        
+    ;;[] ;a stack of any pending policy changes. was statestack..
     :spawning ;the current physical location of the unit. ;fsm/blank-data ;generic state data for the unit's finite state machine.
     :blank-icon
     name
@@ -473,13 +474,13 @@
     :behavior behavior ;the behavior the unit uses to interpret policy and messages.
     )
    (merge {:cycletime    (long cycletime) ;the unit's current coordinate in lifecycle space.
-           :followoncode nil       ;description of the categories this unit serve as a followon to.                      
+           :followoncode nil       ;description of the categories this unit serve as a followon to.
            :currentcycle nil ;the current cycle data structure for the unit.
            :cycles [] ;an ordered collection of the cycles that the unit has completed.
            :spawntime -1 ;the time in which the unit spawned.
            :oititle oititle ;the description of the unit.
            :locationhistory [] ;list of all the locations visited.
-           :dwell-time-when-deployed 0}  ;dwell time before deployment  
+           :dwell-time-when-deployed 0}  ;dwell time before deployment
           )))
 
 (declare srm-record->unitdata)
@@ -512,56 +513,56 @@
                    :command               Command
                    :spawn-info {:location Location  ;;we have starting information, but not the next state...
                                 :position Position
-                                :duration Duration 
+                                :duration Duration
                                 }
                    :default-bucket "SRM"}))))
 
 ;;Changed to 1-based indexing for compatibility with M3.
-(defn generate-name 
+(defn generate-name
   "Generates a conventional name for a unit, given an index."
   ([idx unit]
      (core/msg (inc idx) "_" (:SRC unit) "_" (:component unit)))
   ([idx src compo]
      (core/msg (inc idx) "_" src "_" compo)))
-      
-(defn check-name 
-  "Ensures the unit is uniquely named, unless non-strictness rules are 
+
+(defn check-name
+  "Ensures the unit is uniquely named, unless non-strictness rules are
    applied."
-  [name supply strictname]  
+  [name supply strictname]
     (if (supply/unit? supply name)
-      (if strictname 
-        (throw (Error. (str  "A unit already exists with the name " 
-                             name " in SupplyManager " (:name supply)  
+      (if strictname
+        (throw (Error. (str  "A unit already exists with the name "
+                             name " in SupplyManager " (:name supply)
                              ", unit names must be unique")))
         (str name (count (:unit-map supply))))
       name))
-        
-;;This does not actually attach the unit inside the supplystore, only 
+
+;;This does not actually attach the unit inside the supplystore, only
 ;;preps the unit's name.  It is associated, in the legacy sense that
 ;;the unit would gain a "pointer" to the parent supply, as well as
-;;having its name preconditioned to ensure compatibility or catch 
-;;errors.  In the newer version, we may consider composing this with 
-;;marathon.sim.supply/register-unit , which actually attaches the 
-;;unit to the supply store.  Note: we could handle parent-child 
-;;assocation there as well...The unique functionality here is that 
-;;we are either generating or altering the name of the unit to ensure 
+;;having its name preconditioned to ensure compatibility or catch
+;;errors.  In the newer version, we may consider composing this with
+;;marathon.sim.supply/register-unit , which actually attaches the
+;;unit to the supply store.  Note: we could handle parent-child
+;;assocation there as well...The unique functionality here is that
+;;we are either generating or altering the name of the unit to ensure
 ;;it is unique in the supply.
-(defn associate-unit   
-  "Associate or attach a new unit to a particular supply. If the new unit's name is 
+(defn associate-unit
+  "Associate or attach a new unit to a particular supply. If the new unit's name is
   not unique, it will be changed to accomodate uniqueness requirement."
   [unit supply strictname]
   (assoc unit :name (check-name (:name unit) supply strictname)))
-        
-;;Note -  register-unit is the other primary thing here.  It currently 
+
+;;Note -  register-unit is the other primary thing here.  It currently
 ;;resides in marathon.sim.su
 
 ;;Adds multiple units according to a template.
 ;;Associates each unit with a
 
-;;Breaking apart add-units into three discrete steps: 
+;;Breaking apart add-units into three discrete steps:
 ;;1) create n units, with empty cycles, according to the demand
 ;;   record
-;;2) push that batch of units through cycle distribution. 
+;;2) push that batch of units through cycle distribution.
 ;;3) Prep
 ;;4) Register
 
@@ -649,13 +650,13 @@
        (apply concat)))
 
 ;;Given a set of raw unit records, create a set of unitdata that has
-;;all the information necessary for initialization, i.e. lifecycle, 
-;;policy, behavior, name, etc.  We want to name the units according 
+;;all the information necessary for initialization, i.e. lifecycle,
+;;policy, behavior, name, etc.  We want to name the units according
 ;;to the order in which they were generated, so we provide a
 ;;supplystore to derive the next index from.  We'll pass the output
-;;from this onto a function that prepares the units.  From there 
-;;we do all the minute prepatory tasks to "fill in the details", 
-;;like associating the units with a supply, establishing unit 
+;;from this onto a function that prepares the units.  From there
+;;we do all the minute prepatory tasks to "fill in the details",
+;;like associating the units with a supply, establishing unit
 ;;subscriptions to policies, etc..
 (defn units-from-records
   ([recs supply pstore filter-func]
@@ -685,20 +686,20 @@
 
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
- 
+
 ;;TODO - this returns a ctx, we're using it like we have a unit.
 ;;Alter the signature to [newunit, newctx]
 (defn prep-cycle [unit ctx]
   (initialize-cycle unit (:policy unit) (core/ghost? unit) ctx))
 
-(defn prep-unit 
-  "Given a raw-unit, ensures its name is good with the supplystore, 
-   assigns a policy (typically read from the existing policy field) 
+(defn prep-unit
+  "Given a raw-unit, ensures its name is good with the supplystore,
+   assigns a policy (typically read from the existing policy field)
    and initializes its cycle relative to the current cycletime."
   [unit supplystore policystore parameters ctx]
-  (-> unit       
+  (-> unit
       (associate-unit supplystore true)  ;;may move this into supply/register-unit...
-      (assign-policy policystore parameters)      
+      (assign-policy policystore parameters)
       (prep-cycle ctx)))
 
 ;;Persistent version for testing...OBE when the mutable version works.
@@ -706,12 +707,12 @@
 ;;All we need to do is eat a unit, returning the updated context.
 ;;A raw unit is a unitdata that is freshly parsed, via create-unit.
 (defn process-unit [raw-unit extra-tags parameters behaviors ctx]
-  (core/with-simstate [[supplystore policystore] ctx] ;could get expensive 
-    (let [prepped   (-> raw-unit       
+  (core/with-simstate [[supplystore policystore] ctx] ;could get expensive
+    (let [prepped   (-> raw-unit
                         (associate-unit supplystore true)
-                        (assign-policy policystore parameters)      
+                        (assign-policy policystore parameters)
                         (prep-cycle ctx))
-          newstore (plcy/subscribe-unit prepped (:policy prepped) policystore)         
+          newstore (plcy/subscribe-unit prepped (:policy prepped) policystore)
           newctx   (core/set-policystore ctx newstore)]
       (supply/register-unit supplystore behaviors prepped nil extra-tags newctx))))
 
@@ -728,9 +729,9 @@
 
 ;;Pending Mutable version for bulk updates.
 (defn process-unit! [raw-unit extra-tags parameters behaviors supplystore policystore ctx]
-  (let [prepped   (-> raw-unit       
+  (let [prepped   (-> raw-unit
                       (associate-unit supplystore true)
-                      (assign-policy policystore parameters)      
+                      (assign-policy policystore parameters)
                       (prep-cycle ctx))]
     (do (supply/register-unit! supplystore behaviors prepped nil extra-tags ctx)
 ;        (plcy/subscribe-unit prepped (get u :policy)  policystore)
@@ -742,16 +743,16 @@
        (group-by #(plcy/policy-name (get % :policy)))
        (reduce-kv (fn [scripts pol us]
                     (let [us (r/map #(get % :name) us)]
-                      (assoc scripts pol 
+                      (assoc scripts pol
                              (if-let [newscripts (get scripts pol)]
                                (into newscripts us)
-                               (into #{} us)))))                    
+                               (into #{} us)))))
                   (get policystore :subscriptions))
        (assoc policystore :subscriptions)))
 
 ;;#TODO implement mutable versions for register-units! and subscribe-units!
 
-;;At the highest level, we have to thread a supply around 
+;;At the highest level, we have to thread a supply around
 ;;and modify it, as well as a policystore.
 (defn process-units! [raw-units ctx]
   (assert false "use persistent version of process units for now!")
@@ -767,13 +768,13 @@
     ;;                    (core/with-transient-cells [unittags subscriptions buckets]
     ;;                      (-> (reduce (fn [acc unit]
     ;;                                    (process-unit! unit nil parameters behaviors supplystore policystore acc))
-    ;;                                  ctx2 
+    ;;                                  ctx2
     ;;                                  raw-units))))]
     ;;       (core/with-simstate [[supplystore policystore] newctx]
-    ;;         (core/merge-entity 
+    ;;         (core/merge-entity
     ;;          {:PolicyStore (subscribe-units! (vals (get supplystore :unitmap)) policystore)}
     ;;          newctx)))))
-    )              
+    )
 
  ;;Are there any abstractions we can level?  Any patterns that are
   ;;becoming apparent?
@@ -816,15 +817,15 @@
   ;;   (core/with-simstate [[parameters behaviors] ctx]
   ;;     (-> ctx
   ;;         (supply/register-units supplystore behaviors)
-  ;;         (plcy/subscribe-units 
+  ;;         (plcy/subscribe-units
   ;;     (-> (reduce (fn [acc unit]
   ;;                   (process-unit! unit nil parameters behaviors supplystore policystore acc))
-  ;;                 ctx2 
+  ;;                 ctx2
   ;;                 raw-units)
   ;;         (update-ctx2!)))))
 
 
-  ;;Flesh this out, high level API for adding units to supply.  
+  ;;Flesh this out, high level API for adding units to supply.
   ;;Convenience function.
   ;;We really want to add prepped units.
 
@@ -833,7 +834,7 @@
 
   ;;#Entity Initialization
 
-;;Start state is another one that we can possibly alter.   
+;;Start state is another one that we can possibly alter.
 (defn start-state [supply ctx]
   (core/with-simstate [[parameters] ctx]
     (reduce-kv (fn [acc nm unit] (unitsim/change-state unit :spawning 0 0 ctx) ;;all this does is an instant update in spawning
@@ -844,7 +845,7 @@
 (comment ;testing -- incorporated in testing.clj, auto
   (require '[marathon.sim.sampledata :as sd])
   (require '[clojure.test :as test :refer [deftest is]])
-  
+
   (def testctx  (assoc-in core/emptysim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
   (def debugctx (assoc-in core/debugsim [:state :parameters :SRCs-In-Scope] {"SRC1" true "SRC2" true "SRC3" true}))
 
@@ -855,14 +856,14 @@
   (def tfinal   (+ tstart (:duration first-demand)))
   (def res      (demand/register-demand  first-demand testctx))
   (def dstore   (core/get-demandstore res))
-  (deftest scheduled-demand-correctly 
+  (deftest scheduled-demand-correctly
     (is (= ((juxt  :startday :duration) first-demand)
            [ 901 1080])
         "Sampledata should not change.  Naming should be deterministic.")
     (is (= (first (demand/get-activations dstore tstart))
            (:name first-demand))
         "Demand should register as an activation on startday.")
-    (is (= (first (demand/get-deactivations dstore tfinal)) (:name first-demand)) 
+    (is (= (first (demand/get-deactivations dstore tfinal)) (:name first-demand))
         "Demand should be scheduled for deactivation")
     (is (zero? (sim/get-time res)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time res) tstart) "Next event should be demand activation")
@@ -879,33 +880,33 @@
   (def m-dstore (core/get-demandstore multiple-demands))
   (def times    (map sim/get-time (take-while spork.sim.agenda/still-time? (iterate sim/advance-time multiple-demands))))
   (def events   (spork.sim.data/event-seq multiple-demands))
-  (def expected-events (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time} 
-            {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time} 
-            {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time} 
-            {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time} 
-            {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time} 
-            {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time} 
-            {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time} 
-            {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time} 
-            {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time} 
+  (def expected-events (list {:time 0, :type :time} {:time 1, :type :time} {:time 91, :type :time} {:time 181, :type :time}
+            {:time 271, :type :time} {:time 361, :type :time} {:time 451, :type :time} {:time 467, :type :time}
+            {:time 481, :type :time} {:time 523, :type :time} {:time 541, :type :time} {:time 554, :type :time}
+            {:time 563, :type :time} {:time 595, :type :time} {:time 618, :type :time} {:time 631, :type :time}
+            {:time 666, :type :time} {:time 721, :type :time} {:time 778, :type :time} {:time 811, :type :time}
+            {:time 901, :type :time} {:time 963, :type :time} {:time 991, :type :time} {:time 1048, :type :time}
+            {:time 1051, :type :time} {:time 1081, :type :time} {:time 1261, :type :time} {:time 1330, :type :time}
+            {:time 1351, :type :time} {:time 1441, :type :time} {:time 1531, :type :time} {:time 1621, :type :time}
+            {:time 1711, :type :time} {:time 1801, :type :time} {:time 1981, :type :time} {:time 2071, :type :time}
             {:time 2095, :type :time} {:time 2341, :type :time} {:time 2521, :type :time}))
   (def activations481 (demand/get-activations m-dstore 481))
-  (deftest scheduled-demands-correctly 
+  (deftest scheduled-demands-correctly
     (is (= times
-           '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721 
+           '(0 1 91 181 271 361 451 467 481 523 541 554 563 595 618 631 666 721
                778 811 901 963 991 1048 1051 1081 1261 1330 1351 1441 1531 1621 1711 1801 1981 2071 2095 2341 2521))
         "Scheduled times from sampledata should be consistent, in sorted order.")
-    (is (= events expected-events)           
+    (is (= events expected-events)
         "The only events scheduled should be time changes.")
-    (is (= activations481 
+    (is (= activations481
            '("1_R29_SRC3[481...554]" "1_A11_SRC2[481...554]" "1_Vig-ANON-8_SRC1[481...554]"))
-        "Should have actives on 481...")       
+        "Should have actives on 481...")
     (is (some (fn [d] (= d (:name first-demand))) (demand/get-activations m-dstore tstart))
         "Demand should register as an activation on startday.")
     (is (zero? (sim/get-time multiple-demands)) "Simulation time should still be at zero.")
     (is (== (sim/get-next-time multiple-demands) earliest) "Next event should be demand activation")
     (is (= (last times) (:tlastdeactivation m-dstore))
-        "Last event should be a deactivation time.")) 
+        "Last event should be a deactivation time."))
 
 
   ;;we can't build supply without policy....initializing supply with
@@ -927,29 +928,29 @@
 ;  (def xs (vec (range 1000000)))
 
   (defn slow-test []
-    (time (dotimes [i 1] 
-            (core/with-cells [{dmap [:demandmap] 
-                               :as state}         dstore] 
+    (time (dotimes [i 1]
+            (core/with-cells [{dmap [:demandmap]
+                               :as state}         dstore]
               (let [newmap  (reduce (fn [acc n] (assoc acc n n)) dmap xs)] (update-state!))))))
 
-  (defn fast-test []    
-    (time (dotimes [i 1] 
-            (core/with-cells [{dmap [:demandmap] 
-                               :as state}         dstore] 
-              (let [newmap (core/reset-cell! dmap 
-                              (persistent! 
-                               (reduce (fn [acc n] (assoc! acc n n)) 
+  (defn fast-test []
+    (time (dotimes [i 1]
+            (core/with-cells [{dmap [:demandmap]
+                               :as state}         dstore]
+              (let [newmap (core/reset-cell! dmap
+                              (persistent!
+                               (reduce (fn [acc n] (assoc! acc n n))
                                  (transient @dmap) xs)))] (update-state!))))))
 
 
   ;;This costs us a bit, because we're not slamming directly on the transient.
-  (defn fast-test! []    
-    (time (dotimes [i 1] 
-            (core/with-cells [{dmap [:demandmap] 
-                               :as state}         dstore] 
+  (defn fast-test! []
+    (time (dotimes [i 1]
+            (core/with-cells [{dmap [:demandmap]
+                               :as state}         dstore]
              (core/with-transient-cells [dmap]
-               (reduce (fn [acc n] (assoc acc n n)) 
-                       dmap  xs)) 
+               (reduce (fn [acc n] (assoc acc n n))
+                       dmap  xs))
              (update-state!)))))
 
   (defn add-demand [dstore demandname d]
@@ -988,9 +989,9 @@
     (core/with-cells [{dmap          [:demandmap]
                        activations   [:activations]
                        deactivations [:deactivations]
-                       :as state}                      dstore] 
+                       :as state}                      dstore]
       (do (core/with-transient-cells [dmap activations deactivations]
-            (reduce (fn [acc d] 
+            (reduce (fn [acc d]
                       (add-demand!!! dmap activations deactivations d))
                     nil ds))
             (update-state!))))
@@ -999,62 +1000,62 @@
   (defn add-demands!! [dstore ds]
     (core/with-cells [{dmap          [:demandmap]
                        activations   [:activations]
-                       deactivations [:deactivations] 
+                       deactivations [:deactivations]
                        :as state1}              dstore]
       (core/with-cells [{dmap          [:demandmap]
                          activations   [:activations]
                          deactivations [:deactivations]
-                         :as state2}            state1]                                 
+                         :as state2}            state1]
         (do (core/with-transient-cells [dmap activations deactivations]
-              (reduce (fn [acc d] 
+              (reduce (fn [acc d]
                         (add-demand!!! dmap activations deactivations d))
                       nil ds))
               (update-state2!)))))
 
 
-;;can we define a macro that uses the cell infrastructure? 
-;;i.e. a cell reducer?  or a cell transducer? 
-;;A lot of these update steps are consistent: 
-;;we acquire a temporary bit of cellular storage from the 
+;;can we define a macro that uses the cell infrastructure?
+;;i.e. a cell reducer?  or a cell transducer?
+;;A lot of these update steps are consistent:
+;;we acquire a temporary bit of cellular storage from the
 ;;context.
 ;;We define operations that modify the storage.
-;;We compose these operations into storage updates 
-;;At the end of a storage update, we pack modified 
+;;We compose these operations into storage updates
+;;At the end of a storage update, we pack modified
 ;;storage into the persistent data structure.
 
   ;; (defn add-demand [dstore d]
   ;;   (add-demands! dstore [d]))
 
   (defn add-demands [dstore ds]
-    (reduce (fn [acc d] 
-              (add-demand acc (:name d) d))  dstore ds))      
+    (reduce (fn [acc d]
+              (add-demand acc (:name d) d))  dstore ds))
 )
 
 
-;;another option is to identify bulk operations 
+;;another option is to identify bulk operations
 ;;center around the data that's being changed (i.e. may be optimized
-;;for mutation) and make it easier to express how to unpack and repack 
+;;for mutation) and make it easier to express how to unpack and repack
 ;;the data.  something like with-transient-locations...
 
-;; (comment 
-;;   (defn load-demands! 
+;; (comment
+;;   (defn load-demands!
 ;;     ([record-source ctx]
 ;;        (let [rs    (demands-from-records (core/as-records record-source) ctx)
 ;;              dupes (get (meta rs) :duplicates)]
-;;          (->> (reduce (fn [acc d]                       
+;;          (->> (reduce (fn [acc d]
 ;;                         (-> (associate-demand acc d)
 ;;                             (initialized-demand!  d)))
 ;;                       ctx rs)
 ;;               (notify-duplicate-demands! dupes))))
-;;     ([record-source demandstore ctx] 
+;;     ([record-source demandstore ctx]
 ;;        (load-demands record-source (core/set-demandstore ctx (make-mutable! demandstore)))))
 
 ;;    ...
 ;;     ([rs ctx]
-       
-;;        (reduce (fn [acc d]                       
+
+;;        (reduce (fn [acc d]
 ;;                  (-> (associate-demand acc d) ;mutation heavy...
-                     
+
 ;;                      (initialized-demand!  d) ;independent....
 ;;                      ))
 ;;                ctx rs)
@@ -1062,53 +1063,53 @@
 ;;     ([rs ctx]
 ;;       (core/with-simstate [[parameters demandstore policystore] ctx]
 ;;         (let [idx     (or (:demandstart parameters) 0)
-;;               demands (:demandmap demandstore)              
+;;               demands (:demandmap demandstore)
 ;;               transient-demands (transient demands)]
-;;           (reduce (fn [ctx demand]                       
+;;           (reduce (fn [ctx demand]
 ;;                     (->  ;mutation heavy...
 ;;                      (let [demand-count   (count demands)
 ;;                            new-idx        (+ idx  demand-count)
 ;;                            new-demand     (-> (if (contains? demands (:name demand))
-;;                                                 (assoc demand :name 
+;;                                                 (assoc demand :name
 ;;                                                        (str (:name demand) "_" (inc demand-count)))
-;;                                                 demand)                     
+;;                                                 demand)
 ;;                                               (assoc :index new-idx))]
-;;                        (demand/register-demand new-demand demandstore policystore ctx)) ;mutation heavy...                                            
-;;                        (initialized-demand!  d))) ;independent....                        
+;;                        (demand/register-demand new-demand demandstore policystore ctx)) ;mutation heavy...
+;;                        (initialized-demand!  d))) ;independent....
 ;;                   ctx rs))))
 ;;     ....
 ;;     ([rs ctx]
 ;;       (core/with-simstate [[parameters demandstore policystore] ctx]
 ;;         (let [idx     (or (:demandstart parameters) 0)
-;;               demands (:demandmap demandstore)              
+;;               demands (:demandmap demandstore)
 ;;               transient-demands (transient demands)]
-;;           (reduce (fn [ctx demand]                       
+;;           (reduce (fn [ctx demand]
 ;;                     (->  ;mutation heavy...
 ;;                      (let [demand-count   (count demands)
 ;;                            new-idx        (+ idx  demand-count)
 ;;                            new-demand     (-> (if (contains? demands (:name demand))
-;;                                                 (assoc demand :name 
+;;                                                 (assoc demand :name
 ;;                                                        (str (:name demand) "_" (inc demand-count)))
-;;                                                 demand)                     
+;;                                                 demand)
 ;;                                               (assoc :index new-idx))]
 ;;                        ;;if we had another interface for registering
 ;;                        ;;mutable demands, using a transient
 ;;                        ;;demand-map, then we're golden....
-;;                        (demand/register-demand! new-demand demandstore policystore transient-demands ctx)) ;mutation heavy...                         
-;;                        (initialized-demand!  d))) ;independent....                        
+;;                        (demand/register-demand! new-demand demandstore policystore transient-demands ctx)) ;mutation heavy...
+;;                        (initialized-demand!  d))) ;independent....
 ;;                   ctx rs)))))
 
 ;;Optimized versions for bulk loading information.
-;; (defn associate-demand!     
+;; (defn associate-demand!
 ;;   [ctx demand demand-idx demandstore policystore]
 ;;   (-> (if (contains? (:demandmap demandstore) (:name demand))
-;;         (assoc demand :name 
+;;         (assoc demand :name
 ;;                (str (:name demand) "_" demand-idx))
-;;         demand)                     
+;;         demand)
 ;;       (assoc :index demand-idx)
 ;;       (demand/register-demand demandstore policystore ctx)))
 
 ;;Mutable version designed to work with refs.
-;; (defn load-demand! 
+;; (defn load-demand!
 ;;   [ctx demand demandstore policystore idx-ref]
 ;;   (initialized-demand! (associate-demand! ctx demand (core/inc! idx-ref) demandstore policystore) demand))
