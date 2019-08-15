@@ -576,26 +576,36 @@
 (defn pstore->params [pstore] (core/get-parameters (:ctx (meta pstore))))
 (defn index-unit     [idx  u] (assoc u :unit-index idx))
 
-;;We can extract the supply dependencies, and the ghost arg, 
+;;Tom 15 Aug 2019
+;;We need to decomplect cycle time distribution from
+;;batch unit creation, since we now how the possibility
+;;of having multiple unit batches -specified by different mods-
+;;that should be distributed along the same cyclelength.
+
+;;We can extract the supply dependencies, and the ghost arg,
 ;;if we provide the behavior to be used.
 (defn create-units
   [idx amount pstore base-record]
   (let [bound     (+ idx (quot amount 1))
         pname     (:Policy base-record)
+        compo     (:Component base-record)
+        src       (:SRC base-record)
         policy    (case pname
-                    "Auto" (choose-policy pname (:Component base-record) pstore
-                                          (pstore->params pstore) (:SRC base-record))
-                    (plcy/find-policy pname pstore))]
+                    "Auto" (choose-policy pname compo pstore
+                                          (pstore->params pstore) src)
+                    (plcy/find-policy pname pstore))
+        p         (marathon.data.protocols/policy-name policy)]
     (if (pos? amount)
         (loop [idx idx
                acc []]
-          (if (== idx bound)  
+          (if (== idx bound)
             (distribute-cycle-times acc policy)
-            (let [nm       (generate-name idx (:SRC base-record) (:Component base-record))
+            (let [nm       (generate-name idx src compo)
                   new-unit (-> (assoc base-record :Name nm)
                                (record->unitdata)
-                               (assoc :unit-index idx)) ;;added UnitIndex
-                  ]                
+                               (assoc :unit-index idx)
+                               (assoc :cycle-init-key [src compo p])) ;;added UnitIndex
+                  ]
               (recur (unchecked-inc idx)
                      (conj acc new-unit))))))))
 
@@ -648,8 +658,8 @@
          rassoc     (fn [k v m] (assoc m k v))]
      (->> recs 
          (r/filter filter-func) ;;We need to add data validation, we'll do that later....
-         (reduce (fn [acc r]                    
-                   (if (> (:Quantity r) 1) 
+         (reduce (fn [acc r]
+                   (if (> (:Quantity r) 1)
                      (conj-units acc
                                  (create-units @unit-count  (:Quantity r) pstore r))
                      (->> (generate-name @unit-count (:SRC r) (:Component r))

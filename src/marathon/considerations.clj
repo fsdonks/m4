@@ -428,3 +428,53 @@
 ;;Our goal is to have something like this..
 
 
+
+;;Better Batching of Supply Records for CycleTime Distribution
+;;============================================================
+
+;;Adding Modernization fields to supply records creates multiple
+;;batches of supply with the same [src component policy] key.
+;;The unintended consequence here is that, absent an initial
+;;cycle time, we end up treating these batches as separate
+;;groups for marathon.ces.entityfactory/distribute-cycle-times
+;;during batch unit creation.  In reality, they should be dependent.
+;;The only reason they're separate is due to the tabular nature
+;;and the existence of a new discriminating field, Mod.
+
+;;So, we need to revisit the method of creating batch
+;;units from supply records to allow for formal notion of
+;;cycletime distribution criteria, since our legacy assumptions
+;;are being violated.
+
+;;Under the legacy method, if we have the following supply
+;;records:
+
+;;{:SRC "A" :Component "AC" :Policy "Auto" :Mod 2 :Quantity 2}
+;;{:SRC "A" :Component "AC" :Policy "Auto" :Mod 3 :Quantity 2}
+
+;;where before we may have had
+;;{:SRC "A" :Component "AC" :Policy "Auto" :Quantity 4}
+
+;;We end up with 2 separate batches, which ultimately leaves us
+;;to distribute each pair of units similarly, leading to
+;;duplicate initial cycletimes.  The original single-batch,
+;;which conforms to the assumption that batches are uniquely
+;;specified by [src component policy], we have 4 units evenly
+;;distributed according to their policy's cyclelength.
+
+;;To regain this flexibility, we need to either pre-process the
+;;input during marathon.ces.entityfactory/units-from-records,
+;;or have a different processing pipeline.
+
+;;One obvious implementation is to define a cycle-distribution-key
+;;for the input, namely [src component policy], which can
+;;be associated as an entity component or tracked as meta.
+;;We could then group the units by this key, and push the
+;;grouped units into marathon.ces.entityfactory/distribute-cycle-times.
+
+;;The only downside of naive grouping is that it could mess with
+;;naming of units between runs (and legacy testing), so we'd like
+;;to preserve the order of the records and the resulting unit names.
+
+
+
