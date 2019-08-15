@@ -683,37 +683,6 @@
   ([recs supply pstore]
    (units-from-records recs supply pstore valid-supply-record?)))
 
-#_(defn units-from-records
-  ([recs supply pstore filter-func]
-   (let [unit-count (atom (-> supply :unitmap (count)))
-         initial-count @unit-count
-         ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
-         ;;TODO fix this...our defaults aren't that great.  
-                                        ;        normal-beh @base/default-behavior ;(-> supply :behaviors :defaultACBehavior)
-         conj-units (fn [acc xs] (do (swap! unit-count + (count xs))
-                                     (reduce conj! acc xs)))
-         conj-unit  (fn [acc x] (do (swap! unit-count inc)
-                                    (conj! acc x)))
-         rassoc     (fn [k v m] (assoc m k v))]
-     (->> recs 
-         (r/filter filter-func) ;;We need to add data validation, we'll do that later....
-         (reduce (fn [acc r]
-                   (if (> (:Quantity r) 1)
-                     (conj-units acc
-                                 (create-units @unit-count  (:Quantity r) pstore r))
-                     (->> (generate-name @unit-count (:SRC r) (:Component r))
-                          (assoc r :Name)
-                          (record->unitdata) ;;assign-policy handles policy wrangling.
-                          (rassoc :unit-index @unit-count) ;;Add UnitIndex 3/8/2017
-                          (conj-unit  acc)))) (transient []))
-         (persistent!)
-         initialize-cycle-times
-         (mapv (fn [weight unit] ;;added random-weights
-                (assoc unit :unit-weight weight)) (weights-from initial-count))
-         )))
-  ([recs supply pstore]
-   (units-from-records recs supply pstore valid-supply-record?)))
-
 ;;we have two methods of initializing unit cycles.
 ;;one is on a case-by-case basis, when we use create-unit
  
