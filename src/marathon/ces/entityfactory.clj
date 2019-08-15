@@ -659,6 +659,32 @@
 ;;subscriptions to policies, etc..
 (defn units-from-records
   ([recs supply pstore filter-func]
+   (let [unit-count    (atom (-> supply :unitmap (count)))
+         initial-count @unit-count
+         rassoc        (fn [k v m] (assoc m k v))]
+     (->> recs
+       (into []
+         (comp (filter filter-func) ;;We need to add data validation,
+               ;;we'll do that later.. ..
+               (mapcat (fn [r]
+                         (let [qty (:Quantity r)
+                               idx @unit-count
+                               _  (reset! unit-count (+ idx qty))]
+                           (if (> qty 1)
+                             (create-units idx  qty pstore r)
+                             (->> (generate-name idx (:SRC r) (:Component r))
+                                  (assoc r :Name)
+                                  (record->unitdata) ;;assign-policy handles policy wrangling.
+                                  (rassoc :unit-index idx) ;;Add UnitIndex 3/8/2017
+                                  vector)))))))
+       initialize-cycle-times
+       (mapv (fn [weight unit] ;;added random-weights
+               (assoc unit :unit-weight weight)) (weights-from initial-count)))))
+  ([recs supply pstore]
+   (units-from-records recs supply pstore valid-supply-record?)))
+
+#_(defn units-from-records
+  ([recs supply pstore filter-func]
    (let [unit-count (atom (-> supply :unitmap (count)))
          initial-count @unit-count
          ghost-beh  (-> supply :behaviors :defaultGhostBehavior)
