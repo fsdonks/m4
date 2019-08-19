@@ -247,19 +247,30 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
                    {:in (select-keys u [:name :state :statedata])}))))))
 
 ;;add mod levels in here...
-(def tacmm-fields [:days :src :not_ready :deployed :modernizing
-                   :deployable_tacmm3 :deployable_tacmm2 :deployable_tacmm1
-                   :C1 :C2 :C3 :C4
-                   :supply_taccm1 :supply_tacmm2 :supply_tacmm3
-                   :TotalRequired :TotalFilled :Overlapping :Deployed])
+(def tacmm-fields
+  [:days :src :not_ready :deployed :modernizing
+   :deployable_tacmm3 :deployable_tacmm2 :deployable_tacmm1
+   :C1 :C2 :C3 :C4
+   :supply_tacmm1 :supply_tacmm2 :supply_tacmm3
+   :TotalRequired  :TotalRequired_tacmm1  :TotalRequired_tacmm2  :TotalRequired_tacmm3
+   :TotalFilled
+   :Overlapping    :Overlapping_tacmm1  :Overlapping_tacmm2  :Overlapping_tacmm3
+   :Deployed       :Deployed_tacmm1  :Deployed_tacmm2  :Deployed_tacmm3
+   ])
+
+
+(def mods {1 :tacmm1
+           2 :tacmm2
+           3 :tacmm3})
+
+(defn mod-level [m]
+  (when m
+    (get mods (long m))))
 
 (defn mod-key [u]
-  (case (long (:mod u))
-    1 :tacmm1
-    2 :tacmm2
-    3 :tacmm3
-   (do (println ((juxt :mod :name) u))
-       (throw (ex-info "unknown mod level!" {:in ((juxt :mod :name) u)})))))
+  (or (mod-level (:mod u))
+      (do (println ((juxt :mod :name) u))
+          (throw (ex-info "unknown mod level!" {:in ((juxt :mod :name) u)})))))
 
 (defn mod-supply [us]
   (let [{:keys [tacmm1 tacmm2 tacmm3]}
@@ -267,6 +278,49 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
     {:tacmm1 (count tacmm1)
      :tacmm2 (count tacmm2)
      :tacmm3 (count tacmm3)}))
+
+;;Deployed_tacmm1	Deployed_tacmm2	Deployed_tacmm3
+(defn mod-fills
+  "Compute a map of {ACFilled RCFilled NGFilled OtherFilled
+   ACOverlapping RCOverlapping NGOverlapping OtherOverlapping}
+   from a demand."
+  [ctx d units-assigned units-overlapping]
+  (let [mod-lev   (or (some-> d :mod long)
+                      (throw (ex-info "Demand has no mod associated with it!"
+                                      {:in d})))
+        mod-fills (->> units-assigned
+                         (keys)
+                         (map (fn [nm]
+                                (or (mod-level (store/gete ctx nm :mod))
+                                    (throw (ex-info "unknown mod-level"
+                                              {:in nm :mod (store/gete ctx nm :mod)})))))
+                         (frequencies))
+        {:keys [tacmm1 tacmm2 tacmm3]
+         :or   {tacmm1 0 tacmm2 0 tacmm3 0}} mod-fills
+        t1filled tacmm1
+        t2filled tacmm2
+        t3filled tacmm3
+        mod-overlaps  (->> units-overlapping
+                             (keys)
+                             (map (fn [nm]
+                                    (store/gete ctx nm :component)))
+                             (frequencies))
+        {:keys [tacmm1 tacmm2 tacmm3]
+         :or   {tacmm1 0 tacmm2 0 tacmm3 0}} mod-overlaps
+        t1overlap tacmm1
+        t2overlap tacmm2
+        t3overlap tacmm3]
+    {:Mod               mod-lev
+;     :Filled_tacmm1    (+ t1filled t1overlap)
+;     :Filled_tacmm2    (+ t2filled t2overlap)
+;     :Filled_tacmm3    (+ t3filled t3overlap)
+     :Deployed_tacmm1     t1filled
+     :Deployed_tacmm2     t2filled
+     :Deployed_tacmm3     t3filled
+     :Overlapping_tacmm1     t1overlap
+     :Overlapping_tacmm2     t2overlap
+     :Overlapping_tacmm3     t3overlap
+     }))
 
 ;;cribbed from marathon.analysis.  We're goin the dumb, brute-force
 ;;sampling instead of the smart, sparse approach.
@@ -302,12 +356,53 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
                         :DemandGroup   demandgroup
                         :deltaT       (when (and finals? (= t (a/tfinal d))) 1)}
                        (a/compo-fills ctx assigned overlapping)
+                       (mod-fills ctx d assigned overlapping)
                        ))))))))
   ([ctx] (demand-trends (spork.sim.core/get-time ctx) ctx)))
+
+(def requireds {1  :TotalRequired_tacmm1
+                2  :TotalRequired_tacmm2
+                3  :TotalRequired_tacmm3})
+
+
+(def zero-fills
+  {:TotalRequired 0 :TotalRequired_tacmm1 0 :TotalRequired_tacmm2 0 :TotalRequired_tacmm3 0
+   :TotalFilled 0
+   :Overlapping 0   :Overlapping_tacmm1 0 :Overlapping_tacmm2 0 :Overlapping_tacmm3 0
+   :Deployed 0      :Deployed_tacmm1 0 :Deployed_tacmm2 0 :Deployed_tacmm3 0
+   })
 
 (defn frame->fills [[t ctx]]
   (->>
    (for [[src ds] (group-by :SRC (demand-trends t ctx))]
+
+     [src
+      (reduce (fn [acc {:keys [Mod TotalRequired TotalFilled Overlapping Deployed
+                               Deployed_tacmm1 Deployed_tacmm2 Deployed_tacmm3
+                               Overlapping_tacmm1 Overlapping_tacmm2 Overlapping_tacmm3] :as r}]
+                (let [m (or (-> Mod requireds)
+                            (throw (ex-info "unknown mod level!"
+                                            {:in r :Mod Mod :acc acc})))]
+                  (-> acc
+                      (update :TotalRequired #(+ % TotalRequired))
+                      (update (-> Mod requireds) #(+ % TotalRequired))
+                      (update :TotalFilled        #(+ % TotalFilled))
+                      (update :Overlapping        #(+ % Overlapping))
+                      (update :Overlapping_tacmm1 #(+ % Overlapping_tacmm1))
+                      (update :Overlapping_tacmm2 #(+ % Overlapping_tacmm2))
+                      (update :Overlapping_tacmm3 #(+ % Overlapping_tacmm3))
+                      (update :Deployed           #(+ % Deployed))
+                      (update :Deployed_tacmm1    #(+ % Deployed_tacmm1))
+                      (update :Deployed_tacmm2    #(+ % Deployed_tacmm2))
+                      (update :Deployed_tacmm3    #(+ % Deployed_tacmm3)))))
+              zero-fills
+              ds)])
+   (into {})))
+
+#_(defn frame->fills [[t ctx]]
+  (->>
+   (for [[src ds] (group-by :SRC (demand-trends t ctx))]
+
      [src
       (reduce (fn [acc {:keys [TotalRequired TotalFilled Overlapping Deployed] :as r}]
                 (-> acc
@@ -344,7 +439,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
           :supply_tacmm1 tacmm1
           :supply_tacmm2 tacmm2
           :supply_tacmm3 tacmm3}
-         (get fills src {:TotalRequired 0 :TotalFilled 0 :Overlapping 0 :Deployed 0}))))))
+         (get fills src zero-fills))))))
 
 (defn lerps [rs]
   (let [final (atom nil)]
@@ -376,5 +471,5 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
   (def ctx (a/load-context p))
 
   #_(history->state (a/as-stream ctx) "mods.txt")
-  (history->tacmm-trends (a/as-stream ctx) (io/file-path "~/Documents/tacmm/august/tacmm.txt"))
+  (history->tacmm-trends (a/as-stream ctx) (io/file-path "~/workspacenew/notional/tacmm.txt"))
   )

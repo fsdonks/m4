@@ -180,7 +180,7 @@
   "Basic io function for converting raw records to demanddata."
   [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category
            SourceFirst Quantity  OITitle Vignette Operation  DemandGroup
-           ] :as rec}]
+           Mod] :as rec}]
   (coerce [[Priority StartDay Duration Overlap Quantity] long]
     (-> (create-demand DemandKey SRC Priority StartDay Duration Overlap Category
                        SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup)
@@ -193,6 +193,7 @@
                                  :StartState
                                  :EndState
                                  :MissionLength]))
+        (assoc :mod Mod)
         (clean-nils [:StartState :EndState])
         )))
 
