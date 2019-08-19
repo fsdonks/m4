@@ -300,7 +300,41 @@
 ;;Note: this is pretty crucial for the fill process, it provides all of
 ;;the ordering and filtering context, derived from the demand record.
 
-;;compute a compatible supply catesgory based on the demand.
+;;compute a compatible supply category based on the demand.
+;;derive-category is overloaded to interpret a supply-category
+;;as either a vector of [src #{demandgroup1 demandgroup2 ...}]
+;;or as a simple atomic value (typically a string).
+
+;;1)If the input is a vector, the "implicit" process of deriving the
+;;category for demand d is to see if the demandgroup for d is
+;;present in the set of groups provided in [src groups].  If so,
+;;we return d's demandgroup.  This is an implementation specific
+;;to followon (and later SRM) demands, in that we want to define
+;;a narrow, non-default set of supply to look at, which is associated
+;;explicitly by some key (typically but not exclusively :demandgroup).
+;;It's basically a re-routing or alternate projection of the supply
+;;for querying ("where"), which allows unique considerations of
+;;"feasible" supply when filling, and allows highly variable
+;;fill rules.
+
+;;2)If the input is "not" a vector, we branch off into interpreting
+;;the category by looking to see if d has an associated category
+;;(we ignore the supply-category since it doesn't matter).
+;;  - if the demand has no category we use the :default deployable
+;;    category.  This will later imply that we should use
+;;    units from the default deployable buckets, with SRCs
+;;    that are capability substitutes for the demand's SRC.
+;;  - If the proposed category is "restricted", where it exists in
+;;    a map of {restricted actual} categories, we return the
+;;    restricted category.  This implies that there is a
+;;    special consideration of supply for "this" demand,
+;;    which must be drawn from units in said "restricted"
+;;    category, vs. a potentially wider swath of categories (to include
+;;    the :default).  We implemented this interpretation to express
+;;    deviations from the normal order of fill, such as NonBOG.
+;;  - If the demand category is not restricted, we assume it's
+;;    effectively meaningless annotated information, and
+;;    fill with the :default category.
 (defn derive-category [d supply-category]
   (if (vector? supply-category)
     (let [[src groups] supply-category]

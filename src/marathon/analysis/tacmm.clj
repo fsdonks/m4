@@ -191,27 +191,184 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 
 (defn frame->state-samples [[t ctx]]
   (for [{:keys [name src locationname positionpolicy state mod]} (c/units ctx)]
-    {:t t
-     :src  src
-     :name name
-     :locationname locationname
-     :positionpolicy positionpolicy
-     :state state
-     :readiness (or (first (clojure.set/intersection
-                            #{:c1 :c2 :c3 :c4 :c5}
-                            state))
-                    (if (get state :modernizing) :c4))
-     :mod   mod}))
+    (let [readiness (or (first (clojure.set/intersection
+                                #{:c1 :c2 :c3 :c4 :c5}
+                                state))
+                        (if (get state :modernizing) :c4))]
+      {:t t
+       :src  src
+       :name name
+       :locationname locationname
+       :positionpolicy positionpolicy
+       :state state
+       :readiness readiness
+       :position (if (state :modernizing) "modernizing" positionpolicy)
+       :mod   mod})))
 
 (defn history->state [h tgt]
   (let [flds [:t :src :name :locationname :positionpolicy
-              :state :readiness :mod]]
+              :state :readiness :position :mod]]
     (-> (mapcat frame->state-samples h)
         (tbl/records->file tgt :field-order flds))))
 
+(defn tacmm-key [u]
+  (let [s (:state u)]
+    (cond (s :deployable)   :deployable
+          (s :modernizing)  :modernizing
+          (s :dwelling)     :not-ready
+          (s :bogging)      :deployed
+          (s :overlapping)  :deployed
+          (s :demobilizing) :not-ready
+          :else (throw (ex-info (str "unknown state!" s)
+                                {:in (:state u) :name (:name u)})))))
+
+(defn c-rating [s]
+  (first (clojure.set/intersection
+          #{:c1 :c2 :c3 :c4}
+          (if (coll? s) (set s) #{s}))))
+
+(defn readiness [u]
+  (let [state     (:state u)
+        statedata (:statedata u)]
+    (if (or (state :modernizing) (state :waiting))
+      (-> statedata :nextstate c-rating)
+      (or (c-rating (:prevstate statedata))
+          (let [p  (:policy u)
+                ct (-> u :currentcyle :dwell)]
+            (->> (marathon.data.protocols/get-position p ct)
+                 (marathon.data.protocols/state-at     p)
+                 c-rating))
+          (throw (ex-info "can't find c-rating"
+                   {:in (select-keys u [:name :state :statedata])}))))))
+
+;;add mod levels in here...
+(def tacmm-fields [:days :src :not_ready :deployed :modernizing
+                   :deployable_tacmm3 :deployable_tacmm2 :deployable_tacmm1
+                   :C1 :C2 :C3 :C4
+                   :supply_taccm1 :supply_tacmm2 :supply_tacmm3
+                   :TotalRequired :TotalFilled :Overlapping :Deployed])
+
+(defn mod-key [u]
+  (case (long (:mod u))
+    1 :tacmm1
+    2 :tacmm2
+    3 :tacmm3
+   (do (println ((juxt :mod :name) u))
+       (throw (ex-info "unknown mod level!" {:in ((juxt :mod :name) u)})))))
+
+(defn mod-supply [us]
+  (let [{:keys [tacmm1 tacmm2 tacmm3]}
+        (group-by mod-key us)]
+    {:tacmm1 (count tacmm1)
+     :tacmm2 (count tacmm2)
+     :tacmm3 (count tacmm3)}))
+
+;;cribbed from marathon.analysis.  We're goin the dumb, brute-force
+;;sampling instead of the smart, sparse approach.
+(defn demand-trends
+  ([t ctx]
+   (let [qtr     (a/as-quarter t) ;;1-based quarters.
+         changes (store/gete ctx :demand-watch :demands) ;;map of {demand-name ..}
+         finals  (store/gete ctx :DemandStore  :finals)
+         actives (store/gete ctx :DemandStore  :activedemands)
+         finals? (finals t)]
+     (when true #_(or (seq changes)
+                      finals?
+                      (= (sim/get-final-time ctx) t))
+       (->> actives
+            (keys)
+            (map #(store/get-entity ctx %))
+            (map  (fn [{:keys [category demandgroup operation vignette Command] :as d}]
+                    (let [assigned     (:units-assigned    d)
+                          overlapping  (:units-overlapping d)
+                          ua           (count              assigned)
+                          uo           (count              overlapping)
+                          ]
+                      (merge
+                       {:t             t
+                        :Quarter       qtr
+                        :SRC           (:src      d)
+                        :TotalRequired (:quantity d)
+                        :TotalFilled   (+ uo ua)
+                        :Overlapping   uo
+                        :Deployed      ua
+                        :DemandName    (:name d)
+                        :Vignette      vignette
+                        :DemandGroup   demandgroup
+                        :deltaT       (when (and finals? (= t (tfinal d))) 1)}
+                       (a/compo-fills ctx assigned overlapping)
+                       ))))))))
+  ([ctx] (demand-trends (spork.sim/get-time ctx) ctx)))
+
+(defn frame->fills [[t ctx]]
+  (->>
+   (for [[src ds] (group-by :SRC (demand-trends t ctx))]
+     [src
+      (reduce (fn [acc {:keys [TotalRequired TotalFilled Overlapping Deployed] :as r}]
+                (-> acc
+                    (update :TotalRequired #(+ % TotalRequired))
+                    (update :TotalFilled   #(+ % TotalFilled))
+                    (update :Overlapping   #(+ % Overlapping))
+                    (update :Deployed      #(+ % Deployed))))
+              {:TotalRequired 0 :TotalFilled 0 :Overlapping 0 :Deployed 0}
+              ds)])
+   (into {})))
+
+(defn frame->tacmm-trends [[t ctx]]
+  (let [fills (frame->fills [t ctx])]
+    (for [[src us] (->> ctx c/units (group-by :src))]
+      (let [{:keys [deployable modernizing not-ready deployed]}
+            (group-by tacmm-key us)
+            mods (group-by (comp long :mod) deployable)
+            {:keys [c1 c2 c3 c4] :or {c1 0 c2 0 c3 0 c4 0 c5 0}}
+            (->> us (map readiness) frequencies)
+            {:keys [tacmm1 tacmm2 tacmm3]} (mod-supply us)]
+        (merge
+         {:days t
+          :src  src
+          :not_ready   (count not-ready)
+          :deployed    (count deployed)
+          :modernizing (count modernizing)
+          :deployable_tacmm3 (count (get mods 3 []))
+          :deployable_tacmm2 (count (get mods 2 []))
+          :deployable_tacmm1 (count (get mods 1 []))
+          :C1 c1
+          :C2 c2
+          :C3 c3
+          :C4 c4
+          :supply_tacmm1 tacmm1
+          :supply_tacmm2 tacmm2
+          :supply_tacmm3 tacmm3}
+         (get fills src {:TotalRequired 0 :TotalFilled 0 :Overlapping 0 :Deployed 0}))))))
+
+(defn lerps [rs]
+  (let [final (atom nil)]
+    (concat
+     (for [[xs ys] (partition 2 1 rs)]
+       (do (reset! final [ys 1])
+           [xs (- (:days (first ys))
+                  (:days (first xs)))]))
+     (lazy-seq (vector @final)))))
+
+(defn interpolate [rs]
+  (apply concat
+    (for [[xs dt] (lerps rs)]
+      (if (= dt 1)
+        xs
+        (let [t0 (:days (first xs))]
+          (apply concat
+            (for [n (range dt)]
+              (map (fn [r] (assoc r :days (+ t0 n))) xs))))))))
+
+(defn history->tacmm-trends [h tgt]
+  (-> (map frame->tacmm-trends h)
+      interpolate
+      (tbl/records->file tgt :field-order tacmm-fields)))
+
 (comment
+  (def p "~/Documents/tacmm/august/run_base.xlsx")
+  (def ctx (a/load-context p))
 
-  (history->state (a/as-stream ctx) "mods.txt")
+  #_(history->state (a/as-stream ctx) "mods.txt")
+  (history->tacmm-trends (a/as-stream ctx) (io/file-path "~/Documents/tacmm/august/tacmm.txt"))
   )
-
-;;(defmethod a/emit-frame )
