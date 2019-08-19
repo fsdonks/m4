@@ -256,6 +256,10 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
    :TotalFilled
    :Overlapping    :Overlapping_tacmm1  :Overlapping_tacmm2  :Overlapping_tacmm3
    :Deployed       :Deployed_tacmm1  :Deployed_tacmm2  :Deployed_tacmm3
+   :Sub_1_2        :Sub_1_3
+   :Sub_2_1        :Sub_2_3
+   :Sub_3_1        :Sub_3_2
+   :Unfilled  :Unfilled_tacmm1  :Unfilled_tacmm2  :Unfilled_tacmm3 
    ])
 
 
@@ -278,6 +282,26 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
     {:tacmm1 (count tacmm1)
      :tacmm2 (count tacmm2)
      :tacmm3 (count tacmm3)}))
+
+(def empty-subs
+  {:Sub_1_2 0
+   :Sub_1_3 0
+   :Sub_2_1 0
+   :Sub_2_3 0
+   :Sub_3_1 0
+   :Sub_3_2 0})
+
+(defn subfills [mod-lev t1 t2 t3]
+  (case mod-lev
+    1 (merge empty-subs
+             {:Sub_1_2 t2
+              :Sub_1_3 t3})
+    2 (merge empty-subs
+             {:Sub_2_1 t1
+              :Sub_2_3 t3})
+    3 (merge empty-subs
+             {:Sub_3_1 t1
+              :Sub_3_2 t2})))
 
 ;;Deployed_tacmm1	Deployed_tacmm2	Deployed_tacmm3
 (defn mod-fills
@@ -310,17 +334,18 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
         t1overlap tacmm1
         t2overlap tacmm2
         t3overlap tacmm3]
-    {:Mod               mod-lev
-;     :Filled_tacmm1    (+ t1filled t1overlap)
-;     :Filled_tacmm2    (+ t2filled t2overlap)
-;     :Filled_tacmm3    (+ t3filled t3overlap)
-     :Deployed_tacmm1     t1filled
-     :Deployed_tacmm2     t2filled
-     :Deployed_tacmm3     t3filled
-     :Overlapping_tacmm1     t1overlap
-     :Overlapping_tacmm2     t2overlap
-     :Overlapping_tacmm3     t3overlap
-     }))
+    (merge
+     {:Mod               mod-lev
+;;     :Filled_tacmm1    (+ t1filled t1overlap)
+;;     :Filled_tacmm2    (+ t2filled t2overlap)
+;;     :Filled_tacmm3    (+ t3filled t3overlap)
+      :Deployed_tacmm1     t1filled
+      :Deployed_tacmm2     t2filled
+      :Deployed_tacmm3     t3filled
+      :Overlapping_tacmm1     t1overlap
+      :Overlapping_tacmm2     t2overlap
+      :Overlapping_tacmm3     t3overlap}
+     (subfills mod-lev t1filled t2filled t3filled))))
 
 ;;cribbed from marathon.analysis.  We're goin the dumb, brute-force
 ;;sampling instead of the smart, sparse approach.
@@ -364,12 +389,17 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
                 2  :TotalRequired_tacmm2
                 3  :TotalRequired_tacmm3})
 
+(def unfilleds {1  :Unfilled_tacmm1
+                2  :Unfilled_tacmm2
+                3  :Unfilled_tacmm3})
 
 (def zero-fills
   {:TotalRequired 0 :TotalRequired_tacmm1 0 :TotalRequired_tacmm2 0 :TotalRequired_tacmm3 0
    :TotalFilled 0
    :Overlapping 0   :Overlapping_tacmm1 0 :Overlapping_tacmm2 0 :Overlapping_tacmm3 0
    :Deployed 0      :Deployed_tacmm1 0 :Deployed_tacmm2 0 :Deployed_tacmm3 0
+   :Sub_1_2 0, :Sub_1_3 0, :Sub_2_1 0, :Sub_2_3 0, :Sub_3_1 0, :Sub_3_2 0
+   :Unfilled 0 :Unfilled_tacmm1 0 :Unfilled_tacmm2 0 :Unfilled_tacmm3 0
    })
 
 (defn frame->fills [[t ctx]]
@@ -379,12 +409,13 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
      [src
       (reduce (fn [acc {:keys [Mod TotalRequired TotalFilled Overlapping Deployed
                                Deployed_tacmm1 Deployed_tacmm2 Deployed_tacmm3
-                               Overlapping_tacmm1 Overlapping_tacmm2 Overlapping_tacmm3] :as r}]
+                               Overlapping_tacmm1 Overlapping_tacmm2 Overlapping_tacmm3
+                               Sub_1_2 Sub_1_3 Sub_2_1 Sub_2_3 Sub_3_1 Sub_3_2] :as r}]
                 (let [m (or (-> Mod requireds)
                             (throw (ex-info "unknown mod level!"
                                             {:in r :Mod Mod :acc acc})))]
                   (-> acc
-                      (update :TotalRequired #(+ % TotalRequired))
+                      (update :TotalRequired     #(+ % TotalRequired))
                       (update (-> Mod requireds) #(+ % TotalRequired))
                       (update :TotalFilled        #(+ % TotalFilled))
                       (update :Overlapping        #(+ % Overlapping))
@@ -394,7 +425,16 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
                       (update :Deployed           #(+ % Deployed))
                       (update :Deployed_tacmm1    #(+ % Deployed_tacmm1))
                       (update :Deployed_tacmm2    #(+ % Deployed_tacmm2))
-                      (update :Deployed_tacmm3    #(+ % Deployed_tacmm3)))))
+                      (update :Deployed_tacmm3    #(+ % Deployed_tacmm3))
+                      (update :Sub_1_2            #(+ % Sub_1_2))
+                      (update :Sub_1_3            #(+ % Sub_1_3))
+                      (update :Sub_2_1            #(+ % Sub_2_1))
+                      (update :Sub_2_3            #(+ % Sub_2_3))
+                      (update :Sub_3_1            #(+ % Sub_3_1))
+                      (update :Sub_3_2            #(+ % Sub_3_2))
+                      (update :Unfilled           #(+ % (- TotalRequired Deployed)))
+                      (update (-> Mod unfilleds)  #(+ % (- TotalRequired Deployed)))
+                      )))
               zero-fills
               ds)])
    (into {})))
