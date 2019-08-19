@@ -53,8 +53,10 @@
 
 ;;start with a sample context.
 
+(comment
 (def path (io/file-path "../notional/base-testdata-v8.xlsx"))
 (def modpath (io/file-path "../notional/mod-testdata.xlsx"))
+)
 
 ;;a dumb pre-processor to modernize the
 ;;demand mod levels consistently.
@@ -89,7 +91,7 @@
   "Type	Enabled	Priority	Quantity	DemandIndex	StartDay	Duration	Overlap	SRC	SourceFirst	DemandGroup	Vignette	Operation	Category	Title 10_32	OITitle
 DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modernization	10	OI18")
 
-(def ctx (-> (a/load-context modpath)
+#_(def ctx (-> (a/load-context modpath)
              mod-supply
              #_mod-demand))
 
@@ -98,11 +100,11 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;can inject the mod information into the inputs).
 
 ;;given a demand, we assoc a mod level with it.  Assume this is a given.
-(def d (store/get-entity ctx "2_Bob_01205K000_[1...3651]"))
+#_(def d (store/get-entity ctx "2_Bob_01205K000_[1...3651]"))
 
 
 ;;explicit queries, exercising the functionality.
-(def mod2-units
+#_(def mod2-units
   (->> ctx
        (marathon.ces.query/find-supply {:where   #(= (:mod %) 2)
                                         :order-by  marathon.ces.query/MOD2
@@ -110,7 +112,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 
 ;;(["28_01205K000_NG" 2 1622] ["10_01205K000_AC" 2 895])
 
-(def mod3-units
+#_(def mod3-units
   (->> ctx
        (marathon.ces.query/find-supply {:where    #(= (:mod %) 3)
                                         :order-by  marathon.ces.query/MOD3
@@ -124,7 +126,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;This is more typical of how things actually work.
 ;;We project a demand onto a rule, and then use that rule
 ;;to inform how to find supply.
-(def feasibles (->> ctx
+#_(def feasibles (->> ctx
                     (marathon.ces.query/find-supply (marathon.ces.fill/demand->rule d))
                     (map (comp (juxt :name :mod marathon.ces.unit/normalized-dwell) second))))
 
@@ -135,6 +137,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;    ["27_01205K000_NG" 3 0.832876]
 ;;    ["9_01205K000_AC" 3 0.72694])
 
+(comment 
 (def dmod (->> ctx c/demands (some (fn [{:keys [source-first] :as r}]
                                      (when (= source-first "MOD1-Target-AC")
                                        r)))))
@@ -146,6 +149,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
                            modrule)
                         (map (comp (juxt :name :mod marathon.ces.unit/normalized-dwell) second))))
 
+)
 ;; (["2_01205K000_AC" 2 0.09041]
 ;;  ["4_01205K000_AC" 2 0.272146]
 ;;  ["6_01205K000_AC" 2 0.453881]
@@ -158,7 +162,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;  ["9_01205K000_AC" 3 0.72694]
 ;;  ["11_01205K000_AC" 3 0.908675])
 
-(def mod-any-feasibles
+#_(def mod-any-feasibles
   (->> ctx
        (marathon.ces.query/find-supply
         (assoc modrule :where nil))
@@ -183,7 +187,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 ;;let's define some custom output for our tacmm listener.
 
 
-(def acu (->> ctx c/units (some #(when (= (:component %) "AC") %)) :name))
+#_(def acu (->> ctx c/units (some #(when (= (:component %) "AC") %)) :name))
 
 ;;This is a dumb way to collect state, but effective and simple relative
 ;;to clojure semantics.  The "better" way is to define frame emitters
@@ -219,6 +223,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
           (s :bogging)      :deployed
           (s :overlapping)  :deployed
           (s :demobilizing) :not-ready
+          (= s :waiting)    :deployed ;;NonBOG corner case.
           :else (throw (ex-info (str "unknown state!" s)
                                 {:in (:state u) :name (:name u)})))))
 
@@ -234,7 +239,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
       (-> statedata :nextstate c-rating)
       (or (c-rating (:prevstate statedata))
           (let [p  (:policy u)
-                ct (-> u :currentcyle :dwell)]
+                ct (-> u :currentcycle :dwell)]
             (->> (marathon.data.protocols/get-position p ct)
                  (marathon.data.protocols/state-at     p)
                  c-rating))
@@ -295,10 +300,10 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
                         :DemandName    (:name d)
                         :Vignette      vignette
                         :DemandGroup   demandgroup
-                        :deltaT       (when (and finals? (= t (tfinal d))) 1)}
+                        :deltaT       (when (and finals? (= t (a/tfinal d))) 1)}
                        (a/compo-fills ctx assigned overlapping)
                        ))))))))
-  ([ctx] (demand-trends (spork.sim/get-time ctx) ctx)))
+  ([ctx] (demand-trends (spork.sim.core/get-time ctx) ctx)))
 
 (defn frame->fills [[t ctx]]
   (->>
@@ -366,7 +371,8 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
       (tbl/records->file tgt :field-order tacmm-fields)))
 
 (comment
-  (def p "~/Documents/tacmm/august/run_base.xlsx")
+  #_(def p "~/Documents/tacmm/august/run_base.xlsx")
+  (def p "~/workspacenew/notional/mod-testdata-v2.xlsx")
   (def ctx (a/load-context p))
 
   #_(history->state (a/as-stream ctx) "mods.txt")

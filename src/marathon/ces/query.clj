@@ -1066,15 +1066,50 @@
 (defn distance [f n]
   #(Math/abs (double (- n (f % )))))
 
+;;We use a weighted distance function
+;;to apply a penalty to values that are
+;;greater than the target n.
+;;For values of f <= n, returns
+;;(- n f).  For values of f > n,
+;;returns (* 100  (abs (- n f))).
+;;Creates a "downward bias" toward
+;;values less than n.  Assumes
+;;a penalty of 100 is sufficient (e.g.
+;;original intent is cardinalty of 3).
+(defn downward-biased-distance [f n]
+  #(let [d (- n (f % ))]
+     (if (pos? d) d
+         (* d -100))))
+
+;;Tom Change 8/19/2019
+;;Reference for future use....This was our initial hack at mod.
+;;The revised look establishes a preference for mod levels <=
+;;to the target, then allows for mod levels > than the target
+;;based on min distance from the target mod level,
+;;where the original preferred min distance, max mod.
+
 (defn mod-distance [n]
   (distance #(or (get % :mod)
                  (throw (ex-info "expected a :mod key, none found!" {:in %}))) n))
+
+;;Added a rule that prefers <= a mod level above any value
+;;> than the mod level, with proportional preference for values
+;;> than the mod level that are closest to n otherwise.
+(defn downward-mod-distance [n]
+  (downward-biased-distance
+   #(or (get % :mod)
+        (throw (ex-info "expected a :mod key, none found!" {:in %}))) n))
+
 
 ;;may not need these....we probably want to customize the demand's source first
 ;;based on its mod level, e.g. let the data drive it.
 (def MOD1 [(mod-distance 1) uniform])
 (def MOD2 [(mod-distance 2) uniform])
 (def MOD3 [(mod-distance 3) uniform])
+
+(def <=MOD1 [(downward-mod-distance 1) uniform])
+(def <=MOD2 [(downward-mod-distance 2) uniform])
+(def <=MOD3 [(downward-mod-distance 3) uniform])
 
 (def MOD1-Target-AC [(mod-distance 1) AC min-proportional-dwell min-unit-weight])
 
@@ -1121,6 +1156,10 @@
    "MOD1"       MOD1
    "MOD2"       MOD2
    "MOD3"       MOD3
+
+   "<=MOD1"       MOD1
+   "<=MOD2"       MOD2
+   "<=MOD3"       MOD3
 
    "MOD1-TARGET-AC" MOD1-Target-AC})
 
