@@ -234,17 +234,20 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 
 (defn readiness [u]
   (let [state     (:state u)
-        statedata (:statedata u)]
-    (if (or (state :modernizing) (state :waiting))
-      (-> statedata :nextstate c-rating)
-      (or (c-rating (:prevstate statedata))
-          (let [p  (:policy u)
-                ct (-> u :currentcycle :dwell)]
-            (->> (marathon.data.protocols/get-position p ct)
-                 (marathon.data.protocols/state-at     p)
-                 c-rating))
-          (throw (ex-info "can't find c-rating"
-                   {:in (select-keys u [:name :state :statedata])}))))))
+        statedata (:statedata u)
+        c         (c-rating state)]
+    (cond (or (state :modernizing) (state :waiting))
+          (-> statedata :nextstate c-rating)
+          c c
+          :else
+          (or (c-rating (:prevstate statedata))
+              (let [p  (:policy u)
+                    ct (-> u :currentcycle :dwell)]
+                (->> (marathon.data.protocols/get-position p ct)
+                     (marathon.data.protocols/state-at     p)
+                     c-rating))
+              (throw (ex-info "can't find c-rating"
+                              {:in (select-keys u [:name :state :statedata])}))))))
 
 ;;add mod levels in here...
 (def tacmm-fields
