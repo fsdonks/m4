@@ -259,9 +259,9 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
    :TotalFilled
    :Overlapping    :Overlapping_tacmm1  :Overlapping_tacmm2  :Overlapping_tacmm3
    :Deployed       :Deployed_tacmm1  :Deployed_tacmm2  :Deployed_tacmm3
-   :Sub_1_2        :Sub_1_3
-   :Sub_2_1        :Sub_2_3
-   :Sub_3_1        :Sub_3_2
+   :Sub_1_1 :Sub_1_2 :Sub_1_3
+   :Sub_2_1 :Sub_2_2 :Sub_2_3
+   :Sub_3_1 :Sub_3_2 :Sub_3_3
    :Unfilled  :Unfilled_tacmm1  :Unfilled_tacmm2  :Unfilled_tacmm3 
    ])
 
@@ -287,24 +287,30 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
      :tacmm3 (count tacmm3)}))
 
 (def empty-subs
-  {:Sub_1_2 0
+  {:Sub_1_1 0
+   :Sub_1_2 0
    :Sub_1_3 0
+   :Sub_2_2 0
    :Sub_2_1 0
    :Sub_2_3 0
+   :Sub_3_3 0
    :Sub_3_1 0
    :Sub_3_2 0})
 
 (defn subfills [mod-lev t1 t2 t3]
   (case mod-lev
     1 (merge empty-subs
-             {:Sub_1_2 t2
+             {:Sub_1_1 t1
+              :Sub_1_2 t2
               :Sub_1_3 t3})
     2 (merge empty-subs
              {:Sub_2_1 t1
+              :Sub_2_2 t2
               :Sub_2_3 t3})
     3 (merge empty-subs
              {:Sub_3_1 t1
-              :Sub_3_2 t2})))
+              :Sub_3_2 t2
+              :Sub_3_3 t3})))
 
 ;;Deployed_tacmm1	Deployed_tacmm2	Deployed_tacmm3
 (defn mod-fills
@@ -330,7 +336,9 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
         mod-overlaps  (->> units-overlapping
                              (keys)
                              (map (fn [nm]
-                                    (store/gete ctx nm :component)))
+                                    (or (mod-level (store/gete ctx nm :mod))
+                                        (throw (ex-info "unknown mod-level"
+                                                        {:in nm :mod (store/gete ctx nm :mod)})))))
                              (frequencies))
         {:keys [tacmm1 tacmm2 tacmm3]
          :or   {tacmm1 0 tacmm2 0 tacmm3 0}} mod-overlaps
@@ -401,7 +409,9 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
    :TotalFilled 0
    :Overlapping 0   :Overlapping_tacmm1 0 :Overlapping_tacmm2 0 :Overlapping_tacmm3 0
    :Deployed 0      :Deployed_tacmm1 0 :Deployed_tacmm2 0 :Deployed_tacmm3 0
-   :Sub_1_2 0, :Sub_1_3 0, :Sub_2_1 0, :Sub_2_3 0, :Sub_3_1 0, :Sub_3_2 0
+   :Sub_1_1 0 :Sub_1_2 0, :Sub_1_3 0,
+   :Sub_2_1 0, :Sub_2_2 0  :Sub_2_3 0,
+   :Sub_3_1 0, :Sub_3_2 0, :Sub_3_3 0
    :Unfilled 0 :Unfilled_tacmm1 0 :Unfilled_tacmm2 0 :Unfilled_tacmm3 0
    })
 
@@ -410,10 +420,13 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
    (for [[src ds] (group-by :SRC (demand-trends t ctx))]
 
      [src
-      (reduce (fn [acc {:keys [Mod TotalRequired TotalFilled Overlapping Deployed
-                               Deployed_tacmm1 Deployed_tacmm2 Deployed_tacmm3
-                               Overlapping_tacmm1 Overlapping_tacmm2 Overlapping_tacmm3
-                               Sub_1_2 Sub_1_3 Sub_2_1 Sub_2_3 Sub_3_1 Sub_3_2] :as r}]
+      (reduce (fn [acc {:keys [Mod TotalRequired TotalFilled Overlapping
+                               Deployed Deployed_tacmm1 Deployed_tacmm2
+                               Deployed_tacmm3 Overlapping_tacmm1
+                               Overlapping_tacmm2 Overlapping_tacmm3
+                               Sub_1_1 Sub_1_2 Sub_1_3
+                               Sub_2_1 Sub_2_2 Sub_2_3
+                               Sub_3_1 Sub_3_2 Sub_3_3] :as r}]
                 (let [m (or (-> Mod requireds)
                             (throw (ex-info "unknown mod level!"
                                             {:in r :Mod Mod :acc acc})))]
@@ -426,15 +439,19 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
                       (update :Overlapping_tacmm2 #(+ % Overlapping_tacmm2))
                       (update :Overlapping_tacmm3 #(+ % Overlapping_tacmm3))
                       (update :Deployed           #(+ % Deployed))
+                      ;;These will be obfuscated if we don't pull out subs.
                       (update :Deployed_tacmm1    #(+ % Deployed_tacmm1))
                       (update :Deployed_tacmm2    #(+ % Deployed_tacmm2))
                       (update :Deployed_tacmm3    #(+ % Deployed_tacmm3))
+                      (update :Sub_1_1            #(+ % Sub_1_1))
                       (update :Sub_1_2            #(+ % Sub_1_2))
                       (update :Sub_1_3            #(+ % Sub_1_3))
                       (update :Sub_2_1            #(+ % Sub_2_1))
+                      (update :Sub_2_2            #(+ % Sub_2_2))
                       (update :Sub_2_3            #(+ % Sub_2_3))
                       (update :Sub_3_1            #(+ % Sub_3_1))
                       (update :Sub_3_2            #(+ % Sub_3_2))
+                      (update :Sub_3_3            #(+ % Sub_3_3))
                       (update :Unfilled           #(+ % (- TotalRequired Deployed)))
                       (update (-> Mod unfilleds)  #(+ % (- TotalRequired Deployed)))
                       )))
@@ -507,6 +524,25 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
   (-> (map frame->tacmm-trends h)
       interpolate
       (tbl/records->file tgt :field-order tacmm-fields)))
+
+;;days src tacmm c-rating quantity
+
+(def trkey (juxt :src mod-key readiness))
+(defn tacmm-readiness [t ctx]
+  (for [[[src m c] us] (group-by trkey (c/units ctx))]
+    {:days t
+     :src  src
+     :tacmm m
+     :c-rating c
+     :quantity (count us)}))
+
+(defn frame->tacmm-readiness [[t ctx]]
+  (tacmm-readiness t ctx))
+
+(defn history->tacmm-trends [h tgt]
+  (-> (map frame->tacmm-readiness h)
+      interpolate
+      (tbl/records->file tgt :field-order [:days :src :tacmm :c-rating :quantity])))
 
 (comment
   #_(def p "~/Documents/tacmm/august/run_base.xlsx")
