@@ -539,7 +539,7 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
 (defn frame->tacmm-readiness [[t ctx]]
   (tacmm-readiness t ctx))
 
-(defn history->tacmm-trends [h tgt]
+(defn history->tacmm-readiness [h tgt]
   (-> (map frame->tacmm-readiness h)
       interpolate
       (tbl/records->file tgt :field-order [:days :src :tacmm :c-rating :quantity])))
