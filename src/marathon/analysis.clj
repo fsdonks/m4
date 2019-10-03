@@ -559,6 +559,34 @@
       (fn [tbls]
         (reduce (fn [acc t] (update acc t tbl-filter)) tbls tables))))
 
+(defn group-by-srcs
+  "Given a sequence of srcs to group-by, pre-processes the project tables
+   to retain only records with an associated :SRC value, where the value
+   is in the set defined by srcs.  Returns a map of {src tbls}, where
+   each associated value is the subset of tables affected by the grouping,
+   where only records matching the grouping (in the designated tables)
+   are retained. Defaults to grouping supply and demand
+   records."
+  [srcs & {:keys [tables]
+           :or {tables [:SupplyRecords :DemandRecords]}}]
+  (let [srcs        (set srcs)
+        tbl-filter #(spork.util.table/filter-records (fn [r]  (srcs (:SRC r))) %)]
+    (fn [tbls]
+      (let [filtered (reduce (fn [acc t] (update acc t tbl-filter)) tbls tables)
+            ->empty-table (fn [t]
+                            (let [tbl  (get tbls t)
+                                  flds (tbl/table-fields tbl)]
+                              (spork.util.table/make-table flds
+                                                           (vec (repeat (count flds) [])))))]
+        (let [grouped-tables (into {} (for [t tables]
+                                        [t (tbl/subtables-by :SRC (get tbls t))]))]
+          (->> (for [src srcs]
+                 [src (reduce (fn inner [acc t]
+                                (assoc acc t
+                                        (or (get-in  grouped-tables [t src]) (->empty-table t))))
+                              tbls tables)])
+               (into {})))))))
+
 (defn frame-at
   "Fetch the simulation frame at or nearest (after) time t from a 
    sequence of [t ctx] frames xs."

@@ -157,6 +157,7 @@
         [priority id] d-pris]
     (let [{:keys [quantity src units-assigned]} (store/get-entity ctx id)]
       {:id id :src src
+       :quantity quantity
        :category cat  :unfilled (- quantity (count units-assigned))})))
 ;;Right now, we're storing demands in their entirety in the demandmap...
 ;;We really just want to store the entity's name...
