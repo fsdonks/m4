@@ -104,7 +104,11 @@
   ([r params]
      (and (:Enabled r)
           (core/in-scope? params (:SRC r))
-          (pos? (:Quantity r))))
+          (pos? (:Quantity r))
+          ;;Ensure 0-duration demands aren't included.
+          (if-let [dur (get r :Duration)]
+            (pos? dur) true)
+          ))
   ([r] (valid-record? r (core/get-parameters *ctx*))))
 
 (defn demand-key

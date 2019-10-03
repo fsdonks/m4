@@ -136,11 +136,20 @@
                  {:fill (+ fill weighted-total-fill)
                   :quantity (+ quantity weighted-total-quantity)})
                {:fill 0 :quantity 0})
-        (#(/  (:fill %) (:quantity %)))
+       (#(/  (get  % :fill)
+             (let [q (get % :quantity)]
+               (if (zero? q) 1 q))))
         double))
 
 (defn ctx->percent-fill [ctx]
   (-> ctx a/as-stream weighted-fill-stats percent-fill))
+
+#_(defn some-supply? [prj]
+  (->> prj
+      :tables
+      :SupplyRecords
+      tbl/table-records
+      (some (fn [r] (pos? (:Quantity r))))))
 
 (defn project->fill [prj]
   (-> prj a/load-context ctx->percent-fill))
@@ -166,6 +175,7 @@
 (defn ac-supply-reduction-experiments [tables & {:keys [step] :or {step 1}}]
   (let [init          (-> tables :SupplyRecords)
         groups        (-> init grouped-supply)
+        ;;have to account for ac-only supply.
         upper         (-> "AC" groups :Quantity)]
     (concat [tables]
             (when (and upper (> upper 1))
@@ -187,40 +197,58 @@
 ;;{:SRC :AC :RC :NG :Fill}
 
 (defn summary-record [src proj fill]
-  (let [grouped (-> proj :tables :SupplRecords grouped-supply)]
+  (let [grouped (-> proj :tables :SupplyRecords grouped-supply)]
     {:SRC src
-     :AC  (get grouped "AC" 0)
-     :RC  (get grouped "RC" 0)
-     :NG  (get grouped "NG" 0)
+     :AC  (get-in grouped ["AC" :Quantity] 0)
+     :RC  (get-in grouped ["RC" :Quantity] 0)
+     :NG  (get-in grouped ["NG" :Quantity] 0)
      :Fill fill}
     ))
 
-;;we want to do these as lazy as possible for now.
-(defn target-model [proj]
-  (apply concat
-     (for [[src proj] (split-project proj)]
-       (let [experiments (project->experiments proj)
-             n           (count experiments)]
-        (map-indexed (fn [idx proj]
-                       (println [:processing :src src :experiment idx :of n])
-                             (summary-record src proj (project->fill proj)))
-                     experiments)
-        ))))
-
+;;simple single-core version.
+;;Takes about 6 minutes for a large TAA run, with no
+;;perturbation of readiness conditions.
 (defn target-model [proj]
   (->> (split-project proj)
-       (reduce (fn [acc [src proj]]
-                 (let [_ (println [:starting src])
-                       experiments (project->experiments proj)
-                       n           (count experiments)]
-                   (into acc (map-indexed (fn [idx proj]
-                                            (println [:processing :src src :experiment idx :of n])
-                                            (summary-record src proj (project->fill proj)))
-                                          experiments)
-                         ))) [])))
+       (reduce
+        (fn [acc [src proj]]
+          (let [_ (println [:starting src])
+                experiments (project->experiments proj)
+                n           (count experiments)
+                _ (println [:experiment-count n])]
+            (into acc
+              (map-indexed
+               (fn [idx proj]
+                 (try (let [_    (println [:processing :src src :experiment idx :of n])
+                            fill (project->fill proj)]
+                        (summary-record src proj fill))
+                      (catch Exception e
+                        (throw (ex-info (str "unable to compute fill " src)
+                                        {:src src :idx idx})))))
+               experiments)))) [])))
 
+;;basic execution
 (comment
   (def the-path "../notional/base-testdata-v8.xlsx")
   (def proj (a/load-project the-path))
+  (def res  (target-model proj))
   )
 
+
+
+;;we want to do these as lazy as possible for now.
+;;This original version is lazy, but using chunked-sequences
+;;underneath.  We'll probably want something akin to
+;;requirements analysis's producer/consumer queue.
+(comment 
+  (defn target-model [proj]
+    (apply concat
+           (for [[src proj] (split-project proj)]
+             (let [experiments (project->experiments proj)
+                   n           (count experiments)]
+               (map-indexed (fn [idx proj]
+                              (println [:processing :src src :experiment idx :of n])
+                              (summary-record src proj (project->fill proj)))
+                            experiments)
+               ))))
+  )
