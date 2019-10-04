@@ -2,64 +2,52 @@
 ;;e.g. supply variation, demand variation, maybe both.
 (ns marathon.analysis.experiment
   (:require [marathon.analysis :as a]
+            [marathon.analysis.util :as util]
             [spork.util [table :as tbl]
                         [io :as io]
                         [general :as gen]]))
 
+;;We'll start with a hacky, very specific form of supply experimentation
+;;motivated by generating output for the an existing model.
 
-;;We'll start with a hacky, very specific form of
-;;supply experimentation motivated by generating
-;;output for the an existing model.
+;;Specifically, we'll perform a series of capacity analysis runs (unaudited) and
+;;collect expected fill for each run.
 
-;;Specifically, we'll perform a series of capacity
-;;analysis runs (unaudited) and collect expected
-;;fill for each run.
+;;In general, we want a function to take some input, and generate design points.
 
-;;In general, we want a function to take some input,
-;;and generate design points.
+;;Then we want another function that will experiment with the given design.
 
-;;Then we want another function that will experiment
-;;with the given design.
+;;Finally, a function that collates the results of the experiments.
 
-;;Finally, a function that collates the results
-;;of the experiments.
+;;This is the basic map/reduce paradigm. We project an input onto multiple
+;;datums, then map some processing onto those, then reduce the processed
+;;results.
 
-;;This is the basica map/reduce paradigm.
-;;We project an input onto multiple datums,
-;;then map some processing onto those,
-;;then reduce the processed results.
+;;In our case, we'll generate multiple M4 projects from an initial project.
+;;We'll split the project by SRC. For each SRC, we'll generate multiple projects
+;;as well, based on a design function. The design function will generate
+;;variable supply from the root. We'll run capacity analyses on each design,
+;;generating an expected fill percentage. We may even want to generate a fill
+;;distribution/curve vs. a single point.
 
-;;In our case, we'll generate multiple
-;;M4 projects from an initial project.
-;;We'll split the project by SRC.
-;;For each SRC, we'll generate multiple projects as well,
-;;based on a design function.
-;;The design function will generate variable supply
-;;from the root.
-;;We'll run capacity analyses on each design,
-;;generating an expected fill percentage.
-;;We may even want to generate a fill distribution/curve vs.
-;;a single point.
+;;Then we'll reduce the results into a table of SRC, AC, RC, NG, Fill
 
-;;Then we'll reduce the results into a table of
-;;SRC, AC, RC, NG, Fill
-
-;;Note: we already have a basic implementation for DOE from
-;;TMAS if we want to leverage it.
-
-;;This will be somewhat dumb (intentionally).
-(defn bounds->experiment [l r]
-  (range l r))
-
-(defn load-src [tbls src]
-  (let [src-filter (a/filter-srcs [src])
-        src-tables (src-filter     tbls)] ;alters SupplyRecords, DemandRecords
-    src-tables))
+;;Note: we already have a basic implementation for DOE from TMAS if we want to
+;;leverage it.
 
 ;;this is a fast way to scrape scoping information
 ;;from a project.  We should probably publish it as a core
 ;;method for pre-processing.
+;;TODO: Collect in a preprocessing namespace?
 (defn srcs-in-scope-from
+  "Leverages the functions from marathon.ces.setup
+   to coerce project tables into a marathon fillstore
+   with its requisite fillgraph.  Since this can
+   happen without needing to create a simulation
+   context, and it only depends on demand, supply,
+   and relation records, it provides a fast way
+   to predetermine scoping of SRCs.  We extract
+   the set of scoping criteria."
   [tables]
    (binding [marathon.ces.setup/*tables* tables]
      (->> (marathon.ces.setup/default-fillstore)
@@ -69,13 +57,16 @@
            keys
            set)))
 
-;;we can use scoping information to split up the project into
-;;work chunks.  If there are substitutions, we have to have strongly
-;;connected components together.  Our default supply variation
-;;assumptions preclude this (via independence) though.
+;;we can use scoping information to split up the project into work chunks. If
+;;there are substitutions, we have to have strongly connected components
+;;together. Our default supply variation assumptions preclude this (via
+;;independence) though.
 (defn split-project [prj]
   "Given a project prj, returns a map of {src proj'} where
-   proj'"
+   proj' is a 'sub-project' with the supply/demand/GhostProportions
+   records limited to the those with SRC field = src.  Provides
+   a convenient way to eagerly decompose a project for distributed
+   runs by SRC."
   (let [tbls     (:tables prj)
         srcs     (srcs-in-scope-from tbls)
         group-fn (a/group-by-srcs srcs
@@ -84,27 +75,19 @@
          (reduce-kv (fn [acc src tbls]
                       (assoc acc src (assoc prj :tables tbls))) {}))))
 
+;;Metrics
+;;=======
+
 ;;Given a split set of tables, we can now map an experiment function.
 ;;For our purposes, this will be simply to perform a capacity analysis.
 ;;The metric we care about will be total fill, e.g. %DaysFilled.
 ;;THis is a time weighted percentage, so we'll account for deltat in
 ;;the weighting.
 
-(defn fill-stats
-  "Computes a scalar quantity of unfilled demand from a simulation
-   context."
-  [ctx]
-  (->> ctx
-       (marathon.ces.demand/unfilled-demand-count)
-       (map (juxt :quantity :unfilled))
-       (reduce (fn [[qtot ftot] [q f]]
-                 [(+ qtot q) (+ ftot f)]) [0 0])))
-
-;;using demand trends does a bit of extra work here,
-;;but we get reuse out of the box.
-;;Note: we could also re-use our interpolating functions
-;;from tacmm out of the box too, but we don't need to in
-;;this instance (less work required, just scale by dt)
+;;using demand trends does a bit of extra work here, but we get reuse out of the
+;;box. Note: we could also re-use our interpolating functions from tacmm out of
+;;the box too, but we don't need to in this instance (less work required, just
+;;scale by dt)
 (defn fill-stats
   "Computes a scalar quantity of unfilled demand from a simulation
    context."
@@ -118,6 +101,15 @@
                {:total-fill 0 :total-quantity 0})))
 
 (defn weighted-fill-stats
+  "Given a simulation history expressed as a sequence of [t ctx] frames,
+   where t is the integer end-time of the ctx, and ctx is the state,
+   projects the histotry onto a sequence of time-weighted
+   samples of [ctx t dt], and computes a resulting sequence of
+   fill-stats, returning
+   {:keys [total-fill total-quantity
+           weighted-total-fill weighted-total-quantity]}
+   where the weighted-* keys are scaled by the time weight
+   dt."
   [frames]
   (->> frames
        (map     (fn [[t ctx]] (assoc (fill-stats ctx) :t t)))
@@ -129,7 +121,13 @@
                   (assoc :weighted-total-quantity (* total-quantity dt)))))))
 
 ;;core metric.
-(defn percent-fill [weighted-stats]
+(defn percent-fill
+  "Given a sequence of weighted samples of
+  {:keys [weighted-total-fill weighted-total-quantity]}
+   reduces the samples into a simple percent fill based on
+   (sum weighted-total-fill) / (sum weighted-total-quantity).
+   If no samples are present to reduce, returns 0."
+  [weighted-stats]
   (->> weighted-stats
        (reduce (fn [{:keys [fill quantity]}
                     {:keys [weighted-total-fill weighted-total-quantity]}]
@@ -141,18 +139,20 @@
                (if (zero? q) 1 q))))
         double))
 
-(defn ctx->percent-fill [ctx]
+(defn ctx->percent-fill
+  "Convenience function to directly computed a fill percentage
+   from a context, useful for mapping over experiments."
+  [ctx]
   (-> ctx a/as-stream weighted-fill-stats percent-fill))
 
-#_(defn some-supply? [prj]
-  (->> prj
-      :tables
-      :SupplyRecords
-      tbl/table-records
-      (some (fn [r] (pos? (:Quantity r))))))
-
-(defn project->fill [prj]
+(defn project->fill
+  "Convenience function to directly computed a fill percentage
+   from a project, useful for mapping over experiments."
+  [prj]
   (-> prj a/load-context ctx->percent-fill))
+
+;;Defining Experiments
+;;====================
 
 ;;Now we need to compute multiple experiments from a root project.
 ;;The simplest experiment will be supply variation.
@@ -163,7 +163,10 @@
 ;;We'll define a simple reduction in supply that drives to
 ;;0.
 
-(defn grouped-supply [supply-table]
+(defn grouped-supply
+  "Projects a table of SupplyRecords onto a map of {compo supply-record} for
+  convenient processing."
+  [supply-table]
   (->> supply-table
        tbl/table-records
        (group-by :Component)
@@ -172,7 +175,17 @@
                       (throw (ex-info "expected 1 record" {:compo compo :xs xs}))
                       (assoc acc compo (first xs)))) {})))
 
-(defn ac-supply-reduction-experiments [tables & {:keys [step] :or {step 1}}]
+(defn ac-supply-reduction-experiments
+  "Given a map of the form {:keys [SupplyRecords]},
+   where SupplyRecords is a spork.util.table table, yields a sequence of maps
+  corresponding to alterations of the original input tables. The resulting
+  sequence is generated via
+  [tables tables_1 tables_2 ...tables_n] where tables_n corresponds to a
+  reduction of the AC supply by n. These form a sequence of experimental designs
+  in which the input AC supply decreases to 0.  The size of decrease is
+  parameterized by step, defaulting to 1.  step should be a non-negative
+  int."
+  [tables & {:keys [step] :or {step 1}}]
   (let [init          (-> tables :SupplyRecords)
         groups        (-> init grouped-supply)
         ;;have to account for ac-only supply.
@@ -190,13 +203,18 @@
 
 ;;We want to run an experiment where we decrease the supply to 0.
 ;;Naively, we just decrement the supply until we hit 0.
-(defn project->experiments [prj & {:keys [step] :or {step 1}}]
+(defn project->experiments
+  "Projects a project prj onto a sequence of projects with AC supply
+   decreased by step, tending toward 0."
+  [prj & {:keys [step] :or {step 1}}]
   (for [tbls (ac-supply-reduction-experiments (:tables prj) :step step)]
     (assoc prj :tables tbls)))
 
 ;;{:SRC :AC :RC :NG :Fill}
-
-(defn summary-record [src proj fill]
+(defn summary-record
+  "Record that summarizes the output of an experimental design
+   in a format familiar to extant model data."
+  [src proj fill]
   (let [grouped (-> proj :tables :SupplyRecords grouped-supply)]
     {:SRC src
      :AC  (get-in grouped ["AC" :Quantity] 0)
@@ -208,7 +226,15 @@
 ;;simple single-core version.
 ;;Takes about 6 minutes for a large TAA run, with no
 ;;perturbation of readiness conditions.
-(defn target-model [proj]
+(defn target-model
+  "Given an initial project, decomposes the project into
+   K sub projects by SRC.  For each sub project, computes
+   a supply variation experiment that decrements the initial
+   supply to 0.  Results are returned in the from of
+   summary records.  Yields a sequence of {:keys [SRC AC NG RC Fill]}
+   where AC NG RC are the relative quantities of supply for each compo.
+   Fill is the %Fill Days for the entire simulation."
+  [proj]
   (->> (split-project proj)
        (reduce
         (fn [acc [src proj]]
@@ -226,6 +252,38 @@
                         (throw (ex-info (str "unable to compute fill " src)
                                         {:src src :idx idx})))))
                experiments)))) [])))
+
+;;This gives us about a 3x speedup out of the box.  We're
+;;theoretically using 8 threads, one per core, so
+;;we ought to be getting closer to linear scaling.  I think
+;;we can do better.
+(defn target-model-par
+  "Given an initial project, decomposes the project into
+   K sub projects by SRC.  For each sub project, computes
+   a supply variation experiment that decrements the initial
+   supply to 0.  Results are returned in the from of
+   summary records.  Yields a sequence of {:keys [SRC AC NG RC Fill]}
+   where AC NG RC are the relative quantities of supply for each compo.
+   Fill is the %Fill Days for the entire simulation."
+  [proj]
+  (->> (split-project proj)
+       (reduce
+        (fn [acc [src proj]]
+          (let [_ (println [:starting src])
+                experiments (project->experiments proj)
+                n           (count experiments)
+                _ (println [:experiment-count n])]
+            (into acc
+                  (util/pmap!
+                    (fn [[idx proj]]
+                      (try (let [_    (println [:processing :src src :experiment idx :of n])
+                                 fill (project->fill proj)]
+                             (summary-record src proj fill))
+                           (catch Exception e
+                             (throw (ex-info (str "unable to compute fill " src)
+                                             {:src src :idx idx})))))
+                     (map-indexed vector experiments))))) [])))
+
 
 ;;basic execution
 (comment
