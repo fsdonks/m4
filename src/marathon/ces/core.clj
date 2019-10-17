@@ -279,6 +279,8 @@
 ;;     (deployments ctx)))
 
 (defn periods [ctx] (:periods   (get-policystore ctx)))
+(defn current-period [ctx]
+  (-> ctx (store/get-ine [:PolicyStore :activeperiod :name])))
 
 ;;THis is less useful now that we're in an entitystore...
 ;;might migrate away from this, treat it as a code smell

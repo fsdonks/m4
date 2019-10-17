@@ -459,21 +459,6 @@ DemandRecord	TRUE	1	4	1	822	273	45	01205K000	AC_First	Hinny	Pearl	Kersten	Modern
               ds)])
    (into {})))
 
-#_(defn frame->fills [[t ctx]]
-  (->>
-   (for [[src ds] (group-by :SRC (demand-trends t ctx))]
-
-     [src
-      (reduce (fn [acc {:keys [TotalRequired TotalFilled Overlapping Deployed] :as r}]
-                (-> acc
-                    (update :TotalRequired #(+ % TotalRequired))
-                    (update :TotalFilled   #(+ % TotalFilled))
-                    (update :Overlapping   #(+ % Overlapping))
-                    (update :Deployed      #(+ % Deployed))))
-              {:TotalRequired 0 :TotalFilled 0 :Overlapping 0 :Deployed 0}
-              ds)])
-   (into {})))
-
 (defn frame->tacmm-trends [[t ctx]]
   (let [fills (frame->fills [t ctx])]
     (for [[src us] (->> ctx c/units (group-by :src))]
