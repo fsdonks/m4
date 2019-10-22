@@ -692,6 +692,18 @@
 (defmacro defkey [name base] `(def ~name (key-tag-maker ~base)))
 
 ;;#Utils
+
+;;Common record validation....a little janky, but centralized.
+(defn valid-record?
+  [r]
+  (and (:Enabled r)
+       (pos? (:Quantity r))
+       ;;Ensure 0-duration demands aren't included.
+       (if (not (:Name r)) ;;demand record
+         (if-let [dur (get r :Duration)] ;;has duration 
+           (pos? dur) true)
+         true)))
+
 (defn ensure-name
   "We tend to prefer unique names, and often times we accomplish that by concatenating the 
    count of a container onto a non-unique name.  ensure-names generalizes this stuff."

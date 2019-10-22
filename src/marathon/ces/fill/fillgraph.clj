@@ -138,31 +138,21 @@
        (map (fn [src] 
               [:source src]))))
 
-(defn valid-record?
-  "Used to pre-filter records to ensure that we ignore zeroed demands.."
-  [r]
-  (and (:Enabled r)
-       (pos? (:Quantity r))
-       ;;Ensure 0-duration demands aren't included.
-       (if-let [dur (get r :Duration)]
-         (pos? dur) true )
-       ))
-
 ;;was fromsourcetable
 (defn append-sourcetable [g tbl]
   (reduce (fn [acc {:keys [SRC]}]
             (add-source acc SRC))
           g
-          (r/filter valid-record? tbl)))
+          (r/filter core/valid-record? tbl)))
 
 ;;this is fromDemandrecords kinda
 (defn append-sinktable [g tbl]
   (reduce (fn [acc {:keys [SRC]}]
               (add-sink acc SRC))
-          g 
-          (r/filter valid-record? tbl)))
+          g
+          (r/filter core/valid-record? tbl)))
 
-;;was fromRelationTable 
+;;was fromRelationTable
 (defn append-relationtable [g tbl]
   (reduce (fn [acc {:keys [Recepient Donor Cost Relation]}]
             (case (clojure.string/lower-case (clojure.string/trim  Relation))
