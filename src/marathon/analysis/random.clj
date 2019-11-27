@@ -7,7 +7,8 @@
                                        [spork.util.table :as tbl]))
 
 (defn rand-recs
-  "Takes a supply record with unit quantity n and creates n supply records, each with unit quantity 1 and a random initial cycle time."
+  "Takes a supply record with unit quantity n and creates n supply records,
+  each with unit quantity 1 and a random initial cycle time."
   [rec]
   (for [i (range (:Quantity rec))]
     (if (= (:Component rec) "AC")
@@ -15,7 +16,8 @@
       (assoc rec :CycleTime (rand-int 1825) :Quantity 1 :Name (str i "_" (:SRC rec))))))
 
 (defn rand-proj
-  "Takes a project and uses the rand-recs function to create supply records with random unit initial cycle times."
+  "Takes a project and uses the rand-recs function to create supply records
+  with random unit initial cycle times."
   [proj]
   (->> proj
        :tables
@@ -26,29 +28,51 @@
        (assoc-in proj [:tables :SupplyRecords])))
 
 (defn mean
-  "Calculates the mean across a series of maps for the values associated with a particular key. The map is denoted by fills and the key is denoted by key."
-  [fills key]
-  (/ (reduce + (map key fills)) (count fills)))
+  "Calculates the mean across a series of maps for the values associated
+  with a particular key. The map is denoted by fills and the key is
+  denoted by measure."
+  [fills measure]
+  (double (/ (reduce + (map measure fills)) (count fills))))
 
-(defn means
+(defn std-dev
+  "Calculates the mean across a series of maps for the values associated
+  with a particular key. The map is denoted by fills and the key is
+  denoted by measure."
+  [fills measure]
+  (let [mean (mean fills measure)
+        xs (map measure fills)
+        diffs (map - xs (repeat mean))
+        diffs-squared (map * diffs diffs)
+        n (if (> (count xs) 1) (dec (count xs)) 1)]
+    (Math/sqrt (double (/ (reduce + diffs-squared) n)))))
+
+(defn stats
   "Takes a series of maps and returns a map with mean and representative values."
   [fills]
   (let [mean-fill (mean fills :fill)
         mean-quantity (mean fills :quantity)
         mean-deployable (mean fills :deployable)
+        std-dev-fill (std-dev fills :fill)
+        std-dev-deployable (std-dev fills :deployable)
         period (:period (first fills))]
-    {:mean-fill mean-fill :quantity mean-quantity :mean-deployable mean-deployable :period period}))
+    {:mean-fill mean-fill :quantity mean-quantity :mean-deployable mean-deployable
+     :std-dev-fill std-dev-fill :std-dev-deployable std-dev-deployable :period period}))
 
 (defn rand-runs
-  "Takes a project consisting of one SRC, creates a series of projects with random unit intital cycle times, and returns a sequence of maps (one for each period) with summary statistics."
+  "Takes a project consisting of one SRC, creates a series of projects
+  with random unit intital cycle times, and returns a sequence of maps
+  (one for each period) with summary statistics."
   [proj reps]
   (let [rand-projs (map rand-proj (repeat reps proj))
-        fills (mapcat e/project->period-fill rand-projs)
+        fills (apply concat (pmap e/project->period-fill rand-projs)) 
         grouped-fills (->> fills (group-by :period) vals)]
-    (map means grouped-fills)))
-
+    (map stats grouped-fills)))
+    
 (defn rand-target-model
-  "Uses the target-model-par-av function from the marathon.analysis.experiment namespace as a base. This function is modified to perform multiple runs for each level of supply. Each run has random unit initial cylce times. Mean statistics are then calculated across runs for each supply level."
+  "Uses the target-model-par-av function from the marathon.analysis.experiment
+  namespace as a base. This function is modified to perform multiple runs for
+  each level of supply. Each run has random unit initial cylce times. Mean
+  statistics are then calculated across runs for each supply level."
   [proj reps]
   (->> (e/split-project proj)
        (reduce
@@ -70,9 +94,26 @@
        (apply concat)
        vec))
 
-;Example use:
+(defn write-output
+  "Writes formatted modeling results to a file. "
+  [file-name results]
+  (let [format-string "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n"
+        values (map vals results)
+        formatted-values (clojure.string/join (map #(apply format format-string %) values))
+        headers (clojure.string/replace (apply format format-string (keys (first results))) ":" "")]
+    (spit file-name (str headers formatted-values))))
+
 (comment
-  (def path "~/repos/notional/supplyvariation-testdata.xlsx")
+  ;calculate results
+  (def path "~/repos/notional/testdata-v7.xlsx")
   (def proj (a/load-project path))
-  (def results (rand-target-model proj 10))
+  (def results (rand-target-model proj 1))
+  (def old-results (e/target-model-par-av proj))
+  
+  ;write output
+  (write-output "output.csv" results)
+
+  ;entities for developmental testing
+  (def projs (e/split-project proj))
+  (def proj1 (second (vals projs)))
 )
