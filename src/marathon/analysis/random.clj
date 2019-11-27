@@ -35,9 +35,9 @@
   (double (/ (reduce + (map measure fills)) (count fills))))
 
 (defn std-dev
-  "Calculates the mean across a series of maps for the values associated
-  with a particular key. The map is denoted by fills and the key is
-  denoted by measure."
+  "Calculates the standard deviation across a series of maps for the values
+  associated with a particular key. The map is denoted by fills and the key
+  is denoted by measure."
   [fills measure]
   (let [mean (mean fills measure)
         xs (map measure fills)
@@ -95,7 +95,7 @@
        vec))
 
 (defn write-output
-  "Writes formatted modeling results to a file. "
+  "Writes formatted modeling results to a file."
   [file-name results]
   (let [format-string "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n"
         values (map vals results)
