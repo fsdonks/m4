@@ -64,10 +64,10 @@
   (one for each period) with summary statistics."
   [proj reps]
   (let [rand-projs (map rand-proj (repeat reps proj))
-        fills (apply concat (pmap e/project->period-fill rand-projs)) 
+        fills      (apply concat (util/pmap! e/project->period-fill rand-projs))
         grouped-fills (->> fills (group-by :period) vals)]
     (map stats grouped-fills)))
-    
+
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
   namespace as a base. This function is modified to perform multiple runs for
@@ -82,7 +82,7 @@
                 n           (count experiments)
                 _ (println [:experiment-count n])]
             (into acc
-                  (util/pmap! 
+                  (map ;;#_util/pmap! 
                    (fn [[idx proj]]
                      (try (let [_    (println [:processing :src src :experiment idx :of n])
                                 mean-fills (rand-runs proj reps)]

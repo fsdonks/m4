@@ -379,7 +379,7 @@
                  ;- (println category-selector)
                  ]
              (->>  (->deployers supply :src src-selector :cat category-selector
-                                :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
+                                :weight (fn [_ src] (#_get prefs src Long/MAX_VALUE))
                                 :nm->unit nm->unit)
                ;  (r/map (fn [[k v]]
                ;           [(conj k (get prefs (second k) Long/MAX_VALUE)) v])) ;sort by a score.

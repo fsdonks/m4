@@ -3,7 +3,7 @@
 ;;behavior tree approach defined by spork.ai.behavior .
 (ns marathon.ces.behavior
   (:require [spork.ai.core :as ai :refer
-             [deref! fget fassoc  push-message- debug ->msg]]
+             [deref! fget fassoc  push-message- #_debug ->msg]]
             [spork.ai.behavior 
              :refer [beval
                      success?
@@ -346,13 +346,24 @@
   `(do (debug ~msg)
        ~ctx))
 
-;;migrate.,..
-(defn echo [msg]
-  (fn [ctx] (do (debug msg) (success ctx))))
-
 (defmacro deref!! [v]
   (let [v (with-meta v {:tag 'clojure.lang.IDeref})]
     `(.deref ~v)))
+
+(def debug? (atom nil))
+(defmacro debug
+  ([lvl msg]
+   `(when (let [res# (deref!! ~'marathon.ces.behavior/debug?)]
+            (and res#
+                 (>= res# ~lvl)))
+      (when-let [res#  ~msg] (println res#))))
+  ([msg] `(when (deref!! ~'marathon.ces.behavior/debug?)
+            (when-let [res# ~msg]
+              (println res#)))))
+
+;;migrate.,..
+(defn echo [msg]
+  (fn [ctx] (do (debug msg) (success ctx))))
 
 (defmacro val-at
   "Synonimous with clojure.core/get, except it uses interop to 
@@ -423,7 +434,6 @@
 ;;Environment for evaluating entity behaviors, adapted for use with the simcontext.
 ;;If we provide an address, the entity is pushed there.  So, we can have nested
 ;;updates inside associative structures.
-
 
 ;;__Utility functions__
 ;;Entity step operations...
