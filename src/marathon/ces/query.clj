@@ -991,6 +991,8 @@
   [order-by]
   (->kv-ordering compare-fill-weight order-by))
 
+(def tatom (atom nil))
+
 ;;#TODO maybe generalize this further, hide it behind a closure or something?
 ;;#TODO move this to sim.query or another ns
 ;;Find all deployable units that match the category "SRC=SRC3"
@@ -998,7 +1000,8 @@
                     {src :any cat :default} :as env} ctx]
     (let [order-by (eval-order    order-by)
           where    (eval-filter   where)
-          t        (core/get-time ctx)]
+          t        (core/get-time ctx)
+          _ (if (= t 1000) (reset! tatom (compute-supply env ctx)))]
       (with-query-env env                                                                           
         (as-> (->> (find-feasible-supply (compute-supply env ctx) (core/get-fillmap ctx) 
                                          cat src  (fn [nm]                                                    
@@ -1052,12 +1055,20 @@
 ;;TODO: Revisit the definitions here, potentially using a better candidate for
 ;;predicate equality.  The inversion/flipping stuff is potentially awkward.
 (def not-ac #(is-not (:component %) "AC"))
+(def not-rc #(is (:component %) "AC"))
 
 ;;implies max dwell.
 ;;shifting to capitalizing compound rules...
 (def NOT-AC      [when-fenced not-ac max-proportional-dwell min-unit-weight])
-(def NOT-AC-MIN  [when-fenced not-ac min-proportional-dwell min-unit-weight])
-  
+(def NOT-AC-MIN  [when-fenced not-ac min-proportional-dwell
+                  min-unit-weight])
+
+;;Added for forward stationed/assigned units
+;;Use min-proportional-dwell to grab the least ready units to allow
+;;the more ready units to be used for rotational stuff.
+(def NOT-RC      [when-fenced not-rc min-proportional-dwell
+                  min-unit-weight])
+
 (def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 ;;apparently identical.
 (def hld [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
