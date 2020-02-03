@@ -1059,10 +1059,13 @@
 (def NOT-AC      [when-fenced not-ac max-proportional-dwell min-unit-weight])
 (def NOT-AC-MIN  [when-fenced not-ac min-proportional-dwell min-unit-weight])
 
+;;max dwell
+(def NOT-RC      [when-fenced not-rc max-proportional-dwell min-unit-weight])
 ;;Added for forward stationed/assigned units
 ;;Use min-proportional-dwell to grab the least ready units to allow
 ;;the more ready units to be used for rotational stuff.
-(def NOT-RC      [when-fenced not-rc min-proportional-dwell min-unit-weight])
+(def NOT-RC-MIN      [when-fenced not-rc min-proportional-dwell
+                  min-unit-weight])
 
 (def title32 [#(is (:component %) "NG") min-proportional-dwell min-unit-weight])
 ;;apparently identical.
