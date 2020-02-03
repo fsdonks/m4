@@ -1161,7 +1161,8 @@
    "MIN-DWELL"  min-dwell
    "NOT-AC-MIN" NOT-AC-MIN
    "NOT-AC"     NOT-AC
-
+   "NOT-RC"     NOT-RC
+   "NOT-RC-MIN" NOT-RC-MIN
    "MOD1"       MOD1
    "MOD2"       MOD2
    "MOD3"       MOD3
