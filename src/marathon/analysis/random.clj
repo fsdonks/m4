@@ -2,6 +2,7 @@
 (ns marathon.analysis.random (:require [marathon.analysis :as a]
                                        [marathon.analysis.util :as util]
                                        [marathon.analysis.experiment :as e]
+                                       [marathon.ces.core :as c]
                                        [spork.util.table :as tbl]
                                        [spork.util.general :as gen]))
 
@@ -24,12 +25,38 @@
        tbl/records->table
        (assoc-in proj [:tables :SupplyRecords])))
 
+(defn fill-stats
+  "Computes a scalar quantity of unfilled demand from a simulation
+   context."
+  [ctx]
+  (->> ctx
+       a/demand-trends ;;if we swap this with util/demand-trends-exhaustive trends we'll get a different result.
+       (reduce (fn [acc {:keys [ACFilled NGFilled RCFilled ACOverlap NGOverlap RCOverlap TotalRequired]}]
+                 (-> acc
+                     (update :AC-fill     #(+ % ACFilled))
+                     (update :NG-fill     #(+ % NGFilled))
+                     (update :RC-fill     #(+ % RCFilled))
+                     (update :AC-overlap  #(+ % ACOverlap))
+                     (update :NG-overlap  #(+ % NGOverlap))
+                     (update :RC-overlap  #(+ % RCOverlap))
+                     (update :total-quantity #(+ % TotalRequired))))
+               {:AC-fill 0, :NG-fill 0, :RC-fill 0,
+                :AC-overlap 0, :NG-overlap 0, :RC-overlap 0,
+                :total-quantity 0
+                :AC-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "AC" count) "AC")
+                :NG-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "NG" count) "NG")
+                :RC-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "RC" count) "RC")
+                :AC-total      (get (update (->> ctx c/units (group-by :component)) "AC" count) "AC")
+                :NG-total      (get (update (->> ctx c/units (group-by :component)) "NG" count) "NG")
+                :RC-total      (get (update (->> ctx c/units (group-by :component)) "RC" count) "RC")
+                :period        (c/current-period ctx)})))
+
 (defn weighted-fill-stats
   "Truncated copy of this function from the marathon.analysis.experiment namespace.
   Takes a series of frames and gets the amount of time associated with them (dt)."
   [frames]
   (->> frames
-       (map (fn [[t ctx]] (assoc (e/fill-stats ctx) :t t)))
+       (map (fn [[t ctx]] (assoc (fill-stats ctx) :t t)))
        (filter #(pos? (:total-quantity %)))
        (gen/time-weighted-samples :t)))
 
@@ -59,9 +86,20 @@
 (defn weighted-phase-fill
   "Gets fill stats weighted by the duration of each frame (dt)."
   [fill]
-  (assoc fill :total-fill (* (:total-fill fill) (:dt fill))
-         :total-quantity (* (:total-quantity fill) (:dt fill))
-         :total-deployable (* (:total-deployable fill) (:dt fill))))
+  (assoc fill
+         :AC-fill          (* (:AC-fill fill) (:dt fill))
+         :NG-fill          (* (:NG-fill fill) (:dt fill))
+         :RC-fill          (* (:RC-fill fill) (:dt fill))
+         :AC-overlap       (* (:AC-overlap fill) (:dt fill))
+         :NG-overlap       (* (:NG-overlap fill) (:dt fill))
+         :RC-overlap       (* (:RC-overlap fill) (:dt fill))
+         :total-quantity   (* (:total-quantity fill) (:dt fill))
+         :AC-deployable    (* (:AC-deployable fill) (:dt fill))
+         :NG-deployable    (* (:NG-deployable fill) (:dt fill))
+         :RC-deployable    (* (:RC-deployable fill) (:dt fill))
+         :AC-total         (* (:AC-total fill) (:dt fill))
+         :NG-total         (* (:NG-total fill) (:dt fill))
+         :RC-total         (* (:RC-total fill) (:dt fill))))
 
 (defn project->phase-fill
   "Takes a project and returns weighted fill stats by phase."
@@ -74,9 +112,19 @@
        (map weighted-phase-fill)
        (group-by :phase)
        (map (fn [x] {:phase (key x)
-                     :total-fill (reduce + (map :total-fill (val x)))
-                     :total-quantity (reduce + (map :total-quantity (val x)))
-                     :total-deployable (reduce + (map :total-deployable (val x)))}))))
+                     :AC-fill         (reduce + (map :AC-fill (val x)))
+                     :NG-fill         (reduce + (map :NG-fill (val x)))
+                     :RC-fill         (reduce + (map :RC-fill (val x)))
+                     :AC-overlap      (reduce + (map :AC-overlap (val x)))
+                     :NG-overlap      (reduce + (map :NG-overlap (val x)))
+                     :RC-overlap      (reduce + (map :RC-overlap (val x)))
+                     :total-quantity  (reduce + (map :total-quantity (val x)))
+                     :AC-deployable   (reduce + (map :AC-deployable (val x)))
+                     :NG-deployable   (reduce + (map :NG-deployable (val x)))
+                     :RC-deployable   (reduce + (map :RC-deployable (val x)))
+                     :AC-total        (reduce + (map :AC-total (val x)))
+                     :NG-total        (reduce + (map :NG-total (val x)))
+                     :RC-total        (reduce + (map :RC-total (val x)))}))))
 
 (defn change-bound
   "Modifies the upper or lower bound of supply experiments. Usefull for looking
@@ -151,4 +199,5 @@
   (def proj (a/load-project path))
   (def phases [["comp" 1 821] ["phase-1" 822 967]])
   (def results (rand-runs proj 1 phases 0 1.5))
+  (write-output "results.csv" results)
 )
