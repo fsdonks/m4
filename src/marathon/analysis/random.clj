@@ -26,11 +26,12 @@
        (assoc-in proj [:tables :SupplyRecords])))
 
 (defn fill-stats
-  "Computes a scalar quantity of unfilled demand from a simulation
-   context."
+  "Copy of this function from the marathon.analysis.experiment namespace.
+  This function has been updated to include statistics by component."
   [ctx]
   (->> ctx
        a/demand-trends ;;if we swap this with util/demand-trends-exhaustive trends we'll get a different result.
+       (remove #(= (:DemandGroup  %) "RC_NonBOG-War"))
        (reduce (fn [acc {:keys [ACFilled NGFilled RCFilled ACOverlap NGOverlap RCOverlap TotalRequired]}]
                  (-> acc
                      (update :AC-fill     #(+ % ACFilled))
@@ -200,4 +201,4 @@
   (def phases [["comp" 1 821] ["phase-1" 822 967]])
   (def results (rand-runs proj 1 phases 0 1.5))
   (write-output "results.csv" results)
-)
+  )
