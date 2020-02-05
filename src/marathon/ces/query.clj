@@ -12,7 +12,7 @@
             [spork.data [lazymap :as lm]]
             [marathon.ces.fill.fillgraph]
             [spork.util.reducers]
-            [spork.util [tags :as tag]]
+            [spork.util [tags :as tag] [general :as gen]]
             [clojure.core [reducers :as r]]))
 
 ;; (defmacro napply [f k & xs]
@@ -816,8 +816,8 @@
        (if ord (sort ord filtered) filtered)))
 
 (defn eval-filter [xs]
-  (cond (fn? xs) xs        
-        (vector? xs) 
+  (cond (fn? xs) xs
+        (vector? xs)
            (let [fs (reduce (fn [acc f] (conj acc (eval-filter f))) [] xs)]
              #(ands % fs))
         (nil? xs) nil))
@@ -827,6 +827,7 @@
         (vector? xs)  (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))
         (nil? xs)    nil
         :else (throw (Exception. (str "Unknown ordering expression: " xs)))))
+(alter-var-root #'eval-order gen/memo-1)
 
 (defn selection? [f]  (get (meta f) :selection))
 ;;#TODO flesh out the from key.  Maybe it makes sense to define a

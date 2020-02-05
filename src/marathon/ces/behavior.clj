@@ -43,9 +43,9 @@
             [marathon.data [protocols :as protocols]
              ]
             [marathon.ces [core :as core]
-                          [unit :as u]
-                          [supply :as supply]
-                          [demand :as d]
+             [unit :as u]
+             [supply :as supply]
+             [demand :as d]
              ]
             [spork.cljgraph.core :as graph]
             [spork.util.general     :as gen]        
@@ -54,7 +54,8 @@
             [spork.entitysystem.store :as store :refer :all :exclude [default]]
             [spork.sim.simcontext :as sim]
             [clojure.core.reducers :as r]
-            )
+
+            [spork.util.general :as general])
   (:import [spork.ai.behaviorcontext behaviorenv]))
 
 ;;Overview
@@ -1076,7 +1077,7 @@
 (def locstates #{"Dwelling"  "DeMobilizing" "Recovering"
                  :dwelling :demobilizing :recovering :recovery})
 
-(defn some-member [s1 s2]  
+#_(defn some-member [s1 s2]  
   (let [[l r]  (if (< (count s1) (count s2)) [s1 s2]
                    [s2 s1])]
     (reduce (fn [acc x]
@@ -1087,9 +1088,11 @@
 (defn position=location? [newstate]
   (if (not (set? newstate))
     (locstates newstate)
-    (some-member newstate locstates)
+    (gen/some-member newstate locstates)
     ))
-    
+;;memoize this...
+(alter-var-root #'position=location? gen/memo-1)
+
 ;;after updating the unit bound to :entity in our context, 
 ;;we commit it into the supplystore.  This is probably 
 ;;slow....we may want to define a mutable version, 
