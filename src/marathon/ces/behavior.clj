@@ -1075,10 +1075,21 @@
 
 (def locstates #{"Dwelling"  "DeMobilizing" "Recovering"
                  :dwelling :demobilizing :recovering :recovery})
-
-(defn some-member [s1 s2]  
+;;Potential Hot Spot
+(defn some-member [s1 s2]
   (let [[l r]  (if (< (count s1) (count s2)) [s1 s2]
                    [s2 s1])]
+    (reduce (fn [acc x]
+              (if (r x)
+                (reduced x)
+                acc)) nil l)))
+
+;;approx 2.1x faster
+(defn some-member2 [^clojure.lang.APersistentSet s1
+                    ^clojure.lang.APersistentSet s2]
+  (let [l  (if (< (.count s1) (.count s2)) s1
+               s2)
+        r   (if (identical? l s1) s2 s1)]
     (reduce (fn [acc x]
               (if (r x)
                 (reduced x)
