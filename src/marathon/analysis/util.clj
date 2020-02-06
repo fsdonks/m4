@@ -89,5 +89,29 @@
                      (a/compo-fills ctx assigned overlapping) )))))))
   ([ctx] (demand-trends-exhaustive (spork.sim.core/get-time ctx) ctx)))
 
+(defn map-val   [k->v f]
+  (fn map-val [k]
+    (if-let [v (k->v k)]
+      (f v)
+      (throw (ex-info "no result for input"
+                      {:in k
+                       :k->v k->v})))))
 
+(defprotocol IGen
+  (next-long [g])
+  (next-double [g]))
 
+(defn ->gen [seed]
+  (let [^java.util.Random gen (java.util.Random. (long seed))]
+    (reify
+      clojure.lang.IFn
+      (invoke [this]    (.nextDouble gen))
+      (invoke [this n]  (* (.nextDouble gen) n))
+      IGen
+      (next-long   [g] (.nextLong gen))
+      (next-double [g] (.nextDouble gen)))))
+
+(def default-gen (->gen 42))
+(defn gen-rand-int
+  ([gen n] (long (* ^double (next-double gen) ^long n)))
+  ([n]     (long (* ^double (next-double default-gen) ^long n))))

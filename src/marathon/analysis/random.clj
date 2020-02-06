@@ -4,26 +4,81 @@
                                        [marathon.analysis.experiment :as e]
                                        [marathon.ces.core :as c]
                                        [spork.util.table :as tbl]
-                                       [spork.util.general :as gen]))
+                                       [spork.util.general :as gen]
+                                       [clojure.spec.alpha :as s]))
+
+(defn individual-record
+  "Given an index and an originating record,
+   create a custom individual record the supply representing
+   the nth unit of this record, where n <= (:Quantity rec)."
+  [n rec]
+  (assoc rec :Quantity 1 :Name (str n "_" (:SRC rec))))
+
+(defn record->records
+  "Given a base supply record rec, and an optional transformation function f,
+  expands the supply record into n records, where n is in [0 ... Quantity]
+  relative to the SupplyRecord's quantity. Each reord is supplied to the
+  transformation f to allow for custom processing of each generated record.
+  Defaults to a transformation where quantity and unit names are altered to
+  coerce a batch record into a sequence of individual unit records, but
+  no other fields are changed.."
+  ([rec f]
+   (for [i (range (:Quantity rec))]
+     (f (individual-record i rec))))
+  ([rec] (record->records rec identity)))
+
+;;this is brittle, but conforms to the original proof of concept.
+;;we actually want to compute these from the project input, so
+;;separating them out makes our job easier, while preserving
+;;the option to supply them as args.
+(def default-compo-lengths {"AC" 1095 "RC" 1825 "NG" 1825})
+
+(defn ->cycletime-randomizer
+  "Given an marathon.analyis.util/IGen instance, and a specification of component
+  to cyclelengths, creates a function that transforms supply records into ones
+  with random cycles generated using random draws from the supplied generator
+  via marathon.analysis.util/gen-rand-int, which allows control over the seeds
+  used vs. clojure.core/rand-int ."
+  ([gen compo-lengths]
+   (let [f (util/map-val compo-lengths  #(util/gen-rand-int gen %))]
+     (fn cycletime-randomizer [{:keys [Component] :as r}]
+       (let [ct (f Component)]
+         (assoc r :CycleTime ct)))))
+  ([gen] (->cycletime-randomizer gen default-compo-lengths)))
 
 (defn rand-recs
-  "Takes a supply record and creates multiple supply records with random initial cycle time."
-  [rec]
-  (for [i (range (:Quantity rec))]
-    (if (= (:Component rec) "AC")
-      (assoc rec :CycleTime (rand-int 810) :Quantity 1 :Name (str i "_" (:SRC rec)))
-      (assoc rec :CycleTime (rand-int 1825) :Quantity 1 :Name (str i "_" (:SRC rec))))))
+  "Takes a supply record and creates multiple supply records with a supplied randomize
+   function, of the type record -> record."
+  ([rec randomize] (record->records rec randomize))
+  ([rec]           (rand-recs rec identity)))
 
+#_(defn rand-recs
+    "Takes a supply record and creates multiple supply records with random initial cycle time."
+    [rec]
+    (for [i (range (:Quantity rec))]
+      (if (= (:Component rec) "AC")
+        (assoc rec :CycleTime (rand-int 1095) :Quantity 1 :Name (str i "_" (:SRC rec)))
+        (assoc rec :CycleTime (rand-int 1825) :Quantity 1 :Name (str i "_" (:SRC rec))))))
+
+;;it probably makes sense to fence out a general scheme to apply this pipeline
+;;to demand records, policy records, etc.  There are probably many types of
+;;transformations (or compiler passes) we'd like to apply.
 (defn rand-proj
-  "Takes a project and makes a new project with random unit initial cycle times."
+  "Takes a project and makes a new project with random unit initial cycle times.
+   If the project supplies a:supply-record-randomizer key associated to a
+   function of supply-record -> supply-record, that function will be supplied
+   as a transformation when generating random records.  Otherwise, no transformation
+   will occur beyond the normal expansion of a batch supply record into multiple records
+   with custom names."
   [proj]
-  (->> proj
-       :tables
-       :SupplyRecords
-       tbl/table-records
-       (mapcat rand-recs)
-       tbl/records->table
-       (assoc-in proj [:tables :SupplyRecords])))
+  (let [supply-record-randomizer (get proj :supply-record-randomizer identity)]
+    (->> proj
+         :tables
+         :SupplyRecords
+         tbl/table-records
+         (mapcat #(rand-recs % supply-record-randomizer))
+         tbl/records->table
+         (assoc-in proj [:tables :SupplyRecords]))))
 
 (defn fill-stats
   "Copy of this function from the marathon.analysis.experiment namespace.
@@ -166,18 +221,24 @@
   "Uses the target-model-par-av function from the marathon.analysis.experiment
   namespace as a base. This function is modified to perform a random run for
   each level of supply."
-  [proj phases lower upper]
+  [proj & {:keys [phases lower upper gen seed->randomizer]
+           :or   {lower 0 upper 1 gen util/default-gen
+                  seed->randomizer (fn [_] identity)}}]
   (->> (e/split-project proj)
        (reduce
         (fn [acc [src proj]]
           (let [experiments (project->experiments proj lower upper)
                 n           (count experiments)]
             (into acc
-                  (map 
+                  (map
                    (fn [[idx proj]]
-                     (try (let [fill (project->phase-fill (rand-proj proj) phases)]
+                     (try (let [rep-seed   (util/next-long gen)
+                                proj       (assoc proj :supply-record-randomizer
+                                              (seed->randomizer rep-seed))
+                                fill       (project->phase-fill (rand-proj proj) phases)]
                             ;;fill (e/project->period-fill proj) period fill and no randomness
-                            (vec (e/summary-availability-records src proj fill)))
+                            (mapv #(assoc % :rep-seed rep-seed)
+                                   (e/summary-availability-records src proj fill)))
                           (catch Exception e
                             (throw (ex-info (str "unable to compute fill " src)
                                            {:str src :idx idx})))))
@@ -185,12 +246,52 @@
        (apply concat)
        vec))
 
+(defn default-randomizer [seed compo-lengths]
+  (->cycletime-randomizer (util/->gen seed) compo-lengths))
+
+;;specs to catch an error I ran into with empty phases..
+(s/def ::phase  (s/tuple string? int? int?))
+(s/def ::phases (s/+ ::phase))
+
 (defn rand-runs
   "Runs replications of the rand-target-model function."
-  [proj reps phases lower upper]
-  (apply concat (pmap rand-target-model (repeat reps proj) (repeat reps phases) (repeat lower) (repeat upper))))
+  [proj & {:keys [reps phases lower upper seed compo-lengths seed->randomizer]
+           :or   {lower 0 upper 1 seed 42 compo-lengths default-compo-lengths}}]
+  ;;input validation, we probably should do more of this in general.
+  (assert (s/valid? ::phases []) (s/explain-str ::phases []))
 
-(defn write-output
+  (let [seed->randomizer (or seed->randomizer #(default-randomizer % compo-lengths))
+        gen              (util/->gen seed)]
+    (apply concat
+           (pmap (fn [n] (rand-target-model proj
+                            :phases phases :lower lower :upper upper
+                            :gen   gen    :seed->randomizer seed->randomizer))
+                 (range reps)))))
+
+#_(defn rand-runs
+    "Runs replications of the rand-target-model function."
+    [proj reps phases lower upper]
+    (apply concat (pmap rand-target-model (repeat reps proj) (repeat reps phases) (repeat lower) (repeat upper))))
+
+(def fields
+  [:rep-seed
+   :SRC
+   :phase
+   :AC-fill
+   :NG-fill
+   :RC-fill
+   :AC-overlap
+   :NG-overlap
+   :RC-overlap
+   :total-quantity
+   :AC-deployable
+   :NG-deployable
+   :RC-deployable
+   :AC-total
+   :NG-total
+   :RC-total])
+
+#_(defn write-output
   "Writes formatted output to a file."
   [file-name results]
   (let [format-string (str (clojure.string/join "," (repeat (count (first results)) "%s")) "\n")
@@ -199,11 +300,30 @@
         headers (clojure.string/replace (apply format format-string (keys (first results))) ":" "")]
     (spit file-name (str headers formatted-values))))
 
+(defn write-output [file-name results]
+  (tbl/records->file results file-name :field-order fields))
+
 (comment
   ;way to invoke functions
   (def path "~/repos/notional/supplyvariation-testdata.xlsx")
   (def proj (a/load-project path))
   (def phases [["comp" 1 821] ["phase-1" 822 967]])
-  (def results (rand-runs proj 1 phases 0 1))
+
+  #_(def results (rand-runs proj 1 phases 0 1.5))
+  (def results (rand-runs proj :reps 1 :phases phases
+                               :lower 0 :upper 1.5
+                               :compo-lengths default-compo-lengths))
+
   (write-output "results.csv" results)
-  )
+
+  (def seeds (->> results (filter (fn [{:keys [phase]}] (#{"comp"} phase))) (map :rep-seed)))
+  (def results2 (rand-runs proj :reps 1 :phases phases
+                           :lower 0 :upper 1.5
+                           :compo-lengths default-compo-lengths))
+  (def seeds2 (->> results (filter (fn [{:keys [phase]}] (#{"comp"} phase))) (map :rep-seed)))
+
+  ;;move this into a deftest...
+  (assert (or (= seeds seeds2)
+              (= (sort seeds) (sort seeds2))))
+
+)
