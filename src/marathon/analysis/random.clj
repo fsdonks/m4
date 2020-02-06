@@ -11,7 +11,7 @@
   [rec]
   (for [i (range (:Quantity rec))]
     (if (= (:Component rec) "AC")
-      (assoc rec :CycleTime (rand-int 1095) :Quantity 1 :Name (str i "_" (:SRC rec)))
+      (assoc rec :CycleTime (rand-int 810) :Quantity 1 :Name (str i "_" (:SRC rec)))
       (assoc rec :CycleTime (rand-int 1825) :Quantity 1 :Name (str i "_" (:SRC rec))))))
 
 (defn rand-proj
@@ -142,12 +142,11 @@
         groups    (-> init e/grouped-supply)
         low       (-> "AC" groups :Quantity (change-bound lower))
         high      (-> "AC" groups :Quantity (change-bound upper))]
-    (when (and high (> high 1))
-      (for [n (range high (dec low) (- step))]
-        (->> (assoc-in groups ["AC" :Quantity] n)
-             vals
-             tbl/records->table
-             (assoc tables :SupplyRecords))))))
+    (for [n (range high (dec low) (- step))]
+      (->> (assoc-in groups ["AC" :Quantity] n)
+           vals
+           tbl/records->table
+           (assoc tables :SupplyRecords)))))
 
 (defn project->experiments
   "This is a copy of this function from the marathon.analysis.experiment namespace.
@@ -199,6 +198,6 @@
   (def path "~/repos/notional/supplyvariation-testdata.xlsx")
   (def proj (a/load-project path))
   (def phases [["comp" 1 821] ["phase-1" 822 967]])
-  (def results (rand-runs proj 1 phases 0 1.5))
+  (def results (rand-runs proj 1 phases 0 1))
   (write-output "results.csv" results)
   )
