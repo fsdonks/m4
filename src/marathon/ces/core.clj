@@ -85,7 +85,7 @@
 
   ;spork.util.general
   collect atom?  float-trunc deep-assoc deep-get deep-update
-  deep-dissoc
+  deep-dissoc    
 
   ;spork.ai.messaging
   ->msg handle-message! send!!
@@ -103,6 +103,7 @@
   [spork.util.general
    print-float
    prune-in ;;TODO do we need this?
+   deref!!
    ])
 
 ;;Common Paths to Simulation Resources

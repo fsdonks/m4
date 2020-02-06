@@ -1602,7 +1602,7 @@
 ;;This is a little weak; we're loosely hard coding
 ;;these behaviors.  It's not terrible though.
 (befn special-state {:keys [entity statedata] :as benv}
-      (case (:state @entity)
+      (case (:state (deref!! entity) #_@entity)
         :spawning spawning-beh
         :abrupt-withdraw (do (debug [:<special-state-abw>])
                              abrupt-withdraw-beh)
