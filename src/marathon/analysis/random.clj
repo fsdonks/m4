@@ -127,11 +127,17 @@
                      :NG-total        (reduce + (map :NG-total (val x)))
                      :RC-total        (reduce + (map :RC-total (val x)))}))))
 
-(defn change-bound
-  "Modifies the upper or lower bound of supply experiments. Usefull for looking
+(defn change-upper-bound
+  "Modifies the upper bound of supply experiments. Usefull for looking
   at supply levels greater than the current inventory."
   [bound fraction]
   (if (some? bound) (int (Math/ceil (* bound fraction))) bound))
+
+(defn change-lower-bound
+  "Modifies the lower bound of supply experiments. Usefull for looking
+  at supply levels greater than the current inventory."
+  [bound fraction]
+  (if (some? bound) (int (Math/floor (* bound fraction))) bound))
 
 (defn ac-supply-reduction-experiments
   "This is a copy of this function from the marathon.analysis.experiment namespace.
@@ -140,8 +146,8 @@
   [tables lower upper & {:keys [step] :or {step 1}}]
   (let [init      (-> tables :SupplyRecords)
         groups    (-> init e/grouped-supply)
-        low       (-> "AC" groups :Quantity (change-bound lower))
-        high      (-> "AC" groups :Quantity (change-bound upper))]
+        low       (-> "AC" groups :Quantity (change-lower-bound lower))
+        high      (-> "AC" groups :Quantity (change-upper-bound upper))]
     (for [n (range high (dec low) (- step))]
       (->> (assoc-in groups ["AC" :Quantity] n)
            vals
