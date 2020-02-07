@@ -34,7 +34,7 @@
             [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store :refer :all :exclude
-             [entity-name merge-entity] :as store]
+             [entity-name merge-entity entity?] :as store]
             [spork.sim [simcontext :as sim] [core :as simcore]]
             [spork.ai [core        :as ai]
                       [behaviorcontext :as b]
