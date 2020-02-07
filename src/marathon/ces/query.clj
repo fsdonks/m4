@@ -88,7 +88,7 @@
      (fn [m]  (not (f m)))))
 
 (defn find-deployable-supply  [supply src] (keys (get (supply/get-buckets supply) src)))
-(def  src->fillrule (memoize (fn [src] 
+(def  src->fillrule (gen/memo-1 #_memoize (fn [src] 
                                (marathon.ces.fill.fillgraph/sink-label src))))
 
 ;;Provides an ordered vector of suitable supply buckets to look.
@@ -100,7 +100,7 @@
 
 ;;Refactor?!
 ;;Note: this seems a little bit odd, or is it elegant?
-(def srcs->prefs (memoize (fn [srcs]   
+(def srcs->prefs (memoize (fn [srcs]
                               (into {} (map-indexed (fn [idx src] [src idx]) srcs)))))
 (defn src->prefs [srcmap src]  (srcs->prefs (src->srcs srcmap src)))
 
