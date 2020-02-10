@@ -468,7 +468,7 @@
 (defn commit!
   [ctx xs]
   (reduce (fn [ctx c]
-            (store/map-component ctx  c (fn [x] (try-freeze! @x))))
+            (store/map-component ctx  c (fn [x] (try-freeze! #_(core/deref!! x) @x))))
             ctx xs))
 
 ;;at the end of day, we want to commit changes.

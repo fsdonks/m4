@@ -12,7 +12,7 @@
             [spork.data [lazymap :as lm]]
             [marathon.ces.fill.fillgraph]
             [spork.util.reducers]
-            [spork.util [tags :as tag]]
+            [spork.util [tags :as tag] [general :as gen]]
             [clojure.core [reducers :as r]]))
 
 ;; (defmacro napply [f k & xs]
@@ -88,7 +88,7 @@
      (fn [m]  (not (f m)))))
 
 (defn find-deployable-supply  [supply src] (keys (get (supply/get-buckets supply) src)))
-(def  src->fillrule (memoize (fn [src] 
+(def  src->fillrule (gen/memo-1 #_memoize (fn [src] 
                                (marathon.ces.fill.fillgraph/sink-label src))))
 
 ;;Provides an ordered vector of suitable supply buckets to look.
@@ -100,7 +100,7 @@
 
 ;;Refactor?!
 ;;Note: this seems a little bit odd, or is it elegant?
-(def srcs->prefs (memoize (fn [srcs]   
+(def srcs->prefs (memoize (fn [srcs]
                               (into {} (map-indexed (fn [idx src] [src idx]) srcs)))))
 (defn src->prefs [srcmap src]  (srcs->prefs (src->srcs srcmap src)))
 
@@ -816,8 +816,8 @@
        (if ord (sort ord filtered) filtered)))
 
 (defn eval-filter [xs]
-  (cond (fn? xs) xs        
-        (vector? xs) 
+  (cond (fn? xs) xs
+        (vector? xs)
            (let [fs (reduce (fn [acc f] (conj acc (eval-filter f))) [] xs)]
              #(ands % fs))
         (nil? xs) nil))
@@ -827,6 +827,7 @@
         (vector? xs)  (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))
         (nil? xs)    nil
         :else (throw (Exception. (str "Unknown ordering expression: " xs)))))
+(alter-var-root #'eval-order gen/memo-1)
 
 (defn selection? [f]  (get (meta f) :selection))
 ;;#TODO flesh out the from key.  Maybe it makes sense to define a

@@ -267,8 +267,11 @@
 ;;want to do that?  curious to see if there's any big overhead.
 ;;we brought them back into scope for some niche analysis.
 (defn post-processed-run [wbpath]
+  (default-post-processed-run wbpath))
+
+(defn post-processed-run-with-samples [wbpath]
   (binding [marathon.analysis/*outputs*
-             (conj marathon.analysis/*outputs* :location-samples)]
+            (conj marathon.analysis/*outputs* :location-samples)]
     (default-post-processed-run wbpath)))
 
 (defn post-processed-run-dialogue []

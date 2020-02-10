@@ -34,7 +34,7 @@
             [spork.cljgraph [jungapi :as jung]]
             [spork.sketch :as sketch]                        
             [spork.entitysystem.store :refer :all :exclude
-             [entity-name merge-entity] :as store]
+             [entity-name merge-entity entity?] :as store]
             [spork.sim [simcontext :as sim] [core :as simcore]]
             [spork.ai [core        :as ai]
                       [behaviorcontext :as b]
@@ -85,7 +85,7 @@
 
   ;spork.util.general
   collect atom?  float-trunc deep-assoc deep-get deep-update
-  deep-dissoc
+  deep-dissoc    
 
   ;spork.ai.messaging
   ->msg handle-message! send!!
@@ -103,6 +103,7 @@
   [spork.util.general
    print-float
    prune-in ;;TODO do we need this?
+   deref!!
    ])
 
 ;;Common Paths to Simulation Resources

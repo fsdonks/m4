@@ -460,8 +460,10 @@
                                      [n r])))
                         (filter identity))))))))
 
-(defn bad-srcs []
-  (distinct (map (fn [[n r]] (second (last r))) (diff-deployments-grouped))))
+(defn bad-srcs
+  ([xs]
+   (distinct (map (fn [[n r]] (second (last r))) xs)))
+  ([] (bad-srcs (diff-deployments-grouped))))
 
 
 ;;Note: added a patch to M3 to cover the case where we're doing compo

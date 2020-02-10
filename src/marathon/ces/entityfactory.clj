@@ -373,7 +373,7 @@
                  "Spawning")
         ]
     (-> unit
-        (merge {:policy policy
+        (spork.util.general/static-merge #_merge {:policy policy
                 :positionpolicy newpos
                 :locationname  "Spawning"
                 :currentcycle (policy->cycle-record policy (:cycletime unit) 0 (:name unit) (:src unit) (:component unit))})

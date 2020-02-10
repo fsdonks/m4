@@ -710,7 +710,8 @@
                          ] 
                      (->> ctx 
                           (filled-demand! (:name demand) (:name unit))
-                          (check-ghost unit)
+                          ;;PERF Disabled, this is vestigial..
+                          #_(check-ghost unit)
                           (fill! t period demand cnt filldata))))
                  ctx promised-fills)
          (store/assoce :SupplyStore :deployment-count @deployment-count))))
