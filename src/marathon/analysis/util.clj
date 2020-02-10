@@ -115,3 +115,48 @@
 (defn gen-rand-int
   ([gen n] (long (* ^double (next-double gen) ^long n)))
   ([n]     (long (* ^double (next-double default-gen) ^long n))))
+
+
+(defn try-random-run
+  "Utility function to help flush out random runs
+   to find an input that leads to an exception."
+  [get-random-project init-proj]
+  (let [rp (get-random-project init-proj)]
+    (try (count (a/marathon-stream (a/load-context rp)))
+         (catch Exception e (ex-info "bad-value!" {:err e :project rp})))))
+
+(defn find-bad-run
+  "Utility function to help seek out inputs that cause errors.
+   If we know we have an initial project that generated a
+   random project that caused a failure, we can seed this
+   process with the project, init-proj, and use the
+   same randomization function, get-random-project, to
+   do either a finite amount of runs, via. limit, or
+   and unbounded amount of random runs.  This is useful
+   for searching for poor inputs.  If one is found, an
+   ex-info will be returned which the caller and extract
+   relevant data from - the stack trace, as well as the
+   project - which are in the ex-data, {:keys [err project]}."
+  [init-proj & {:keys [get-random-project limit]}]
+  (->> (if limit (range limit) (range))
+       (map (fn [idx]
+              (do (println [:run idx])
+                  (try-random-run get-random-project init-proj))))
+       (drop-while number?)
+       (first)))
+
+(def log-chan (async/chan (async/sliding-buffer  1000)))
+
+(defn log
+  "Logs messages asynchronously, prints synchronously.
+   This allows logging to occur from multiple writers
+   asynchronously, while retaining serialized printing
+   for readability."
+  [msg]
+  (clojure.core.async/put! log-chan msg))
+
+(def logger
+  (async/go-loop []
+    (when-let [msg (async/<! log-chan)]
+        (do (println msg)
+            (recur)))))

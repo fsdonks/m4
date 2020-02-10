@@ -1,11 +1,19 @@
 ;This name space contains functions for performing targeting model supply variations with multiple random runs.
-(ns marathon.analysis.random (:require [marathon.analysis :as a]
-                                       [marathon.analysis.util :as util]
-                                       [marathon.analysis.experiment :as e]
-                                       [marathon.ces.core :as c]
-                                       [spork.util.table :as tbl]
-                                       [spork.util.general :as gen]
-                                       [clojure.spec.alpha :as s]))
+(ns marathon.analysis.random
+  (:require [marathon.analysis :as a]
+            [marathon.analysis.util :as util]
+            [marathon.analysis.experiment :as e]
+            [marathon.ces.core :as c]
+            [spork.util.table :as tbl]
+            [spork.util.general :as gen]
+            [clojure.spec.alpha :as s]))
+
+;;number of threads to use for pmap.
+(def ^:dynamic *threads* 4)
+;;how many times a rep can fail before we toss the whole thing.
+(def ^:dynamic *retries* 2)
+;;probability of printing a message.
+(def ^:dynamic *noisy* 0.5)
 
 (defn individual-record
   "Given an index and an originating record,
@@ -52,17 +60,10 @@
   ([rec randomize] (record->records rec randomize))
   ([rec]           (rand-recs rec identity)))
 
-#_(defn rand-recs
-    "Takes a supply record and creates multiple supply records with random initial cycle time."
-    [rec]
-    (for [i (range (:Quantity rec))]
-      (if (= (:Component rec) "AC")
-        (assoc rec :CycleTime (rand-int 1095) :Quantity 1 :Name (str i "_" (:SRC rec)))
-        (assoc rec :CycleTime (rand-int 1825) :Quantity 1 :Name (str i "_" (:SRC rec))))))
-
 ;;it probably makes sense to fence out a general scheme to apply this pipeline
 ;;to demand records, policy records, etc.  There are probably many types of
 ;;transformations (or compiler passes) we'd like to apply.
+;;this is really a random supply project.
 (defn rand-proj
   "Takes a project and makes a new project with random unit initial cycle times.
    If the project supplies a:supply-record-randomizer key associated to a
@@ -119,20 +120,21 @@
 (defn in-phase?
   "Tests if x is between a and b."
   [[a b] x]
-  (if (and (>= x a) (<= x b)) true false))
+  (and (>= x a) (<= x b)))
 
+;;Not happy that this allows nil, but meh.
 (defn phase-fill
   "Gets the amount of overlap between the intervals [x, x+d] and [a, b]."
   [[phase a b] [m x d]]
   (let [y (dec (+ x d))]
-    (if (and (<= x a) (in-phase? [a b] y))
-      (assoc m :phase phase :dt (inc (- y a)))
-      (if (and (in-phase? [a b] x) (>= y b))
-        (assoc m :phase phase :dt (inc (- b x)))
-        (if (and (in-phase? [a b] x) (in-phase? [a b] y))
-          (assoc m :phase phase :dt (inc (- y x)))
-          (if (and (<= x a) (>= y b))
-            (assoc m :phase phase :dt (inc (- b a)))))))))
+    (cond (and (<= x a) (in-phase? [a b] y))
+             (assoc m :phase phase :dt (inc (- y a)))
+          (and (in-phase? [a b] x) (>= y b))
+            (assoc m :phase phase :dt (inc (- b x)))
+          (and (in-phase? [a b] x) (in-phase? [a b] y))
+            (assoc m :phase phase :dt (inc (- y x)))
+          (and (<= x a) (>= y b))
+            (assoc m :phase phase :dt (inc (- b a))))))
 
 (defn phase-fill-stats
   "Gets the amount of overlap between the interval [x, x+d] and each phase."
@@ -141,21 +143,21 @@
 
 (defn weighted-phase-fill
   "Gets fill stats weighted by the duration of each frame (dt)."
-  [fill]
+  [{:keys [dt] :as fill}]
   (assoc fill
-         :AC-fill          (* (:AC-fill fill) (:dt fill))
-         :NG-fill          (* (:NG-fill fill) (:dt fill))
-         :RC-fill          (* (:RC-fill fill) (:dt fill))
-         :AC-overlap       (* (:AC-overlap fill) (:dt fill))
-         :NG-overlap       (* (:NG-overlap fill) (:dt fill))
-         :RC-overlap       (* (:RC-overlap fill) (:dt fill))
-         :total-quantity   (* (:total-quantity fill) (:dt fill))
-         :AC-deployable    (* (:AC-deployable fill) (:dt fill))
-         :NG-deployable    (* (:NG-deployable fill) (:dt fill))
-         :RC-deployable    (* (:RC-deployable fill) (:dt fill))
-         :AC-total         (* (:AC-total fill) (:dt fill))
-         :NG-total         (* (:NG-total fill) (:dt fill))
-         :RC-total         (* (:RC-total fill) (:dt fill))))
+         :AC-fill          (* (:AC-fill fill) dt)
+         :NG-fill          (* (:NG-fill fill) dt)
+         :RC-fill          (* (:RC-fill fill) dt)
+         :AC-overlap       (* (:AC-overlap fill) dt)
+         :NG-overlap       (* (:NG-overlap fill) dt)
+         :RC-overlap       (* (:RC-overlap fill) dt)
+         :total-quantity   (* (:total-quantity fill) dt)
+         :AC-deployable    (* (:AC-deployable fill) dt)
+         :NG-deployable    (* (:NG-deployable fill) dt)
+         :RC-deployable    (* (:RC-deployable fill) dt)
+         :AC-total         (* (:AC-total fill) dt)
+         :NG-total         (* (:NG-total fill) dt)
+         :RC-total         (* (:RC-total fill) dt)))
 
 (defn project->phase-fill
   "Takes a project and returns weighted fill stats by phase."
@@ -167,81 +169,110 @@
        (mapcat phase-fill-stats (repeat phases))
        (map weighted-phase-fill)
        (group-by :phase)
-       (map (fn [x] {:phase (key x)
-                     :AC-fill         (reduce + (map :AC-fill (val x)))
-                     :NG-fill         (reduce + (map :NG-fill (val x)))
-                     :RC-fill         (reduce + (map :RC-fill (val x)))
-                     :AC-overlap      (reduce + (map :AC-overlap (val x)))
-                     :NG-overlap      (reduce + (map :NG-overlap (val x)))
-                     :RC-overlap      (reduce + (map :RC-overlap (val x)))
-                     :total-quantity  (reduce + (map :total-quantity (val x)))
-                     :AC-deployable   (reduce + (map :AC-deployable (val x)))
-                     :NG-deployable   (reduce + (map :NG-deployable (val x)))
-                     :RC-deployable   (reduce + (map :RC-deployable (val x)))
-                     :AC-total        (reduce + (map :AC-total (val x)))
-                     :NG-total        (reduce + (map :NG-total (val x)))
-                     :RC-total        (reduce + (map :RC-total (val x)))}))))
+       (map (fn [[phase xs]]
+              {:phase            phase
+               :AC-fill         (reduce + (map :AC-fill xs))
+               :NG-fill         (reduce + (map :NG-fill xs))
+               :RC-fill         (reduce + (map :RC-fill xs))
+               :AC-overlap      (reduce + (map :AC-overlap xs))
+               :NG-overlap      (reduce + (map :NG-overlap xs))
+               :RC-overlap      (reduce + (map :RC-overlap xs))
+               :total-quantity  (reduce + (map :total-quantity xs))
+               :AC-deployable   (reduce + (map :AC-deployable xs))
+               :NG-deployable   (reduce + (map :NG-deployable xs))
+               :RC-deployable   (reduce + (map :RC-deployable xs))
+               :AC-total        (reduce + (map :AC-total xs))
+               :NG-total        (reduce + (map :NG-total xs))
+               :RC-total        (reduce + (map :RC-total xs))}))))
 
-(defn change-upper-bound
-  "Modifies the upper bound of supply experiments. Usefull for looking
-  at supply levels greater than the current inventory."
-  [bound fraction]
-  (if (some? bound) (int (Math/ceil (* bound fraction))) bound))
+(defn bound->bounds [n [lower upper]]
+  (if n
+    [(long (Math/floor (* lower n)))
+     (long (Math/ceil  (* upper n)))]
+    [0 0]))
 
-(defn change-lower-bound
-  "Modifies the lower bound of supply experiments. Usefull for looking
-  at supply levels greater than the current inventory."
-  [bound fraction]
-  (if (some? bound) (int (Math/floor (* bound fraction))) bound))
+(defn compute-spread-descending
+  [levels low high]
+  (let [delta (- high low)
+        step  (/ delta (dec levels))]
+    (if (<= step 1)
+      (range high (dec low) -1)
+      (map long (range high (dec low) (- step))))))
 
 (defn ac-supply-reduction-experiments
   "This is a copy of this function from the marathon.analysis.experiment namespace.
   Upper and lower bounds have been modified so we can look at AC supply levels
   above the current inventory."
-  [tables lower upper & {:keys [step] :or {step 1}}]
-  (let [init      (-> tables :SupplyRecords)
-        groups    (-> init e/grouped-supply)
-        low       (-> "AC" groups :Quantity (change-lower-bound lower))
-        high      (-> "AC" groups :Quantity (change-upper-bound upper))]
-    (for [n (range high (dec low) (- step))]
-      (->> (assoc-in groups ["AC" :Quantity] n)
-           vals
-           tbl/records->table
-           (assoc tables :SupplyRecords)))))
+  [tables lower upper & {:keys [levels step] :or {step 1}}]
+  (let [init         (-> tables :SupplyRecords)
+        groups       (-> init e/grouped-supply)
+        [low high]   (bound->bounds (-> "AC" groups :Quantity) [lower upper])]
+    (if (not= low high)
+      (for [n (compute-spread-descending (or levels (inc high)) low high)]
+        (->> (assoc-in groups ["AC" :Quantity] n)
+             vals
+             tbl/records->table
+             (assoc tables :SupplyRecords)))
+      [tables])))
+
 
 (defn project->experiments
   "This is a copy of this function from the marathon.analysis.experiment namespace.
   This function is modified so we can look at AC supply levels above the
   current inventory."
-  [prj lower upper & {:keys [step] :or {step 1}}]
-  (for [tbls (ac-supply-reduction-experiments (:tables prj) lower upper :step step)]
+  [prj lower upper & {:keys [levels step] :or {step 1}}]
+  (for [tbls (ac-supply-reduction-experiments (:tables prj) lower upper
+                  :step step :levels (:levels prj))]
     (assoc prj :tables tbls)))
+
+;;if we can't copmute a fill, we should log it somewhere.
+(defn try-fill
+  ([proj src idx phases]
+   (loop [n *retries*]
+     (let [_   (when (and *noisy*
+                          (not (zero? *noisy*))
+                          (or (= *noisy* 1.0)
+                              (< (rand) *noisy*)))
+                 (util/log [:trying src :level idx]))
+           res (try (let [seed (:rep-seed proj)
+                          fill (project->phase-fill (rand-proj proj) phases)]
+                      (mapv #(assoc % :rep-seed seed)
+                            (e/summary-availability-records src proj fill)))
+                    (catch Exception e #_:error (throw e)))]
+       (case res
+         :error (if (pos? n)
+                  (do (util/log {:retrying n :src src :idx idx})
+                      (recur (dec n)))
+                  (let [err {:error (str "unable to compute fill " src)
+                             :src   src
+                             :idx   idx}
+                        _    (util/log err)]
+                    err))
+         res)))))
 
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
   namespace as a base. This function is modified to perform a random run for
   each level of supply."
-  [proj & {:keys [phases lower upper gen seed->randomizer]
+  [proj & {:keys [phases lower upper levels gen seed->randomizer]
            :or   {lower 0 upper 1 gen util/default-gen
                   seed->randomizer (fn [_] identity)}}]
-  (->> (e/split-project proj)
+  (->> (assoc proj :phases phases :lower lower :upper upper :levels levels
+              :gen gen  :seed->randomizer :seed->randomizer)
+       (e/split-project)
        (reduce
         (fn [acc [src proj]]
-          (let [experiments (project->experiments proj lower upper)
-                n           (count experiments)]
+          (let [experiments (project->experiments proj lower upper)]
             (into acc
-                  (map
+                  (filter (fn blah [x] (not (:error x))))
+                  (util/pmap! *threads*
                    (fn [[idx proj]]
-                     (try (let [rep-seed   (util/next-long gen)
-                                proj       (assoc proj :supply-record-randomizer
-                                              (seed->randomizer rep-seed))
-                                fill       (project->phase-fill (rand-proj proj) phases)]
-                            ;;fill (e/project->period-fill proj) period fill and no randomness
-                            (mapv #(assoc % :rep-seed rep-seed)
-                                   (e/summary-availability-records src proj fill)))
-                          (catch Exception e
-                            (throw (ex-info (str "unable to compute fill " src)
-                                           {:str src :idx idx})))))
+                     (let [rep-seed   (util/next-long gen)]
+                       (-> proj
+                           (assoc :rep-seed rep-seed
+                                  :supply-record-randomizer
+                                  (seed->randomizer rep-seed))
+                           (try-fill src idx phases))))
                    (map-indexed vector experiments))))) [])
        (apply concat)
        vec))
@@ -255,53 +286,40 @@
 
 (defn rand-runs
   "Runs replications of the rand-target-model function."
-  [proj & {:keys [reps phases lower upper seed compo-lengths seed->randomizer]
+  [proj & {:keys [reps phases lower upper seed levels compo-lengths seed->randomizer]
            :or   {lower 0 upper 1 seed 42 compo-lengths default-compo-lengths}}]
   ;;input validation, we probably should do more of this in general.
-  (assert (s/valid? ::phases []) (s/explain-str ::phases []))
-
+  (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
   (let [seed->randomizer (or seed->randomizer #(default-randomizer % compo-lengths))
         gen              (util/->gen seed)]
     (apply concat
-           (pmap (fn [n] (rand-target-model proj
+           (map (fn [n] (rand-target-model proj
                             :phases phases :lower lower :upper upper
-                            :gen   gen    :seed->randomizer seed->randomizer))
+                            :gen   gen     :seed->randomizer seed->randomizer
+                            :levels levels))
                  (range reps)))))
 
-#_(defn rand-runs
-    "Runs replications of the rand-target-model function."
-    [proj reps phases lower upper]
-    (apply concat (pmap rand-target-model (repeat reps proj) (repeat reps phases) (repeat lower) (repeat upper))))
-
 (def fields
-  [:rep-seed
-   :SRC
-   :phase
-   :AC-fill
-   :NG-fill
-   :RC-fill
-   :AC-overlap
-   :NG-overlap
-   :RC-overlap
-   :total-quantity
-   :AC-deployable
-   :NG-deployable
-   :RC-deployable
-   :AC-total
-   :NG-total
-   :RC-total])
-
-#_(defn write-output
-  "Writes formatted output to a file."
-  [file-name results]
-  (let [format-string (str (clojure.string/join "," (repeat (count (first results)) "%s")) "\n")
-        values (map vals results)
-        formatted-values (clojure.string/join (map #(apply format format-string %) values))
-        headers (clojure.string/replace (apply format format-string (keys (first results))) ":" "")]
-    (spit file-name (str headers formatted-values))))
+  [:rep-seed :SRC :phase :AC-fill :NG-fill :RC-fill :AC-overlap :NG-overlap
+   :RC-overlap :total-quantity :AC-deployable :NG-deployable :RC-deployable
+   :AC-total :NG-total :RC-total])
 
 (defn write-output [file-name results]
   (tbl/records->file results file-name :field-order fields))
+
+(defn run
+  [proj-or-path & {:keys [target lower upper phases reps compo-lengths levels]
+                   :or   {target "results.txt"
+                          lower  0
+                          upper  1.5
+                          reps   1}}]
+  (let [proj    (if (string? proj-or-path)
+                  (a/load-project proj-or-path)
+                  proj-or-path)
+        t0      (System/currentTimeMillis)
+        results (rand-runs proj :reps reps :phases phases :lower lower :upper upper
+                                :levels levels :compo-lengths compo-lengths)]
+    (write-output target results)))
 
 (comment
   ;way to invoke functions
@@ -309,7 +327,6 @@
   (def proj (a/load-project path))
   (def phases [["comp" 1 821] ["phase-1" 822 967]])
 
-  #_(def results (rand-runs proj 1 phases 0 1.5))
   (def results (rand-runs proj :reps 1 :phases phases
                                :lower 0 :upper 1.5
                                :compo-lengths default-compo-lengths))
@@ -325,5 +342,40 @@
   ;;move this into a deftest...
   (assert (or (= seeds seeds2)
               (= (sort seeds) (sort seeds2))))
+
+  ;;We can just use run....and pass it high level args to control behavior.
+  ;;This run will run 1 rep, degrading supply by 1, from a range of 1.5*initial AC supply,
+  ;;to 0 AC, with the default component lengths to distribute random cycles by, using
+  ;;a predefined set of phases to report results.
+  (def run1
+    (binding [*noisy* 1.0]
+      (run "~/repos/notional/supplyvariation-testdata.xlsx"
+        :reps 1
+        :phases phases
+        :lower 0 :upper 1.5
+        :compo-lengths default-compo-lengths)))
+
+  ;;This run will run 1 rep, degrading supply by 1, from a range of 1.5*initial AC supply,
+  ;;to 0 AC, with the default component lengths to distribute random cycles by, using
+  ;;a predefined set of phases to report results.  It will only perform 3 levels of
+  ;;supply experiments, distributing the levels evenly across the range [lower*supply upper*supply].
+  ;;It will perform 5 replications at each level.  All messages will be logged and
+  ;;printed to output cleanly as well.
+  (def run2
+    (binding [*noisy* 1.0]
+      (run "~/repos/notional/supplyvariation-testdata.xlsx"
+        :reps 5
+        :phases phases
+        :lower 0 :upper 1.5
+        :compo-lengths default-compo-lengths
+        :levels 3)))
+
+  ;;some defaults...
+  (def phases [["comp-1"  1   730]
+               ["phase-1" 731 763]
+               ["phase-2" 764 883]
+               ["phase-3" 884 931]
+               ["phase-4" 932 1699]
+               ["comp-2"  1700 5349]])
 
 )
