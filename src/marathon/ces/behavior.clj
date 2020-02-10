@@ -1649,12 +1649,18 @@
                     moving-beh])
                                         ;?
             ))))
-      
+
 ;;way to get the unit back to reset.  We set up a move to the policy's start state,
-;;and rip off the followon code.
-(befn reset-beh {:keys [entity] :as benv}
-      (let [pos             (protocols/start-state (:policy @entity))
-            wt              (immediate-wait-time @entity pos benv)
+;;and rip off the followon code.  Added a formal reset policy for
+;;reset evaluation associated with policy changes.
+(befn reset-beh {:keys [entity reset-policy] :as benv}
+      (let [pos             (protocols/start-state (or reset-policy (:policy @entity)))
+            wt              (if-not reset-policy
+                              (immediate-wait-time @entity pos benv)
+                              ;;supplied reset policy implies a move to reset with note
+                              ;;added transfer time; time remaining in state is ignored.
+                              (protocols/transfer-time reset-policy
+                                   pos (get-next-position reset-policy pos)))
             _   (debug [:immediate-reset :from (:positionpolicy @entity) :to pos :wait-time wt])
             newbogbudget (u/max-bog @entity)
             _               (swap! entity #(-> %
@@ -2028,21 +2034,27 @@
                            (core/trigger-event :UnitChangedPolicy uname  policynameA
                              (core/msg "Unit " uname " changed policies: "
                                        policynameA ":" cycletimeA "->" policynameB ":" cycletimeB) nil)))              
-              (->and [(->alter (fn [benv] ;(if (= oldstate newstate)
-                                          ;  (do (debug [:no-state-change])
-                                          ;      benv)
-                                              (assoc benv :state-change
-                                                     {:newstate newstate
-                                                      :duration newduration
-                                                      :timeinstate 0}
-                                                     :changed-policy true
-                                                     :policy-change nil)
-                                              ))
-                                              ;)))
-                      (move! positionB newduration) ;;movement behavior
-                      policy-change-deployability-check
-                      #_(->alter (fn [benv] (assoc benv :policy-change nil))) ;;drop the policy-change
-                       ]))))
+              (->and [(->alter (fn [benv]
+                                 (assoc benv :state-change
+                                        {:newstate newstate
+                                         :duration newduration
+                                         :timeinstate 0}
+                                        :changed-policy true
+                                        :policy-change nil
+                                        ;;we add a formal reset policy
+                                        ;;to allow reset-beh to accurately
+                                        ;;compute reset wait time.
+                                        :reset-policy next-policy)))
+                      ;;for some reason, move! was swallowing up our behavior
+                      ;;for specific units, and not following through withh
+                      ;;a policy-change-deployability check.  This left us
+                      ;;with units that should have reset and gained new
+                      ;;bog budget not doing so, leading to a runtime
+                      ;;invalid deployer error.  ->seq should force both
+                      ;;behaviors to evaluate.
+                      (->seq [(move! positionB newduration) ;;movement behavior
+                              policy-change-deployability-check])
+                      ]))))
 
 ;;TODO: Add this?
 

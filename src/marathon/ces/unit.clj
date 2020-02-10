@@ -291,7 +291,19 @@
 ;                                               'If unit has already bogged over budget, budget is zeroed!
 ;End With
 ;
-;End Sub
+;;End Sub
+
+
+(defn compute-bogbudget
+  "Given a new policy to ostensibly change to,
+   compares the unit's current cycle bog to determine
+   what its prospective bog would be in the new cycle.
+   If the bog budget would be exhausted in the new policy,
+   floors to 0."
+  [u newpolicy]
+  (max (- (pol/bog-budget newpolicy)
+          (get-bog u))
+       0))
 
 ;;Modified to correspond with new cycle-stats wrapper function.
 ;;note: this implementation clashed with the original mod-cycle fn,
@@ -303,9 +315,7 @@
   (let [{:keys [max-bog max-dwell cycle-length max-mob]} (cycle-stats newpolicy)
         ;;Note the reduction in bogbudget!
         ;;If unit has already bogged over budget, budget is zeroed!
-        bogbudget   (max (- (pol/bog-budget newpolicy)
-                            (get-bog u))
-                         0)
+        bogbudget   (compute-bogbudget u newpolicy)
         newrecord   (cyc/modify-cyclerecord (:currentcycle u) max-bog max-dwell
                                             cycle-length max-mob bogbudget)]
     (assoc u :currentcycle newrecord)))
