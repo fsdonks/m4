@@ -101,6 +101,11 @@
   (next-long [g])
   (next-double [g]))
 
+(extend-protocol IGen
+  java.util.Random
+  (next-long   [g] (.nextLong   g))
+  (next-double [g] (.nextDouble g)))
+
 (defn ->gen [seed]
   (let [^java.util.Random gen (java.util.Random. (long seed))]
     (reify

@@ -15,6 +15,9 @@
 ;;probability of printing a message.
 (def ^:dynamic *noisy* 0.5)
 
+;;Default constant PRNG seed for reproducibility
+(def +default-seed+ 42)
+
 (defn individual-record
   "Given an index and an originating record,
    create a custom individual record the supply representing
@@ -86,7 +89,8 @@
   This function has been updated to include statistics by component."
   [ctx]
   (->> ctx
-       a/demand-trends ;;if we swap this with util/demand-trends-exhaustive trends we'll get a different result.
+       #_a/demand-trends
+       util/demand-trends-exhaustive
        (remove #(= (:DemandGroup  %) "RC_NonBOG-War"))
        (reduce (fn [acc {:keys [ACFilled NGFilled RCFilled ACOverlap NGOverlap RCOverlap TotalRequired]}]
                  (-> acc
@@ -287,7 +291,8 @@
 (defn rand-runs
   "Runs replications of the rand-target-model function."
   [proj & {:keys [reps phases lower upper seed levels compo-lengths seed->randomizer]
-           :or   {lower 0 upper 1 seed 42 compo-lengths default-compo-lengths}}]
+           :or   {lower 0 upper 1 seed +default-seed+
+                  compo-lengths default-compo-lengths}}]
   ;;input validation, we probably should do more of this in general.
   (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
   (let [seed->randomizer (or seed->randomizer #(default-randomizer % compo-lengths))
@@ -308,11 +313,21 @@
   (tbl/records->file results file-name :field-order fields))
 
 (defn run
-  [proj-or-path & {:keys [target lower upper phases reps compo-lengths levels]
+  "High level entry point to produce random runs, with optional
+   parameters for supply bounds by percentage, phases for output
+   statistics, the number of random replications per level,
+   cyclelengths to use for initial conditions by component,
+   the number of levels (e.g. supply variations) to examine,
+   and a global PRNG seed.  If a seed is not provided, will
+   default to the constant +default-seed+, leading to
+   consistent replications for the same inputs."
+  [proj-or-path & {:keys [target lower upper phases reps
+                          compo-lengths levels seed]
                    :or   {target "results.txt"
                           lower  0
                           upper  1.5
-                          reps   1}}]
+                          reps   1
+                          seed +default-seed+}}]
   (let [proj    (if (string? proj-or-path)
                   (a/load-project proj-or-path)
                   proj-or-path)
@@ -320,6 +335,22 @@
         results (rand-runs proj :reps reps :phases phases :lower lower :upper upper
                                 :levels levels :compo-lengths compo-lengths)]
     (write-output target results)))
+
+(defn random-run
+  "Convenience function to produce arbitrary random replications without a
+   consistent root PRNG seed.  This is useful for distributing runs across
+   multiple machines, such that replications are independent and may be
+   combined into a sample afterward."
+  [proj-or-path & {:keys [target lower upper phases reps
+                          compo-lengths levels seed]
+                   :or   {target "results.txt"
+                          lower  0
+                          upper  1.5
+                          reps   1}}]
+  (let [seed (or seed (util/next-long (java.util.Random.)))]
+    (run proj-or-path
+      :target target :lower lower :upper upper :phases phases
+      :levels levels :reps reps :compo-lengths compo-lengths :seed seed)))
 
 (comment
   ;way to invoke functions
@@ -369,6 +400,19 @@
         :lower 0 :upper 1.5
         :compo-lengths default-compo-lengths
         :levels 3)))
+
+  ;;this will generate a different root seed every time, as opposed
+  ;;to the previous 2 examples, which will always use +default-seed+
+  ;;or 42, unless supplied.
+  (def random-run-ex
+    (def run2
+      (binding [*noisy* 1.0]
+        (random-run "~/repos/notional/supplyvariation-testdata.xlsx"
+          :reps 5
+          :phases phases
+          :lower 0 :upper 1.5
+          :compo-lengths default-compo-lengths
+          :levels 3))))
 
   ;;some defaults...
   (def phases [["comp-1"  1   730]
