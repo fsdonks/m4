@@ -3,7 +3,7 @@
                  (if (.exists f)
                    (clojure.edn/read-string (slurp "order.edn"))
                    '[marathon.main])))
-(def version "4.1.8")
+(def version "4.1.9")
 (def capsule-name "marathon")
 (def capsule-jar (str  capsule-name "-" version ".jar"))
 
