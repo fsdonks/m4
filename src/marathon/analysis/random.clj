@@ -88,6 +88,18 @@
   "Copy of this function from the marathon.analysis.experiment namespace.
   This function has been updated to include statistics by component."
   [ctx]
+  (let [units        (c/units ctx)
+        compos       (group-by :component units)
+        compo-totals (reduce-kv (fn [acc k v]
+                                  (assoc acc k (count v))) compos compos)
+        compo-states (->> (for [[c xs] compos]
+                            [c (frequencies (map util/state-key xs))])
+                          (into {}))
+        state-count  (fn [compo state]
+                       (or (some-> (compo-states compo)
+                                   (get state))
+                           0))]
+
   (->> ctx
        #_a/demand-trends
        util/demand-trends-exhaustive
@@ -104,16 +116,16 @@
                {:AC-fill 0, :NG-fill 0, :RC-fill 0,
                 :AC-overlap 0, :NG-overlap 0, :RC-overlap 0,
                 :total-quantity 0
-                :AC-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "AC" count) "AC")
-                :NG-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "NG" count) "NG")
-                :RC-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "RC" count) "RC")
-                :AC-not-ready  (get (update (->> ctx c/units util/not-readies (group-by :component)) "AC" count) "AC")
-                :NG-not-ready  (get (update (->> ctx c/units util/not-readies (group-by :component)) "NG" count) "NG")
-                :RC-not-ready  (get (update (->> ctx c/units util/not-readies (group-by :component)) "RC" count) "RC")
-                :AC-total      (get (update (->> ctx c/units (group-by :component)) "AC" count) "AC")
-                :NG-total      (get (update (->> ctx c/units (group-by :component)) "NG" count) "NG")
-                :RC-total      (get (update (->> ctx c/units (group-by :component)) "RC" count) "RC")
-                :period        (c/current-period ctx)})))
+                :AC-deployable (state-count "AC" :deployable)
+                :NG-deployable (state-count "NG" :deployable)
+                :RC-deployable (state-count "RC" :deployable)
+                :AC-not-ready  (state-count "AC" :not-ready)
+                :NG-not-ready  (state-count "NG" :not-ready)
+                :RC-not-ready  (state-count "RC" :not-ready)
+                :AC-total      (compo-totals "AC" 0)
+                :NG-total      (compo-totals "NG" 0)
+                :RC-total      (compo-totals "RC" 0)
+                :period        (c/current-period ctx)}))))
 
 (defn weighted-fill-stats
   "Truncated copy of this function from the marathon.analysis.experiment namespace.
