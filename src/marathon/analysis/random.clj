@@ -107,6 +107,9 @@
                 :AC-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "AC" count) "AC")
                 :NG-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "NG" count) "NG")
                 :RC-deployable (get (update (->> ctx c/units util/deployables (group-by :component)) "RC" count) "RC")
+                :AC-not-ready  (get (update (->> ctx c/units util/not-readies (group-by :component)) "AC" count) "AC")
+                :NG-not-ready  (get (update (->> ctx c/units util/not-readies (group-by :component)) "NG" count) "NG")
+                :RC-not-ready  (get (update (->> ctx c/units util/not-readies (group-by :component)) "RC" count) "RC")
                 :AC-total      (get (update (->> ctx c/units (group-by :component)) "AC" count) "AC")
                 :NG-total      (get (update (->> ctx c/units (group-by :component)) "NG" count) "NG")
                 :RC-total      (get (update (->> ctx c/units (group-by :component)) "RC" count) "RC")
@@ -118,7 +121,6 @@
   [frames]
   (->> frames
        (map (fn [[t ctx]] (assoc (fill-stats ctx) :t t)))
-       (filter #(pos? (:total-quantity %)))
        (gen/time-weighted-samples :t)))
 
 (defn in-phase?
@@ -159,6 +161,9 @@
          :AC-deployable    (* (:AC-deployable fill) dt)
          :NG-deployable    (* (:NG-deployable fill) dt)
          :RC-deployable    (* (:RC-deployable fill) dt)
+         :AC-not-ready     (* (:AC-not-ready fill) dt)
+         :NG-not-ready     (* (:NG-not-ready fill) dt)
+         :RC-not-ready     (* (:RC-not-ready fill) dt)
          :AC-total         (* (:AC-total fill) dt)
          :NG-total         (* (:NG-total fill) dt)
          :RC-total         (* (:RC-total fill) dt)))
@@ -185,6 +190,9 @@
                :AC-deployable   (reduce + (map :AC-deployable xs))
                :NG-deployable   (reduce + (map :NG-deployable xs))
                :RC-deployable   (reduce + (map :RC-deployable xs))
+               :AC-not-ready    (reduce + (map :AC-not-ready xs))
+               :NG-not-ready    (reduce + (map :NG-not-ready xs))
+               :RC-not-ready    (reduce + (map :RC-not-ready xs))
                :AC-total        (reduce + (map :AC-total xs))
                :NG-total        (reduce + (map :NG-total xs))
                :RC-total        (reduce + (map :RC-total xs))}))))
@@ -307,7 +315,7 @@
 (def fields
   [:rep-seed :SRC :phase :AC-fill :NG-fill :RC-fill :AC-overlap :NG-overlap
    :RC-overlap :total-quantity :AC-deployable :NG-deployable :RC-deployable
-   :AC-total :NG-total :RC-total])
+   :AC-not-ready :NG-not-ready :RC-not-ready :AC-total :NG-total :RC-total])
 
 (defn write-output [file-name results]
   (tbl/records->file results file-name :field-order fields))

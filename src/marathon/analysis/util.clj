@@ -33,6 +33,9 @@
 (defn deployables [xs]
   (filter #(= (state-key %) :deployable) xs))
 
+(defn not-readies [xs]
+  (filter #(= (state-key %) :not-ready) xs))
+
 (defn c-rating [s]
   (first (clojure.set/intersection
           #{:c1 :c2 :c3 :c4}
