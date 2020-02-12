@@ -671,10 +671,12 @@
 ;;Note: if we don't go through this template, we don't get deployable times set,
 ;;we we end up with policies that can't deploy.  I had the same problem with
 ;;AdaptAC.
-(defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable & {:keys [overlap deltas deployable-set] :or {deltas {}}}]
+(defn register-template [name maxdwell mindwell maxbog startdeployable stopdeployable
+                          & {:keys [overlap deltas deployable-set recovery] :or {deltas {}}}]
   (try  (if-let [ctor (get @templates name (get @templates (keyword name)))]
           (let [stats      {:maxdwell maxdwell :mindwell mindwell :maxbog maxbog :startdeployable startdeployable :stopdeployable stopdeployable}
                 stats      (if overlap (assoc stats :overlap overlap) stats)
+                stats      (if recovery (assoc stats :recovery recovery) stats)
                 stats      (clamp-stats name stats)
                 base       (ctor :deltas deltas :stats stats)
                 baselength (core/compute-cycle-length base)

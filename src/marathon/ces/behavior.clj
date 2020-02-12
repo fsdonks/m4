@@ -1754,7 +1754,7 @@
 
 (defn recovery-time
   ([unit p]
-   (or (policy-recovery-time p)
+   (or (policy-recovery-time (-> p marathon.data.protocols/get-active-policy))
        (:default-recovery unit)))
   ([unit] (recovery-time unit (:policy unit))))
 

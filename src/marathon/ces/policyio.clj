@@ -45,7 +45,7 @@
 ;(_   _    _  PolicyName Template MaxDwell MinDwell MaxBOG StartDeployable StopDeployable Overlap Recovery BOGBudget Deltas  _)
 (defn record->policy 
   [{:keys [Template PolicyName MaxBOG MaxDwell MinDwell Overlap 
-           StartDeployable StopDeployable Deltas]}]
+           StartDeployable StopDeployable Deltas Recovery]}]
   (let [deltas (if (= Deltas "{}") {}
                    (clojure.edn/read-string
                     (clojure.string/replace Deltas
@@ -56,10 +56,11 @@
           ;;we'd like to delay this if possible...          
           (policyops/register-template Template MaxDwell MinDwell MaxBOG 
                                  StartDeployable StopDeployable
-                                 :overlap Overlap 
+                                 :overlap Overlap
                                  :deltas  deltas
-                                 :deployable-set? (deployable-set? Template)))
-        (assoc :name PolicyName))))           
+                                 :deployable-set? (deployable-set? Template)
+                                 :recovery Recovery))
+        (assoc :name PolicyName))))
 
 (def reltbl {"SUB" :sub
              "EQUIVALENCE" :equivalence})
