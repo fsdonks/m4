@@ -312,6 +312,12 @@
 (defn write-output [file-name results]
   (tbl/records->file results file-name :field-order fields))
 
+(defn runtime [s]
+  (let [h (quot s (* 60 60))
+        m (quot (- s (* h 60 60)) 60)
+        s (- s (* 60 60 h) (* 60 m))]
+    [h m s]))
+
 (defn run
   "High level entry point to produce random runs, with optional
    parameters for supply bounds by percentage, phases for output
@@ -333,8 +339,11 @@
                   proj-or-path)
         t0      (System/currentTimeMillis)
         results (rand-runs proj :reps reps :phases phases :lower lower :upper upper
-                                :levels levels :compo-lengths compo-lengths)]
-    (write-output target results)))
+                           :levels levels :compo-lengths compo-lengths)
+        _        (write-output target results)
+        tf       (double (- (System/currentTimeMillis) t0))
+        [h m s]  (runtime (/ tf 1000.0))]
+    (println [:completed-in (str h "h:" m "m:" s "s") :wrote-to target])))
 
 (defn random-run
   "Convenience function to produce arbitrary random replications without a
@@ -405,14 +414,13 @@
   ;;to the previous 2 examples, which will always use +default-seed+
   ;;or 42, unless supplied.
   (def random-run-ex
-    (def run2
-      (binding [*noisy* 1.0]
-        (random-run "~/repos/notional/supplyvariation-testdata.xlsx"
-          :reps 5
-          :phases phases
-          :lower 0 :upper 1.5
-          :compo-lengths default-compo-lengths
-          :levels 3))))
+    (binding [*noisy* 1.0]
+      (random-run "~/repos/notional/supplyvariation-testdata.xlsx"
+        :reps 5
+        :phases phases
+        :lower 0 :upper 1.5
+        :compo-lengths default-compo-lengths
+        :levels 3)))
 
   ;;some defaults...
   (def phases [["comp-1"  1   730]
@@ -420,6 +428,6 @@
                ["phase-2" 764 883]
                ["phase-3" 884 931]
                ["phase-4" 932 1699]
-               ["comp-2"  1700 5349]])
+               ["comp-2"  1700 2430]])
 
 )
