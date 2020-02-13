@@ -84,10 +84,52 @@
          tbl/records->table
          (assoc-in proj [:tables :SupplyRecords]))))
 
-(defn fill-stats
-  "Copy of this function from the marathon.analysis.experiment namespace.
-  This function has been updated to include statistics by component."
-  [ctx]
+;;instead of adding fills and overlap and required, we just add
+;;any fill information to not-ready. indicated units filling
+;;these kinds of demands are considered unavailable and do not
+;;count toward fill (e.g. cannibalized units), and their
+;;demand requirement is not added to the total required.
+(defn accumulate-not-ready
+  [acc {:keys [ACFilled NGFilled RCFilled ACOverlap
+               NGOverlap RCOverlap]}]
+  (-> acc
+      (update :AC-not-ready   #(+ % ACFilled ACOverlap))
+      (update :NG-not-ready   #(+ % NGFilled NGOverlap))
+      (update :RC-not-ready   #(+ % RCFilled RCOverlap))))
+
+;;This is our normal fill stats accumulator, pulled out from the
+;;original reduction.  By default, a demantrend record will
+;;increment compo-relative fills proporationally, as well as the
+;;total required demand.
+(defn accumulate-fill
+  [acc {:keys [ACFilled NGFilled RCFilled ACOverlap
+               NGOverlap RCOverlap TotalRequired]}]
+  (-> acc
+      (update :AC-fill     #(+ % ACFilled))
+      (update :NG-fill     #(+ % NGFilled))
+      (update :RC-fill     #(+ % RCFilled))
+      (update :AC-overlap  #(+ % ACOverlap))
+      (update :NG-overlap  #(+ % NGOverlap))
+      (update :RC-overlap  #(+ % RCOverlap))
+      (update :total-quantity #(+ % TotalRequired))))
+
+;;an extensible way to define demand groups that we consider
+;;not-ready fills, in case we need to expand this in the future.
+(def demandgroup-type {"RC_NonBOG-War" :not-ready})
+;;determines if we consider this a normal fill, or if we should
+;;funnel the fill stats elsewhere.
+(defn normal-fill? [dtrend]
+   (not (some-> :DemandGroup dtrend demandgroup-type (= :not-ready))))
+
+;;Central accumulator for reduction in fill-stats.
+(defn accumulate-fill-stats [acc dtrend]
+  (if (normal-fill? dtrend)
+    (accumulate-fill acc dtrend)        ;;fills -> deployed, inc total reqd.
+    (accumulate-not-ready acc dtrend))) ;;fills -> not-ready
+
+;;Decoupled from fill-stats.  Computes the initial record of fill stats
+;;for the reduction to build on.
+(defn initial-fill-state [ctx]
   (let [units        (c/units ctx)
         compos       (group-by :component units)
         compo-totals (reduce-kv (fn [acc k v]
@@ -99,33 +141,34 @@
                        (or (some-> (compo-states compo)
                                    (get state))
                            0))]
+    {:AC-fill 0, :NG-fill 0, :RC-fill 0,
+     :AC-overlap 0, :NG-overlap 0, :RC-overlap 0,
+     :total-quantity 0
+     :AC-deployable (state-count "AC" :deployable)
+     :NG-deployable (state-count "NG" :deployable)
+     :RC-deployable (state-count "RC" :deployable)
+     :AC-not-ready  (state-count "AC" :not-ready)
+     :NG-not-ready  (state-count "NG" :not-ready)
+     :RC-not-ready  (state-count "RC" :not-ready)
+     :AC-total      (compo-totals "AC" 0)
+     :NG-total      (compo-totals "NG" 0)
+     :RC-total      (compo-totals "RC" 0)
+     :period        (c/current-period ctx)}))
 
+(defn fill-stats
+  "Computes time-veried fill statistics by component, producing a record of fills,
+  deployables, not-ready, total required, and inventory for each sample. By
+  default, demand trends will convert Filled, Overlap, and TotalRequired
+  statistics into corresponding fields in the fill-stats record. Any demand with
+  a DemandGroup value existing in the map
+  marathon.analysis.random/demandgroup-type will instead have its fill stats
+  added to the corresponding not-ready fields, and will not increase the total
+  required demand, to model the effects of demands that absorb units without
+  counting toward fill."
+  [ctx]
   (->> ctx
-       #_a/demand-trends
        util/demand-trends-exhaustive
-       (remove #(= (:DemandGroup  %) "RC_NonBOG-War"))
-       (reduce (fn [acc {:keys [ACFilled NGFilled RCFilled ACOverlap NGOverlap RCOverlap TotalRequired]}]
-                 (-> acc
-                     (update :AC-fill     #(+ % ACFilled))
-                     (update :NG-fill     #(+ % NGFilled))
-                     (update :RC-fill     #(+ % RCFilled))
-                     (update :AC-overlap  #(+ % ACOverlap))
-                     (update :NG-overlap  #(+ % NGOverlap))
-                     (update :RC-overlap  #(+ % RCOverlap))
-                     (update :total-quantity #(+ % TotalRequired))))
-               {:AC-fill 0, :NG-fill 0, :RC-fill 0,
-                :AC-overlap 0, :NG-overlap 0, :RC-overlap 0,
-                :total-quantity 0
-                :AC-deployable (state-count "AC" :deployable)
-                :NG-deployable (state-count "NG" :deployable)
-                :RC-deployable (state-count "RC" :deployable)
-                :AC-not-ready  (state-count "AC" :not-ready)
-                :NG-not-ready  (state-count "NG" :not-ready)
-                :RC-not-ready  (state-count "RC" :not-ready)
-                :AC-total      (compo-totals "AC" 0)
-                :NG-total      (compo-totals "NG" 0)
-                :RC-total      (compo-totals "RC" 0)
-                :period        (c/current-period ctx)}))))
+       (reduce accumulate-fill (initial-fill-state ctx))))
 
 (defn weighted-fill-stats
   "Truncated copy of this function from the marathon.analysis.experiment namespace.
