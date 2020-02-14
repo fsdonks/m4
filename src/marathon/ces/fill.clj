@@ -384,7 +384,9 @@
 
    "Modernization"
    (fn [u] (>= (get u :mod) 2))
-   })
+
+   "NonBOG-RC-Only"
+   (fn [u] (not= (:component u) "AC"))})
 
 
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.

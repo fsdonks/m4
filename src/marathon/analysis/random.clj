@@ -168,7 +168,7 @@
   [ctx]
   (->> ctx
        util/demand-trends-exhaustive
-       (reduce accumulate-fill (initial-fill-state ctx))))
+       (reduce accumulate-fill-stats (initial-fill-state ctx))))
 
 (defn weighted-fill-stats
   "Truncated copy of this function from the marathon.analysis.experiment namespace.
