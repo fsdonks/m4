@@ -1067,38 +1067,56 @@
     (seq!! out)))
   )
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
-                    :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position #_:Original])
+                    :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position #_:Original
+                    :Bound])
 
 (defn requirements->table
-  "Computes a finalized table of supply records representing the 
+  "Computes a finalized table of supply records representing the
    required supply."
   [rs]
   (->> rs
        (filter second) ;eliminating nil resultsx
-       (mapcat (comp :supply second))       
+       (mapcat (comp :supply second))
        (tbl/records->table)
        (tbl/map-field :Quantity long)
        (tbl/order-fields-by supply-fields)))
 
 (defn requirements-run
-  "Primary function to compute  requirements analysis.  Reads requirements 
-   project from inpath, computes requirement, and spits results to a tsv 
-   table in the same root folder as inpath, requirements.txt"
-  [inpath]
+  "Primary function to compute  requirements analysis.  Reads requirements
+   project from inpath, computes requirement, and spits results to a tsv
+   table in the same root folder as inpath, requirements.txt.
+   Caller may supply an argument, bound, to determine the amount of contiguous
+   days that constitute a missed demand."
+  [inpath & {:keys [bound] :or {bound 1}}]
   (let [inpath (clojure.string/replace inpath #"\\" "/")
         base (->> (clojure.string/split inpath #"/")
                   (butlast)
                   (clojure.string/join "/"))
         outpath (str base "/requirements.txt")]
-    (do (println ["Analyzing requirements for" inpath])
-        (->> (-> (a/load-requirements-project inpath)
-                 (:tables)
-                 (tables->requirements-async  :search bisecting-convergence)
-                 (requirements->table)
-                 (tbl/table->tabdelimited))
-             (spit outpath))
-        (println ["Spit requirements to " outpath]))))
+    (binding [*distance-function*    (if (> bound 1)
+                                       contiguous-distance
+                                       default-distance)
+              *contiguity-threshold* bound]
+      (do (println ["Analyzing requirements for" inpath])
+          (->> (-> (a/load-requirements-project inpath)
+                   (:tables)
+                   (tables->requirements-async  :search bisecting-convergence)
+                   (requirements->table)
+                   (tbl/table->tabdelimited))
+               (spit outpath))
+          (println ["Spit requirements to " outpath])))))
 
+(defn outer-to-inner [xs]
+  (let [xs (vec xs)]
+    (loop [l   0
+           r   (dec (count xs))
+           acc []]
+      (if (< l r)
+        (recur (inc l) (dec r) (conj acc [l r]))
+        (->> (if (= l r)
+               (conj acc [l r])
+               acc)
+             (map (fn [[l r]] [(nth xs l) (nth xs r)])))))))
 
 (defn requirements-contour [proj xs]
   (let [tbls  (-> (a/load-requirements-project proj)
