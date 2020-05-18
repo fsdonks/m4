@@ -504,6 +504,54 @@
        (filter pos?)
        (first)))
 
+(def ^:dynamic *contiguity-threshold* 20)
+
+;;we accumulate a map of {demand {:dt ::int :quantity ::int}}
+;;When we calculate misses as per unfilled-demand,
+;;we just reduce over the unfilled demands to see if any still remain
+;;from the previous accumulation.
+;;If so, update their dt with the current dt computed from the previous
+;;frame.
+;;If any demands exceed the max, we've reduced with an answer.
+(defn update-priors [bound t dt priors {:keys [id unfilled]}]
+  (if-let [duration (priors id)] ;;demand was missing last time
+    (let [dnext (+ duration dt)]
+      (if (> dnext bound)
+        ;;we found at least one demand that will violate the bound.
+        (reduced (assoc priors :failed {:id id :t t :contiguous-days-missed dnext}))
+        ;;increment the duration for next time.
+        (update priors id #(+ % dt))))
+    ;;accumulate time for this guy.
+    (assoc priors id dt)))
+
+(defn history->contiguous-misses
+  "Like history->ghosts, we wish to detect an instance
+   of missed demand, except unlike the referenced, we are looking
+   for a specific critera of 'missed' demand.  In this case,
+   we consider any span of contiguous time where there is unfilled
+   demand, dnoted by max, to constitute a missed demand.  history->ghosts
+   may be seend as a specific case of this more general interpretation,
+   where we have a max of 1 (e.g. any day of missed demand constitutes
+   failure)."
+  [h & {:keys [bound]
+        :or {bound *contiguity-threshold*}}]
+  (let [[t0 ctx0] (first h)]
+   (->> (for [[ [t1 l] [t2 r] ]  (partition 2 1 h)]
+          [t2 (- t2 t1) (demand/unfilled-demand-count r)])
+        (reduce
+         (fn contred [priors dt-misses]
+           (if-let [[t dt misses] dt-misses]
+             (let [pnext (reduce (fn updatered [priors sample]
+                                   (update-priors bound t dt priors sample)) priors misses)]
+               (if (pnext :failed)
+                 (reduced pnext)
+                 pnext))
+             {}))
+         (into {} (for [{:keys [id unfilled]} (demand/unfilled-demand-count ctx0)]
+                    [id t0])))
+        :failed
+        :contiguous-days-missed)))
+
 (defn history->indexed-ghosts [h]
   ;;The crude idea here is to traverse the history until
   ;;we find the first time we actually miss demand.
@@ -564,6 +612,8 @@
 
 (def default-distance (comp history->ghosts a/marathon-stream))
 (def indexed-distance (comp history->indexed-ghosts a/marathon-stream))
+(def contiguous-distance (comp history->contiguous-misses a/marathon-stream))
+(def ^:dynamic *distance-function* default-distance)
 
 (def prior (atom nil))
 
@@ -596,7 +646,7 @@
    At the low end, we'll just be performing multiple 
    capacity analyses..."
   [reqstate & {:keys [distance]
-               :or   {distance default-distance}}]
+               :or   {distance *distance-function*}}]
   (let [echo (fn [{:keys [src iteration] :as reqs} dist]
                (do (println
                     (pprint/cl-format nil "Generated ~a ghosts of ~a on iteration ~a"
@@ -672,7 +722,7 @@
    tries to bracket in an on empirical lower and upper bound, returning 
    a vector of [lower upper]."
   [reqstate & {:keys [distance init-lower init-upper]
-               :or   {distance default-distance
+               :or   {distance *distance-function*
                       init-lower 1
                       init-upper 10}}]
   ;;TODO I think the first clause in and can now be replaced by
@@ -705,7 +755,7 @@
    capacity analyses...Uses a shared base context to 
    save time on i/o."
   [reqstate & {:keys [distance]
-               :or   {distance default-distance}}]
+               :or   {distance *distance-function*}}]
   (let [tables->ctx (quick-context  (:tables reqstate))
         echo (fn [{:keys [src iteration] :as reqs} dist]
                (do (println
@@ -738,7 +788,7 @@
    a peak field, which lets us know what the peak demand is
    for inferring the expected misses for a supply of 0."
   [reqstate & {:keys [distance init-lower init-upper log init-known]
-               :or   {distance default-distance
+               :or   {distance *distance-function*
                       init-lower 0
                       init-upper 10
                       log println
@@ -1048,7 +1098,20 @@
                  (tbl/table->tabdelimited))
              (spit outpath))
         (println ["Spit requirements to " outpath]))))
-              
+
+
+(defn requirements-contour [proj xs]
+  (let [tbls  (-> (a/load-requirements-project proj)
+                  (:tables))]
+    (vec (for [x xs]
+           (binding [*distance-function* contiguous-distance *contiguity-threshold* x]
+             {:bound x
+              :requirement  (-> tbls
+                                (tables->requirements-async  :search bisecting-convergence)
+                                (requirements->table)
+                                (as-> res
+                                    (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
+              })))))
 (comment ;testing
 ;;   #_(def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
 ;;   (def ags "Type	Enabled	SRC	AC	NG	RC	Note
