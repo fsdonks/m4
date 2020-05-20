@@ -1130,6 +1130,53 @@
                                 (as-> res
                                     (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
               })))))
+
+;; (defn fast-contour [proj xs]
+;;   (let [tbls  (-> (a/load-requirements-project proj)
+;;                   (:tables))
+;;         ;;initial raw tables (ALL SRCs)
+;;         fixed (atom {})
+;;         samples (outer-to-inner xs)
+;;         bounded-requirement (fn [bound]
+;;                               (binding [*distance-function* contiguous-distance *contiguity-threshold* bound]
+;;                                 (-> tbls
+;;                                     (tables->requirements-async  :search bisecting-convergence)
+;;                                     (requirements->table)
+;;                                     (as-> res
+;;                                         (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
+;;                                 )]
+;;     (vec (for [[l r] samples]
+;;            (let [
+;;                  fl
+;;                  fr ]
+;;            ))))
+
+;;a smarter sensitivity analysis using outer-to-inner...
+;;we have a 1d sensitivity analysis here the compresses where possible.
+;;It's not awesome though.  We want sensitivities for each SRC.
+;;So the sensitivity is the supply record by SRC.
+;;Normal course of order is n independent requirements analyses.
+(defn sensitivity
+  [f xs]
+  (let [cache     (atom {})
+        remaining (atom (set xs))
+        lookup!   (fn [x]
+                    (or (@cache x)
+                        (let [res (f x)
+                              _   (swap! cache assoc x res)
+                              _   (swap! remaining disj x)]
+                          res)))
+        samples (outer-to-inner xs)]
+    (doseq [[l r] samples]
+              (let [fl (lookup! l)
+                    fr (lookup! r)]
+                (when (= fl fr)
+                  (doseq [dup   @remaining
+                          :when (and (not (@cache dup)) (> dup l)  (< dup r))]
+                    (swap! cache assoc dup fl)))))
+    @cache))
+
+
 (comment ;testing
 ;;   #_(def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
 ;;   (def ags "Type	Enabled	SRC	AC	NG	RC	Note
