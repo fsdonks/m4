@@ -522,17 +522,6 @@
         ;;increment the duration for next time.
         (assoc priors id dnext))))
 
-#_(defn update-priors [bound t dt priors {:keys [id unfilled]}]
-  (if-let [duration (priors id)] ;;demand was missing last time
-    (let [dnext (+ duration dt)]
-      (if (> dnext bound)
-        ;;we found at least one demand that will violate the bound.
-        (reduced (assoc priors :failed {:id id :t t :contiguous-days-missed dnext}))
-        ;;increment the duration for next time.
-        (update priors id #(+ % dt))))
-    ;;accumulate time for this guy.
-    (assoc priors id dt)))
-
 (defn history->contiguous-misses
   "Like history->ghosts, we wish to detect an instance
    of missed demand, except unlike the referenced, we are looking
@@ -558,34 +547,6 @@
              {}))
          (into {} (for [{:keys [id unfilled]} (demand/unfilled-demand-count ctx0)]
                     [id t0]))))))
-
-#_(defn history->contiguous-misses
-  "Like history->ghosts, we wish to detect an instance
-   of missed demand, except unlike the referenced, we are looking
-   for a specific critera of 'missed' demand.  In this case,
-   we consider any span of contiguous time where there is unfilled
-   demand, dnoted by max, to constitute a missed demand.  history->ghosts
-   may be seend as a specific case of this more general interpretation,
-   where we have a max of 1 (e.g. any day of missed demand constitutes
-   failure)."
-  [h & {:keys [bound]
-        :or {bound *contiguity-threshold*}}]
-  (let [[t0 ctx0] (first h)]
-   (->> (for [[ [t1 l] [t2 r] ]  (partition 2 1 h)]
-          [t2 (- t2 t1) (demand/unfilled-demand-count r)])
-        (reduce
-         (fn contred [priors dt-misses]
-           (if-let [[t dt misses] dt-misses]
-             (let [pnext (reduce (fn updatered [priors sample]
-                                   (update-priors bound t dt priors sample)) priors misses)]
-               (if (pnext :failed)
-                 (reduced pnext)
-                 pnext))
-             {}))
-         (into {} (for [{:keys [id unfilled]} (demand/unfilled-demand-count ctx0)]
-                    [id t0])))
-        :failed
-        :contiguous-days-missed)))
 
 (defn history->indexed-ghosts [h]
   ;;The crude idea here is to traverse the history until
