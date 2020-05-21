@@ -546,7 +546,9 @@
                  pnext))
              {}))
          (into {} (for [{:keys [id unfilled]} (demand/unfilled-demand-count ctx0)]
-                    [id t0]))))))
+                    [id t0])))
+        :failed
+        :contiguous-days-missed)))
 
 (defn history->indexed-ghosts [h]
   ;;The crude idea here is to traverse the history until
