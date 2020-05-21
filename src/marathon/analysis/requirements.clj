@@ -514,6 +514,15 @@
 ;;frame.
 ;;If any demands exceed the max, we've reduced with an answer.
 (defn update-priors [bound t dt priors {:keys [id unfilled]}]
+  (let [duration (priors id 0) ;;demand was missing last time
+        dnext    (+ duration dt)]
+      (if (> dnext bound)
+        ;;we found at least one demand that will violate the bound.
+        (reduced (assoc priors :failed {:id id :t t :contiguous-days-missed dnext}))
+        ;;increment the duration for next time.
+        (assoc priors id dnext))))
+
+#_(defn update-priors [bound t dt priors {:keys [id unfilled]}]
   (if-let [duration (priors id)] ;;demand was missing last time
     (let [dnext (+ duration dt)]
       (if (> dnext bound)
@@ -525,6 +534,32 @@
     (assoc priors id dt)))
 
 (defn history->contiguous-misses
+  "Like history->ghosts, we wish to detect an instance
+   of missed demand, except unlike the referenced, we are looking
+   for a specific critera of 'missed' demand.  In this case,
+   we consider any span of contiguous time where there is unfilled
+   demand, dnoted by max, to constitute a missed demand.  history->ghosts
+   may be seend as a specific case of this more general interpretation,
+   where we have a max of 1 (e.g. any day of missed demand constitutes
+   failure)."
+  [h & {:keys [bound]
+        :or {bound *contiguity-threshold*}}]
+  (let [[t0 ctx0] (first h)]
+   (->> (for [[ [t1 l] [t2 r] ]  (partition 2 1 h)]
+          [t2 (- t2 t1) (demand/unfilled-demand-count r)])
+        (reduce
+         (fn contred [priors t-dt-misses]
+           (if-let [[t dt misses] t-dt-misses]
+             (let [pnext (reduce (fn updatered [priors sample]
+                                   (update-priors bound t dt priors sample)) priors misses)]
+               (if (pnext :failed)
+                 (reduced pnext)
+                 pnext))
+             {}))
+         (into {} (for [{:keys [id unfilled]} (demand/unfilled-demand-count ctx0)]
+                    [id t0]))))))
+
+#_(defn history->contiguous-misses
   "Like history->ghosts, we wish to detect an instance
    of missed demand, except unlike the referenced, we are looking
    for a specific critera of 'missed' demand.  In this case,
@@ -1068,7 +1103,7 @@
   )
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position #_:Original
-                    :Bound])
+                    #_:Bound])
 
 (defn requirements->table
   "Computes a finalized table of supply records representing the
@@ -1087,13 +1122,13 @@
    table in the same root folder as inpath, requirements.txt.
    Caller may supply an argument, bound, to determine the amount of contiguous
    days that constitute a missed demand."
-  [inpath & {:keys [bound] :or {bound 1}}]
+  [inpath & {:keys [bound] :or {bound 0}}]
   (let [inpath (clojure.string/replace inpath #"\\" "/")
         base (->> (clojure.string/split inpath #"/")
                   (butlast)
                   (clojure.string/join "/"))
         outpath (str base "/requirements.txt")]
-    (binding [*distance-function*    (if (> bound 1)
+    (binding [*distance-function*    default-distance #_(if (> bound 0)
                                        contiguous-distance
                                        default-distance)
               *contiguity-threshold* bound]
