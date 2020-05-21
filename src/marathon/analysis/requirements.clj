@@ -1039,29 +1039,6 @@
         ]
     (seq!! out)))
 
-(comment ;;pc test
-  (defn pc []
-    (let [out     (async/chan 10)
-          in      (async/chan 10)
-          _       (async/onto-chan in  (range 100))
-          break (rand-int 100)
-          f-or-err  (fn f-or-err [n]
-                      (try  (if (= n break)
-                              (throw (Exception. (str [:error! n])))
-                               n)
-                                  
-                            (catch Exception e
-                              (do (async/go (async/close! in))
-                                  (->error n e)))))
-          pipe    (producer->consumer
-                   2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
-                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
-                   out
-                   f-or-err #_src-distros->requirements
-                   in)
-        ]
-    (seq!! out)))
-  )
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position #_:Original
                     #_:Bound])
@@ -1089,7 +1066,7 @@
                   (butlast)
                   (clojure.string/join "/"))
         outpath (str base "/requirements.txt")]
-    (binding [*distance-function*    default-distance #_(if (> bound 0)
+    (binding [*distance-function*   (if (> bound 0)
                                        contiguous-distance
                                        default-distance)
               *contiguity-threshold* bound]
@@ -1126,52 +1103,6 @@
                                 (as-> res
                                     (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
               })))))
-
-;; (defn fast-contour [proj xs]
-;;   (let [tbls  (-> (a/load-requirements-project proj)
-;;                   (:tables))
-;;         ;;initial raw tables (ALL SRCs)
-;;         fixed (atom {})
-;;         samples (outer-to-inner xs)
-;;         bounded-requirement (fn [bound]
-;;                               (binding [*distance-function* contiguous-distance *contiguity-threshold* bound]
-;;                                 (-> tbls
-;;                                     (tables->requirements-async  :search bisecting-convergence)
-;;                                     (requirements->table)
-;;                                     (as-> res
-;;                                         (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
-;;                                 )]
-;;     (vec (for [[l r] samples]
-;;            (let [
-;;                  fl
-;;                  fr ]
-;;            ))))
-
-;;a smarter sensitivity analysis using outer-to-inner...
-;;we have a 1d sensitivity analysis here the compresses where possible.
-;;It's not awesome though.  We want sensitivities for each SRC.
-;;So the sensitivity is the supply record by SRC.
-;;Normal course of order is n independent requirements analyses.
-(defn sensitivity
-  [f xs]
-  (let [cache     (atom {})
-        remaining (atom (set xs))
-        lookup!   (fn [x]
-                    (or (@cache x)
-                        (let [res (f x)
-                              _   (swap! cache assoc x res)
-                              _   (swap! remaining disj x)]
-                          res)))
-        samples (outer-to-inner xs)]
-    (doseq [[l r] samples]
-              (let [fl (lookup! l)
-                    fr (lookup! r)]
-                (when (= fl fr)
-                  (doseq [dup   @remaining
-                          :when (and (not (@cache dup)) (> dup l)  (< dup r))]
-                    (swap! cache assoc dup fl)))))
-    @cache))
-
 
 (comment ;testing
 ;;   #_(def root (hpath "\\Documents\\srm\\tst\\notionalv2\\reqbase.xlsx"))
