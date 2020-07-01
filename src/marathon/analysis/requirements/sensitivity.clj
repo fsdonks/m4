@@ -231,3 +231,168 @@
           (recur new-known (reduce conj (pop pending) new-segments)))
         ;;otherwise we're done, report the inflections.
         (with-meta known {:pruned (vec @pruned) :calls @calls})))))
+
+;;so let's talk about our function...
+;;In practice, we'll have a requirements analysis doing its
+;;own thing, executing another bisection search.
+
+;;Since we're doing function evaluations across multiple
+;;thresholds, we have a lot of intermediate information covered.
+
+;;If we look at requirments computation for an SRC as a
+;;single function of 1 integer parameter (the growth factor),
+;;we have the mechanism our bisection search uses.
+
+;;When we're searching extrema, we're actually performing
+;;multiple requirements analyses (bisection searches) with
+;;an implicit parameter - CMDD.  As CMDD grows, it relaxes
+;;the constraints on the requirement.  The implication is that
+;;higher CMDD provide information on upper bounds for feasibility
+;;for lower CMDD searches.  That is, for the same level of supply,
+;;for a CMDD, if we know any higher CMDD indicates failure, we can
+;;prove that this sample will also fail, and require growth.
+;;Similarly, if we have a lower known CMDD that succeeded, we
+;;can prove that this CMDD will also succeed (since it's a relaxation).
+
+;;So, during our extrema search, where we vary CMDD, we will have multiple
+;;function evaluations for a specific CMDD during the requirements analysis
+;;computation.  Normally, we toss out these samples and only care about
+;;the binary result (the solution to the bisection search, e.g. the
+;;minimum feasible requirement).  Along the way, we leave a trail
+;;of pass/fails in the form of a map inside the bisection search function.
+;;If we save this map, and associate it with a specific CMDD level,
+;;then we have a wealth of information for pruning unnecessary
+;;function evaluations in the requirements sensitivity analysis case.
+
+;;Functionally, we really want to maintain a map of
+;;{supply {min-feasible-cmdd   min
+;;         max-infeasible-cmdd max}}
+;;if the current CMDD we're testing is >= the min-feasible,
+;;then we can accept the node as sucessful and prune it.
+;;conversely, if the CMDD is <= the max-infeasible-cmdd,
+;;then we can reject it.
+;;If it's in between, we have to test by evaluating the
+;;function, after which we can update our existing bounds for
+;;min-feasible and max-infeasible.
+
+;;So, in the emergent framework that involves pruning,
+;;we want a smarter requirements analysis function that
+;;can leverage this kind of pruning information and update
+;;bounds during searches.
+
+
+;;We need to redefine the requirements-countour to split the RA inputs
+;;by SRC, then perform an extrema search on each SRC in parallel.
+;;The next step will be replacing bisecting-search with one that
+;;incorporates CMDD-based pruning information.
+
+#_
+(defn tables->requirements-async
+  "Given a database of distributions, and the required tables for a marathon 
+   project, computes a sequence of [src {compo requirement}] for each src."
+  [tbls & {:keys [dtype search src-filter]
+           :or {search bisecting-convergence ;iterative-convergence
+                dtype  :proportional
+                src-filter (fn [_] true)}}]
+  (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
+        distros (into {} (->> (aggregate-distributions tbls :dtype dtype)
+                              (filter (fn [[src _]]
+                                        (src-filter src)))))
+        peaks   (->>  (:DemandRecords tbls)
+                      (tbl/table-records)
+                      (filter #(and (:Enabled %)
+                                    (distros (:SRC %))))
+                      (demands->src-peaks))
+        n       (atom (count peaks))
+        ;;This is our injection site.
+        src-distros->requirements  (requirements-by tbls peaks search n)
+        out     (async/chan 10)
+        in      (async/chan 10)
+        _       (async/onto-chan in (seq distros))
+        require-or-err  (fn require-or-err [distros]
+                          (try  (src-distros->requirements  distros)
+                                (catch Exception e
+                                  (do (async/go (async/close! in))
+                                      (->error distros e)))))
+        pipe    (producer->consumer
+                    2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
+                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
+                   out
+                   require-or-err #_src-distros->requirements
+                   in)
+        ]
+    (seq!! out)))
+
+#_(defn requirements-contour [proj xs]
+    (let [tbls  (-> (a/load-requirements-project proj)
+                    (:tables))]
+      (vec (for [x xs]
+             (binding [*distance-function* contiguous-distance *contiguity-threshold* x]
+               {:bound x
+                :requirement  (-> tbls
+                                  (tables->requirements-async  :search bisecting-convergence)
+                                  (requirements->table)
+                                  (as-> res
+                                      (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
+                })))))
+
+
+
+#_
+(defn bisecting-convergence
+  "reqstate is a map of information for a basic requirements
+   run, which is used to create a parametric run based on
+   the initial supply, a growth-step n, and a distribution
+   of supply by component.  Reqstate also includes
+   a peak field, which lets us know what the peak demand is
+   for inferring the expected misses for a supply of 0."
+  [reqstate & {:keys [distance init-lower init-upper log init-known]
+               :or   {distance *distance-function*
+                      init-lower 0
+                      init-upper 10
+                      log println
+                     }}]
+  (let [known?     (atom (or init-known {}))
+        converge   (fn [dir reqs n]
+                     (do (log [:converged dir n])
+                         (distribute reqs (:src reqstate) n)))
+        amount     (fn amt [reqs n]
+                     ;(log [:amount n])
+                     (get-or @known? n
+                             (let [rtest (-> reqs
+                                             (distribute (:src reqs) n))
+                                   ;;Found no missed demands, so zero! misses!
+                                   res (or (calculate-requirement rtest distance) 0)
+                                   _   (swap! known? assoc n res)
+                                   ;_   (when (zero? n) (println [:amount 0 res]))
+                                   ]
+                          res)))
+        _ (assert (not (neg?  (- init-upper init-lower))) "need a valid non-negative interval!")]
+    (loop [reqs      reqstate
+           lower init-lower
+           upper init-upper]
+      (let [hw    (quot (- upper lower) 2)
+            mid   (+ lower hw)]
+        (if (= mid lower)
+          (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
+            ;;In this case, BOTH guesses produce 0 misses!
+            ;;We want to take whichever guess is NOT 0,
+            ;;since 0 is not a valid guess.
+            [true  true]
+                (if (pos? lower)
+                  ;;lower is a valid guess, and is the minimum!
+                  (converge :left  reqs  lower)
+                  ;;lower is zero!, upper is the valid guess
+                  ;;and minimum! (1).
+                  (converge :right reqs upper))
+            [false true]
+                  ;;Upper is the only valid guess, and minimum!
+                  (converge :right reqs upper)
+            (do (reset! rs reqstate)
+              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)])))))
+          (let [reqs (update reqs :iteration inc)
+                res  (amount reqs mid)
+                _    (log [:guessing [lower upper] :at mid :got res])]
+            (if (pos? res)
+              (recur reqs mid upper)
+              (recur reqs lower mid))))))))
