@@ -323,19 +323,6 @@
         ]
     (seq!! out)))
 
-#_(defn requirements-contour [proj xs]
-    (let [tbls  (-> (a/load-requirements-project proj)
-                    (:tables))]
-      (vec (for [x xs]
-             (binding [*distance-function* contiguous-distance *contiguity-threshold* x]
-               {:bound x
-                :requirement  (-> tbls
-                                  (tables->requirements-async  :search bisecting-convergence)
-                                  (requirements->table)
-                                  (as-> res
-                                      (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
-                })))))
-
 
 
 #_
@@ -396,3 +383,21 @@
             (if (pos? res)
               (recur reqs mid upper)
               (recur reqs lower mid))))))))
+
+
+;;redefine requirements-contour in terms of extrema-search.
+;;define bisecting-convergence-prune
+
+(defn requirements-contour [proj xs]
+    (let [tbls  (-> (a/load-requirements-project proj)
+                    (:tables))
+          src->table ]
+      (vec (for [x xs]
+             (binding [*distance-function* contiguous-distance *contiguity-threshold* x]
+               {:bound x
+                :requirement  (-> tbls
+                                  (tables->requirements-async  :search bisecting-convergence)
+                                  (requirements->table)
+                                  (as-> res
+                                      (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
+                })))))
