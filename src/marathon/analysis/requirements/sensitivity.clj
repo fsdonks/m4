@@ -1,7 +1,8 @@
-(ns requirements.sensitivity
+(ns marathon.analysis.requirements.sensitivity
   (:require [spork.util
                [io :as io]
              [table :as tbl]]
+            [marathon.analysis :as a]
             [marathon.analysis.requirements :as r]))
 
 (def supply-fields
@@ -200,7 +201,7 @@
 ;;drive the search.
 ;;What we'd like to do is maintain some information regarding
 ;;containment.
-(defn extrema-search-sparse [f xs]
+#_(defn extrema-search-sparse [f xs]
   (let [init (vec (sort xs))
         segment {:l (first init)
                  :r (last init)
@@ -231,6 +232,78 @@
           (recur new-known (reduce conj (pop pending) new-segments)))
         ;;otherwise we're done, report the inflections.
         (with-meta known {:pruned (vec @pruned) :calls @calls})))))
+
+;;we're working with a function f(x) = y, where we expect x to be numeric
+;;and y to be numeric.  The problem in practice is, we have functions that take
+;;an interval and return a result that's not numeric.  We need to keep track
+;;if this information.  If we supply a key function and a weight function,
+;;we can project xs onto inputs for f, compute (f (key x)), and store
+;;the raw result of the function assoc'd to x, while guiding the search
+;;with the weight function, (weight (f (key x)))).  Then return the
+;;raw results in the meta and provide a function to grab them.
+
+(defn extrema-search-generic
+  "Generalization of extrema-search-sparse; allows caller to supply additional
+  functions for key and weight, where keyf will provide a function that is
+  applied to numeric values in xs prior to evaluation of f, the result of which
+  (f (keyf x)) will be stored in a raw map of {x (f (keyf x))}, while the search
+  intervals are conducted using the weightf function which projects the raw
+  result of (f (keyf x)) onto a numeric value, such that the result of the
+  search is a map of {x (weight (f (keyf x)))} with metadata of the raw map
+  stored in :raw."
+  [f xs & {:keys [keyf weightf]
+           :or {keyf identity weightf identity}}]
+  (let [init (vec (sort xs))
+        segment {:l (first init)
+                 :r (last init)
+                 :unvisited init}
+        pruned  (atom nil)
+        calls   (atom 0)
+        sample (fn [x] (swap! calls inc) (f x))]
+    (loop [known   {}
+           raw     {}
+           pending [segment]]
+      (if-let [{:keys [l r unvisited] :as node} (peek pending)]
+        ;;pick a segment off the stack and update, neither point should be
+        ;;known.
+        (let [singular? (== l r)
+              fl    (sample (keyf l))  ;raw fl
+              fr    (if-not singular? (sample (keyf r)) fl) ;;raw fr
+              wl    (weightf fl)
+              wr    (weightf fr)
+              constant? (== wl wr) ;;weights are same.
+              ;;raw results from function
+              new-raw   (assoc raw l fl r fr)
+              ;;weighted results driving the search.
+              new-known (assoc known l wl r wr)
+              _        (if (and constant? (not singular?))
+                         (swap! pruned concat unvisited))
+              ;;when we put a segment on the stack, it should be shrink-wrapped.
+              ;;We also partition the unknown points into each segment. So when
+              ;;we subdivide, we pack points into the l/r segments, and
+              ;;shrinkwrap the segment to be the minima/maxima of the contained
+              ;;points.
+              new-segments (when-not constant?
+                             (-> (subdivide l r)
+                                 (partition-segments (rest (butlast unvisited)))))]
+          (recur new-known new-raw (reduce conj (pop pending) new-segments)))
+        ;;otherwise we're done, report the inflections.
+        (with-meta known {:pruned (vec @pruned) :calls @calls :raw raw})))))
+
+(defn recover-raw
+  "Helper function to allow us to get back the original values from f(x) in our
+   search function, rather than the numeric weights used to guide the search."
+  [search-result]
+  (-> search-result meta :raw))
+
+(comment ;;simple demo
+  (def res3 (extrema-search-generic (fn [{:keys [x]}] {:bound x :result (f x)}) [0 1000]
+                                    :keyf (fn [x] {:x x}) :weightf :result))
+  ;;user> res3
+  ;;{0 10, 1000 13}
+  ;;user> (recover-raw res3)
+  ;;{0 {:bound 0, :result 10}, 1000 {:bound 1000, :result 13}}
+  )
 
 ;;so let's talk about our function...
 ;;In practice, we'll have a requirements analysis doing its
@@ -287,7 +360,46 @@
 ;;incorporates CMDD-based pruning information.
 
 #_
-(defn tables->requirements-async
+(defn requirements-by
+  "Helper function for our parallel requirements computation."
+  [tbls peaks search n]
+  (fn [[src compo->distros]]
+    ;;for each src, we create a reqstate
+    (if-let [peak (peaks src)]
+      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
+            ;;We now pack along the peak demand for extra context.
+            reqstate       (assoc (load-src tbls src compo->distros)
+                                  :peak peak)
+            _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
+            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
+        (if (== lower upper 0)
+          [src reqstate]
+          [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
+      (do (println [:skipping-src src :has-no-demand])
+          [src nil])
+      )))
+
+;;instead of the async version where we're doing n requirements analyses and
+;;allow work stealing, we'll focus on doing the n requirements analysis [src distros]
+;;synchronously, and then do the extrema search with additional constraint information
+;;as we go.  Looks like requirements-by is fine.  We need to inject the extrema
+;;search into here.
+
+;;in the parlance of extrema-search-generic, this will serve as our
+;;weightf function to project raw results onto a numeric weight.
+(defn requirements-sum
+  "Compute a simple numeric result for the total requirement for
+   a given requirement state returned by a search.  Yields a
+   simple sum of the quantities from the resulting supply records.
+   Allows us to interface with extrema-search by providing a simple
+   function to yield a useful numeric value."
+  [reqstate]
+  (->> (some-> reqstate
+               :supply)
+       (map (comp long :Quantity))
+       (reduce + 0)))
+
+#_(defn tables->requirements-sync
   "Given a database of distributions, and the required tables for a marathon 
    project, computes a sequence of [src {compo requirement}] for each src."
   [tbls & {:keys [dtype search src-filter]
@@ -304,24 +416,13 @@
                                     (distros (:SRC %))))
                       (demands->src-peaks))
         n       (atom (count peaks))
-        ;;This is our injection site.
-        src-distros->requirements  (requirements-by tbls peaks search n)
-        out     (async/chan 10)
-        in      (async/chan 10)
-        _       (async/onto-chan in (seq distros))
-        require-or-err  (fn require-or-err [distros]
-                          (try  (src-distros->requirements  distros)
-                                (catch Exception e
-                                  (do (async/go (async/close! in))
-                                      (->error distros e)))))
-        pipe    (producer->consumer
-                    2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
-                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
-                   out
-                   require-or-err #_src-distros->requirements
-                   in)
-        ]
-    (seq!! out)))
+        src-distros->requirements  (requirements-by tbls peaks search n)]
+    (mapv (fn compute-reqs [src-distros]
+            ;;for each cmdd value, we want to compute multiple requirements,
+            ;;and do so using extrema-search. Assume we have multiple cmdd's.
+            (try  (src-distros->requirements src-distros)
+                  (catch Exception e (->error src-distros e))))
+          (seq distros))))
 
 
 
@@ -386,12 +487,80 @@
 
 
 ;;redefine requirements-contour in terms of extrema-search.
-;;define bisecting-convergence-prune
+;;define bisecting-convergence-prune.  Extrema-search
+;;expects a function that returns a simple number, so we
+;;need to probably just sum the requirements.
 
+#_
+(defn requirements-by
+  "Helper function for our parallel requirements computation."
+  [tbls peaks search n]
+  (fn [[src compo->distros]]
+    ;;for each src, we create a reqstate
+    (if-let [peak (peaks src)]
+      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
+            ;;We now pack along the peak demand for extra context.
+            reqstate       (assoc (load-src tbls src compo->distros)
+                                  :peak peak)
+            _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
+            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
+        (if (== lower upper 0)
+          [src reqstate]
+          [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
+      (do (println [:skipping-src src :has-no-demand])
+          [src nil])
+      )))
+
+;;revamped, merged with tables->requirements-sync
+(defn requirements-contour-faster
+  [proj xs  & {:keys [dtype search src-filter]
+                   :or {search r/bisecting-convergence ;iterative-convergence
+                        dtype  :proportional
+                        src-filter (fn [_] true)}}]
+  (let [tbls    (-> (a/load-requirements-project proj)      :tables)
+        distros (into {} (->> (r/aggregate-distributions tbls :dtype dtype)
+                              (filter (fn [[src _]]
+                                        (src-filter src)))))
+        peaks   (->>  (:DemandRecords tbls)
+                      (tbl/table-records)
+                      (filter #(and (:Enabled %)
+                                    (distros (:SRC %))))
+                      (r/demands->src-peaks))
+        n       (atom (count peaks)) ;;revisit.
+        src-distros->requirements  (r/requirements-by tbls peaks search n)]
+    (->> (for [[src distro :as sd] distros]
+           ;;for each [src distro] we want to compute a requirements analysis contour
+           ;;for the points in xs.
+           [src
+             (extrema-search-generic (fn [[src distro bound :as sd]]
+                                     (binding [r/*distance-function*    r/contiguous-distance
+                                               r/*contiguity-threshold* bound]
+                                       (assoc (second (src-distros->requirements sd)) :bound bound)
+                                       #_(try
+                                            (catch Exception e (r/->error sd e)))))
+                                   xs
+                                   :keyf (fn [bound] [src distro bound])
+                                   :weightf (fn [reqstate] (requirements-sum reqstate)))])
+         (mapcat (fn [[src search-res]]
+                   (let [{:keys [pruned calls]} (meta search-res)]
+                     (println [:completed src  :pruned (count pruned) :called calls]))
+                   (for [[weight reqstate] (sort-by first (recover-raw search-res))
+                         r                 (-> reqstate :supply)]
+                     (assoc r :bound (reqstate :bound))))))))
+
+;;testing
+
+(comment
+
+  (def path (io/file-path "~/workspacenew/notional/reqs-testdata-v7.xlsx"))
+  ;;gives us table records with bound information now.
+  ;;currently prints out pruning information as well.
+  (def res (requirements-contour-faster path (range 30)))
+  )
+#_
 (defn requirements-contour [proj xs]
     (let [tbls  (-> (a/load-requirements-project proj)
-                    (:tables))
-          src->table ]
+                    (:tables))]
       (vec (for [x xs]
              (binding [*distance-function* contiguous-distance *contiguity-threshold* x]
                {:bound x
