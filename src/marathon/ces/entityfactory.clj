@@ -123,6 +123,39 @@
     EndState
     MissionLength])
 
+
+;;Formal Tag parsing.
+;;Tags are adopted from the old legacy type to allow for
+;;custom clojure datastructures.  Should be able to maybe
+;;have parametric tags that can operate on the entity as well.
+
+;;TODO add a spec for this...
+;;tags should be immutable (string)
+(defn parse-tags [x]
+  (try (clojure.edn/read-string x)
+       (catch Exception e
+         (throw (ex-info
+                 (str "Error parsing Tags, expected either Auto or a valid"
+                      " clojure map literal (as a string)\n"
+                      (ex-message e) \newline
+                      [:in x])
+                         {:in x
+                          :err e})))))
+
+;;minor optimization, probably not worth a lot.
+(alter-var-root #'parse-tags spork.util.general/memo-1)
+(defn as-tags [x & {:keys [default] :or {default {}}}]
+  (case x
+    "Auto" default
+    (or (and x (parse-tags x)) {})))
+
+(defn merge-tags [m tags]
+  (if tags
+    (if-let [res (as-tags tags)]
+      (merge m res)
+      m)
+    m))
+
 ;;Could inline for speed, may be unnecessary...
 (defn create-demand
   "Produces a validated demand from the inputs.  We enforce invariants about
@@ -179,7 +212,7 @@
   "Basic io function for converting raw records to demanddata."
   [{:keys [DemandKey SRC  Priority StartDay Duration Overlap Category
            SourceFirst Quantity  OITitle Vignette Operation  DemandGroup
-           Mod] :as rec}]
+           Mod Tags] :as rec}]
   (coerce [[Priority StartDay Duration Overlap Quantity] long]
     (-> (create-demand DemandKey SRC Priority StartDay Duration Overlap Category
                        SourceFirst (if (pos? Quantity) Quantity 1) OITitle Vignette Operation  DemandGroup)
@@ -194,6 +227,7 @@
                                  :MissionLength]))
         (assoc :mod Mod)
         (clean-nils [:StartState :EndState])
+        (merge-tags Tags)
         )))
 
 
@@ -490,11 +524,12 @@
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata
   [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-           Mod] :as r}]
+           Mod Tags] :as r}]
   (-> (if (= Behavior "SRM")    ;;hackish way to go about things...
         (srm-record->unitdata r)
         (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin))
-      (assoc :mod (if (and Mod (pos? Mod)) Mod 3))))
+      (assoc :mod (if (and Mod (pos? Mod)) Mod 3)) ;;TODO deprecate into tags? 
+      (merge-tags  Tags)))
 
 ;;Ideally, we'll unify this in the near future, for now it's srm specific.
 ;;we can have the unit behavior handle assigning policy.  From the start, we know
@@ -503,7 +538,7 @@
 
 ;;Special extension to handle the spawn-time requirements of the SRM
 (defn srm-record->unitdata [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-                                    Location Position Command Duration]}]
+                                    Location Position Command Duration Tags]}]
   (do ;(println [:loading-srm-unit Name Position Location])
       (-> (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior))
                                         ;SRM specific spawning information.
@@ -692,6 +727,7 @@
 (defn prep-cycle [unit ctx]
   (initialize-cycle unit (:policy unit) (core/ghost? unit) ctx))
 
+;;TODO - looks unused; DEPRECATE!
 (defn prep-unit
   "Given a raw-unit, ensures its name is good with the supplystore,
    assigns a policy (typically read from the existing policy field)
