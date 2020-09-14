@@ -132,7 +132,15 @@
 ;;TODO add a spec for this...
 ;;tags should be immutable (string)
 (defn parse-tags [x]
-  (try (clojure.edn/read-string x)
+  (try (cond (string? x)
+             (clojure.edn/read-string x)
+             (coll? x)
+             x
+             (and (symbol? x)
+                  (= 'Auto x))
+             nil
+             (nil? x)
+             nil)
        (catch Exception e
          (throw (ex-info
                  (str "Error parsing Tags, expected either Auto or a valid"
