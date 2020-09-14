@@ -1000,14 +1000,14 @@
     (let [order-by (eval-order    order-by)
           where    (eval-filter   where)
           t        (core/get-time ctx)]
-      (with-query-env env                                                                           
-        (as-> (->> (find-feasible-supply (compute-supply env ctx) (core/get-fillmap ctx) 
-                                         cat src  (fn [nm]                                                    
-                                                    (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
+      (with-query-env env
+        (as-> (->> (find-feasible-supply (compute-supply env ctx) (core/get-fillmap ctx)
+                      cat src  (fn [nm]
+                                 (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
                    (select {:where    (when where   (fn wherf [kv] (where (second kv))))
                             :order-by (when order-by (->ordering order-by))}))
-              res               
-             (if collect-by (core/collect collect-by (map second res)) 
+              res
+             (if collect-by (core/collect collect-by (map second res))
                  res)))))
 
 ;;More sophisticated querying API

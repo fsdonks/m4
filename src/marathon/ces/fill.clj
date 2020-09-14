@@ -516,6 +516,8 @@
 ;;should allow for a very flexible arrange of rule descriptions, as well as
 ;;varying degrees of interpretation rule interpretation, and the generation of 
 ;;promised supply.
+
+;;DEPRECATE?
 (defprotocol ISupplier 
   (query [s rule store] 
   "Given a rule that orders eligible supply, s applies the
@@ -590,8 +592,8 @@
    potential fills....where potential fills are data structures that contain 
    the context of the fill (i.e. the unit, the actions required to realize the 
    fill, and other meta data), typically a filldata record."
-  ([fillfunc supplystore rule]     
-     (query fillfunc rule supplystore))
+  ([fillfunc supplystore rule]
+     (query fillfunc rule supplystore)) ;;Only place where ISupplier/query used...
   ([supplystore rule]
      (map (fn [[[cat src length] u]] 
             (unit->filldata cat src length u))
