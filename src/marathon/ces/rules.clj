@@ -312,7 +312,7 @@
                                                                        (change-if units (unitfilter unit)
                                                                                   (f1 acc [[cat src (weight cat src)] unit])))) acc units)))
                                            acc (only-keys-from srcfilter srcs)))) (f1) supply))
-      (coll-reduce [_ f1 init]      
+      (coll-reduce [_ f1 init]
         (reduce-kv (fn [acc cat srcs]
                      (change-if acc (catfilter cat)
                                 (reduce-kv (fn [acc src units]
@@ -794,27 +794,96 @@
    "MOD1"       MOD1
    "MOD2"       MOD2
    "MOD3"       MOD3
-
-   "<=MOD1"       MOD1
-   "<=MOD2"       MOD2
-   "<=MOD3"       MOD3
-
+   "<=MOD1"     MOD1
+   "<=MOD2"     MOD2
+   "<=MOD3"     MOD3
    "MOD1-TARGET-AC" MOD1-Target-AC})
 
 (doseq [[k r] +default-rules+]
   (register-rule! k r))
 
 
+;;Category API
+;;============
+(def categories (atom {}))
+
+(defn register-category! [k v]
+  (swap! categories assoc k v)
+  k)
+
+(defn register-categories! [kvs]
+  (doseq [[k v] kvs]
+    (register-category! k v)))
+
+(def +default-categories+
+  {:default   {:filter (fn [_] true)} ;;maybe filter not necessary?
+   "SRM"      {:restricted "SRM"}
+   "NonBOG"   {:restricted  "NonBOG"
+    :computed  (fn [env ctx]
+                 (lazy-merge
+                  (compute-nonbog env ctx) ;;<-merge these in
+                  (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                      :deployable-buckets
+                                      :default])))}
+  "NonBOG-RC-Only"
+   {:restricted  "NonBOG"
+    :filter   (fn [u] (not= (:component u) "AC"))
+    :computed (fn [{:keys [where] :as env}  ctx]
+                (lazy-merge
+                 (compute-nonbog
+                  (assoc env :where
+                         (fn [u] (not= (:component u) "AC")))
+                  ctx) ;;<-merge these in
+                 (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                     :deployable-buckets
+                                     :default])))}
+   ;;Added to provide a filtering criteria for modernized demands.
+   ;;We never modernize mod 1, since that's considered the absolute
+  ;;highest mod level.
+  "Modernization"
+   {:restricted "NonBOG"
+    :filter (fn [u] (>= (get u :mod) 2))
+    :computed
+    (fn [{:keys [where] :as env}  ctx]
+      (lazy-merge
+       (compute-nonbog
+        (assoc env :where
+               (fn [u] (>= (get u :mod) 2)))
+        ctx) ;;<-merge these in
+       (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                           :deployable-buckets
+                           :default])))}
+
+  "Modernization-AC"
+   {:restricted "NonBOG"
+    :filter
+    (fn [u] (and (= (:component u) "AC")
+                 (>= (get u :mod) 2)))
+   :computed
+   (fn [{:keys [where] :as env}  ctx]
+     (lazy-merge
+      (compute-nonbog
+       (assoc env :where
+              (fn [u] (and (= (:component u ) "AC")
+                           (>= (get u :mod) 2))))
+       ctx) ;;<-merge these in
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default])))}})
+
+(register-categories! +default-categories+)
+
+
 
 ;;new rules....should be able to compose these...
 ;;By default, we get substituable, globally-available supply using our
-;;existing query.  
+;;existing query.
 
 
 ;;Example rules:
 
 ;;establishes a preference...
-;;given the rule "SRC3" 
+;;given the rule "SRC3"
 ;;We search from an abstract deployable resource
 
 (comment 
@@ -854,3 +923,84 @@
 
 ;;(defcomparer initial-demand [[AC-First MaxDwell]
 ;;                             [RC-AD MaxDwell]])
+
+
+;;cloned from marathon.ces.fill
+;;Tom Hack 26 May 2016
+;;If we're not SRM demand, i.e. the category is something other than
+;;SRM, we use the default category so as to not restrict our fill.
+#_
+(def restricted-categories
+  {"SRM" "SRM"
+   :SRM  :SRM
+   "NonBOG" "NonBOG"
+   "NonBOG-RC-Only" "NonBOG"
+   :NonBOG :NonBOG
+
+   ;;I think we want to do this.
+   "Modernization" "NonBOG"
+   :Modernization "NonBOG"
+
+   ;;Added ac-only class of modernization demands.
+   "Modernization-AC" "NonBOG"
+   :Modernization-AC "NonBOG"
+   })
+
+#_
+(def demand-filters
+  {:default (fn [_] true)
+   "Modernization-AC"
+   (fn [u] (and (= (:component u) "AC")
+                (>= (get u :mod) 2)))
+
+   "Modernization"
+   (fn [u] (>= (get u :mod) 2))
+
+   "NonBOG-RC-Only"
+   (fn [u] (not= (:component u) "AC"))})
+
+#_
+(def computed-categories
+  {"NonBOG"
+      (fn [env ctx]
+          (lazy-merge
+            (compute-nonbog env ctx) ;;<-merge these in
+            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                :deployable-buckets
+                                :default])))
+   "NonBOG-RC-Only"
+        (fn [{:keys [where] :as env}  ctx]
+          (lazy-merge
+            (compute-nonbog 
+              (assoc env :where 
+                (fn [u] (not= (:component u) "AC")))
+               ctx) ;;<-merge these in
+            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                :deployable-buckets
+                                :default])))
+   ;;Added to provide a filtering criteria for modernized demands.
+   ;;We never modernize mod 1, since that's considered the absolute
+   ;;highest mod level.
+   "Modernization"
+   (fn [{:keys [where] :as env}  ctx]
+     (lazy-merge
+      (compute-nonbog
+       (assoc env :where
+              (fn [u] (>= (get u :mod) 2)))
+       ctx) ;;<-merge these in
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default])))
+   "Modernization-AC"
+   (fn [{:keys [where] :as env}  ctx]
+     (lazy-merge
+      (compute-nonbog
+       (assoc env :where
+              (fn [u] (and (= (:component u ) "AC")
+                           (>= (get u :mod) 2))))
+       ctx) ;;<-merge these in
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default])))
+
+   })

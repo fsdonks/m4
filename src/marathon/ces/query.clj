@@ -13,6 +13,20 @@
             [marathon.ces.query.primitive :refer [ord-fn ordering ordering?]]
             [spork.util [general :as gen] [metaprogramming :as m]]))
 
+;;util
+(defmacro cache-1!
+  "Caches function invokations for symb in an efficient memoized
+   map, and invalidats the cache when ref-symb is altered."
+  [symb ref-symb]
+  `(let [original# ~symb]
+     (alter-var-root #'~symb gen/memo-1)
+     (add-watch ~ref-symb ~(keyword (str "get-" (name symb)))
+                (fn [~'_ ~'_ old# new#]
+                  (when (not= old# new#)
+                    (alter-var-root #'~symb (fn [old#] (gen/memo-1 original#))))
+                  ))
+     [:cached ~symb]))
+
 ;;convenience imports and exports
 (defn known-rules []
   (for [[s v] (ns-publics 'marathon.ces.rules)
@@ -25,7 +39,24 @@
         [marathon.ces.rules
          ~@(known-rules)
          ~'stock-queries
-         ~'register-rule!]))
+         ~'register-rule!
+         ~'register-category!
+         ]))
+
+(defn get-category [k]
+  (@rules/categories k))
+
+(defn get-rule [k]
+  (@rules/stock-queries k))
+
+(cache-1! get-category rules/categories)
+(cache-1! get-rule     rules/stock-queries)
+
+(defn restricted-categories [c]
+  (some-> c get-category :restricted))
+
+;;cache get-category, and ensure we invalidate
+;;the cache if the underlying atom changes.
 
 ;;TODO -> make this a bit higher level, provide an API for defining
 ;;environmental queries and specifying which vars in an expression are drawn

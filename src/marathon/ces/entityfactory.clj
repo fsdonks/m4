@@ -113,6 +113,7 @@
    (clojure.string/join "" [Priority "_"  Vignette "_" SRC
                             "_["  StartDay "..."  (+ StartDay Duration) "]"])))
 
+;;TODO unify this with our Tags implementation, providing some backwards compat.
 (def extra-fields
   '[Command
     Location

@@ -16,7 +16,7 @@
 ;;TODO [Verify and delete if not used!]
 ;;           [marathon.supply [unitdata :as udata]]
             [marathon.ces [core :as core] [demand :as dem] [supply :as supply]
-                          [policy :as policy] [unit :as u] 
+                          [policy :as policy] [unit :as u]
                           [deployment :as deployment]
                           [query :as query]]
             [marathon.ces.fill [fillgraph :as fg]]
@@ -275,6 +275,7 @@
 ;;Tom Hack 26 May 2016
 ;;If we're not SRM demand, i.e. the category is something other than
 ;;SRM, we use the default category so as to not restrict our fill.
+#_
 (def restricted-categories
   {"SRM" "SRM"
    :SRM  :SRM
@@ -340,7 +341,7 @@
     (let [[src groups] supply-category]
       (groups (:demandgroup d)))
     (let [c (get d :category :default)]
-      (or (when (restricted-categories c) c)
+      (or (when (query/restricted-categories c) c) ;;changed to query/...
           :default))))
 
 ;;TOM Notes 5 Aug 2019
@@ -376,20 +377,30 @@
 
 ;;NOTE: Additional State to Keep Track of
 ;;TODO: Define an API for these and /or an intepreter
-(def demand-filters
-  {:default (fn [_] true)
-   "Modernization-AC"
-   (fn [u] (and (= (:component u) "AC")
-                (>= (get u :mod) 2)))
-
-   "Modernization"
-   (fn [u] (>= (get u :mod) 2))
-
-   "NonBOG-RC-Only"
-   (fn [u] (not= (:component u) "AC"))})
+;;Consolidated demand-filters into
+;;marathon.ces.rules/categories
 
 
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
+(defn demand->rule
+  ([d supply-category-key]
+   (let [category-key  (derive-category d supply-category-key)
+         category      (query/get-category category-key)
+         r   {:src     (get d :src)
+              :cat      category-key ;;
+              :category category ;;we now pass the category record in...
+              :name (get d :name)
+              :order-by (resolve-source-first (get d :source-first "uniform"))
+              :required (d/required d)
+              :where    (get category :filter identity)
+              }]
+     (if  (or (= category-key :default) (nil? (:StartState d)))
+           r
+            ;;we have a preference for startstate...
+          (assoc r :where  (has-transition? (:StartState d))))))
+  ([d] (demand->rule d :default)))
+
+#_
 (defn demand->rule
   ([d supply-category]
    (let [category (derive-category d supply-category)
@@ -401,9 +412,9 @@
               :where    (get demand-filters category identity)
               }]
      (if  (or (= category :default) (nil? (:StartState d)))
-           r
-            ;;we have a preference for startstate...
-          (assoc r :where  (has-transition? (:StartState d))))))
+       r
+       ;;we have a preference for startstate...
+       (assoc r :where  (has-transition? (:StartState d))))))
   ([d] (demand->rule d :default)))
 
 
