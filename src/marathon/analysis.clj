@@ -610,17 +610,17 @@
   [ctx id & {:keys [sample?] :or {sample?
                                   (fn [x] true)}}]
   (-> (as-stream ctx)
-      (history/discrete-entity-history :sample? sample?)))
+      (history/discrete-entity-history id :sample? sample?)))
 
 (def unit-entity-summary
   (juxt :t :locationname :positionpolicy
             :state marathon.supply.unitdata/unit-stats :location-delta))
 
 (defn entity-trace
-  "High level function for directing entity event and behavior 
-   traces to *out*.  Allows us to walk through the entity's 
-   behavior as it changes and see fine-grained event and 
-   behavior messages about the entity, as well as its 
+  "High level function for directing entity event and behavior
+   traces to *out*.  Allows us to walk through the entity's
+   behavior as it changes and see fine-grained event and
+   behavior messages about the entity, as well as its
    discrete state changes."
   [ctx e & {:keys [debug? sample? trace]
             :or {debug? true sample? (fn [_] true) trace unit-entity-summary}}]

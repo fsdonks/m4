@@ -831,7 +831,14 @@
        ctx) ;;<-merge these in
       (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                           :deployable-buckets
-                          :default])))}})
+                          :default])))}
+   "Fenced"
+   {:filter
+    (fn [u]
+      (and (u :fenced?)
+           (= (u :aligned)
+              ((*env* :demand) :region))))}
+   })
 
 (register-categories! +default-categories+)
 
