@@ -147,7 +147,6 @@
       (.nth  r n)))
   ([n l r] (compare-nth n compare l r)))
 
-
 (defn ->kv-ordering
   "Refactoring of the inner function originally defined in find-supply.
    Given two comparers, one for keys and one for values,, operates on a sequence 

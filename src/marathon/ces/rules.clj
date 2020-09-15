@@ -552,10 +552,8 @@
   [{:keys [src cat order-by where collect-by computed] :or
     {src :any cat :default} :as env} ctx]
   (let [supply (store/gete ctx :SupplyStore :deployable-buckets)]
-    (if computed
-        (assoc supply cat (computed env ctx))
-      supply)))
-
+    (if (not computed) supply ;;more common case.
+        (assoc supply cat (computed env ctx)))))
 
 ;;Environmental queries
 ;;=====================

@@ -346,7 +346,6 @@
 ;;vectors and maps to allow inline forms to define
 ;;said criterion.
 
-
 ;;For now, we simply extend the projection of
 ;;demand->rule to include a static set of
 ;;mappings from Category->Filter.
@@ -355,26 +354,24 @@
 ;;easy to extend in the aforementioned
 ;;direction in the future.
 
-
 ;;NOTE: Additional State to Keep Track of
 ;;TODO: Define an API for these and /or an intepreter
 ;;Consolidated demand-filters into
 ;;marathon.ces.rules/categories
 
-
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
 (defn demand->rule
   ([d supply-category-key]
-   (let [category-key  (derive-category d supply-category-key)
-         category      (query/get-category category-key)
-         r   {:src     (get d :src)
+   (let [category-key   (derive-category d supply-category-key)
+         category       (query/get-category category-key)
+         r   {:src      (get d :src)
               :cat      category-key ;;
               :computed (get category :computed) ;;derive computed supply
               :name     (get d :name)
               :order-by (resolve-source-first (get d :source-first "uniform"))
               :required (d/required d)
               :where    (get category :filter identity)
-              }]
+              :demand   d}]
      (if  (or (= category-key :default) (nil? (:StartState d)))
            r
            ;;we have a preference for startstate...
