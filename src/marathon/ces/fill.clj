@@ -272,25 +272,6 @@
     r
     (throw (Exception. (str "unknown source-first rule: " sf)))))
 
-;;Tom Hack 26 May 2016
-;;If we're not SRM demand, i.e. the category is something other than
-;;SRM, we use the default category so as to not restrict our fill.
-#_
-(def restricted-categories
-  {"SRM" "SRM"
-   :SRM  :SRM
-   "NonBOG" "NonBOG"
-   "NonBOG-RC-Only" "NonBOG"
-   :NonBOG :NonBOG
-
-   ;;I think we want to do this.
-   "Modernization" "NonBOG"
-   :Modernization "NonBOG"
-
-   ;;Added ac-only class of modernization demands.
-   "Modernization-AC" "NonBOG"
-   :Modernization-AC "NonBOG"
-   })
 
 ;;Ensures that we only allow StartStates
 ;;that exist in the unit's policy....

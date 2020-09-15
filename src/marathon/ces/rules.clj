@@ -216,57 +216,9 @@
           (for [[src xs]  (group-by :src es)]
             [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))]))))
 
-;;computed categories indicate which categories can be derived on-demand by
-;;applying a function against the context.
 
-;;Note: Changed to account for updated, i.e. corrected behavior in M3-82, we now
-;;fully merge (if there is deployable supply or not).
-(def computed-categories
-  {"NonBOG"
-      (fn [env ctx]
-          (lazy-merge
-            (compute-nonbog env ctx) ;;<-merge these in
-            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                                :deployable-buckets
-                                :default])))
-   "NonBOG-RC-Only"
-        (fn [{:keys [where] :as env}  ctx]
-          (lazy-merge
-            (compute-nonbog 
-              (assoc env :where 
-                (fn [u] (not= (:component u) "AC")))
-               ctx) ;;<-merge these in
-            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                                :deployable-buckets
-                                :default])))
-   ;;Added to provide a filtering criteria for modernized demands.
-   ;;We never modernize mod 1, since that's considered the absolute
-   ;;highest mod level.
-   "Modernization"
-   (fn [{:keys [where] :as env}  ctx]
-     (lazy-merge
-      (compute-nonbog
-       (assoc env :where
-              (fn [u] (>= (get u :mod) 2)))
-       ctx) ;;<-merge these in
-      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                          :deployable-buckets
-                          :default])))
-   "Modernization-AC"
-   (fn [{:keys [where] :as env}  ctx]
-     (lazy-merge
-      (compute-nonbog
-       (assoc env :where
-              (fn [u] (and (= (:component u ) "AC")
-                           (>= (get u :mod) 2))))
-       ctx) ;;<-merge these in
-      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                          :deployable-buckets
-                          :default])))
-
-   })
-
-(defn computed [cat] (computed-categories cat))
+;;relocated...
+(declare computed)
 
 ;;Reducer/seq that provides an abstraction layer for implementing queries over
 ;;deployable supply. I really wish I had more time to hack out a better macro
@@ -815,6 +767,20 @@
   (doseq [[k v] kvs]
     (register-category! k v)))
 
+(defn computed [cat]
+  (when-let [c (@categories cat)]
+    (c :computed)))
+
+#_(defn computed [cat] (computed-categories cat))
+
+;;notes moved from disparate locations.
+
+;;computed categories indicate which categories can be derived on-demand by
+;;applying a function against the context.
+
+;;Note: Changed to account for updated, i.e. corrected behavior in M3-82, we now
+;;fully merge (if there is deployable supply or not).
+
 ;;Tom Hack 26 May 2016
 ;;If we're not SRM demand, i.e. the category is something other than
 ;;SRM, we use the default category so as to not restrict our fill.
@@ -876,8 +842,6 @@
                           :default])))}})
 
 (register-categories! +default-categories+)
-
-
 
 ;;new rules....should be able to compose these...
 ;;By default, we get substituable, globally-available supply using our
@@ -941,6 +905,53 @@
 
    "NonBOG-RC-Only"
    (fn [u] (not= (:component u) "AC"))})
+
+#_
+(def computed-categories
+  {"NonBOG"
+      (fn [env ctx]
+          (lazy-merge
+            (compute-nonbog env ctx) ;;<-merge these in
+            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                :deployable-buckets
+                                :default])))
+   "NonBOG-RC-Only"
+        (fn [{:keys [where] :as env}  ctx]
+          (lazy-merge
+            (compute-nonbog 
+              (assoc env :where 
+                (fn [u] (not= (:component u) "AC")))
+               ctx) ;;<-merge these in
+            (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                :deployable-buckets
+                                :default])))
+   ;;Added to provide a filtering criteria for modernized demands.
+   ;;We never modernize mod 1, since that's considered the absolute
+   ;;highest mod level.
+   "Modernization"
+   (fn [{:keys [where] :as env}  ctx]
+     (lazy-merge
+      (compute-nonbog
+       (assoc env :where
+              (fn [u] (>= (get u :mod) 2)))
+       ctx) ;;<-merge these in
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default])))
+   "Modernization-AC"
+   (fn [{:keys [where] :as env}  ctx]
+     (lazy-merge
+      (compute-nonbog
+       (assoc env :where
+              (fn [u] (and (= (:component u ) "AC")
+                           (>= (get u :mod) 2))))
+       ctx) ;;<-merge these in
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default])))
+
+   })
+
 
 #_
 (def computed-categories
