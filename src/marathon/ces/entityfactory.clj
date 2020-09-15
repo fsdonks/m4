@@ -235,8 +235,8 @@
                                  :EndState
                                  :MissionLength]))
         (assoc :mod Mod)
+        (merge-tags Tags) ;;weird, had to push this up higher in the hierarchy.
         (clean-nils [:StartState :EndState])
-        (merge-tags Tags)
         )))
 
 

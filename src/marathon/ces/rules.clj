@@ -328,7 +328,7 @@
 ;;may not need all the supply.  Possible performance optimization.
 (defn find-feasible-supply
   ([supply srcmap category src nm->unit]
-   (let [;_   (println [:query/find-feasible5 srcmap category src])
+   (let [#_   (println [:query/find-feasible5 srcmap category src])
          any-src?      (or (identical? src :any) (identical? src  :*))
          any-category? (or (identical? category :any) (identical? category  :*))
          src-selector  (cond any-src?  identity 
@@ -778,7 +778,7 @@
 ;;SRM, we use the default category so as to not restrict our fill.
 
 (def +default-categories+
-  {:default   {:filter (fn [_] true)} ;;maybe filter not necessary?
+  {:default   {:filter (fn [u] (not (:fenced? u)))} ;;maybe filter not necessary?
    "SRM"      {:restricted "SRM"}
    "NonBOG"   {:restricted  "NonBOG"
     :computed  (fn [env ctx]
@@ -833,11 +833,21 @@
                           :deployable-buckets
                           :default])))}
    "Fenced"
-   {:filter
-    (fn [u]
-      (and (u :fenced?)
-           (= (u :aligned)
-              ((*env* :demand) :region))))}
+   {:restricted "Fenced"
+    :computed
+    (fn [{:keys [where] :as env} ctx]
+      (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                          :deployable-buckets
+                          :default]))
+    :filter
+    (fn fenced [u]
+      (let [demand (*env* :demand)
+            #_ (println [:checking-fence-for (:name demand) (:region demand)
+                        (:name u) (:aligned u) (:fenced? u)])
+            ]
+        (and (u :fenced?)
+             (= (u :aligned)
+                (demand  :region)))))}
    })
 
 (register-categories! +default-categories+)

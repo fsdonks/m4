@@ -597,16 +597,14 @@
 ;;============================
 ;;Migrated from quilsample.bridge
 
-;;can we take a discrete entity history and create a
-;;continuous entity history?  That's what the cycle-lerper
-;;is supposed to be doing, but currently is failing a bit at.
+;;can we take a discrete entity history and create a continuous entity history?
+;;That's what the cycle-lerper is supposed to be doing, but currently is failing
+;;a bit at.
 (defn discrete-entity-history
-  "Given a context and an entity id to follow, returns a 
-   map of the discrete values of the entity's history 
-   as a function of time.  Ensures that only inflections 
-   where the entity history changes are captured. 
-   Caller may supply an optional sample? function  
-   to determine if frames should be dropped."
+  "Given a context and an entity id to follow, returns a map of the discrete
+  values of the entity's history as a function of time. Ensures that only
+  inflections where the entity history changes are captured. Caller may supply
+  an optional sample? function to determine if frames should be dropped."
   [ctx id & {:keys [sample?] :or {sample?
                                   (fn [x] true)}}]
   (-> (as-stream ctx)

@@ -371,7 +371,9 @@
               :order-by (resolve-source-first (get d :source-first "uniform"))
               :required (d/required d)
               :where    (get category :filter identity)
-              :demand   d}]
+              :demand   d}
+         ;_ (println [supply-category-key category-key #_category (dissoc r :demand)])
+         ]
      (if  (or (= category-key :default) (nil? (:StartState d)))
            r
            ;;we have a preference for startstate...
