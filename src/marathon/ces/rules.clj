@@ -216,10 +216,6 @@
           (for [[src xs]  (group-by :src es)]
             [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))]))))
 
-
-;;relocated...
-(declare computed)
-
 ;;Reducer/seq that provides an abstraction layer for implementing queries over
 ;;deployable supply. I really wish I had more time to hack out a better macro
 ;;for the reducers, but this works for now. Deployers provides a view of the
@@ -553,11 +549,11 @@
   sort of pre-processor, making availabile the entire context and the query
   information, associating the result onto the supply used for the actual
   deployer query."
-  [{:keys [src cat order-by where collect-by] :or
+  [{:keys [src cat order-by where collect-by computed] :or
     {src :any cat :default} :as env} ctx]
   (let [supply (store/gete ctx :SupplyStore :deployable-buckets)]
-    (if-let [compute-supply (computed cat)]
-        (assoc supply cat (compute-supply  env ctx))
+    (if computed
+        (assoc supply cat (computed env ctx))
       supply)))
 
 
@@ -770,8 +766,6 @@
 (defn computed [cat]
   (when-let [c (@categories cat)]
     (c :computed)))
-
-#_(defn computed [cat] (computed-categories cat))
 
 ;;notes moved from disparate locations.
 

@@ -369,7 +369,7 @@
          category      (query/get-category category-key)
          r   {:src     (get d :src)
               :cat      category-key ;;
-              :category category ;;we now pass the category record in...
+              :computed (get category :computed) ;;derive computed supply
               :name     (get d :name)
               :order-by (resolve-source-first (get d :source-first "uniform"))
               :required (d/required d)
