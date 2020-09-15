@@ -389,15 +389,16 @@
          r   {:src     (get d :src)
               :cat      category-key ;;
               :category category ;;we now pass the category record in...
-              :name (get d :name)
+              :name     (get d :name)
               :order-by (resolve-source-first (get d :source-first "uniform"))
               :required (d/required d)
               :where    (get category :filter identity)
               }]
      (if  (or (= category-key :default) (nil? (:StartState d)))
            r
-            ;;we have a preference for startstate...
-          (assoc r :where  (has-transition? (:StartState d))))))
+           ;;we have a preference for startstate...
+           ;;respect the filter if we have one.
+          (assoc r :where  [(r :where) (has-transition? (:StartState d))]))))
   ([d] (demand->rule d :default)))
 
 #_
