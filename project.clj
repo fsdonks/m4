@@ -11,7 +11,7 @@
 (defproject marathon "4.2.0-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [spork "0.2.1.2-SNAPSHOT"
+                 [spork "0.2.1.3-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
                  [marathon-schemas "4.1.6-SNAPSHOT"
@@ -26,7 +26,7 @@
                  [demand_builder "0.1.0-SNAPSHOT"
                   :exclusions [spork]]
                  ;;external libs
-                 [joinr/nightclub "0.0.1-SNAPSHOT"]
+                 [joinr/nightclub "0.0.2-SNAPSHOT"]
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
