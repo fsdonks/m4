@@ -293,6 +293,60 @@
                   :step step :levels (:levels prj))]
     (assoc prj :tables tbls)))
 
+(defn project->nolh-experiments
+  "Constructs a series of supply variation experiments by using eithe a Nearly Orthogonal
+   Latin Hypercube (NOLH) 65-level design, or if the empirical levels from the supply
+   are < 65, does a full factorial design.  Like project->experiments, returns
+   a sequence of projects with updated :tables for each new supply design."
+  [prj lower upper]
+  (let [tbls          (:tables prj)
+        init-records  (-> prj :tables :SupplyRecords tbl/table-records)
+        compo-records (group-by :Component init-records)
+        _ (assert (every? #{1} (map count (vals compo-records)))
+                  "Expected a single record per component for NOLH supply!")
+        compo-records (zipmap (keys compo-records) (map first (vals compo-records)))
+        init-supply   (into {} (map (juxt :Component :Quantity) init-records))
+        bound-names   (for [[compo quantity] init-supply]
+                        [compo [(long (* lower quantity))
+                                (long (* upper quantity))]])]
+    (->> bound-names
+         nolh/designs
+         (map (fn [r]
+                (->> (for [[compo quantity] r]
+                      (let [from (get compo-records  compo)
+                            rec  (assoc from :Quantity quantity)]
+                        rec))
+                     tbl/records->table
+                     (assoc tbls :SupplyRecords)
+                     (assoc prj :tables)))))))
+
+(defn project->full-factorial-experiments
+  "Constructs a series of supply variation experiments by using eithe a Nearly Orthogonal
+   Latin Hypercube (NOLH) 65-level design, or if the empirical levels from the supply
+   are < 65, does a full factorial design.  Like project->experiments, returns
+   a sequence of projects with updated :tables for each new supply design."
+  [prj lower upper]
+  (let [tbls          (:tables prj)
+        init-records  (-> prj :tables :SupplyRecords tbl/table-records)
+        compo-records (group-by :Component init-records)
+        _ (assert (every? #{1} (map count (vals compo-records)))
+                  "Expected a single record per component for NOLH supply!")
+        compo-records (zipmap (keys compo-records) (map first (vals compo-records)))
+        init-supply   (into {} (map (juxt :Component :Quantity) init-records))
+        bound-names   (for [[compo quantity] init-supply]
+                        [compo [(long (* lower quantity))
+                                (long (* upper quantity))]])]
+    (->> bound-names
+         nolh/full-factorial-records
+         (map (fn [r]
+                (->> (for [[compo quantity] r]
+                      (let [from (get compo-records  compo)
+                            rec  (assoc from :Quantity quantity)]
+                        rec))
+                     tbl/records->table
+                     (assoc tbls :SupplyRecords)
+                     (assoc prj :tables)))))))
+
 ;;if we can't copmute a fill, we should log it somewhere.
 (defn try-fill
   ([proj src idx phases]
@@ -318,6 +372,8 @@
                     err))
          res)))))
 
+(def ^:dynamic *project->experiments* marathon.analysis.random/project->experiments)
+
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
   namespace as a base. This function is modified to perform a random run for
@@ -325,25 +381,26 @@
   [proj & {:keys [phases lower upper levels gen seed->randomizer]
            :or   {lower 0 upper 1 gen util/default-gen
                   seed->randomizer (fn [_] identity)}}]
-  (->> (assoc proj :phases phases :lower lower :upper upper :levels levels
-              :gen gen  :seed->randomizer :seed->randomizer)
-       (e/split-project)
-       (reduce
-        (fn [acc [src proj]]
-          (let [experiments (project->experiments proj lower upper)]
-            (into acc
-                  (filter (fn blah [x] (not (:error x))))
-                  (util/pmap! *threads*
-                   (fn [[idx proj]]
-                     (let [rep-seed   (util/next-long gen)]
-                       (-> proj
-                           (assoc :rep-seed rep-seed
-                                  :supply-record-randomizer
-                                  (seed->randomizer rep-seed))
-                           (try-fill src idx phases))))
-                   (map-indexed vector experiments))))) [])
-       (apply concat)
-       vec))
+   (let [project->experiments *project->experiments*]
+     (->> (assoc proj :phases phases :lower lower :upper upper :levels levels
+                 :gen gen  :seed->randomizer :seed->randomizer)
+          (e/split-project)
+          (reduce
+           (fn [acc [src proj]]
+             (let [experiments (project->experiments proj lower upper)]
+               (into acc
+                     (filter (fn blah [x] (not (:error x))))
+                     (util/pmap! *threads*
+                                 (fn [[idx proj]]
+                                   (let [rep-seed   (util/next-long gen)]
+                                     (-> proj
+                                         (assoc :rep-seed rep-seed
+                                                :supply-record-randomizer
+                                                (seed->randomizer rep-seed))
+                                         (try-fill src idx phases))))
+                                 (map-indexed vector experiments))))) [])
+          (apply concat)
+          vec)))
 
 (defn default-randomizer [seed compo-lengths]
   (->cycletime-randomizer (util/->gen seed) compo-lengths))
@@ -485,6 +542,27 @@
         :lower 0 :upper 1.5
         :compo-lengths default-compo-lengths
         :levels 3)))
+
+  ;;This will change out the default ac supply reduction experiments.
+  ;;We now leverage at most a 65-level NOLH design varying all
+  ;;components.  At best, we do a full-factorial design of < 65.
+  (def random-run-nolh
+    (binding [*noisy* 1.0
+              *project->experiments* project->nolh-experiments]
+      (random-run "~/repos/notional/supplyvariation-testdata.xlsx"
+                  :reps 1
+                  :phases phases
+                  :lower 0 :upper 1.5
+                  :compo-lengths default-compo-lengths)))
+
+  (def random-run-exhaustive
+    (binding [*noisy* 1.0
+              *project->experiments* project->full-factorial-experiments]
+      (random-run "~/repos/notional/supplyvariation-testdata.xlsx"
+                  :reps 1
+                  :phases phases
+                  :lower 0 :upper 1.5
+                  :compo-lengths default-compo-lengths)))
 
   ;;some defaults...
   (def phases [["comp-1"  1   730]
