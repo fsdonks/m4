@@ -3,6 +3,7 @@
   (:require [marathon.analysis :as a]
             [marathon.analysis.util :as util]
             [marathon.analysis.experiment :as e]
+            [marathon.analysis.nolh :as nolh]
             [marathon.ces.core :as c]
             [spork.util.table :as tbl]
             [spork.util.general :as gen]
