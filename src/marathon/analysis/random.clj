@@ -321,10 +321,9 @@
                      (assoc prj :tables)))))))
 
 (defn project->full-factorial-experiments
-  "Constructs a series of supply variation experiments by using eithe a Nearly Orthogonal
-   Latin Hypercube (NOLH) 65-level design, or if the empirical levels from the supply
-   are < 65, does a full factorial design.  Like project->experiments, returns
-   a sequence of projects with updated :tables for each new supply design."
+  "Constructs a series of supply variation experiments by using full factorial
+  design. Like project->experiments, returns a sequence of projects with
+  updated :tables for each new supply design."
   [prj lower upper]
   (let [tbls          (:tables prj)
         init-records  (-> prj :tables :SupplyRecords tbl/table-records)
