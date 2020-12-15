@@ -936,6 +936,35 @@
            positionpolicy 
            (protocols/next-position policy positionpolicy)))}))
 
+;;Adding a lame function to detect for and enable pre-fill.
+;;Right now, we just assume it's enabled, but we'll check the context.
+
+(defn prefill? [ctx]
+  (-> ctx
+      core/get-parameters
+      :PreFill))
+
+;;prefill is modeled as the unit's available time impacting its bog budget. So
+;;the simplest scheme is to just reduce the bog budget proportional to the
+;;unit's available time. Maybe decrement according to its stop-deployable time?
+(defn compute-prefill [ent policy cycletime]
+  (let [p (ent :policy)
+        ts (protocols/start-deployable policy)
+        tf (protocols/stop-deployable policy)
+        bogbudget (protocols/max-bog policy)]
+    (when (and (>= cycletime ts)
+               (<  cycletime tf))
+      (let [res (- bogbudget (- tf cycletime))]
+        (and (pos? res) res)))))
+
+;;if we detect a prefill condition, we reduce the unit's
+;;bog budget accordingly to space out deployments.
+(defn set-prefill [ent policy cycletime ctx]
+  (if-let [pf (and (prefill? ctx)
+                   (compute-prefill ent policy cycletime))]
+    (assoc ent :prefill pf)
+    ent))
+
 ;;Our default spawning behavior is to use cycle to indicate.
 ;;There will be times we alter the methods in which a unit 
 ;;spawns (initializes itself in the simulation).  It'd be nice
@@ -985,6 +1014,7 @@
                                         :default-recovery (core/default-recovery @ctx))
                                 (u/initCycles tupdate)
                                 (u/add-dwell  cycletime)
+                                (set-prefill policy cycletime @ctx) ;;added for optional prefill to space out deps.
                                 (assoc  :last-update tupdate)
                                 (dissoc :spawn-info) ;eliminate spawning data.
                                 ) ;;may not want to do this..

@@ -37,7 +37,13 @@
                        :main  marathon.main
                        :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
                        :plugins [[lein-capsule "0.2.1"]]
-                       }}
+                       }
+             :uberjar-all {;:aot  [marathon.main]
+                           :aot [marathon.main marathon.core];~aot-order
+                           :main  marathon.main
+                           :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
+                           :plugins [[lein-capsule "0.2.1"]]
+                           }}
   ;:plugins [[lein-capsule "0.2.1"]]
   ;;; Capsule plugin configuration section, optional
   :capsule {:application {:name    ~capsule-name

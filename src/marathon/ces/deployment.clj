@@ -51,7 +51,8 @@
    })
 
 (defn location-based-policy? [d]
-  (and (:StartState d) (:EndState d)))
+  (or (:override d))
+      (and (:StartState d) (:EndState d)))
 
 (defn wait-based-policy? [d]
   (when-let [fx (demand-effect-categories (:category d))]
