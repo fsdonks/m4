@@ -780,13 +780,16 @@
 (def +default-categories+
   {:default   {:filter (fn [u] (not (:fenced? u)))} ;;maybe filter not necessary?
    "SRM"      {:restricted "SRM"}
-   "NonBOG"   {:restricted  "NonBOG"
+   "NonBOG"
+   {:restricted  "NonBOG"
     :computed  (fn [env ctx]
                  (lazy-merge
                   (compute-nonbog env ctx) ;;<-merge these in
                   (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                                       :deployable-buckets
-                                      :default])))}
+                                      :default])))
+   :effects    {:wait-time   999999
+                :wait-state  :waiting}}
   "NonBOG-RC-Only"
    {:restricted  "NonBOG"
     :filter   (fn [u] (not= (:component u) "AC"))
@@ -798,7 +801,9 @@
                   ctx) ;;<-merge these in
                  (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                                      :deployable-buckets
-                                     :default])))}
+                                     :default])))
+    :effects   {:wait-time   999999
+                :wait-state  :waiting}}
    ;;Added to provide a filtering criteria for modernized demands.
    ;;We never modernize mod 1, since that's considered the absolute
   ;;highest mod level.
@@ -814,7 +819,9 @@
         ctx) ;;<-merge these in
        (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                            :deployable-buckets
-                           :default])))}
+                           :default])))
+    :effects    {:wait-time   365
+                 :wait-state  #{:waiting :modernizing}}}
 
   "Modernization-AC"
    {:restricted "NonBOG"
@@ -831,7 +838,9 @@
        ctx) ;;<-merge these in
       (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                           :deployable-buckets
-                          :default])))}
+                          :default])))
+    :effects {:wait-time   365
+              :wait-state  #{:waiting :modernizing}}}
    "Fenced"
    {:restricted "Fenced"
     :computed

@@ -8,7 +8,8 @@
             [marathon.supply [unitdata :as udata]]
             [marathon.ces    [core :as core] [demand :as dem] 
                              [policy :as policy] [supply :as supply] 
-                             [unit :as u]]
+                             [unit :as u]
+                             [query :as query]]
             [marathon.data   [protocols :as protocols]]
             [spork.entitysystem.store :as store]
             [spork.sim       [simcontext :as sim]]
@@ -23,16 +24,16 @@
 ;;         ]
 ;;     (- bog-remaining  (protocols/overlap p))))
 
-;;Demand effect categories map values of associated
-;;with the :category of the demand to a set of
-;;interpreted effects, if any.  These provide a
-;;flexible form of location-based policy that allows
-;;us to express overrides of default policy-based
-;;behavior.  One simple idea is to override the
-;;behavioral defaults, i.e. the statemap,
-;;for the unit's state.  This provides an
-;;easy way to rewire common states.
-(def demand-effect-categories
+;;Demand effect categories map values of associated with the :category of the
+;;demand to a set of interpreted effects, if any. These provide a flexible form
+;;of location-based policy that allows us to express overrides of default
+;;policy-based behavior. One simple idea is to override the behavioral defaults,
+;;i.e. the statemap, for the unit's state. This provides an easy way to rewire
+;;common states.
+
+;;TOM CHANGE 12/16/2020 - Migrated to unified rule map
+;;in marathon.ces.rules/+default-rules+ under the :effects key
+#_(def demand-effect-categories
   {"NonBOG" {:wait-time   999999
              :wait-state  :waiting}
    "NonBOG-RC-Only"
@@ -49,6 +50,8 @@
     :wait-state  #{:waiting :modernizing}
     }
    })
+(defn demand-effect-categories [cat]
+  (get (query/get-rule cat) :effects))
 
 (defn location-based-policy? [d]
   (or (:override d))
