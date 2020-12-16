@@ -883,6 +883,18 @@
     (->>  (store/add-entity ctx new-unit)
           (keep-bogging-until-depleted new-unit newlocation))))
 
+;;a generic check to see if the unit is prefill eligible, and if so
+;;we create conditions for it to deploy in staggered fashion.
+(defn  check-prefill [unit demand t ctx]
+  (if (or (> t 1)
+          (not (unit :prefill))
+          #_(not (demand :prefill)))  ;;TBD add prefill conditions to demands.
+    unit
+    ;;modify bogbudget relative to the unit's prefill
+    (-> unit
+        (add-bog (unit :prefill))
+        (dissoc :prefill))))
+
 ;;We can probably combine these into a unit behavior.
 ;;For instance, notice we update the deployments.
 (defn  deploy-unit [unit demand t ctx]
@@ -892,6 +904,7 @@
     (-> unit
         (assoc :deployment-index cnt)
         (increment-deployments)
+        (check-prefill demand t ctx) ;;added 12/16/2020
         (keep-bogging-until-depleted newlocation ctx))))
 
 (defn pseudo-deploy [unit info t ctx]
