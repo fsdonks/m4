@@ -947,15 +947,40 @@
 ;;prefill is modeled as the unit's available time impacting its bog budget. So
 ;;the simplest scheme is to just reduce the bog budget proportional to the
 ;;unit's available time. Maybe decrement according to its stop-deployable time?
+
+;;Addendum: we want to ensure we never have overlop occuring on day 1.
+;;We also want to ensure deployments are somehow optimally ordered in the past.
+;;That is, we don't have units deploying (and leaving) at the same time,
+;;creating clumps or resonant unfilled demand.  So to avoid this, we
+;;create a prefill deployemnt schedudle where units are evenly spaced
+;;as if they had deployed in the past.  The trick is to ensure that
+;;we account for overlap in this spacing.  We also want this to be
+;;determinstic and "ideal" akin to how our cycletime spacing is
+;;an ideal representation.  So to have an ideal prefill deployment
+;;schedule is to minimize the effects of overlap and ensure no
+;;clumping in addition to the constraint that no prefilling unit
+;;will overlap on day 1...
+
+;;A simpler option is to just project the unit's lifecycle entirely and ignore
+;;the availability question... So project the unit onto a shorter
+;;(clength - (overlap + 1)) cycle. Then determine prefill based on that
+;;projection according to the existing method. Stop deployable is a more
+;;consistent target... which is why the extant method was nice.
 (defn compute-prefill [ent policy cycletime]
-  (let [p (ent :policy)
-        ts (protocols/start-deployable policy)
+  (let [ts (protocols/start-deployable policy)
         tf (protocols/stop-deployable policy)
+        cyclelength   (protocols/cycle-length policy)
         bogbudget (protocols/max-bog policy)]
-    (when (and (>= cycletime ts)
+    (when (and (>= cycletime ts) ;;deployable
                (<  cycletime tf))
-      (let [res (- bogbudget (- tf cycletime))]
-        (and (pos? res) res)))))
+      (let [progress     (double (/ cycletime cyclelength))
+            overlap      (protocols/overlap policy)
+            new-length   (- cyclelength (inc overlap))
+            ctprojected  (* progress new-length)
+            tfprogress   (double (/ tf cyclelength))
+            tfprojected  (* tfprogress new-length)
+            res          (long (- bogbudget (- tfprojected ctprojected)))]
+        (when (pos? res) res)))))
 
 ;;if we detect a prefill condition, we reduce the unit's
 ;;bog budget accordingly to space out deployments.
