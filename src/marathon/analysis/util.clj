@@ -168,3 +168,13 @@
     (when-let [msg (async/<! log-chan)]
         (do (println msg)
             (recur)))))
+
+
+(defn derive-phases [proj]
+  (->> proj
+       :tables
+       :PeriodRecords
+       tbl/table-records
+       (filter (complement (comp zero? :ToDay)))
+       (sort-by :FromDay)
+       (mapv (juxt :Name :FromDay :ToDay))))

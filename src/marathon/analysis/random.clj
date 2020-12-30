@@ -409,14 +409,25 @@
 (s/def ::phases (s/+ ::phase))
 
 (defn rand-runs
-  "Runs replications of the rand-target-model function."
+  "Runs replications of the rand-target-model function.
+   Mid-level function meant to be invoked from higher-level APIs.
+   Caller may supply
+   :reps - int, number of random replications
+   :phases - optional, sequence of [phase from to] :: [string int int],
+             derived from PeriodRecords if nil
+   :lower - lower bound for the supply variation multiplier, defaut 0.
+   :upper - upper bound for the supply variation multipler, default 1.
+   :seed - integer, random seed to use for all the replications, default +default-seed+.
+   :compo-lengths optional, map of {compo cyclelength} used for distribution
+                  random initial cycletimes, default default-compo-lengths ."
   [proj & {:keys [reps phases lower upper seed levels compo-lengths seed->randomizer]
            :or   {lower 0 upper 1 seed +default-seed+
                   compo-lengths default-compo-lengths}}]
-  ;;input validation, we probably should do more of this in general.
-  (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
   (let [seed->randomizer (or seed->randomizer #(default-randomizer % compo-lengths))
-        gen              (util/->gen seed)]
+        gen              (util/->gen seed)
+        phases           (or phases (util/derive-phases proj))]
+    ;;input validation, we probably should do more of this in general.
+    (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
     (apply concat
            (map (fn [n] (rand-target-model proj
                             :phases phases :lower lower :upper upper
