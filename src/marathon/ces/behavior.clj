@@ -961,26 +961,23 @@
 ;;clumping in addition to the constraint that no prefilling unit
 ;;will overlap on day 1...
 
-;;A simpler option is to just project the unit's lifecycle entirely and ignore
-;;the availability question... So project the unit onto a shorter
-;;(clength - (overlap + 1)) cycle. Then determine prefill based on that
-;;projection according to the existing method. Stop deployable is a more
-;;consistent target... which is why the extant method was nice.
+;;The projection scheme ends up being identical to just offsetting
+;;unit cycletimes by - (overlap + 1).  The only caveat is that we now
+;;have the possibility of units near cycletime of (start-deployable + overlap)
+;;becoming ineligible to deploy since the offset pushes their cycletime
+;;before start deployble.  So we allow them to have max prefill by
+;;flooring the cycletime at start-deployable.  We thus allow units close
+;;to start-deployable to have maximum prefill bog budget if they are
+;;selected for prefill deployments.  This should be unlikely.
 (defn compute-prefill [ent policy cycletime]
   (let [ts (protocols/start-deployable policy)
         tf (protocols/stop-deployable policy)
-        cyclelength   (protocols/cycle-length policy)
         bogbudget (protocols/max-bog policy)]
     (when (and (>= cycletime ts) ;;deployable
                (<  cycletime tf))
-      (let [progress     (double (/ cycletime cyclelength))
-            overlap      (protocols/overlap policy)
-            new-length   (- cyclelength (inc overlap))
-            ctprojected  (* progress new-length)
-            tfprogress   (double (/ tf cyclelength))
-            tfprojected  (* tfprogress new-length)
-            res          (long (- bogbudget (- tfprojected ctprojected)))]
-        (when (pos? res) res)))))
+      (let [overlap      (protocols/overlap policy)
+            ctprojected  (max (- cycletime (inc overlap)) ts)]
+        (long (- bogbudget (- tf ctprojected)))))))
 
 ;;if we detect a prefill condition, we reduce the unit's
 ;;bog budget accordingly to space out deployments.
