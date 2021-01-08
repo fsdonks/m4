@@ -754,7 +754,13 @@
 (def ^:constant +max-cycle-length+     10000)
 (def ^:constant +default-cycle-length+ 1095)
 
-
+;;moved from marathon.ces.entityfactory
+(defn finite-cycle-length [policy]
+  (let [clength (protocols/cycle-length policy)]
+    (if (> clength +max-cycle-length+)
+      (or (finite-else (protocols/expected-dwell policy)
+                            +default-cycle-length+))
+      clength)))
 
 ;;##Developer Notes
 

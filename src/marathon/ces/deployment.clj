@@ -51,7 +51,7 @@
     }
    })
 (defn demand-effect-categories [cat]
-  (get (query/get-rule cat) :effects))
+  (get (query/get-category cat) :effects))
 
 (defn location-based-policy? [d]
   (or (:override d))

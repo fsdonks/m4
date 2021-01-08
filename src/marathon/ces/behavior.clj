@@ -969,10 +969,21 @@
 ;;flooring the cycletime at start-deployable.  We thus allow units close
 ;;to start-deployable to have maximum prefill bog budget if they are
 ;;selected for prefill deployments.  This should be unlikely.
+
+;;Edit: we have a problem for policies where tf - ts is > BogBudget,
+;;since we end up with negative numbers.  This ends up increasing BOG
+;;for prefill. First manifested with an unexpected MaxUtilization and
+;;infinite policy cyclelength.  Working out a scheme to either warn
+;;or correct.
 (defn compute-prefill [ent policy cycletime]
   (let [ts (protocols/start-deployable policy)
         tf (protocols/stop-deployable policy)
-        bogbudget (protocols/max-bog policy)]
+        bogbudget (protocols/max-bog policy)
+        ;;addresses infinite cycle stuff, incorporates
+        ;;expected-dwell (assigned to max-dwell).
+        {:keys [max-bog max-dwell cycle-length max-mob]}
+          (u/cycle-stats policy)
+        tf (min tf max-dwell cycle-length)]
     (when (and (>= cycletime ts) ;;deployable
                (<  cycletime tf))
       (let [overlap      (protocols/overlap policy)
