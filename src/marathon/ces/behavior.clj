@@ -2102,6 +2102,8 @@
             unit           (reset! entity
                                    (-> unit ;;we change positionpolicy here....bad move?
                                        (merge  {;:positionpolicy positionB
+                                                ;;policy-change supercedes old deferred policy changes.
+                                                :deferred-policy-change nil
                                                 :policy         next-policy
                                                 :cycletime      cycletimeB})                                              
                                        (u/change-cycle tupdate)
