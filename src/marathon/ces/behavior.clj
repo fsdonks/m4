@@ -975,6 +975,31 @@
 ;;for prefill. First manifested with an unexpected MaxUtilization and
 ;;infinite policy cyclelength.  Working out a scheme to either warn
 ;;or correct.
+
+;;For any policy where the span of the deployable window is
+;;greater than the bogbudget, we have a situation where it's
+;;possible to get a negative number.  We apply a correction
+;;iff we have eligible deployers (within the interval [ts tf])
+;;where we project the monotonically decreasing prefill (negative
+;;numbers the further away you get from tf - bogbudget) onto
+;;a rotating sequence of prefills similar to the values we
+;;have for the units that had positive numbers.  To do this,
+;;we transform the negative prefills by computing their
+;;abs value's modulus relative to the bogbudget (bound),
+;;so they projected onto positive numbers within the span
+;;of [0 bound].  Then to get the ordering correct so we
+;;have a decreasing order of positive numbers, we
+;;subtract the result from the bound.  This gives
+;;us a nice repeating spread that's determined by
+;;cycletime, bogbudget, overlap, and the deployable
+;;window and "should" work with any policy.
+(defn inverse-clamp [bound x]
+  (if (> x -1)
+    x
+    (let [x (mod (- x) bound)
+          y (- bound x)]
+      y)))
+
 (defn compute-prefill [ent policy cycletime]
   (let [ts (protocols/start-deployable policy)
         tf (protocols/stop-deployable policy)
@@ -986,9 +1011,19 @@
         tf (min tf max-dwell cycle-length)]
     (when (and (>= cycletime ts) ;;deployable
                (<  cycletime tf))
-      (let [overlap      (protocols/overlap policy)
-            ctprojected  (max (- cycletime (inc overlap)) ts)]
-        (long (- bogbudget (- tf ctprojected)))))))
+      (let [overlap      (inc (protocols/overlap policy))
+            ctprojected  (max (- cycletime  overlap) ts)
+            res          (long (- bogbudget (- tf ctprojected)))
+            bound        (- bogbudget overlap)
+            clamped      (inverse-clamp   bound res)]
+        (or (and (>= clamped 0) (<= clamped bound) clamped)
+            (throw
+             (ex-info "prefill not in [0 .. bogbudget - (overlap + 1]"
+                      {:prefill clamped
+                       :policy-name (protocols/policy-name policy)
+                       :start-deployable ts
+                       :stop-deployable tf
+                       :overlap+1 overlap})))))))
 
 ;;if we detect a prefill condition, we reduce the unit's
 ;;bog budget accordingly to space out deployments.
