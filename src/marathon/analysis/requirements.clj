@@ -9,6 +9,7 @@
                           [setup :as setup]
                           [demand :as demand]]
             [marathon [analysis :as a] [observers :as obs]]
+            [marathon.analysis.util :as u]
             [clojure.core [async :as async]]))
 
 ;;Utility functions
@@ -940,67 +941,6 @@
     (->> distros
          (map (requirements-by tbls peaks search n)))))
 
-;;https://gist.github.com/stathissideris/8659706
-(defn seq!! 
-   "Returns a (blocking!) lazy sequence read from a channel.  Throws on err values" 
-   [c] 
-   (lazy-seq 
-    (when-let [v (async/<!! c)]
-      (if (instance? Throwable v)
-        (throw v)
-        (cons v (seq!! c))))))
-
-;;Trying to avoid the crap that's happening
-;;with pipeline...we get stalled out on
-;;long-running tasks, when we could still be making
-;;progress...
-(defn producer->consumer!! [n out f jobs]
-  (let [;jobs    (async/chan 10)
-        done?   (atom 0)
-        res     (async/chan n)        
-        workers (dotimes [i n]
-                  (async/thread
-                    (loop []
-                      (if-let [nxt (async/<!! jobs)]
-                        (let [res (f nxt)
-                              _   (async/>!! out res)]
-                          (recur))
-                        (let [ndone (swap! done? inc)]
-                          (when (= ndone n)
-                            (do (async/close! out)
-                                (async/>!! res true))))))))]
-    res))
-
-(defn producer->consumer [n out f jobs]
-  (let [;jobs    (async/chan 10)
-        done?   (atom 0)
-        res     (async/chan n)        
-        workers (dotimes [i n]
-                  (async/go
-                    (loop []
-                      (if-let [nxt (async/<! jobs)]
-                        (let [res (f nxt)
-                              _   (async/>! out res)]
-                          (recur))
-                        (let [ndone (swap! done? inc)]
-                          (when (= ndone n)
-                            (do (async/close! out)
-                                (async/>! res true))))))))]
-    res))
-
-
-(defn pmap! [n f xs]
-  (let [out     (async/chan 10)
-        in      (async/chan 10)
-        _       (async/onto-chan in (seq xs))
-        pipe    (producer->consumer
-                    n  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
-                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
-                   out
-                   f
-                   in)]
-    (seq!! out)))
-
 ;;a little box type for our requirements runs...
 (defn ->error [input ^Throwable e]
   (Throwable. (str input) e))
@@ -1023,23 +963,17 @@
                                     (distros (:SRC %))))
                       (demands->src-peaks))
         n       (atom (count peaks))
-        src-distros->requirements  (requirements-by tbls peaks search n)
-        out     (async/chan 10)
+        ;;allows us to close the channel on error.
         in      (async/chan 10)
         _       (async/onto-chan in (seq distros))
+        src-distros->requirements  (requirements-by tbls peaks search n)
         require-or-err  (fn require-or-err [distros]
                           (try  (src-distros->requirements  distros)
                                 (catch Exception e
                                   (do (async/go (async/close! in))
                                       (->error distros e)))))
-        pipe    (producer->consumer
-                    2  #_(.availableProcessors (Runtime/getRuntime)) ;; Parallelism factor
-                                        ;                 (doto (a/chan) (a/close!))                  ;; Output channel - /dev/null
-                   out
-                   require-or-err #_src-distros->requirements
-                   in)
         ]
-    (seq!! out)))
+    (u/unordered-pmap (u/guess-physical-cores) require-or-err in))) 
 
 (def supply-fields [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
                     :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position #_:Original
@@ -1185,7 +1119,7 @@
     (if false ;(io/exists? "emps.edn")
       (clojure.edn/read-string (slurp "emps.edn"))      
       (->> (range 1 1690)
-           (pmap! 2 (fn [i] (do (println i) [i (calculate-requirement (distribute razero (:src razero) i) default-distance)])) )
+           (u/pmap 2 (fn [i] (do (println i) [i (calculate-requirement (distribute razero (:src razero) i) default-distance)])) )
            (into [] ))))
 
   (def emps (into emps bisections))

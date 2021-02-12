@@ -1,20 +1,125 @@
 (ns marathon.analysis.util
+  (:refer-clojure :exclude [pmap])
   (:require [clojure.core.async :as async]
             [marathon     [analysis :as a]]
             [marathon.ces [core :as c] [query :as query]]
             [spork.entitysystem [store :as store]]
             [spork.util [io :as io] [table :as tbl]]))
 
-(defn pmap!
-  ([n f xs]
-   (let [output-chan (async/chan)]
-     (async/pipeline-blocking n
-                          output-chan
-                          (map f)
-                          (async/to-chan xs))
-     (async/<!! (async/into [] output-chan))))
-  ([f xs] (pmap! (.availableProcessors (Runtime/getRuntime)) f  xs)))
+;;https://gist.github.com/stathissideris/8659706
+(defn seq!! 
+  "Returns a (blocking!) lazy sequence read from a channel.  Throws on err values" 
+  [c] 
+  (lazy-seq 
+   (when-let [v (async/<!! c)]
+     (if (instance? Throwable v)
+       (throw v)
+       (cons v (seq!! c))))))
 
+(defn chan? [x]
+  (instance? clojure.core.async.impl.channels.ManyToManyChannel x))
+
+(defn guess-physical-cores
+  "Hueristic used to account for likely prevalent
+   hyperthreading influencing the supposed available
+   processor count.  For some runs, we would like to
+   stick close to the logical core count.  A useful
+   heuristic is to just divide by 2."
+  []
+  (let [n (.availableProcessors (Runtime/getRuntime))]
+    (case n
+      1 1
+      (quot n 2))))
+
+(defn as-chan [xs]
+  (cond (chan? xs) xs
+        (coll? xs) (async/to-chan xs)
+        :else (throw (ex-info "unknown channel type" {:in xs}))))
+
+(defn pmap>
+  "Like clojure.core/pmap, except it uses work stealing and a dedicated thread pool
+   via core.async's pipeline-blocking.  The input xs may be a collection or a channel.
+   Collections will be coerced to internal channels. Returns a channel."
+  ([n f xs]
+   (let [output-chan (async/chan (* 2 n))]
+     (async/pipeline-blocking n
+                              output-chan
+                              (map f)
+                              (as-chan xs))
+      output-chan))
+  ([f xs] (pmap> (.availableProcessors (Runtime/getRuntime)) f  xs)))
+
+(defn pmap!
+  "Like clojure.core/pmap, except it uses work stealing and a dedicated thread pool
+   via core.async's pipeline-blocking.  Returns a vector."
+  ([n f xs] (async/<!! (async/into [] (pmap> n f xs))))
+  ([f xs]   (pmap! (.availableProcessors (Runtime/getRuntime)) f  xs)))
+
+(defn pmap
+  "Like clojure.core/pmap, except it uses work stealing and a dedicated thread pool
+   via core.async's pipeline-blocking.  Returns a lazy sequence realized from a channel."
+  ([n f xs] (seq!!  (pmap> n f xs)))
+  ([f xs]   (pmap (.availableProcessors (Runtime/getRuntime)) f  xs)))
+
+
+;;Trying to avoid the crap that's happening
+;;with pipeline...we get stalled out on
+;;long-running tasks, when we could still be making
+;;progress...
+(defn producer->consumer!! [n out f jobs]
+  (let [;jobs    (async/chan 10)
+        done?   (atom 0)
+        res     (async/chan n)
+        workers (dotimes [i n]
+                  (async/thread
+                    (loop []
+                      (if-let [nxt (async/<!! jobs)]
+                        (let [res (f nxt)
+                              _   (async/>!! out res)]
+                          (recur))
+                        (let [ndone (swap! done? inc)]
+                          (when (= ndone n)
+                            (do (async/close! out)
+                                (async/>!! res true))))))))]
+    res))
+#_
+(defn producer->consumer [n out f jobs]
+  (let [done?   (atom 0)
+        res     (async/chan n)
+        workers (dotimes [i n]
+                  (async/go
+                    (loop []
+                      (if-let [nxt (async/<! jobs)]
+                        (let [res (f nxt)
+                              _   (async/>! out res)]
+                          (recur))
+                        (let [ndone (swap! done? inc)]
+                          (when (= ndone n)
+                            (do (async/close! out)
+                                (async/>! res true))))))))]
+    res))
+
+
+(defn unordered-pmap>
+  ([n f xs]
+   (let [out     (async/chan (* n 2))
+         in      (as-chan xs) #_(async/chan (* n 2))
+         ;_       (async/onto-chan in (seq xs))
+         pipe    (producer->consumer!!
+                  n
+                  out
+                  f
+                  in)]
+      out))
+  ([f xs] (unordered-pmap> (guess-physical-cores) f xs)))
+
+(defn unordered-pmap
+  ([n f xs] (seq!! (unordered-pmap> n f xs)))
+  ([f xs] (unordered-pmap (guess-physical-cores) f xs)))
+
+(defn unordered-pmap!
+  ([n f xs] (async/into [] (unordered-pmap> n f xs)))
+  ([f xs] (unordered-pmap! (guess-physical-cores) f xs)))
 
 ;;some generic stuff migrated from the tacmm scripting..
 ;;formerly tacmm-key

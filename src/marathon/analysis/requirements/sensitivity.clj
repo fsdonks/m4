@@ -1,9 +1,11 @@
 (ns marathon.analysis.requirements.sensitivity
   (:require [spork.util
                [io :as io]
-             [table :as tbl]]
+             [table :as tbl]
+             [general :as gen]]
             [marathon.analysis :as a]
-            [marathon.analysis.requirements :as r]))
+            [marathon.analysis [requirements :as r] [util :as u]]
+            [clojure.core.async :as async]))
 
 (def supply-fields
   [:Type :Enabled :Quantity :SRC :Component :OITitle :Name
@@ -256,7 +258,9 @@
   (let [init (vec (sort xs))
         segment {:l (first init)
                  :r (last init)
-                 :unvisited init}
+                 :unvisited (case (count init)
+                              (1 2) nil
+                              (vec (rest (butlast init)))) #_init}
         pruned  (atom nil)
         calls   (atom 0)
         sample (fn [x] (swap! calls inc) (f x))]
@@ -511,6 +515,26 @@
           [src nil])
       )))
 
+
+(defn interpolate [keyf lerpf xs results]
+  (let [expected (atom (sort xs))
+        knowns   (group-by keyf results)]
+    (concat (apply concat
+                   (for [[[l ls] [r rs]] (->> knowns
+                                              (sort-by key)
+                                              (partition 2 1))]
+                     (let [[missing remaining] (->> @expected
+                                                    (drop-while #(= % l))
+                                                    (split-with #(< % r)))]
+                       (reset! expected remaining)
+                       (concat ls (mapcat (fn [k] (lerpf k ls)) missing)))))
+            (knowns (first @expected)))))
+
+;;helper function to expand our sparse results that form a discrete signal
+;;into complete results interpolated by expected integer sampling points.
+(defn expand-missing [xs results]
+  (interpolate :bound (fn [b xs] (map #(assoc % :bound b) xs)) xs results))
+
 ;;revamped, merged with tables->requirements-sync
 (defn requirements-contour-faster
   [proj xs  & {:keys [dtype search src-filter]
@@ -532,21 +556,64 @@
            ;;for each [src distro] we want to compute a requirements analysis contour
            ;;for the points in xs.
            [src
-             (extrema-search-generic (fn [[src distro bound :as sd]]
-                                     (binding [r/*distance-function*    r/contiguous-distance
-                                               r/*contiguity-threshold* bound]
-                                       (assoc (second (src-distros->requirements sd)) :bound bound)
-                                       #_(try
-                                            (catch Exception e (r/->error sd e)))))
-                                   xs
-                                   :keyf (fn [bound] [src distro bound])
-                                   :weightf (fn [reqstate] (requirements-sum reqstate)))])
+            (extrema-search-generic
+             (fn [[src distro bound :as sd]]
+               (binding [r/*distance-function*    r/contiguous-distance
+                         r/*contiguity-threshold* bound]
+                 (assoc (second (src-distros->requirements sd)) :bound bound)))
+             xs
+             :keyf (fn [bound] [src distro bound])
+             :weightf (fn [reqstate] (requirements-sum reqstate)))])
          (mapcat (fn [[src search-res]]
-                   (let [{:keys [pruned calls]} (meta search-res)]
-                     (println [:completed src  :pruned (count pruned) :called calls]))
-                   (for [[weight reqstate] (sort-by first (recover-raw search-res))
-                         r                 (-> reqstate :supply)]
-                     (assoc r :bound (reqstate :bound))))))))
+                   (let [{:keys [pruned calls]} (meta search-res)
+                         p (count pruned)]
+                     (println [:completed src  :pruned p :called calls
+                               :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
+                     (for [[weight reqstate] (sort-by first (recover-raw search-res))
+                           r                 (-> reqstate :supply)]
+                       (assoc r :bound (reqstate :bound))))))
+         (expand-missing xs))))
+
+(defn requirements-contour-faster-async
+  [proj xs  & {:keys [dtype search src-filter]
+                   :or {search r/bisecting-convergence ;iterative-convergence
+                        dtype  :proportional
+                        src-filter (fn [_] true)}}]
+  (let [tbls    (-> (a/load-requirements-project proj)      :tables)
+        distros (into {} (->> (r/aggregate-distributions tbls :dtype dtype)
+                              (filter (fn [[src _]]
+                                        (src-filter src)))))
+        peaks   (->>  (:DemandRecords tbls)
+                      (tbl/table-records)
+                      (filter #(and (:Enabled %)
+                                    (distros (:SRC %))))
+                      (r/demands->src-peaks))
+        n       (atom (count peaks)) ;;revisit.
+        src-distros->requirements  (r/requirements-by tbls peaks search n)]
+    (->> distros
+         (u/unordered-pmap
+          (u/guess-physical-cores)
+          (fn extrema-requirements [[src distro :as sd]]
+            ;;for each [src distro] we want to compute a requirements analysis contour
+            ;;for the points in xs.
+            [src
+             (extrema-search-generic
+              (fn [[src distro bound :as sd]]
+                (binding [r/*distance-function*    r/contiguous-distance
+                          r/*contiguity-threshold* bound]
+                  (assoc (second (src-distros->requirements sd)) :bound bound)))
+              xs
+              :keyf (fn [bound] [src distro bound])
+              :weightf (fn [reqstate] (requirements-sum reqstate)))]))
+         (mapcat (fn [[src search-res]]
+                   (let [{:keys [pruned calls]} (meta search-res)
+                         p (count pruned)]
+                     (println [:completed src  :pruned p :called calls
+                               :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
+                     (for [[weight reqstate] (sort-by first (recover-raw search-res))
+                           r                 (-> reqstate :supply)]
+                       (assoc r :bound (reqstate :bound))))))
+         (expand-missing xs))))
 
 ;;testing
 
