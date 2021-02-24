@@ -391,7 +391,7 @@
 
 ;;in the parlance of extrema-search-generic, this will serve as our
 ;;weightf function to project raw results onto a numeric weight.
-(defn requirements-sum
+(defn requirements-sum  ;;should replace this with total?
   "Compute a simple numeric result for the total requirement for
    a given requirement state returned by a search.  Yields a
    simple sum of the quantities from the resulting supply records.
@@ -402,6 +402,15 @@
                :supply)
        (map (comp long :Quantity))
        (reduce + 0)))
+
+;;better function for extracting the growth scale factor,
+;;which should also be a nice monotonically increasing integer value.
+(defn requirements-total
+  [reqstate]
+  (some-> reqstate
+          :steps
+          peek ;;get the last one, which converged
+          :total))
 
 #_(defn tables->requirements-sync
   "Given a database of distributions, and the required tables for a marathon 
@@ -495,19 +504,76 @@
 ;;expects a function that returns a simple number, so we
 ;;need to probably just sum the requirements.
 
-#_
-(defn requirements-by
+(defn bound-fn [bound f & args]
+  (binding [r/*distance-function*    r/contiguous-distance
+            r/*contiguity-threshold* bound]
+    (apply f args)))
+
+   ; (assoc (second (sd->requirements sd)) :bound bound)))
+
+
+(defn extrema-requirements [src-distros->requirements [src distro :as sd]]
+  ;;for each [src distro] we want to compute a requirements analysis contour
+  ;;for the points in xs.
+  (let [[l r] ((juxt first last) xs)
+        upper  (bound-fn l
+                 src-distros->requirements sd)
+        ub     (requirements-total upper)
+        bound-info (atom (sorted-map l ub))
+        lower  (bound-fn r
+                 src-distros->requirements sd :bound-info @bound-info)
+        lb     (requirements-total lower)
+        ;;precomputed function calls, don't have to re-run
+        known  {l upper   r lower}
+        _      (swap! bound-info assoc lower lb)]
+  [src
+   (extrema-search-generic
+    (fn [[src distro bound :as sd]]
+      (let [[_ res] (or (known bound) ;;leverage our cache.
+                        (bound-fn bound
+                          src-distros->requirements sd :bound-info @bound-info))
+            total (requirements-total res)
+            ;;update our cmdd bound info going forward with newly discovered bounds
+            _     (swap! bound-info assoc bound total)]
+        (assoc res :bound bound))))
+    xs
+    :keyf (fn [bound] [src distro bound])
+    :weightf (fn [reqstate] (requirements-total reqstate))]))
+
+;;We can modify requirements-by to include our pruning information.
+;;If we maintain a map of {SRC {CMDD Optimum}}, then
+;;can compute bounds for each run.  Specifically:
+
+;;Since cmdd is monotonically decreasing, we want to return
+;;a bound of [lower upper] where lower < upper, and our
+;;map is keyed in lower-CMDD ... higher-CMMD, but the
+;;associated values (total growth) are in descending order,
+;;we return the bound pairs in reverse order for easier access.
+(defn compute-bounds [bound bound-info]
+  (->> (reduce-kv
+        (fn [acc n b]
+          (cond (> n bound ) (reduced [(first acc) [n b]])
+                (= n bound) (reduced [[n b] [n b]])
+                :else       [[n b] nil])) nil bound-info)
+       (map (fn [kv]
+              (when kv
+                (second kv))))
+       reverse))
+
+(defn bounded-requirements-by
   "Helper function for our parallel requirements computation."
   [tbls peaks search n]
-  (fn [[src compo->distros]]
+  (fn [[src compo->distros] & {:keys [src->bound-info] :or {src->bound-info {}}}]
     ;;for each src, we create a reqstate
     (if-let [peak (peaks src)]
       (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
             ;;We now pack along the peak demand for extra context.
-            reqstate       (assoc (load-src tbls src compo->distros)
+            reqstate       (assoc (r/load-src tbls src compo->distros)
                                   :peak peak)
             _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
-            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
+            [lb ub]        (some-> src src->bound-info compute-bounds)
+            ;;if we have information we can use it to prune.
+            [lower upper]  (r/find-bounds reqstate :init-lower (or lb 0) :init-upper (or ub peak))]
         (if (== lower upper 0)
           [src reqstate]
           [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
@@ -535,10 +601,9 @@
 (defn expand-missing [xs results]
   (interpolate :bound (fn [b xs] (map #(assoc % :bound b) xs)) xs results))
 
-;;revamped, merged with tables->requirements-sync
 (defn requirements-contour-faster
   [proj xs  & {:keys [dtype search src-filter]
-                   :or {search r/bisecting-convergence ;iterative-convergence
+                   :or {search r/bisecting-convergence
                         dtype  :proportional
                         src-filter (fn [_] true)}}]
   (let [tbls    (-> (a/load-requirements-project proj)      :tables)
@@ -551,49 +616,12 @@
                                     (distros (:SRC %))))
                       (r/demands->src-peaks))
         n       (atom (count peaks)) ;;revisit.
-        src-distros->requirements  (r/requirements-by tbls peaks search n)]
-    (->> (for [[src distro :as sd] distros]
-           ;;for each [src distro] we want to compute a requirements analysis contour
-           ;;for the points in xs.
-           [src
-            (extrema-search-generic
-             (fn [[src distro bound :as sd]]
-               (binding [r/*distance-function*    r/contiguous-distance
-                         r/*contiguity-threshold* bound]
-                 (assoc (second (src-distros->requirements sd)) :bound bound)))
-             xs
-             :keyf (fn [bound] [src distro bound])
-             :weightf (fn [reqstate] (requirements-sum reqstate)))])
-         (mapcat (fn [[src search-res]]
-                   (let [{:keys [pruned calls]} (meta search-res)
-                         p (count pruned)]
-                     (println [:completed src  :pruned p :called calls
-                               :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
-                     (for [[weight reqstate] (sort-by first (recover-raw search-res))
-                           r                 (-> reqstate :supply)]
-                       (assoc r :bound (reqstate :bound))))))
-         (expand-missing xs))))
-
-(defn requirements-contour-faster-async
-  [proj xs  & {:keys [dtype search src-filter]
-                   :or {search r/bisecting-convergence ;iterative-convergence
-                        dtype  :proportional
-                        src-filter (fn [_] true)}}]
-  (let [tbls    (-> (a/load-requirements-project proj)      :tables)
-        distros (into {} (->> (r/aggregate-distributions tbls :dtype dtype)
-                              (filter (fn [[src _]]
-                                        (src-filter src)))))
-        peaks   (->>  (:DemandRecords tbls)
-                      (tbl/table-records)
-                      (filter #(and (:Enabled %)
-                                    (distros (:SRC %))))
-                      (r/demands->src-peaks))
-        n       (atom (count peaks)) ;;revisit.
-        src-distros->requirements  (r/requirements-by tbls peaks search n)]
+        src-distros->requirements  (bounded-requirements-by #_r/requirements-by tbls peaks search n)]
     (->> distros
          (u/unordered-pmap
           (u/guess-physical-cores)
-          (fn extrema-requirements [[src distro :as sd]]
+          #(extrema-requirements src-distros->requirements %)
+          #_(fn extrema-requirements [[src distro :as sd]]
             ;;for each [src distro] we want to compute a requirements analysis contour
             ;;for the points in xs.
             [src
