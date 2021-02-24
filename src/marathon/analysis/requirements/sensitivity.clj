@@ -415,32 +415,32 @@
   (let [ _    (println [:computing-requirements src :remaining (swap! n dec)])
         [l r] ((juxt first last) xs)
         _     (println [:initializing-bounds-from-cmdds l r])
-        [_ upper]  (with-cmdd l
-                     src-distros->requirements sd)
-        ub     (requirements-total upper)
-        _      (println {:ub   (or ub :none)
-                         :ukeys (keys upper)})
-        bound-info (atom (sorted-map l ub))
-        [_ lower]  (with-cmdd r
-                 src-distros->requirements sd :bound-info @bound-info :bound r)
-        lb     (requirements-total lower)
-        ;;precomputed function calls, don't have to re-run
-        known  {l [src upper]
-                r [src lower]}
-        _      (swap! bound-info assoc r lb)]
-  [src
-   (extrema-search-generic
-    (fn [[src distro bound :as sd]]
-      (let [[_ res] (or (known bound) ;;leverage our cache.
-                        (with-cmdd bound
-                          src-distros->requirements sd :bound-info @bound-info :bound bound))
-            total (requirements-total res)
-            ;;update our cmdd bound info going forward with newly discovered bounds
-            _     (swap! bound-info assoc bound total)]
-        (assoc res :bound bound)))
-    xs
-    :keyf (fn [bound] [src distro bound])
-    :weightf (fn [reqstate] (requirements-total reqstate)))]))
+        [_ upper] (with-cmdd l
+                    src-distros->requirements sd)
+        ub     (requirements-total upper)]
+    (if-not ub
+      [src nil]
+      (let [bound-info (atom (sorted-map l ub))
+            [_ lower]  (with-cmdd r
+                         src-distros->requirements sd :bound-info @bound-info :bound r)
+            lb     (requirements-total lower)
+            ;;precomputed function calls, don't have to re-run
+            known  {l [src upper]
+                    r [src lower]}
+            _      (swap! bound-info assoc r lb)]
+        [src
+         (extrema-search-generic
+          (fn [[src distro bound :as sd]]
+            (let [[_ res] (or (known bound) ;;leverage our cache.
+                              (with-cmdd bound
+                                src-distros->requirements sd :bound-info @bound-info :bound bound))
+                  total (requirements-total res)
+                  ;;update our cmdd bound info going forward with newly discovered bounds
+                  _     (swap! bound-info assoc bound total)]
+              (assoc res :bound bound)))
+          xs
+          :keyf (fn [bound] [src distro bound])
+          :weightf (fn [reqstate] (requirements-total reqstate)))]))))
 
 ;;We can modify requirements-by to include our pruning information.
 ;;If we maintain a map of {SRC {CMDD Optimum}}, then
@@ -476,7 +476,9 @@
                              (println [:pre-supplied-bounds {:bound-info bound-info :bound bound}])
                              (compute-bounds bound bound-info))
             ;;if we have information we can use it to prune.
-            [lower upper]  (r/find-bounds reqstate :init-lower (or lb 0) :init-upper (or ub peak))]
+            [lower upper]  (if  ub
+                             [(or lb 0) ub]
+                             (r/find-bounds reqstate :init-lower (or lb 0) :init-upper (or ub peak)))]
         (if (== lower upper 0)
           [src reqstate]
           [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
@@ -569,6 +571,7 @@
          (u/unordered-pmap
           (u/guess-physical-cores)
           #(extrema-requirements src-distros->requirements xs n %))
+         (keep #(when (second %) %)) ;;handling empty results, kind of jank.
          (mapcat (fn [[src search-res]]
                    (let [{:keys [pruned calls]} (meta search-res)
                          p (count pruned)]
@@ -595,6 +598,9 @@
   ;;gives us table records with bound information now.
   ;;currently prints out pruning information as well.
   (def res (requirements-contour-faster path (range 30)))
+
+  (time (def res (vec (requirements-contour-faster-pruned path
+                          (concat (range 21) (range 30 91 10))))))
   )
 
 
