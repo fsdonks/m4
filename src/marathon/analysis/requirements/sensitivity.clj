@@ -12,6 +12,8 @@
    :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position
    :bound])
 
+;;Deprecated Legacy API (WIP)
+;;===========================
 (defn contour-table [bound-tables]
   (->> (map :requirement bound-tables)
        tbl/concat-tables
@@ -39,6 +41,9 @@
   (tbl/paste-records! res)
 
   )
+
+;;Current
+;;=======
 
 ;;pending.
 ;;we can significantly speed up the process if we cache information between runs,
@@ -161,28 +166,6 @@
       [[(inc l)   mid]
        [(inc mid)       (dec r)]])))
 
-;;this is the naive version.
-(defn extrema-search [f xs]
-  (let [init (vec (sort xs))
-        segment [(first init) (last init)]
-        calls   (atom 0)
-        sample (fn [x] (swap! calls inc) (f x))]
-    (loop [known   {}
-           pending [segment]]
-      (if-let [[l r] (peek pending)]
-        ;;pick a segment off the stack and update, neither point should be
-        ;;known.
-        (let [_ (println {:visiting [l r] :pending pending :known known})
-              singular? (== l r)
-              fl    (sample l)
-              fr    (if-not singular? (sample r) fl)]
-          (recur (assoc known l fl r fr)
-                 (if (== fl fr)
-                   (pop pending)
-                   (reduce conj (pop pending) (subdivide l r)))))
-        ;;otherwise we're done, report the inflections.
-        (with-meta known {:calls @calls})))))
-
 
 ;;given a segment and some unknowns,
 ;;sort the unknowns by segment, creating a pending
@@ -196,44 +179,6 @@
     (->> [(when (seq ls) {:l (first ls) :r (last ls) :unvisited ls})
           (when (seq rs) {:l (first rs) :r (last rs) :unvisited rs})]
          (filter identity))))
-
-;;So extrema search can provide significant savings for us
-;;computationally.  We still end up doing more work than necessary,
-;;since we're not letting the caller's requested point spread (xs)
-;;drive the search.
-;;What we'd like to do is maintain some information regarding
-;;containment.
-#_(defn extrema-search-sparse [f xs]
-  (let [init (vec (sort xs))
-        segment {:l (first init)
-                 :r (last init)
-                 :unvisited init}
-        pruned  (atom nil)
-        calls   (atom 0)
-        sample (fn [x] (swap! calls inc) (f x))]
-    (loop [known   {}
-           pending [segment]]
-      (if-let [{:keys [l r unvisited] :as node} (peek pending)]
-        ;;pick a segment off the stack and update, neither point should be
-        ;;known.
-        (let [singular? (== l r)
-              fl    (sample l)
-              fr    (if-not singular? (sample r) fl)
-              constant? (== fl fr)
-              new-known (assoc known l fl r fr)
-              _        (if (and constant? (not singular?))
-                         (swap! pruned concat unvisited))
-              ;;when we put a segment on the stack, it should be shrink-wrapped.
-              ;;We also partition the unknown points into each segment. So when
-              ;;we subdivide, we pack points into the l/r segments, and
-              ;;shrinkwrap the segment to be the minima/maxima of the contained
-              ;;points.
-              new-segments (when-not constant?
-                             (-> (subdivide l r)
-                                 (partition-segments (rest (butlast unvisited)))))]
-          (recur new-known (reduce conj (pop pending) new-segments)))
-        ;;otherwise we're done, report the inflections.
-        (with-meta known {:pruned (vec @pruned) :calls @calls})))))
 
 ;;we're working with a function f(x) = y, where we expect x to be numeric
 ;;and y to be numeric.  The problem in practice is, we have functions that take
@@ -363,26 +308,6 @@
 ;;The next step will be replacing bisecting-search with one that
 ;;incorporates CMDD-based pruning information.
 
-#_
-(defn requirements-by
-  "Helper function for our parallel requirements computation."
-  [tbls peaks search n]
-  (fn [[src compo->distros]]
-    ;;for each src, we create a reqstate
-    (if-let [peak (peaks src)]
-      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
-            ;;We now pack along the peak demand for extra context.
-            reqstate       (assoc (load-src tbls src compo->distros)
-                                  :peak peak)
-            _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
-            [lower upper]  (find-bounds reqstate :init-lower 0 :init-upper peak)]
-        (if (== lower upper 0)
-          [src reqstate]
-          [src (search reqstate :init-lower lower :init-upper upper :init-known? {upper 0})]))
-      (do (println [:skipping-src src :has-no-demand])
-          [src nil])
-      )))
-
 ;;instead of the async version where we're doing n requirements analyses and
 ;;allow work stealing, we'll focus on doing the n requirements analysis [src distros]
 ;;synchronously, and then do the extrema search with additional constraint information
@@ -391,6 +316,7 @@
 
 ;;in the parlance of extrema-search-generic, this will serve as our
 ;;weightf function to project raw results onto a numeric weight.
+;;DEPRECATED
 (defn requirements-sum  ;;should replace this with total?
   "Compute a simple numeric result for the total requirement for
    a given requirement state returned by a search.  Yields a
@@ -412,33 +338,7 @@
           peek ;;get the last one, which converged
           :total))
 
-#_(defn tables->requirements-sync
-  "Given a database of distributions, and the required tables for a marathon 
-   project, computes a sequence of [src {compo requirement}] for each src."
-  [tbls & {:keys [dtype search src-filter]
-           :or {search bisecting-convergence ;iterative-convergence
-                dtype  :proportional
-                src-filter (fn [_] true)}}]
-  (let [;;note: we can also derive aggd based on supplyrecords, we look for a table for now.
-        distros (into {} (->> (aggregate-distributions tbls :dtype dtype)
-                              (filter (fn [[src _]]
-                                        (src-filter src)))))
-        peaks   (->>  (:DemandRecords tbls)
-                      (tbl/table-records)
-                      (filter #(and (:Enabled %)
-                                    (distros (:SRC %))))
-                      (demands->src-peaks))
-        n       (atom (count peaks))
-        src-distros->requirements  (requirements-by tbls peaks search n)]
-    (mapv (fn compute-reqs [src-distros]
-            ;;for each cmdd value, we want to compute multiple requirements,
-            ;;and do so using extrema-search. Assume we have multiple cmdd's.
-            (try  (src-distros->requirements src-distros)
-                  (catch Exception e (->error src-distros e))))
-          (seq distros))))
-
-
-
+;;pending, may make the convergence more fine-grained async.
 #_
 (defn bisecting-convergence
   "reqstate is a map of information for a basic requirements
@@ -504,41 +404,39 @@
 ;;expects a function that returns a simple number, so we
 ;;need to probably just sum the requirements.
 
-(defn bound-fn [bound f & args]
-  (binding [r/*distance-function*    r/contiguous-distance
-            r/*contiguity-threshold* bound]
-    (apply f args)))
+(defmacro with-cmdd [bound f & args]
+  `(binding [~'r/*distance-function*    ~'r/contiguous-distance
+             ~'r/*contiguity-threshold* ~bound]
+    (~f ~@args)))
 
-   ; (assoc (second (sd->requirements sd)) :bound bound)))
-
-
-(defn extrema-requirements [src-distros->requirements [src distro :as sd]]
+(defn extrema-requirements [src-distros->requirements xs n [src distro :as sd]]
   ;;for each [src distro] we want to compute a requirements analysis contour
   ;;for the points in xs.
-  (let [[l r] ((juxt first last) xs)
-        upper  (bound-fn l
+  (let [ _    (println [:computing-requirements src :remaining (swap! n dec)])
+        [l r] ((juxt first last) xs)
+        upper  (with-cmdd l
                  src-distros->requirements sd)
         ub     (requirements-total upper)
         bound-info (atom (sorted-map l ub))
-        lower  (bound-fn r
+        lower  (with-cmdd r
                  src-distros->requirements sd :bound-info @bound-info)
         lb     (requirements-total lower)
         ;;precomputed function calls, don't have to re-run
         known  {l upper   r lower}
-        _      (swap! bound-info assoc lower lb)]
+        _      (swap! bound-info assoc r lb)]
   [src
    (extrema-search-generic
     (fn [[src distro bound :as sd]]
       (let [[_ res] (or (known bound) ;;leverage our cache.
-                        (bound-fn bound
+                        (with-cmdd bound
                           src-distros->requirements sd :bound-info @bound-info))
             total (requirements-total res)
             ;;update our cmdd bound info going forward with newly discovered bounds
             _     (swap! bound-info assoc bound total)]
-        (assoc res :bound bound))))
+        (assoc res :bound bound)))
     xs
     :keyf (fn [bound] [src distro bound])
-    :weightf (fn [reqstate] (requirements-total reqstate))]))
+    :weightf (fn [reqstate] (requirements-total reqstate)))]))
 
 ;;We can modify requirements-by to include our pruning information.
 ;;If we maintain a map of {SRC {CMDD Optimum}}, then
@@ -566,8 +464,7 @@
   (fn [[src compo->distros] & {:keys [src->bound-info] :or {src->bound-info {}}}]
     ;;for each src, we create a reqstate
     (if-let [peak (peaks src)]
-      (let [_ (println [:computing-requirements src :remaining (swap! n dec)])
-            ;;We now pack along the peak demand for extra context.
+      (let [;;We now pack along the peak demand for extra context.
             reqstate       (assoc (r/load-src tbls src compo->distros)
                                   :peak peak)
             _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
@@ -601,6 +498,9 @@
 (defn expand-missing [xs results]
   (interpolate :bound (fn [b xs] (map #(assoc % :bound b) xs)) xs results))
 
+;;API
+;;===
+
 (defn requirements-contour-faster
   [proj xs  & {:keys [dtype search src-filter]
                    :or {search r/bisecting-convergence
@@ -616,12 +516,11 @@
                                     (distros (:SRC %))))
                       (r/demands->src-peaks))
         n       (atom (count peaks)) ;;revisit.
-        src-distros->requirements  (bounded-requirements-by #_r/requirements-by tbls peaks search n)]
+        src-distros->requirements  (r/requirements-by tbls peaks search n)]
     (->> distros
          (u/unordered-pmap
           (u/guess-physical-cores)
-          #(extrema-requirements src-distros->requirements %)
-          #_(fn extrema-requirements [[src distro :as sd]]
+          (fn extrema-requirements [[src distro :as sd]]
             ;;for each [src distro] we want to compute a requirements analysis contour
             ;;for the points in xs.
             [src
@@ -643,6 +542,43 @@
                        (assoc r :bound (reqstate :bound))))))
          (expand-missing xs))))
 
+;;Pending version with additional improvement.
+(defn requirements-contour-faster-pruned
+  [proj xs  & {:keys [dtype search src-filter]
+                   :or {search r/bisecting-convergence
+                        dtype  :proportional
+                        src-filter (fn [_] true)}}]
+  (let [tbls    (-> (a/load-requirements-project proj)      :tables)
+        distros (into {} (->> (r/aggregate-distributions tbls :dtype dtype)
+                              (filter (fn [[src _]]
+                                        (src-filter src)))))
+        peaks   (->>  (:DemandRecords tbls)
+                      (tbl/table-records)
+                      (filter #(and (:Enabled %)
+                                    (distros (:SRC %))))
+                      (r/demands->src-peaks))
+        n       (atom (count peaks)) ;;revisit.
+        src-distros->requirements  (bounded-requirements-by tbls peaks search n)]
+    (->> distros
+         (u/unordered-pmap
+          (u/guess-physical-cores)
+          #(extrema-requirements src-distros->requirements xs n %))
+         (mapcat (fn [[src search-res]]
+                   (let [{:keys [pruned calls]} (meta search-res)
+                         p (count pruned)]
+                     (println [:completed src  :pruned p :called calls
+                               :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
+                     (for [[weight reqstate] (sort-by first (recover-raw search-res))
+                           r                 (-> reqstate :supply)]
+                       (assoc r :bound (reqstate :bound))))))
+         (expand-missing xs))))
+
+(defn contour-records->table [xs]
+  (->> xs
+       tbl/records->table
+       (tbl/order-by [:bound :SRC :Component])
+       (tbl/order-fields-by supply-fields)))
+
 ;;testing
 
 (comment
@@ -652,16 +588,68 @@
   ;;currently prints out pruning information as well.
   (def res (requirements-contour-faster path (range 30)))
   )
+
+
+;;Legacy
+;;======
+
+;;this is the naive version.
 #_
-(defn requirements-contour [proj xs]
-    (let [tbls  (-> (a/load-requirements-project proj)
-                    (:tables))]
-      (vec (for [x xs]
-             (binding [*distance-function* contiguous-distance *contiguity-threshold* x]
-               {:bound x
-                :requirement  (-> tbls
-                                  (tables->requirements-async  :search bisecting-convergence)
-                                  (requirements->table)
-                                  (as-> res
-                                      (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))
-                })))))
+(defn extrema-search [f xs]
+  (let [init (vec (sort xs))
+        segment [(first init) (last init)]
+        calls   (atom 0)
+        sample (fn [x] (swap! calls inc) (f x))]
+    (loop [known   {}
+           pending [segment]]
+      (if-let [[l r] (peek pending)]
+        ;;pick a segment off the stack and update, neither point should be
+        ;;known.
+        (let [_ (println {:visiting [l r] :pending pending :known known})
+              singular? (== l r)
+              fl    (sample l)
+              fr    (if-not singular? (sample r) fl)]
+          (recur (assoc known l fl r fr)
+                 (if (== fl fr)
+                   (pop pending)
+                   (reduce conj (pop pending) (subdivide l r)))))
+        ;;otherwise we're done, report the inflections.
+        (with-meta known {:calls @calls})))))
+
+;;So extrema search can provide significant savings for us
+;;computationally.  We still end up doing more work than necessary,
+;;since we're not letting the caller's requested point spread (xs)
+;;drive the search.
+;;What we'd like to do is maintain some information regarding
+;;containment.
+#_(defn extrema-search-sparse [f xs]
+  (let [init (vec (sort xs))
+        segment {:l (first init)
+                 :r (last init)
+                 :unvisited init}
+        pruned  (atom nil)
+        calls   (atom 0)
+        sample (fn [x] (swap! calls inc) (f x))]
+    (loop [known   {}
+           pending [segment]]
+      (if-let [{:keys [l r unvisited] :as node} (peek pending)]
+        ;;pick a segment off the stack and update, neither point should be
+        ;;known.
+        (let [singular? (== l r)
+              fl    (sample l)
+              fr    (if-not singular? (sample r) fl)
+              constant? (== fl fr)
+              new-known (assoc known l fl r fr)
+              _        (if (and constant? (not singular?))
+                         (swap! pruned concat unvisited))
+              ;;when we put a segment on the stack, it should be shrink-wrapped.
+              ;;We also partition the unknown points into each segment. So when
+              ;;we subdivide, we pack points into the l/r segments, and
+              ;;shrinkwrap the segment to be the minima/maxima of the contained
+              ;;points.
+              new-segments (when-not constant?
+                             (-> (subdivide l r)
+                                 (partition-segments (rest (butlast unvisited)))))]
+          (recur new-known (reduce conj (pop pending) new-segments)))
+        ;;otherwise we're done, report the inflections.
+        (with-meta known {:pruned (vec @pruned) :calls @calls})))))
