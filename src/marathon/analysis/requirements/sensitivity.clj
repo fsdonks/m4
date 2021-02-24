@@ -414,22 +414,26 @@
   ;;for the points in xs.
   (let [ _    (println [:computing-requirements src :remaining (swap! n dec)])
         [l r] ((juxt first last) xs)
-        upper  (with-cmdd l
-                 src-distros->requirements sd)
+        _     (println [:initializing-bounds-from-cmdds l r])
+        [_ upper]  (with-cmdd l
+                     src-distros->requirements sd)
         ub     (requirements-total upper)
+        _      (println {:ub   (or ub :none)
+                         :ukeys (keys upper)})
         bound-info (atom (sorted-map l ub))
-        lower  (with-cmdd r
-                 src-distros->requirements sd :bound-info @bound-info)
+        [_ lower]  (with-cmdd r
+                 src-distros->requirements sd :bound-info @bound-info :bound r)
         lb     (requirements-total lower)
         ;;precomputed function calls, don't have to re-run
-        known  {l upper   r lower}
+        known  {l [src upper]
+                r [src lower]}
         _      (swap! bound-info assoc r lb)]
   [src
    (extrema-search-generic
     (fn [[src distro bound :as sd]]
       (let [[_ res] (or (known bound) ;;leverage our cache.
                         (with-cmdd bound
-                          src-distros->requirements sd :bound-info @bound-info))
+                          src-distros->requirements sd :bound-info @bound-info :bound bound))
             total (requirements-total res)
             ;;update our cmdd bound info going forward with newly discovered bounds
             _     (swap! bound-info assoc bound total)]
@@ -461,14 +465,16 @@
 (defn bounded-requirements-by
   "Helper function for our parallel requirements computation."
   [tbls peaks search n]
-  (fn [[src compo->distros] & {:keys [src->bound-info] :or {src->bound-info {}}}]
+  (fn [[src compo->distros] & {:keys [bound-info bound] :or {bound-info {}}}]
     ;;for each src, we create a reqstate
     (if-let [peak (peaks src)]
       (let [;;We now pack along the peak demand for extra context.
             reqstate       (assoc (r/load-src tbls src compo->distros)
                                   :peak peak)
             _              (println [:growing-by :proportional :from (:minimum-supply reqstate)])
-            [lb ub]        (some-> src src->bound-info compute-bounds)
+            [lb ub]        (when bound
+                             (println [:pre-supplied-bounds {:bound-info bound-info :bound bound}])
+                             (compute-bounds bound bound-info))
             ;;if we have information we can use it to prune.
             [lower upper]  (r/find-bounds reqstate :init-lower (or lb 0) :init-upper (or ub peak))]
         (if (== lower upper 0)
@@ -578,6 +584,8 @@
        tbl/records->table
        (tbl/order-by [:bound :SRC :Component])
        (tbl/order-fields-by supply-fields)))
+
+
 
 ;;testing
 
