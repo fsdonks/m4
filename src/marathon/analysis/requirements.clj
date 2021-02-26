@@ -529,7 +529,7 @@
    for a specific critera of 'missed' demand.  In this case,
    we consider any span of contiguous time where there is unfilled
    demand, dnoted by max, to constitute a missed demand.  history->ghosts
-   may be seend as a specific case of this more general interpretation,
+   may be seen as a specific case of this more general interpretation,
    where we have a max of 1 (e.g. any day of missed demand constitutes
    failure)."
   [h & {:keys [bound]

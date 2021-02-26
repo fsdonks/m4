@@ -421,13 +421,16 @@
     (if-not ub
       [src nil]
       (let [bound-info (atom (sorted-map l ub))
-            [_ lower]  (with-cmdd r
-                         src-distros->requirements sd :bound-info @bound-info :bound r)
+            singular?  (= l r)
+            [_ lower]  (when-not singular?
+                         (with-cmdd r
+                           src-distros->requirements sd :bound-info @bound-info :bound r))
             lb     (requirements-total lower)
-            ;;precomputed function calls, don't have to re-run
-            known  {l [src upper]
-                    r [src lower]}
-            _      (swap! bound-info assoc r lb)]
+            known  (as-> {l [src upper]} acc
+                     (if singular?
+                       acc
+                       (assoc acc r [src lower])))
+            _      (when lb (swap! bound-info assoc r lb))]
         [src
          (extrema-search-generic
           (fn [[src distro bound :as sd]]
@@ -490,15 +493,17 @@
 (defn interpolate [keyf lerpf xs results]
   (let [expected (atom (sort xs))
         knowns   (group-by keyf results)]
-    (concat (apply concat
-                   (for [[[l ls] [r rs]] (->> knowns
-                                              (sort-by key)
-                                              (partition 2 1))]
-                     (let [[missing remaining] (->> @expected
-                                                    (drop-while #(= % l))
-                                                    (split-with #(< % r)))]
+    ;;needed to force the realization of the first seq to
+    ;;leverage the atom correctly.
+    (concat (vec (apply concat
+                        (for [[[l ls] [r rs]] (->> knowns
+                                                   (sort-by key)
+                                                   (partition 2 1))]
+                          (let [[missing remaining] (->> @expected
+                                                         (drop-while #(= % l))
+                                                         (split-with #(< % r)))]
                        (reset! expected remaining)
-                       (concat ls (mapcat (fn [k] (lerpf k ls)) missing)))))
+                       (concat ls (mapcat (fn [k] (lerpf k ls)) missing))))))
             (knowns (first @expected)))))
 
 ;;helper function to expand our sparse results that form a discrete signal
@@ -599,8 +604,15 @@
   ;;currently prints out pruning information as well.
   (def res (requirements-contour-faster path (range 30)))
 
+  ;;45 mins
   (time (def res (vec (requirements-contour-faster-pruned path
-                          (concat (range 21) (range 30 91 10))))))
+                         (concat (range 21) (range 30 91 10))))))
+  ;;105 mins
+  (time (def res (vec (requirements-contour-faster path
+                         (concat (range 21) (range 30 91 10))))))
+
+  ;;edge case..
+  (def weird "01605K100")
   )
 
 
