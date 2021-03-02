@@ -1018,7 +1018,7 @@
                acc)
              (map (fn [[l r]] [(nth xs l) (nth xs r)])))))))
 
-(defn requirements-contour [proj xs & {:keys [src-filter] :of {src-filter (fn [_] true)}}]
+(defn requirements-contour [proj xs & {:keys [src-filter] :or {src-filter (fn [_] true)}}]
   (let [tbls  (-> (a/load-requirements-project proj)
                   (:tables))]
     (vec (for [x xs]

@@ -622,14 +622,19 @@
   ;;I'd like to
   ;;isolate src "01605K100"
   ;;define quantities for ac/ng/rc
-  (defn xform-records [tbl & xfs]
+  (defn xform-records
+    "Given a table, and one-or-more transducing functions,
+     acts like eduction and into, returning a table constructed
+     from records via (eduction xf1 xf2 xf3 .... (table-records tbl))
+     with the same ordering of fields as the input tbl (if applicable)."
+    [tbl & xfs]
     (let [fields (tbl/table-fields tbl)]
-      (->> tbl
-           tbl/table-records
-           (apply eduction xfs)
+      (->> (tbl/table-records tbl)
+           (conj (vec xfs))
+           (apply eduction)
            (into [])
-           #_tbl/records->table
-           #_(tbl/order-fields-by fields))))
+           tbl/records->table
+           (tbl/order-fields-by fields))))
 
   (defn isolate [src compo-quantity
                  {:keys [SupplyRecords] :as tbls}]
