@@ -613,6 +613,9 @@
 
   ;;edge case..
   (def weird "01605K100")
+  ;;entry point to look at stuff.
+  ;;naive contours gives us 41, pruned 39.  why?
+  (r/history->contiguous-misses (a/marathon-stream path) :bound 2)
   )
 
 
