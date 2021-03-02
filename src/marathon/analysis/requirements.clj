@@ -177,15 +177,6 @@
 ;;  incidental.
 (defn requirements-ctx [tbls & {:keys [observer-routes]
                                 :or   {observer-routes obs/default-routes}}]
-  ;;we'll basically do the same thing we normally do.
-  ;;For now at least...
-  ;;use init-context here, but not setting up observers.  
-  #_(->>  (setup/simstate-from ;;allows us to pass maps in, hackey
-           tbls
-           core/emptysim)  
-          (sim/add-time 1)
-                                        ;(sim/register-routes obs/default-routes)
-          )
   (a/load-context tbls :init-ctx core/emptysim :observer-routes {}))
 
 ;;Note: we need a higher-order function that wraps
@@ -1027,14 +1018,15 @@
                acc)
              (map (fn [[l r]] [(nth xs l) (nth xs r)])))))))
 
-(defn requirements-contour [proj xs]
+(defn requirements-contour [proj xs & {:keys [src-filter] :of {src-filter (fn [_] true)}}]
   (let [tbls  (-> (a/load-requirements-project proj)
                   (:tables))]
     (vec (for [x xs]
            (binding [*distance-function* contiguous-distance *contiguity-threshold* x]
              {:bound x
               :requirement  (-> tbls
-                                (tables->requirements-async  :search bisecting-convergence)
+                                (tables->requirements-async  :search bisecting-convergence
+                                                             :src-filter src-filter)
                                 (requirements->table)
                                 (as-> res
                                     (tbl/conj-field [:bound (repeat (tbl/count-rows res) x)] res)))

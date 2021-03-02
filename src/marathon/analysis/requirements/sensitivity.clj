@@ -613,6 +613,38 @@
 
   ;;edge case..
   (def weird "01605K100")
+
+  (defn limited-contour [path srcs xs]
+    (binding [a/*table-xform* (a/filter-srcs )])
+    )
+
+  ;;let's define a very simply supply transform...
+  ;;I'd like to
+  ;;isolate src "01605K100"
+  ;;define quantities for ac/ng/rc
+  (defn xform-records [tbl & xfs]
+    (let [fields (tbl/table-fields tbl)]
+      (->> tbl
+           tbl/table-records
+           (apply eduction xfs)
+           (into [])
+           #_tbl/records->table
+           #_(tbl/order-fields-by fields))))
+
+  (defn isolate [src compo-quantity
+                 {:keys [SupplyRecords] :as tbls}]
+    (-> tbls
+        ((a/filter-srcs [src]
+                        :tables [:SupplyRecords :DemandRecords
+                                 :GhostProportionsAggregate]))
+        (update :SupplyRecords
+                 xform-records
+                 (filter #(= (:SRC %) src))
+                 (map (fn [{:keys [SRC Quantity Component] :as r}]
+                         (if-let [q (compo-quantity Component)]
+                           (assoc r :Quantity q)
+                           r))))))
+
   ;;entry point to look at stuff.
   ;;naive contours gives us 41, pruned 39.  why?
   (r/history->contiguous-misses (a/marathon-stream path) :bound 2)
