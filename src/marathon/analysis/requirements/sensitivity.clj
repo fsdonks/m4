@@ -614,9 +614,7 @@
   ;;edge case..
   (def weird "01605K100")
 
-  (defn limited-contour [path srcs xs]
-    (binding [a/*table-xform* (a/filter-srcs )])
-    )
+   ;;convenience function experiment.
 
   ;;let's define a very simply supply transform...
   ;;I'd like to
@@ -636,23 +634,51 @@
            tbl/records->table
            (tbl/order-fields-by fields))))
 
-  (defn isolate [src compo-quantity
-                 {:keys [SupplyRecords] :as tbls}]
+  (defn xform-tables [tbls table-xform]
+    (->> (for [[k xform] table-xform
+               :when (tbls k)]
+           [k (apply xform-records (tbls k) xform)])
+         (into tbls)))
+
+  (def proj (a/load-requirements-project path))
+
+  (def ts
+    (let [src= (filter #(= (:SRC %) weird))]
+      (-> proj :tables
+          (xform-tables {:SupplyRecords [src=]
+                         :DemandRecords [src=]}))))
+
+  (defn isolate [{:keys [SupplyRecords] :as tbls} src compo-quantity]
     (-> tbls
         ((a/filter-srcs [src]
                         :tables [:SupplyRecords :DemandRecords
                                  :GhostProportionsAggregate]))
-        (update :SupplyRecords
-                 xform-records
-                 (filter #(= (:SRC %) src))
-                 (map (fn [{:keys [SRC Quantity Component] :as r}]
-                         (if-let [q (compo-quantity Component)]
-                           (assoc r :Quantity q)
-                           r))))))
+        (xform-tables  {:SupplyRecords
+                          [(filter #(= (:SRC %) src))
+                           (map (fn [{:keys [Quantity Component] :as r}]
+                                  (if-let [q (compo-quantity Component)]
+                                    (assoc r :Quantity q)
+                                    r)))]})))
+
+  (defn limited-contour [path srcs xs]
+    (binding [a/*table-xform* (a/filter-srcs )]))
 
   ;;entry point to look at stuff.
   ;;naive contours gives us 41, pruned 39.  why?
+  (defn simple-misses [path-or-proj compo-quantity & {:keys [bound]}]
+    (-> path-or-proj
+        a/load-project
+        (update :tables isolate weird compo-quantity)
+        a/marathon-stream
+        (r/history->contiguous-misses :bound (or bound r/*contiguity-threshold*))))
+
   (r/history->contiguous-misses (a/marathon-stream path) :bound 2)
+
+  ;;these growth factors correspond to [11 0 14]
+  ;;So we have a counter-intuition that invalidates our bracketing.
+  ;;What is at play that makes a supply of [39 39] @ 74 valid, but "not"
+  ;;a supply of 40.0 40.0?
+  (def interesting [72 74 76])
   )
 
 

@@ -467,12 +467,13 @@
    a project and audit? is truthy."
   [x & {:keys [table-xform audit? audit-path events?]
                        :or {table-xform identity}}]
-  (cond (string? x) (if audit?
-                      (do (io/make-folders! audit-path ["audit.txt"])
-                          (load-audited-context x :table-xform table-xform :root audit-path
-                                                :events? events?))
-                      (load-context x :table-xform table-xform))
-        (core/context? x) x
+  (cond (core/context? x) x
+        (or (string? x) (map? x))
+            (if audit?
+              (do (io/make-folders! audit-path ["audit.txt"])
+                  (load-audited-context x :table-xform table-xform :root audit-path
+                                        :events? events?))
+              (load-context x :table-xform table-xform))
         :else (throw (Exception.
                       (str "Invalid MARATHON sim context " x)))))
 
@@ -551,13 +552,19 @@
   "Given a sequence of srcs to keep, pre-processes the project tables
    to retain only records with an associated :SRC value, where the value
    is in the set defined by srcs.  Defaults to filtering supply and demand
-   records."
+   records.  User may specify tables to filter (default SupplyRecords
+   and DemandRecords); if specified tables are missing a warning is issued
+   and the table is skipped."
   [srcs & {:keys [tables]
-                             :or {tables [:SupplyRecords :DemandRecords]}}]
+           :or {tables [:SupplyRecords :DemandRecords]}}]
   (let [srcs        (set srcs)
         tbl-filter #(spork.util.table/filter-records (fn [r]  (srcs (:SRC r))) %)]
-      (fn [tbls]
-        (reduce (fn [acc t] (update acc t tbl-filter)) tbls tables))))
+    (fn [tbls]
+      (->> tables
+           (filter (fn [t]  ;;added to avoid surprises
+                     (or (tbls t)
+                         (println [:filter-srcs t :missing :skipping]))))
+           (reduce (fn [acc t] (update acc t tbl-filter)) tbls)))))
 
 (defn group-by-srcs
   "Given a sequence of srcs to group-by, pre-processes the project tables
