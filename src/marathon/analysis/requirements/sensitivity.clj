@@ -12,35 +12,6 @@
    :Behavior :CycleTime :Policy :Tags :SpawnTime :Location :Position
    :bound])
 
-;;Deprecated Legacy API (WIP)
-;;===========================
-(defn contour-table [bound-tables]
-  (->> (map :requirement bound-tables)
-       tbl/concat-tables
-       (tbl/order-by [:bound :SRC :Component])))
-
-(def prev (atom nil))
-(defn contours [tgt xs]
-  (let [conts (r/requirements-contour tgt xs)
-        _     (reset! prev conts)]
-    (contour-table conts)))
-
-;;field order gets messed up, unknown why.
-(defn spit-contours [tgt xs]
-  (let [out (io/file-path (io/parent-path tgt) "requirements-contour.txt")]
-        (->> (contours tgt xs)
-             (tbl/spit-table out))))
-
-;;basic invocation
-(comment
-  (def tgt
-    (io/file-path "~/Documents/taa2327/RA/m4book-2327-v8-inclusive-requirements.xlsx"))
-  ;;compute the big table of requirements indexed by bound
-  (def res (contours tgt (range 0 21)))
-  ;;shove into excel
-  (tbl/paste-records! res)
-
-  )
 
 ;;Current
 ;;=======
@@ -132,16 +103,16 @@
 ;;[[1 ... 19]]
 
 
-;;let's define a linear test function with 3 inflections over the range [0 ... 13].
-(defn piecewise-linear [kvs]
-  (let [kvs (vec (sort-by first kvs))]
-    (fn [n]
-      (reduce (fn [acc [x y]]
-                (cond (< n x) (reduced acc)
-                      (= n x) (reduced y)
-                      :else y)) (ffirst kvs) kvs))))
-
 (comment
+
+  ;;let's define a linear test function with 3 inflections over the range [0 ... 13].
+  (defn piecewise-linear [kvs]
+    (let [kvs (vec (sort-by first kvs))]
+      (fn [n]
+        (reduce (fn [acc [x y]]
+                  (cond (< n x) (reduced acc)
+                        (= n x) (reduced y)
+                        :else y)) (ffirst kvs) kvs))))
   (def inflections
     {0 10 ;;implicity [0 5] -> 10
      6 11 ;;  [6 8] -> 11
@@ -338,67 +309,6 @@
           peek ;;get the last one, which converged
           :total))
 
-;;pending, may make the convergence more fine-grained async.
-#_
-(defn bisecting-convergence
-  "reqstate is a map of information for a basic requirements
-   run, which is used to create a parametric run based on
-   the initial supply, a growth-step n, and a distribution
-   of supply by component.  Reqstate also includes
-   a peak field, which lets us know what the peak demand is
-   for inferring the expected misses for a supply of 0."
-  [reqstate & {:keys [distance init-lower init-upper log init-known]
-               :or   {distance *distance-function*
-                      init-lower 0
-                      init-upper 10
-                      log println
-                     }}]
-  (let [known?     (atom (or init-known {}))
-        converge   (fn [dir reqs n]
-                     (do (log [:converged dir n])
-                         (distribute reqs (:src reqstate) n)))
-        amount     (fn amt [reqs n]
-                     ;(log [:amount n])
-                     (get-or @known? n
-                             (let [rtest (-> reqs
-                                             (distribute (:src reqs) n))
-                                   ;;Found no missed demands, so zero! misses!
-                                   res (or (calculate-requirement rtest distance) 0)
-                                   _   (swap! known? assoc n res)
-                                   ;_   (when (zero? n) (println [:amount 0 res]))
-                                   ]
-                          res)))
-        _ (assert (not (neg?  (- init-upper init-lower))) "need a valid non-negative interval!")]
-    (loop [reqs      reqstate
-           lower init-lower
-           upper init-upper]
-      (let [hw    (quot (- upper lower) 2)
-            mid   (+ lower hw)]
-        (if (= mid lower)
-          (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
-            ;;In this case, BOTH guesses produce 0 misses!
-            ;;We want to take whichever guess is NOT 0,
-            ;;since 0 is not a valid guess.
-            [true  true]
-                (if (pos? lower)
-                  ;;lower is a valid guess, and is the minimum!
-                  (converge :left  reqs  lower)
-                  ;;lower is zero!, upper is the valid guess
-                  ;;and minimum! (1).
-                  (converge :right reqs upper))
-            [false true]
-                  ;;Upper is the only valid guess, and minimum!
-                  (converge :right reqs upper)
-            (do (reset! rs reqstate)
-              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)])))))
-          (let [reqs (update reqs :iteration inc)
-                res  (amount reqs mid)
-                _    (log [:guessing [lower upper] :at mid :got res])]
-            (if (pos? res)
-              (recur reqs mid upper)
-              (recur reqs lower mid))))))))
-
-
 ;;redefine requirements-contour in terms of extrema-search.
 ;;define bisecting-convergence-prune.  Extrema-search
 ;;expects a function that returns a simple number, so we
@@ -514,7 +424,33 @@
 ;;API
 ;;===
 
-(defn requirements-contour-faster
+
+;;legacy naive implementation, retained for verification
+(defn contour-table [bound-tables]
+  (->> (map :requirement bound-tables)
+       tbl/concat-tables
+       (tbl/order-by [:bound :SRC :Component])))
+
+(defn requirements-contour-naive
+  "Original requirements contour function that performs 1:1 requirements analysis
+   for every CMDD value in xs using the requirements analysis project-or-path
+   indicated by tgt. This is naive because we can substantially reduce the
+   required runs. Returns the concatenated records of all requirements analyses
+   for each CMDD level x, with an additional :bound field indicating the CMDD
+   that generated the requirement."
+  [tgt xs & {:keys [src-filter] :or {src-filter (fn [_] true)}}]
+  (-> (r/requirements-contour tgt xs)
+      contour-table
+      tbl/table-records))
+
+
+(defn requirements-contour-sparse
+  "A sparse variant of computing CMDD contours that sticks very closely to the
+   naive requirements-contour function, except it uses extrema search to
+   sparsely sample the input sequence of Contiguous Missed Demand Day
+   (CMDD) levels xs.  Returns the concatenated records of all requirements
+   analyses for each CMDD level x, with an additional :bound field indicating
+   the CMDD that generated the requirement."
   [proj xs  & {:keys [dtype search src-filter]
                    :or {search r/bisecting-convergence
                         dtype  :proportional
@@ -556,7 +492,17 @@
          (expand-missing xs))))
 
 ;;Pending version with additional improvement.
-(defn requirements-contour-faster-pruned
+(defn requirements-contour-pruned
+  "Identical API to requirements-contour-sparse, except performance is further
+   improved by leveraging additional bounding proofs from runs performed during
+   sucessive extrema searches.  Given the results for the range [l ... r],
+   we if we have an intermediate CMDD sample m, such that l < m < r, we can
+   initialize the bounds for bisection search on m to be [minimum(r) minimum(l)],
+   since lower CMDD value provides an upper bound, and the higher CMDD value
+   relaxes the requirement to provide a lower bound.  This yields additional
+   pruning (upwards of 50%) as well as possible discovery of more fine-grained
+   inflections in the resulting requirement for small changes in CMDD due to
+   finer grained sampling."
   [proj xs  & {:keys [dtype search src-filter]
                    :or {search r/bisecting-convergence
                         dtype  :proportional
@@ -593,6 +539,32 @@
        (tbl/order-by [:bound :SRC :Component])
        (tbl/order-fields-by supply-fields)))
 
+(defn spit-contours
+  "Computes the requirements contour for each CMDD value in xs based on the
+   project-or-path tgt. Caller may supply an optional path to spit results to via
+   out, otherwise a requirements-contour.txt will be created colocated with the
+   tgt path - or in ./ if tgt is not a path.  Caller may choose one of three
+   modes for computing the contour -
+   :pruned (default, fastest, may yield more fine grained inflections)
+   :sparse (faster than naive, but identical inflections to naive)
+   :naive  (slow/exhaustive, 1:1 requirements analysis per CMDD in xs)
+   Caller may also supply an SRC filter to limit analysis to certain
+   SRCs, e.g. a set of SRCs."
+  [tgt xs & {:keys [out mode src-filter]
+             :or {mode :pruned src-filter (fn [_] true)}}]
+  (let [parent (if (string? tgt) (io/parent-path tgt) ".")
+        out (or out
+                (io/file-path parent "requirements-contour.txt"))
+        contour-func (case mode
+                       :pruned requirements-contour-pruned
+                       :sparse requirements-contour-sparse
+                       :naive  requirements-contour-naive
+                       (throw (ex-info "unknown contour mode!" {:mode mode})))
+        _    (println [:spitting-contours out])]
+    (some->> (contour-func tgt xs :src-filter src-filter)
+             contour-records->table
+             (tbl/spit-table out))))
+
 
 
 ;;testing
@@ -600,19 +572,22 @@
 (comment
 
   (def path (io/file-path "~/workspacenew/notional/reqs-testdata-v7.xlsx"))
-  ;;gives us table records with bound information now.
-  ;;currently prints out pruning information as well.
-  (def res (requirements-contour-faster path (range 30)))
-
-  ;;45 mins
-  (time (def res (vec (requirements-contour-faster-pruned path
-                         (concat (range 21) (range 30 91 10))))))
-  ;;105 mins
-  (time (def res (vec (requirements-contour-faster path
-                         (concat (range 21) (range 30 91 10))))))
 
   ;;edge case..
   (def weird "01605K100")
+  ;;gives us table records with bound information now.
+  ;;currently prints out pruning information as well.
+  (def res (requirements-contour-sparse path (range 30)))
+
+  (spit-contours path
+                 (concat (range 21) (range 30 91 10)) :src-filter #{weird})
+
+  ;;45 mins
+  (time (def res (vec (requirements-contour-pruned path
+                         (concat (range 21) (range 30 91 10))))))
+  ;;105 mins
+  (time (def res (vec (requirements-contour-sparse path
+                         (concat (range 21) (range 30 91 10))))))
 
    ;;convenience function experiment.
 
@@ -682,8 +657,93 @@
   )
 
 
+;;pending, may make the convergence more fine-grained async.
+#_
+(defn bisecting-convergence
+  "reqstate is a map of information for a basic requirements
+   run, which is used to create a parametric run based on
+   the initial supply, a growth-step n, and a distribution
+   of supply by component.  Reqstate also includes
+   a peak field, which lets us know what the peak demand is
+   for inferring the expected misses for a supply of 0."
+  [reqstate & {:keys [distance init-lower init-upper log init-known]
+               :or   {distance *distance-function*
+                      init-lower 0
+                      init-upper 10
+                      log println
+                     }}]
+  (let [known?     (atom (or init-known {}))
+        converge   (fn [dir reqs n]
+                     (do (log [:converged dir n])
+                         (distribute reqs (:src reqstate) n)))
+        amount     (fn amt [reqs n]
+                     ;(log [:amount n])
+                     (get-or @known? n
+                             (let [rtest (-> reqs
+                                             (distribute (:src reqs) n))
+                                   ;;Found no missed demands, so zero! misses!
+                                   res (or (calculate-requirement rtest distance) 0)
+                                   _   (swap! known? assoc n res)
+                                   ;_   (when (zero? n) (println [:amount 0 res]))
+                                   ]
+                          res)))
+        _ (assert (not (neg?  (- init-upper init-lower))) "need a valid non-negative interval!")]
+    (loop [reqs      reqstate
+           lower init-lower
+           upper init-upper]
+      (let [hw    (quot (- upper lower) 2)
+            mid   (+ lower hw)]
+        (if (= mid lower)
+          (case (mapv zero? [(amount reqs lower) (amount reqs upper)])
+            ;;In this case, BOTH guesses produce 0 misses!
+            ;;We want to take whichever guess is NOT 0,
+            ;;since 0 is not a valid guess.
+            [true  true]
+                (if (pos? lower)
+                  ;;lower is a valid guess, and is the minimum!
+                  (converge :left  reqs  lower)
+                  ;;lower is zero!, upper is the valid guess
+                  ;;and minimum! (1).
+                  (converge :right reqs upper))
+            [false true]
+                  ;;Upper is the only valid guess, and minimum!
+                  (converge :right reqs upper)
+            (do (reset! rs reqstate)
+              (throw (Exception. (str [:wierd-case! lower upper  @known? (:supply reqs)])))))
+          (let [reqs (update reqs :iteration inc)
+                res  (amount reqs mid)
+                _    (log [:guessing [lower upper] :at mid :got res])]
+            (if (pos? res)
+              (recur reqs mid upper)
+              (recur reqs lower mid))))))))
+
 ;;Legacy
 ;;======
+
+;;Deprecated Legacy API
+;;=====================
+;;Retained for posterity in case we need additional verification.
+
+(comment
+
+;;field order gets messed up, unknown why.
+(defn spit-contours [tgt xs]
+  (let [out (io/file-path (io/parent-path tgt) "requirements-contour.txt")]
+    (->> (contours tgt xs)
+         (tbl/spit-table out))))
+
+)
+
+;;basic invocation
+(comment
+  (def tgt
+    (io/file-path "~/Documents/taa2327/RA/m4book-2327-v8-inclusive-requirements.xlsx"))
+  ;;compute the big table of requirements indexed by bound
+  (def res (contours tgt (range 0 21)))
+  ;;shove into excel
+  (tbl/paste-records! res)
+
+  )
 
 ;;this is the naive version.
 #_

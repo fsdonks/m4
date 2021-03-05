@@ -84,7 +84,7 @@
 ;;basically rip through the demandtrends computing totalfilled/totalrequired.
 ;;Assumes a path to multiple folders with one or more TACMM cases from
 ;;early experiments.
-(defn path (io/file-path "~/Documents/tacmm/revised/cases"))
+(defn path [] (io/file-path "~/Documents/tacmm/revised/cases"))
 
 ;;derives one or more child runs from a root path p,
 ;;where runs are paths with "run" in the name.
@@ -97,7 +97,7 @@
 ;;where output exists (detected by the presence of DemandTrends)
 ;;and scrapes them into a labeled run map.
 (defn derive-runs [root]
-  (let [xs (->> path
+  (let [xs (->> root
                 io/file
                 file-seq
                 (map io/fpath)
@@ -137,19 +137,20 @@
 
 (defn compute-fills [runs]
   (for [{:keys [label root]} runs]
-    (->> (tbl/tabdelimited->records (io/file-path roo "DemandTrends.txt")
+    (->> (tbl/tabdelimited->records (io/file-path root "DemandTrends.txt")
                                     :schema demandtrend-schema)
-         (reduce (fn [acc {:keys [filled required] :as stats}]
-                   (get acc SRC {:filled 0 :required 0}))
-                 (assoc acc SRC {:filled (+ filled Deployed)
-                                 :required (+ TotalRequired required)})
+         (reduce (fn [acc {:keys [SRC TotalRequired Deployed] :as r}]
+                   (let [{:keys [filled required] :as stats}
+                          (get acc SRC {:filled 0 :required 0})]
+                     (assoc acc SRC {:filled   (+ filled Deployed)
+                                     :required (+ TotalRequired required)})))
                  {})
          (assoc {:run label} :fills))))
 
 (def deprecordschema
   (assoc proc.schemas/deprecordschema "DwellYearsBeforeDeploy" :number))
 
-(defn compute-dewells [runs]
+(defn compute-dwells [runs]
   (for [{:keys [label root]} runs]
     (->> (tbl/tabdelimited->records
           (io/file-path root "AUDIT_Deployments.txt")
