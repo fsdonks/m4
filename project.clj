@@ -26,7 +26,7 @@
                  [demand_builder "0.1.0-SNAPSHOT"
                   :exclusions [spork]]
                  ;;external libs
-                 [joinr/nightclub "0.0.2-SNAPSHOT" :exclusions [clojure.core.async]]
+                 [joinr/nightclub "0.0.3-SNAPSHOT" :exclusions [clojure.core.async]]
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
