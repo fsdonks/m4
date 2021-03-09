@@ -1,10 +1,12 @@
 (ns marathon.analysis.util
   (:refer-clojure :exclude [pmap])
   (:require [clojure.core.async :as async]
+            [clojure.set]
+            [clojure.string]
             [marathon     [analysis :as a]]
             [marathon.ces [core :as c] [query :as query]]
             [spork.entitysystem [store :as store]]
-            [spork.util [io :as io] [table :as tbl]]))
+            [spork.util [io :as io] [table :as tbl] [diff :as diff]]))
 
 ;;https://gist.github.com/stathissideris/8659706
 (defn seq!! 
@@ -283,3 +285,29 @@
        (filter (complement (comp zero? :ToDay)))
        (sort-by :FromDay)
        (mapv (juxt :Name :FromDay :ToDay))))
+
+
+(defn diff-fields [l r]
+  (-> (diff/diff-map (zipmap l l) (zipmap r r))
+      (update :added #(when (seq %) (set (map first %))))))
+
+(defn maybe-match [ls rs]
+  (let [lower (comp clojure.string/lower-case name)
+        ls (zipmap (map lower ls) ls)
+        rs (zipmap (map lower rs) rs)
+        inter (clojure.set/intersection (set (keys ls)) (set (keys rs)))]
+    (when-let [xs (seq inter)]
+      (into {} (for [x xs] [(ls x) (rs x)])))))
+
+(defn loose-order-fields-by [xs tbl]
+  (let [flds (tbl/table-fields tbl)]
+    (if (clojure.set/subset? xs flds)
+      (tbl/order-fields-by xs tbl)
+      (let [{:keys [dropped added]} (diff-fields xs flds)
+            _ (println [:loose-order-fields/expected-subset xs])
+            _ (println [:of  flds])]
+        (if-let [res (maybe-match dropped added)]
+          (do (println [:loose-order-fields/found-mismatched-fields! :loosely-matching res])
+              (tbl/order-fields-by (replace res xs) tbl))
+          (do (println [:loose-order-fields/no-common-or-loose-matched-fields! :skipping!  :check-input!])
+              tbl))))))

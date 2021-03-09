@@ -451,7 +451,7 @@
    (CMDD) levels xs.  Returns the concatenated records of all requirements
    analyses for each CMDD level x, with an additional :bound field indicating
    the CMDD that generated the requirement."
-  [proj xs  & {:keys [dtype search src-filter]
+  [proj xs  & {:keys [dtype search src-filter req-fn]
                    :or {search r/bisecting-convergence
                         dtype  :proportional
                         src-filter (fn [_] true)}}]
@@ -486,10 +486,10 @@
                          p (count pruned)]
                      (println [:completed src  :pruned p :called calls
                                :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
-                     (for [[weight reqstate] (sort-by first (recover-raw search-res))
-                           r                 (-> reqstate :supply)]
-                       (assoc r :bound (reqstate :bound))))))
-         (expand-missing xs))))
+                     (->> (for [[weight reqstate] (sort-by first (recover-raw search-res))
+                                r                 (-> reqstate :supply)]
+                            (assoc r :bound (reqstate :bound)))
+                          (expand-missing xs))))))))
 
 ;;Pending version with additional improvement.
 (defn requirements-contour-pruned
@@ -528,16 +528,16 @@
                          p (count pruned)]
                      (println [:completed src  :pruned p :called calls
                                :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
-                     (for [[weight reqstate] (sort-by first (recover-raw search-res))
-                           r                 (-> reqstate :supply)]
-                       (assoc r :bound (reqstate :bound))))))
-         (expand-missing xs))))
+                     (->> (for [[weight reqstate] (sort-by first (recover-raw search-res))
+                                r                 (-> reqstate :supply)]
+                            (assoc r :bound (reqstate :bound)))
+                          (expand-missing xs))))))))
 
 (defn contour-records->table [xs]
   (->> xs
        tbl/records->table
        (tbl/order-by [:bound :SRC :Component])
-       (tbl/order-fields-by supply-fields)))
+       (u/loose-order-fields-by supply-fields)))
 
 (defn spit-contours
   "Computes the requirements contour for each CMDD value in xs based on the
@@ -595,55 +595,22 @@
   ;;I'd like to
   ;;isolate src "01605K100"
   ;;define quantities for ac/ng/rc
-  (defn xform-records
-    "Given a table, and one-or-more transducing functions,
-     acts like eduction and into, returning a table constructed
-     from records via (eduction xf1 xf2 xf3 .... (table-records tbl))
-     with the same ordering of fields as the input tbl (if applicable)."
-    [tbl & xfs]
-    (let [fields (tbl/table-fields tbl)]
-      (->> (tbl/table-records tbl)
-           (conj (vec xfs))
-           (apply eduction)
-           (into [])
-           tbl/records->table
-           (tbl/order-fields-by fields))))
 
-  (defn xform-tables [tbls table-xform]
-    (->> (for [[k xform] table-xform
-               :when (tbls k)]
-           [k (apply xform-records (tbls k) xform)])
-         (into tbls)))
 
   (def proj (a/load-requirements-project path))
 
   (def ts
     (let [src= (filter #(= (:SRC %) weird))]
       (-> proj :tables
-          (xform-tables {:SupplyRecords [src=]
-                         :DemandRecords [src=]}))))
-
-  (defn isolate [{:keys [SupplyRecords] :as tbls} src compo-quantity]
-    (-> tbls
-        ((a/filter-srcs [src]
-                        :tables [:SupplyRecords :DemandRecords
-                                 :GhostProportionsAggregate]))
-        (xform-tables  {:SupplyRecords
-                          [(filter #(= (:SRC %) src))
-                           (map (fn [{:keys [Quantity Component] :as r}]
-                                  (if-let [q (compo-quantity Component)]
-                                    (assoc r :Quantity q)
-                                    r)))]})))
-
-  (defn limited-contour [path srcs xs]
-    (binding [a/*table-xform* (a/filter-srcs )]))
+          (a/xform-tables {:SupplyRecords [src=]
+                           :DemandRecords [src=]}))))
 
   ;;entry point to look at stuff.
   ;;naive contours gives us 41, pruned 39.  why?
   (defn simple-misses [path-or-proj compo-quantity & {:keys [bound]}]
     (-> path-or-proj
         a/load-project
-        (update :tables isolate weird compo-quantity)
+        (update :tables a/isolate weird compo-quantity)
         a/marathon-stream
         (r/history->contiguous-misses :bound (or bound r/*contiguity-threshold*))))
 

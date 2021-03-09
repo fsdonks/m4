@@ -536,18 +536,25 @@
    units for deployment.  Useful for verifying supply-queries
    and other fill-related rules."
   [ctx]
-  (engine/parametric-sim-step ctx 
+  (engine/parametric-sim-step ctx
     :fill nil
     :end  nil))
 
 (defn fill-of
-  "Like day-of, except we fast forward to the point just before 
+  "Like day-of, except we fast forward to the point just before
    filling.  Convenience function for debugging."
   [day ctx]
   (-> (day-of day ctx)
       (step-prefill)))
 
-;;simple-project xforms
+(defn frame-at
+  "Fetch the simulation frame at or nearest (after) time t from a
+   sequence of [t ctx] frames xs."
+  [t xs] (some (fn [[tc ctx]] (when (>= tc t) ctx))
+               (as-stream xs)))
+
+;;simple-project and table xforms
+;;===============================
 (defn filter-srcs
   "Given a sequence of srcs to keep, pre-processes the project tables
    to retain only records with an associated :SRC value, where the value
@@ -594,11 +601,57 @@
                               tbls tables)])
                (into {})))))))
 
-(defn frame-at
-  "Fetch the simulation frame at or nearest (after) time t from a 
-   sequence of [t ctx] frames xs."
-  [t xs] (some (fn [[tc ctx]] (when (>= tc t) ctx))
-               (as-stream xs)))
+(defn xform-records
+  "Given a table, and one-or-more transducing functions, acts like eduction and
+  into, returning a table constructed from records via
+  (eduction xf1 xf2 xf3.... (table-records tbl)) with the same
+  ordering of fields as the input tbl (if applicable).
+  TODO: migrate to spork.util.table and import in marathon.analysis"
+  [tbl & xfs]
+  (let [fields (tbl/table-fields tbl)]
+    (->> (tbl/table-records tbl)
+         (conj (vec xfs))
+         (apply eduction)
+         (into [])
+         tbl/records->table
+         (tbl/order-fields-by fields))))
+
+(defn xform-tables
+  "Given a map of tbls {k table} and a table-xform map of
+  {k [xform1 xform2 xform3 ... xformn :as xform] },
+  returns a map of {k (apply xform-records (tbls k) (table-xform k))},
+  allowing complex declarative table transformations using transducers:
+
+  (let [src= (filter #(= (:SRC %) \"some-src\")
+        supply-alteration (fn [r] ...)
+        demand-alteration (fn [r] ...)]
+      (-> proj :tables
+          (xform-tables {:SupplyRecords [src= (map supply-alteration)]
+                         :DemandRecords [src= (map demand-alteration)]}))))"
+  [tbls table-xform]
+  (->> (for [[k xform] table-xform
+             :when (tbls k)]
+         [k (apply xform-records (tbls k) xform)])
+       (into tbls)))
+
+(defn isolate
+  "Given a map of {k table}, such as the :tables value in
+   an idiomatic M4 project, an SRC to isolate, and a
+   possibly empty map of {component quantity},
+   filters all supply, demand, and ghost proportions
+   input to the specified SRC and updates the supply
+   to any matching value present in compo-quantity."
+  [{:keys [SupplyRecords] :as tbls} src compo-quantity]
+  (-> tbls
+      ((filter-srcs [src]
+                      :tables [:SupplyRecords :DemandRecords
+                               :GhostProportionsAggregate]))
+      (xform-tables  {:SupplyRecords
+                      [(filter #(= (:SRC %) src))
+                       (map (fn [{:keys [Quantity Component] :as r}]
+                              (if-let [q (compo-quantity Component)]
+                                (assoc r :Quantity q)
+                                r)))]})))
 
 ;;Entity Tracing and Debugging
 ;;============================
