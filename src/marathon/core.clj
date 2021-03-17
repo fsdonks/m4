@@ -453,7 +453,11 @@
              (night/attach! :window-args
                             {:title   (str "MARATHON " +version+)
                              :menubar main-menu
-                             :on-close (if exit? :exit :dispose)})
+                             :on-close (if exit? :exit :dispose)
+                             }
+                            ;;make sure we redirect logging and
+                            ;;setup our ns to be marathon.core
+                            :init-eval (str "(ns " *ns* ") (marathon.analysis.util/log-to)"))
              (add-watch nightcode.ui/root :popup
                         (fn [_ _ _ _]
                           (seesaw.core/invoke-later (install-popups!))

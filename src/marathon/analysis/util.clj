@@ -261,6 +261,27 @@
        (first)))
 
 (def log-chan (async/chan (async/sliding-buffer  1000)))
+(def logger
+  (async/go-loop []
+    (when-let [msg (async/<! log-chan)]
+      (do (println msg)
+          (recur)))))
+
+(defn log-to
+  "Redirects logging to a new out, which may have not been
+   captured originally."
+  ([out]
+   (binding [*out* out]
+     ;;resets log-chan
+     (def log-chan (async/chan (async/sliding-buffer  1000)))
+     (def logger   (async/go-loop []
+                     (when-let [msg (async/<! log-chan)]
+                       (do (println msg)
+                           (recur)))))
+     (println [:logging-to *out*])
+     (println [:from-thread (str (Thread/currentThread))])))
+  ([] (log-to *out*)))
+
 
 (defn log
   "Logs messages asynchronously, prints synchronously.
@@ -269,12 +290,6 @@
    for readability."
   [msg]
   (clojure.core.async/put! log-chan msg))
-
-(def logger
-  (async/go-loop []
-    (when-let [msg (async/<! log-chan)]
-        (do (println msg)
-            (recur)))))
 
 
 (defn derive-phases [proj]
