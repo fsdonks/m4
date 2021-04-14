@@ -204,7 +204,7 @@
         new-records   (for [compo new-compos
                             :when (pos? (compo-distros compo))]
                         (->supply-record src compo 0))]
-    (do (println [:computing-initial-supply])    
+    (do (println [:computing-initial-supply])
         (concat (map (fn [r] (if-not (:Enabled r)
                                (assoc r :Quantity 0 :Enabled true) r)) (tbl/table-records supply-table))
                 new-records))))

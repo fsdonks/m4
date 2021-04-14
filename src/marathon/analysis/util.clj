@@ -316,7 +316,7 @@
 
 (defn loose-order-fields-by [xs tbl]
   (let [flds (tbl/table-fields tbl)]
-    (if (clojure.set/subset? xs flds)
+    (if (clojure.set/subset? (set xs) (set flds))
       (tbl/order-fields-by xs tbl)
       (let [{:keys [dropped added]} (diff-fields xs flds)
             _ (println [:loose-order-fields/expected-subset xs])

@@ -517,21 +517,33 @@
                                     (distros (:SRC %))))
                       (r/demands->src-peaks))
         n       (atom (count peaks)) ;;revisit.
-        src-distros->requirements  (bounded-requirements-by tbls peaks search n)]
+        src-distros->requirements  (bounded-requirements-by tbls peaks search n)
+        src->srecords (->> (:SupplyRecords tbls)
+                           tbl/table-records
+                           (filter #(and (:Enabled %)
+                                         (distros (:SRC %))))
+                           (group-by :SRC))]
     (->> distros
          (u/unordered-pmap
           (u/guess-physical-cores)
           #(extrema-requirements src-distros->requirements xs n %))
-         (keep #(when (second %) %)) ;;handling empty results, kind of jank.
+         #_(keep #(when (second %) %)) ;;handling empty results, kind of jank.
          (mapcat (fn [[src search-res]]
-                   (let [{:keys [pruned calls]} (meta search-res)
-                         p (count pruned)]
-                     (println [:completed src  :pruned p :called calls
-                               :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
-                     (->> (for [[weight reqstate] (sort-by first (recover-raw search-res))
-                                r                 (-> reqstate :supply)]
-                            (assoc r :bound (reqstate :bound)))
-                          (expand-missing xs))))))))
+                   (if-not search-res
+                     ;;copy supply records where we had no requirement.
+                     (let [original (src->srecords src)
+                           _        (println [:completed src :constant-supply
+                                              :no-requirements])]
+                       (for [x xs]
+                         (mapv #(assoc % :bound x) original)))
+                     (let [{:keys [pruned calls]} (meta search-res)
+                           p (count pruned)]
+                       (println [:completed src  :pruned p :called calls
+                                 :reduced (gen/float-trunc (/ p (+ p calls)) 3)])
+                       (->> (for [[weight reqstate] (sort-by first (recover-raw search-res))
+                                  r                 (-> reqstate :supply)]
+                              (assoc r :bound (reqstate :bound)))
+                            (expand-missing xs)))))))))
 
 (defn contour-records->table [xs]
   (->> xs
