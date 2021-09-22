@@ -8,7 +8,7 @@
 (def capsule-jar (str  capsule-name "-" version ".jar"))
 
 ;;project definition...
-(defproject marathon "4.2.2-SNAPSHOT"
+(defproject marathon "4.2.3-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [spork "0.2.1.4-SNAPSHOT"
@@ -26,7 +26,7 @@
                  [demand_builder "0.1.1-SNAPSHOT"
                   :exclusions [spork]]
                  ;;external libs
-                 [joinr/nightclub "0.0.3-SNAPSHOT" :exclusions [clojure.core.async]]
+                 [joinr/nightclub "0.0.4-SNAPSHOT"]
                  [eigenhombre/splasher "0.0.2"] ;;splash screen lib
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
