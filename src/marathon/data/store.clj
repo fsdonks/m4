@@ -225,6 +225,7 @@
     :StartState    StartState ;;Defines a possible starting state for the demand, if any.
     :EndState      EndState ;;Defines the implication of leaving the demand on any associated entity.
     :MissionLength MissionLength ;;Defines the length of duration of a local assignment to the demand.
+    :demand-entity true ;;type tag for demands.
     ]})
 
 ;;Actively In Use
