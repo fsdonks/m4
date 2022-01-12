@@ -9,7 +9,7 @@
             [spork.util [io :as io]]))
 
 ;;testing
-(def p (io/file-path "~/workspacenew/notional/base-testdata-v7-rearmm-vizbct.xlsx"))
+(def p (io/file-path "~/workspacenew/notional/base-testdata-v7-rearmm-vizbct2.xlsx"))
 
 ;;we can keep track of a sparse sequence of changes.
 
