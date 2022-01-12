@@ -145,6 +145,10 @@
   (for [id  (keys (:demandmap (get-demandstore ctx)))]
     (get-entity ctx id)))
 
+(defn active-demands [ctx]
+  (for [id (keys (store/gete ctx :DemandStore :activedemands))]
+    (get-entity ctx id)))
+
 (defn units   [ctx]
     (for [id  (keys (:unitmap   (get-supplystore ctx)))]
       (get-entity ctx id)))

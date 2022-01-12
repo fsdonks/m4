@@ -17,67 +17,66 @@
 ;;{t name state location ct normalized-ct}
 ;;should be able to infer what we need from that...
 
-#_
-{:SRC "ABCT"
- :compo "NG"
- :icon "abct.png"
- :location :home
- :readiness 0 ;;0 to 1, 0 == c4, 1 == c1, even partitions.
- }
-
+(defn unit-entities [ctx]
+  (->> (for [u     (core/current-units ctx)]
+         (-> (marathon.ces.unit/summary u)
+             (select-keys [:name :curstate :location :cycletime :src])
+             (assoc  :readiness (marathon.ces.unit/normalized-dwell u)
+                     :compo (u :component)
+                     :id    (u :name))
+             (dissoc :name)))
+       (reduce (fn [acc r]
+                 (assoc acc (r :id) r))
+               {})))
 
 (defn compute-moves [ctx]
   (when-let [locs (a/location-changes ctx)]
     (let [ds (core/demand-entities ctx)]
       (->> (for [[id from to] locs]
-             (do #_(println [id from to])
-                 (cond (and (not (ds from)) (ds to)) ;;deployment
-                       [:deployed id from to]
-                       (and (ds from) (not (ds to))) ;;home
-                       [:home id from to]
-                       :else nil #_(throw (ex-info "unknown move!" {:move [id from to]})))))
+             (cond (and (not (ds from)) (ds to)) ;;deployment
+                   [:deployed id from to]
+                   (and (ds from) (not (ds to))) ;;home
+                   [:home id from to]
+                   ;;c-rating change.
+                   :else
+                   nil
+                   #_[:dwell id from to] #_(throw (ex-info "unknown move!" {:move [id from to]}))))
            (filterv identity)))))
 
 (defn frame->vstats [[t ctx]]
-  (let [region (spork.util.general/memo-1
-                (fn [loc] (store/gete ctx loc :region)))]
-    {:t t
-     :period   (core/current-period ctx)
-     :entities (->> (for [u     (core/current-units ctx)]
-                      (-> (marathon.ces.unit/summary u)
-                          (select-keys [:name :curstate :location :cycletime :src])
-                          (assoc  :readiness (marathon.ces.unit/normalized-dwell u)
-                                  :compo (u :component)
-                                  :id    (u :name))))
-                    (reduce (fn [acc r]
-                              (assoc acc (r :id) r))
-                            {}))
-     :moves    (compute-moves ctx)
-     :missed   (if-let [xs (seq (marathon.ces.demand/unfilled-demand-count ctx))]
-                 (reduce + 0 (map :unfilled xs))
-                 0)}))
+  {:t t
+   :period   (core/current-period ctx)
+   :entities (unit-entities ctx)
+   :moves    (compute-moves ctx)
+   :missed   (if-let [xs (seq (marathon.ces.demand/unfilled-demand-count ctx))]
+               (reduce + 0 (map :unfilled xs))
+               0)})
+
+;;need to group demands by region...
 
 (defn history->vis-state [h]
-  (let [[t0 ctx0] (first h)
-        [tf _]    (last h)
-        init-entities (core/unit-entities )]
-    {:c-day 0
-     :tstart t0
-     :tstop  tf
+  (let [[t0 ctx0]     (first h)
+        init-entities (unit-entities ctx0)
+        regions       ((store/domains ctx0) :region)
+        init-demand   (->> ctx0
+                           core/active-demands
+                           (map :region)
+                           frequencies)]
+    {:c-day    0
+     :tstart   t0
+     :tstop    (store/gete ctx0 :parameters :LastDayDefault)
      :entities init-entities
-     :demand {:northcom 1
-              :pacom    3
-              :eucom    3
-              :centcom  2}
-     :slots {:northcom 1
-             :pacom    3
-             :eucom    3
-             :centcom  2}
-     :period "Initialization"
-     :totals {:mission 0
-              :available 0
-              :unavailable 0}
-    :frames (rest h)}))
+     :regions  ((store/domains ctx0) :region)
+     ;;demand and slots don't make sense.
+     :demand   init-demand
+     :slots    init-demand
+     :period   (core/current-period ctx0)
+     ;;these aren't currently computed.
+     ;;we can compute them on the other side.
+     :totals   {:mission     0
+                :available   0
+                :unavailable 0}
+    :frames (vec (rest h))}))
 
 
 ;;we want to build a map of
