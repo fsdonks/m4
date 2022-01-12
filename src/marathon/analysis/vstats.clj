@@ -17,17 +17,25 @@
 ;;{t name state location ct normalized-ct}
 ;;should be able to infer what we need from that...
 
+(defn re-key [m kvs]
+  (reduce-kv (fn [acc kold knew]
+               (if-let [v (acc kold)]
+                 (-> acc (dissoc kold) (assoc knew v))
+                 acc))
+             m kvs))
+
 (defn unit-entities [ctx]
   (->> (for [u     (core/current-units ctx)]
-         (-> (marathon.ces.unit/summary u)
-             (select-keys [:name :curstate :location :cycletime :src])
-             (assoc  :readiness (marathon.ces.unit/normalized-dwell u)
-                     :compo (u :component)
-                     :id    (u :name))
-             (dissoc :name)))
-       (reduce (fn [acc r]
-                 (assoc acc (r :id) r))
-               {})))
+         (let [v  (if (marathon.ces.unit/deployed? u) 0
+                      (/ 1.0 (marathon.ces.unit/get-cyclelength u)))]
+               (-> (marathon.ces.unit/summary u)
+                   (select-keys [:name :curstate :location :cycletime :src])
+                   (assoc  :readiness (marathon.ces.unit/normalized-dwell u)
+                           :compo     (u :component)
+                           :velocity  v)
+                   (re-key {:name :id :curstate :state}))))
+           (reduce (fn [acc r] (assoc acc (r :id) r))
+                   {})))
 
 (defn compute-moves [ctx]
   (when-let [locs (a/location-changes ctx)]
@@ -76,7 +84,7 @@
      :totals   {:mission     0
                 :available   0
                 :unavailable 0}
-    :frames (vec (rest h))}))
+    :frames (vec (map frame->vstats (rest h)))}))
 
 
 ;;we want to build a map of
