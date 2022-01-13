@@ -30,7 +30,7 @@
                v  (if deployed? 0
                       (/ 1.0 (marathon.ces.unit/get-cyclelength u)))
                location (if deployed?
-                          (store/gete ctx (u :locationname  ) :region)
+                          (store/gete ctx (u :locationname) :region)
                           :home)]
                (-> (marathon.ces.unit/summary u)
                    (select-keys [:name :curstate #_:location :cycletime :src])
@@ -48,9 +48,9 @@
     (let [ds (core/demand-entities ctx)]
       (->> (for [[id from to] locs]
              (cond (and (not (ds from)) (ds to)) ;;deployment
-                   [:deployed id from to]
+                   [:deployed id from to  :home (store/gete ctx to :region)]
                    (and (ds from) (not (ds to))) ;;home
-                   [:home id from to]
+                   [:returned id from to (store/gete ctx from :region)  :home]
                    ;;c-rating change.
                    :else
                    nil
@@ -87,3 +87,14 @@
      :period   (core/current-period ctx0)
      :profile  (core/demand-profile ctx0)
     :frames (vec (map frame->vstats (rest h)))}))
+
+;;simple API call to dump an edn file.  Should probably migrate to using
+;;transit, but meh.  We'll see how long this takes in practice.
+(defn dump-stats [from to]
+  (println [:spitting :vis-stats :from from])
+  (->> (io/file-path from)
+       a/marathon-stream
+       history->vis-state
+       pr-str
+       (spit (io/file-path to)))
+  (println [:emitted :to to]))
