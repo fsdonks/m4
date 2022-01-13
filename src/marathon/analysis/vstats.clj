@@ -26,14 +26,20 @@
 
 (defn unit-entities [ctx]
   (->> (for [u     (core/current-units ctx)]
-         (let [v  (if (marathon.ces.unit/deployed? u) 0
-                      (/ 1.0 (marathon.ces.unit/get-cyclelength u)))]
+         (let [deployed? (marathon.ces.unit/deployed? u)
+               v  (if deployed? 0
+                      (/ 1.0 (marathon.ces.unit/get-cyclelength u)))
+               location (if deployed?
+                          (store/gete ctx (u :locationname  ) :region)
+                          :home)]
                (-> (marathon.ces.unit/summary u)
-                   (select-keys [:name :curstate :location :cycletime :src])
+                   (select-keys [:name :curstate #_:location :cycletime :src])
                    (assoc  :readiness (marathon.ces.unit/normalized-dwell u)
                            :compo     (u :component)
+                           :location  location
                            :velocity  v)
-                   (re-key {:name :id :curstate :state}))))
+                   ;;lame rekey to SRC because reasons...
+                   (re-key {:name :id :curstate :state :src :SRC}))))
            (reduce (fn [acc r] (assoc acc (r :id) r))
                    {})))
 
@@ -79,42 +85,5 @@
      :demand   init-demand
      :slots    init-demand
      :period   (core/current-period ctx0)
-     ;;these aren't currently computed.
-     ;;we can compute them on the other side.
-     :totals   {:mission     0
-                :available   0
-                :unavailable 0}
+     :profile  (core/demand-profile ctx0)
     :frames (vec (map frame->vstats (rest h)))}))
-
-
-;;we want to build a map of
-;; #_
-;; {:entities intial set of {:keys [id src compo icon location readiness]}
-;;  :c-day 0
-;;  :tstart tstart
-;;  :tstop  tstop
-;;  :stats {:deployed {:C1 0
-;;                     :C2 0
-;;                     :C3 0
-;;                     :C4 0
-;;                     :C5 0
-;;                     :Missing 0}
-;;          :totals  (totals @state)}
-;;  :fill-stats {:northcom empty-fill-stats
-;;               :eucom    empty-fill-stats
-;;               :centcom  empty-fill-stats
-;;               :pacom    empty-fill-stats}}
-
-#_
-(defn totals [s]
-  (->> s :entities vals
-       (reduce (fn [acc e]
-                 (case (e :location)
-                   :home (case (naive-c-rating e)
-                           (:C1 :C2) (update acc :available inc)
-                           (update acc :unavailable inc))
-                   (update acc :mission inc)))
-               {:mission 0
-                :available 0
-                :unavailable 0})))
-
