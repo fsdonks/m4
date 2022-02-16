@@ -346,10 +346,17 @@
  (double  (/ (+ (get u :cycletime) (get u :dt 0))
              (-> u :currentcycle :dwell-expected))))
 
+#_
 (defn normalized-dwell [u]
  (core/float-trunc  (/ (+ (get u :cycletime) (get u :dt 0))
                        (-> u :currentcycle :dwell-expected))
                     6))
+
+;;allow user-supplied time now, otherwise default to current cyclelength.
+(defn normalized-dwell
+  ([u]      (normalized-dwell u (+ (get u :cycletime) (get u :dt 0))))
+  ([u t]    (core/float-trunc  (/ t (-> u :currentcycle :dwell-expected))
+                               6)))
 
 
 ;;trying to boost speed.
@@ -901,8 +908,8 @@
   (let [newlocation (:name demand)
         cnt  (core/deployment-count ctx)
         ctx  (core/inc-deployment-count ctx)]
-    (-> unit
-        (assoc :deployment-index cnt)
+    (-> unit  ;;keep track of cycletime for initial deployment now
+        (assoc :deployment-index cnt :cycle-time-when-deployed (unit :cycletime))
         (increment-deployments)
         (check-prefill demand t ctx) ;;added 12/16/2020
         (keep-bogging-until-depleted newlocation ctx))))
@@ -910,8 +917,8 @@
 (defn pseudo-deploy [unit info t ctx]
   (let [cnt  (core/deployment-count ctx)
         ctx  (core/inc-deployment-count ctx)]
-    (-> unit
-        (assoc :deployment-index cnt)
+    (-> unit ;;keep track of cycletime for initial deployment now
+        (assoc :deployment-index cnt :cycle-time-when-deployed (unit :cycletime))
         (increment-deployments)
         (wait-at info ctx))))
 

@@ -27,8 +27,8 @@
 (defn unit-entities [ctx]
   (->> (for [u     (core/current-units ctx)]
          (let [deployed? (marathon.ces.unit/deployed? u)
-               v  (if deployed? 0
-                      (/ 1.0 (marathon.ces.unit/get-cyclelength u)))
+               clength   (marathon.ces.unit/get-cyclelength u)
+               v  (if deployed? 0 (/ 1.0 clength))
                location (if deployed?
                           (store/gete ctx (u :locationname) :region)
                           :home)]
@@ -37,14 +37,16 @@
                    ;;normalized dwell is not a great indicator here.
                    ;;we can increase dwell while bogging since it's based on
                    ;;cycletime....kind of a misnomer :(
-                   (assoc  :readiness (marathon.ces.unit/normalized-dwell u)
+                   (assoc  :readiness (if deployed?
+                                        (marathon.ces.unit/normalized-dwell u
+                                          (u :cycle-time-when-deployed))
+                                        (marathon.ces.unit/normalized-dwell u))
                            :compo     (u :component)
                            :location  location
                            :velocity  v)
                    ;;lame rekey to SRC because reasons...
                    (re-key {:name :id :curstate :state :src :SRC}))))
-           (reduce (fn [acc r] (assoc acc (r :id) r))
-                   {})))
+           (reduce (fn [acc r] (assoc acc (r :id) r)) {})))
 
 (defn compute-moves [ctx]
   (when-let [locs (a/location-changes ctx)]
