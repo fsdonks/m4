@@ -34,6 +34,9 @@
                           :home)]
                (-> (marathon.ces.unit/summary u)
                    (select-keys [:name :curstate #_:location :cycletime :src])
+                   ;;normalized dwell is not a great indicator here.
+                   ;;we can increase dwell while bogging since it's based on
+                   ;;cycletime....kind of a misnomer :(
                    (assoc  :readiness (marathon.ces.unit/normalized-dwell u)
                            :compo     (u :component)
                            :location  location
@@ -52,6 +55,8 @@
                    (and (ds from) (not (ds to))) ;;home
                    [:returned id from to (store/gete ctx from :region)  :home]
                    ;;c-rating change.
+                   (and (ds from) (ds to)) ;;re-deployed
+                   [:re-deployed id from to (store/gete ctx from :region) (store/gete ctx to :region)]
                    :else
                    nil
                    #_[:dwell id from to] #_(throw (ex-info "unknown move!" {:move [id from to]}))))
