@@ -65,13 +65,20 @@
            (filterv identity)))))
 
 (defn frame->vstats [[t ctx]]
+  (let [id->region (fn [r] (store/gete ctx (r :id) :region))
+        misses (when-let [xs (seq (marathon.ces.demand/unfilled-demand-count ctx))]
+                 (->> (for [[region recs] (group-by id->region xs)
+                            [src    ys]   (group-by :src recs)]
+                            [region src (reduce + 0 (map :unfilled ys))])
+                      (reduce (fn [acc [region src n]]
+                                (assoc-in acc [region src] n)) {})))
+        total-missed (if (seq misses) (reduce + (mapcat vals (vals misses))) 0)]
   {:t t
    :period   (core/current-period ctx)
    :entities (unit-entities ctx)
    :moves    (compute-moves ctx)
-   :missed   (if-let [xs (seq (marathon.ces.demand/unfilled-demand-count ctx))]
-               (reduce + 0 (map :unfilled xs))
-               0)})
+   :total-missed  total-missed
+   :misses   misses}))
 
 ;;need to group demands by region...
 

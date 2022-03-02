@@ -902,14 +902,18 @@
         (add-bog (unit :prefill))
         (dissoc :prefill))))
 
+(defn current-cycle-time [unit ctx]
+  (let [cu (core/current-entity ctx (unit :name))]
+    (+ (cu :cycletime) (cu :dt 0))))
+
 ;;We can probably combine these into a unit behavior.
-;;For instance, notice we update the deployments.
+;;For instance, notice we update the deployments.s
 (defn  deploy-unit [unit demand t ctx]
   (let [newlocation (:name demand)
         cnt  (core/deployment-count ctx)
         ctx  (core/inc-deployment-count ctx)]
-    (-> unit  ;;keep track of cycletime for initial deployment now
-        (assoc :deployment-index cnt :cycle-time-when-deployed (unit :cycletime))
+    (-> unit  ;;keep track of cycletime for initial deployment now, this is possibly inccurate.
+        (assoc :deployment-index cnt :cycle-time-when-deployed (current-cycle-time unit ctx))
         (increment-deployments)
         (check-prefill demand t ctx) ;;added 12/16/2020
         (keep-bogging-until-depleted newlocation ctx))))
@@ -918,7 +922,7 @@
   (let [cnt  (core/deployment-count ctx)
         ctx  (core/inc-deployment-count ctx)]
     (-> unit ;;keep track of cycletime for initial deployment now
-        (assoc :deployment-index cnt :cycle-time-when-deployed (unit :cycletime))
+        (assoc :deployment-index cnt :cycle-time-when-deployed (current-cycle-time unit ctx))
         (increment-deployments)
         (wait-at info ctx))))
 
