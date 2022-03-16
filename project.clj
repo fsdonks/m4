@@ -17,7 +17,7 @@
                  [marathon-schemas "4.1.7-SNAPSHOT"
                   :exclusions [spork]]
                  ;;post processing.
-                 [proc  "0.2.8-SNAPSHOT"
+                 [proc  "0.2.9-SNAPSHOT"
                   :exclusions [spork]]
                  [stoke "0.1.1-SNAPSHOT"
                   :exclusions [spork]]
