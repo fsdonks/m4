@@ -145,6 +145,10 @@
   (for [id  (keys (:demandmap (get-demandstore ctx)))]
     (get-entity ctx id)))
 
+(defn active-demands [ctx]
+  (for [id (keys (store/gete ctx :DemandStore :activedemands))]
+    (get-entity ctx id)))
+
 (defn units   [ctx]
     (for [id  (keys (:unitmap   (get-supplystore ctx)))]
       (get-entity ctx id)))
@@ -486,7 +490,7 @@
 (defn unit-names      [ctx] (keys (gete ctx :SupplyStore :unitmap)))
 (defn unit-entities   [s]   (store/get-domain s :unit-entity))
 (defn unit-records    [ctx] (store/get-entities ctx (unit-names ctx)))
-(defn demand-entities [s]   (store/get-domain s :DemandType))
+(defn demand-entities [s]   (store/get-domain s :demand-entity))
 
 ;;fetch units with appended :dt information for
 ;;potential synchronization purposes.
@@ -502,7 +506,7 @@
 ;;demand-changes gets us the units...
 ;;we also need to compute the peak demand.
 (defn all-demands [store]
-  (store/select-entities store :from [:startday :duration :quantity :DemandType]))
+  (store/select-entities store :from [:startday :duration :quantity :demand-entity]))
 
 ;;not sure about this, we may want to break out by trends...
 ;;We'll see what use case pops up for this type of query.

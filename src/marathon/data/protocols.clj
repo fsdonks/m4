@@ -337,14 +337,16 @@
 (defn leads-to-start? [p position]
   (-> (get-position-graph p)
       (graph/depth-first-search position (start-state p))
-      (graph/path?)))       
+      (graph/path?)))
 
+;;deprecated.
+#_
 (defprotocol IUnitBehavior
   (behavior-name [b] "Return the name of the behavior...duh.")
   (init-behavior [b state] "Used for stateful initializaion, may tank this one.")
   (update [b deltat unit] "Update unit with behavior b, given a time delta.")
-  (change-state [b unit to-state deltat duration following-state] 
-      "Return the result of changing the unit's finite state machine to a 
+  (change-state [b unit to-state deltat duration following-state]
+      "Return the result of changing the unit's finite state machine to a
        new state using behavior b."))
 
 (defn policy? [obj]
