@@ -790,7 +790,7 @@
                                       :default])))
    :effects    {:wait-time   999999
                 :wait-state  :waiting}}
-  "NonBOG-RC-Only"
+  "NonBOG-RC-Only "
    {:restricted  "NonBOG"
     :filter   (fn [u] (not= (:component u) "AC"))
     :computed (fn [{:keys [where] :as env}  ctx]
@@ -804,6 +804,21 @@
                                      :default])))
     :effects   {:wait-time   999999
                 :wait-state  :waiting}}
+
+   "RC_Cannibalization" ;;new category for cannibalized demand, was NonBOG-RC-Only
+   {:restricted  "NonBOG"
+    :filter   (fn [u] (not= (:component u) "AC"))
+    :computed (fn [{:keys [where] :as env}  ctx]
+                (lazy-merge
+                 (compute-nonbog
+                  (assoc env :where
+                         (fn [u] (not= (:component u) "AC")))
+                  ctx) ;;<-merge these in
+                 (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                     :deployable-buckets
+                                     :default])))
+    :effects   {:wait-time   999999
+                :wait-state  #{:waiting :unavailable}}}
    ;;Added to provide a filtering criteria for modernized demands.
    ;;We never modernize mod 1, since that's considered the absolute
   ;;highest mod level.

@@ -96,7 +96,10 @@
 ;;not worried about collecting garbage.  Used in deploy-unit only.
 (def last-deploy (atom nil))
 ;;this is hacky; should be data-driven.
-(defn non-bog? [d] (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC"} (:category d)))
+(defn non-bog? [d]
+  (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC" "RC_Cannibalization"}
+   (:category d)))
+
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
 (defn deploy-unit
