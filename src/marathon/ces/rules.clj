@@ -790,7 +790,21 @@
                                       :default])))
    :effects    {:wait-time   999999
                 :wait-state  :waiting}}
-  "NonBOG-RC-Only "
+   "Forward"
+   {:doc "Like NonBOG, but only exists for compo1 units; aligns with a region, and provides
+          additional metadata about the unit's status (e.g. for visualization and recording
+          purposes)"
+    :restricted  "NonBOG"
+    :computed  (fn [env ctx]
+                 (lazy-merge
+                  (assoc env :where
+                         (fn [u] (= (:component u) "AC"))) ;;<-merge these in
+                  (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                      :deployable-buckets
+                                      :default])))
+    :effects    {:wait-time   999999
+                 :wait-state  #{:waiting :forward}}}
+  "NonBOG-RC-Only"
    {:restricted  "NonBOG"
     :filter   (fn [u] (not= (:component u) "AC"))
     :computed (fn [{:keys [where] :as env}  ctx]

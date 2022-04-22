@@ -688,7 +688,7 @@
   (->> (for [[k us] (group-by :cycle-init-key xs)]
          (if-not k
            us
-           (let [[src compo p] k
+           (let [;;[src compo p] k
                  policy        (-> k meta :policy)]
              (distribute-cycle-times us policy))))
        (apply concat)))

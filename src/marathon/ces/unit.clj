@@ -600,21 +600,32 @@
 ;;(defmacro kw? [x]
 ;;  `(instance? clojure.lang.Keyword ~x))
 
+;;TOM Change 4/22/2022
+;;Prior logic failed to check correctly when ys is a set and xs
+;;is a keyword.  We want the semantics to be:
+;;ys is a set, xs is set -> xs is a subset of ys.
+;;ys is a set, xs is a non-set -> ys contains xs, e.g. #{xs} is a subset of ys.
+;;ys is not a set, xs is a set -> #{ys} = xs (only holds if card of xs is 1)
+;;ys is not a set, xs is not a sest -> ys = xs
+;;So for comparison purposes, we want to treat singleton sets as
+;;broadly equivalent to non-sets of the single entry:
+;;e.g. #{x} ~= x
 (defn has?
   "Dumb aux function to help with state sets/keys.
-   If we have an fsm with statedata, we can check 
-   whether the state representation has a desired 
-   state - or 'is'  the state - even in the 
-   presence of multiple conjoined states - ala 
-   state sets."
+   If we have an fsm with statedata, we can check whether the state
+   representation has a desired state - or 'is' the state - even in the presence
+   of multiple conjoined states - ala state sets."
   [ys xs]
-  (if (set? xs) 
-    (if (set? ys) (when (every? ys xs) xs)
-        (and (== (count xs) 1)
-             (xs ys)))
-    (if (set? ys) 
-        (and (== (count ys) 1)
-             (ys xs))
+  (if (set? xs)
+    (if (set? ys)
+      (when (every? ys xs) xs) ;;xs is a subset of ys
+      (and (== (count xs) 1)   ;;#{x} = xs, x = y
+           (xs ys)))
+    ;;xs is non-set
+    (if (set? ys)
+        ;;ys contains xs, e.g. #{xs} is a subset of ys.
+        (ys xs)
+        ;;neither are sets, must be =
         (when (= ys xs) ys))))
 
 (defn has-state? [u s]
@@ -628,9 +639,10 @@
     (:bogging :deploying pol/Deployed pol/Bogging :non-bogging :waiting :overlapping) true
     false))
 
-;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
-;Note, this implicitly hardcodes deployed states.  We could probably yank this out into
-;a data-driven definition that's more dynamic.  TBD.
+;;Consults the unit's state to determine if it's in a Bogging or Overlapping state.
+;;Note, this implicitly hardcodes deployed states.  We could probably yank this out into
+;;a data-driven definition that's more dynamic.  TBD.
+;;TOM - noticed that we didn't use has-state? here....
 (defn deployed? [u]
   (let [s (unit-state u)]
     (if-not (set? s)
