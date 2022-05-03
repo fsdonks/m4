@@ -618,13 +618,42 @@
 
 (defn pstore->params [pstore] (core/get-parameters (:ctx (meta pstore))))
 (defn index-unit     [idx  u] (assoc u :unit-index idx))
-(defn basic-cycle-key
+  
+(defn metable?
+  "Can we attach meta data to this object? We should be able to attach
+  meta data to anything that implements IObj."
+  [x] 
+  (instance? clojure.lang.IObj x))
+
+(defn policy-from-record
+  "Return a vector of [policy policy-name] for the policy that will be used based on
+  what the value is in the Policy field of the supply record."
+  [{:keys [Policy Component SRC] :as supply-rec} pstore]
+  (let [policy (case Policy
+                 "Auto" (choose-policy Policy Component pstore
+                                       (pstore->params pstore) SRC)
+                 (plcy/find-policy Policy pstore))]
+    ;;return the policy
+    [policy
+     ;;return the policy-name
+     (marathon.data.protocols/policy-name policy)]))
+
+(defn compute-cycle-key
   "We want to group units for initial cycle time distribution according to
   a key.  Usually, we have a separate distribution for [SRC component
-  policy]"
-  [{:keys }])
+  policy], but we can also have a custom cycle-init-key in the supply record."
+  [{:keys [Policy Component SRC cycle-init-key]
+    :as supply-rec} pstore]
+  (let [[policy p] (policy-from-record supply-rec pstore)]
+        (-> (if cycle-init-key
+              (if (metable? cycle-init-key)
+                cycle-init-key
+                ;;we can attach metadata to a vector
+                [cycle-init-key])
+              ;;our typical cycle key
+              [SRC Component p])
+            (with-meta {:policy policy}))))
 
-(defn compute-cycle-key [])
 ;;Tom 15 Aug 2019
 ;;We need to decomplect cycle time distribution from
 ;;batch unit creation, since we now how the possibility
@@ -640,27 +669,9 @@
 (defn create-units
   [idx amount pstore base-record]
   (let [bound     (+ idx (quot amount 1))
-        pname     (:Policy base-record)
         compo     (:Component base-record)
         src       (:SRC base-record)
-        policy    (case pname
-                    "Auto" (choose-policy pname compo pstore
-                                          (pstore->params pstore) src)
-                    (plcy/find-policy pname pstore))
-        p         (marathon.data.protocols/policy-name policy)
-        ;;We can attach a field called :cycle-init-key-add to the
-        ;;supply record in order to make more groups to units to
-        ;;distribute cycletimes.
-        ;;function compute-cycle-key
-        ;;if nil, compute from record
-        ;;or if it is something check to see if it can support
-        ;;metadata, then append policy, otherwise wrap it in a vector
-        ;;clojure meta?  can attach meta.
-        k         (with-meta [src
-                              compo
-                              p
-                              (:cycle-init-key-add base-record)]
-                    {:policy policy})]
+        k         (compute-cycle-key base-record pstore)]
     (when (pos? amount)
       (into [] (map (fn [idx]
                       (let [nm       (generate-name idx src compo)]
@@ -699,7 +710,6 @@
 ;;Tom added 19 Aug 2019
 ;;We now have a processing step that groups the unit records by :cycle-init-key
 ;;and defines cyclelengths for each unit.
-
 (defn initialize-cycle-times [xs]
   (->> (for [[k us] (group-by :cycle-init-key xs)]
          (if-not k
@@ -720,7 +730,7 @@
   associated with the record.  If all of the bins have been used up
   and there is still a remaining quantity, the remaining units are
   placed in a supply record with no alignment."
-  [{:keys [Quantity] :as supply-rec} bins]
+  [{:keys [Quantity SRC Component] :as supply-rec} bins]
   (loop [remaining-quantity Quantity
          binned []
          remaining-bins (partition 2 bins)]
@@ -732,9 +742,8 @@
                     (assoc new-rec :aligned alignment
                            ;;In order to group units for each
                            ;;alignment and distribute their cycletimes
-                           ;;separately, we need to add alignment on
-                           ;;to the cycle-init-key
-                           :cycle-init-key-add alignment)
+                           ;;separately, we can group by this key
+                           :cycle-init-key [SRC Component alignment])
                     new-rec)
           leftovers (- remaining-quantity new-quantity)]
       (cond
@@ -754,8 +763,9 @@
 
 (defn preprocess-supply
   "Given a supply record, apply each of the functions found under the
-  :Tags->:preprocess value along with the associated arguments.  Note
-  that the functions will be evaluated from left to right.
+  {:Tags {:preprocess [func1 [args1 args2] func2 [args3 args4]}} value
+  along with the associated arguments.  Note that the functions will
+  be evaluated from left to right.
   The first arg of all of the functions should be a single supply
   record and each function should return a sequnce of supply records."
   [{:keys [preprocess] :as supply-rec}]
