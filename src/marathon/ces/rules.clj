@@ -793,7 +793,8 @@
    "Forward"
    {:doc "Like NonBOG, but only exists for compo1 units; aligns with a region, and provides
           additional metadata about the unit's status (e.g. for visualization and recording
-          purposes)"
+          purposes).  Filter only those units that are aligned to the
+  forward region."
     :restricted  "NonBOG"
     :computed  (fn [env ctx]
                  (lazy-merge
@@ -803,7 +804,12 @@
                                       :deployable-buckets
                                       :default])))
     :effects    {:wait-time   999999
-                 :wait-state  #{:waiting :forward}}}
+                 :wait-state  #{:waiting :forward}}
+    :filter
+    (fn fenced [u]
+      (let [demand (*env* :demand)]
+        (and (= (u :aligned)
+                (demand  :region)))))}
   "NonBOG-RC-Only"
    {:restricted  "NonBOG"
     :filter   (fn [u] (not= (:component u) "AC"))

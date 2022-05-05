@@ -27,7 +27,8 @@
             [spork.sim.simcontext :as sim]
             [marathon.ces.core :as core]
             [spork.util      [table :as tbl]]
-            [clojure.core    [reducers :as r]]))
+            [clojure.core    [reducers :as r]]
+            [clojure.test :refer [is]]))
 
 
 ;;*Entity Orders
@@ -761,9 +762,31 @@
 ;;that we can resolve them at runtime.
 (def preprocessing-ns 'marathon.ces.entityfactory)
 
+(defn namespace-provided?
+  "Returns a string if there was a namespace provided for the symbol.
+  Else, returns nil."
+   {:test (fn []
+           (is (= "blah" (namespace-provided? 'blah/func)))
+           (is (nil? (namespace-provided? 'func))))}
+  [symbol]
+  {:pre [(symbol? symbol)]}
+  (namespace symbol))
+  
+(defn resolve-fn
+  "Given preprocessing functions in the Tags, use the supplied
+  namespace if it exists.  Otherwise, try to resolve the function in
+  our preprocessing-ns for now."
+  [func]
+  {:pre [(symbol? func)]
+   ;;make sure that our symbol resolved to something and isn't nil
+   :post [(not (nil? %))]}
+  (if (namespace-provided? func)
+    (resolve func)
+    (ns-resolve preprocessing-ns func)))
+    
 (defn preprocess-supply
   "Given a supply record, apply each of the functions found under the
-  {:Tags {:preprocess [func1 [args1 args2] func2 [args3 args4]}} value
+  {:Tags {:preprocess [func1 [arg1 arg2] func2 [arg3 arg4]}} value
   along with the associated arguments.  Note that the functions will
   be evaluated from left to right.
   The first arg of all of the functions should be a single supply
@@ -777,8 +800,7 @@
                           ;;map a keyword to resolved function OR
                           ;;as part of preprocessing at setups so
                           ;;can use that function anywhere
-                          (apply (ns-resolve
-                                  preprocessing-ns func)
+                          (apply (resolve-fn func)
                                  supply-record
                                  args))                   
                    supply-recs)) [supply-rec] func-tuples))
