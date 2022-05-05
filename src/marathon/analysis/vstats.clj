@@ -29,9 +29,8 @@
 ;;we need to capture this in the entity state as a key.
 (defn unavailable? [u] (-> u marathon.ces.unit/unit-state :unavailable))
 
-(defn unit-entities [ctx]
-  (->> (for [u     (core/current-units ctx)]
-         (let [deployed? (marathon.ces.unit/deployed? u)
+(defn unit-entity [u]
+  (let [deployed? (marathon.ces.unit/deployed? u)
                demob?    (marathon.ces.unit/demobilizing? u)
                unav?     (unavailable? u)
                clength   (marathon.ces.unit/get-cyclelength u)
@@ -56,7 +55,11 @@
                    (update :cycletime + (u :dt)) ;;cycletime is not fresh.
                    ;;lame rekey to SRC because reasons...
                    (re-key {:name :id :curstate :state :src :SRC}))))
-           (reduce (fn [acc r] (assoc acc (r :id) r)) {})))
+
+(defn unit-entities [ctx]
+  (->> (core/current-units ctx)
+       (map unit-entity)
+       (reduce (fn [acc r] (assoc acc (r :id) r)) {})))
 
 (defn compute-moves [ctx]
   (when-let [locs (a/location-changes ctx)]
