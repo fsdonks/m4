@@ -798,8 +798,7 @@
     :restricted  "NonBOG"
     :computed  (fn [env ctx]
                  (lazy-merge
-                  (assoc env :where
-                         (fn [u] (= (:component u) "AC"))) ;;<-merge these in
+                  (compute-nonbog env ctx)
                   (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                                       :deployable-buckets
                                       :default])))
