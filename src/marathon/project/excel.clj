@@ -123,10 +123,15 @@
 ;;disadvantages to this...
 (defn marathon-book->marathon-tables
   "Extract a map of canonical tables to a map with the same name.  Caller can
-   supply additional tables, or supply the :all keyword to get all tables."
+   supply additional tables, or supply the :all keyword to get all
+  tables."
   [wbpath & {:keys [tables] :or {tables
                                  marathon-workbook-schema}}]
-  (let [wb (xl/as-workbook (io/file-path wbpath))]
+  ;;Only clean the string with io/file-path if wbpath is a string.
+  ;;Alternatively, we might be passing a resource.
+  (let [wb (xl/as-workbook (if (string? wbpath)
+                             (io/file-path wbpath)
+                             wbpath))]
     (into {} (filter identity
                      (for [[nm sheetname] (seq tables)]
                        (do (print "Loading" sheetname ". . . ")
@@ -140,34 +145,49 @@
                                [(keyword nm) tab])
                              (println "(missing)."))))))))
 
-;;This is all that really matters from marathon.project...
-(defmethod load-project "xlsm"
-  [path & {:keys [tables]
-           :or {tables marathon-workbook-schema}}]
-    (let [ts    (marathon-book->marathon-tables path :tables tables)
-        paths (reduce-kv (fn [acc nm _]
-                           (assoc acc nm
-                                  [path
-                                   (name nm)])) {} ts)]
-      (-> (make-project
-           (clojure.string/replace (io/fname path) #".xlsm" "")
-           (io/as-directory (io/fdir path)))
-          (assoc :tables ts)
-          (update :paths merge paths))))
-
-(defmethod load-project "xlsx"
-  [path & {:keys [tables]
-           :or {tables marathon-workbook-schema}}]
+(defn load-workbook
+  [path file-extension & {:keys [tables]
+                          :or {tables marathon-workbook-schema}}]
   (let [ts    (marathon-book->marathon-tables path :tables tables)
         paths (reduce-kv (fn [acc nm _]
                            (assoc acc nm
                                   [path
                                    (name nm)])) {} ts)]
-  (-> (make-project
-        (clojure.string/replace (io/fname path) #".xlsx" "")
-        (io/as-directory (io/fdir path)))
-      (assoc :tables ts)
-      (update :paths merge paths))))
+      (-> (make-project
+           (clojure.string/replace (io/fname path) (re-pattern
+                                                    file-extension) "")           
+           (io/as-directory (io/fdir path)))
+          (assoc :tables ts)
+          (update :paths merge paths))))
+
+(defmethod load-project "xlsm"
+  [path & {:keys [tables]
+           :or {tables marathon-workbook-schema}
+           :as m}]
+  ;;Collect up the args and send them to load-workbook
+  (apply load-workbook (apply concat [path ".xlsm"] m)))
+
+(defmethod load-project "xlsx"
+  [path & {:keys [tables]
+           :or {tables marathon-workbook-schema}
+           :as m}]
+  (apply load-workbook (apply concat [path ".xlsx"] m)))
+
+;;Loading a clojure.java.io/resource
+(defmethod load-project java.net.URL
+  [path & {:keys [tables]
+           :or {tables marathon-workbook-schema}
+           :as m}]
+  (let [ts    (marathon-book->marathon-tables path :tables tables)]
+      (-> (make-project
+           (clojure.string/replace (io/fname path) #".xlsm|.xlsx" "")
+                                   ;;no paths for a resource
+                                   ;;since we'll be using the MARATHON
+                                   ;;history directly with no i/o for now.
+                                    "" :paths {}) 
+          (assoc :tables ts)))
+  
+  (apply load-workbook (apply concat [path ".xlsx"] m)))
 
 (defmethod save-project "xlsx" [proj path & options]
   (xl/tables->xlsx path

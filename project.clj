@@ -11,7 +11,7 @@
 (defproject marathon "4.2.3-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [spork "0.2.1.4-SNAPSHOT"
+                 [spork "0.2.1.5-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
                  [marathon-schemas "4.1.7-SNAPSHOT"
