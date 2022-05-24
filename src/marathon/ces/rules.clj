@@ -802,6 +802,12 @@
                   (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
                                       :deployable-buckets
                                       :default])))
+    #_#_:filter ;;only use fenced units. we may want to revisit this....
+    (fn fenced [u]
+      (let [demand (*env* :demand)]
+        (and (u :fenced?)
+             (= (u :aligned)
+                (demand  :region)))))
     :effects    {:wait-time   999999
                  :wait-state  #{:waiting :forward}}}
   "NonBOG-RC-Only"

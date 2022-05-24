@@ -9,7 +9,7 @@
             [spork.util [io :as io]]))
 
 ;;testing
-(def p (io/file-path "~/workspacenew/notional/base-testdata-v7-rearmm-vizbct3.xlsx"))
+(def p (io/file-path "~/workspacenew/notional/base-testdata-v7-rearmm-vizbct4.xlsx"))
 
 ;;we can keep track of a sparse sequence of changes.
 
@@ -29,36 +29,36 @@
 ;;we need to capture this in the entity state as a key.
 (defn unavailable? [u] (-> u marathon.ces.unit/unit-state :unavailable))
 
-(defn unit-entity [u]
+(defn unit-entity [u ctx]
   (let [deployed? (marathon.ces.unit/deployed? u)
-               demob?    (marathon.ces.unit/demobilizing? u)
-               unav?     (unavailable? u)
-               clength   (marathon.ces.unit/get-cyclelength u)
-               v  (if (or deployed? demob? unav?) 0 (/ 1.0 clength))
-               location (if (and deployed? (not unav?))
-                          (store/gete ctx (u :locationname) :region)
-                          :home)]
-               (-> (marathon.ces.unit/summary u)
-                   (select-keys [:name :curstate #_:location :cycletime :src])
-                   ;;normalized dwell is not a great indicator here.
-                   ;;we can increase dwell while bogging since it's based on
-                   ;;cycletime....kind of a misnomer :(
-                   (assoc  :readiness (cond deployed? (marathon.ces.unit/normalized-dwell u
-                                                        (u :cycle-time-when-deployed))
-                                            demob?    0
-                                            unav?     0
-                                            :else    (marathon.ces.unit/normalized-dwell u))
-                           :compo     (u :component)
-                           :location  location
-                           :velocity  v
-                           :unavailable unav?)
-                   (update :cycletime + (u :dt)) ;;cycletime is not fresh.
-                   ;;lame rekey to SRC because reasons...
-                   (re-key {:name :id :curstate :state :src :SRC}))))
+        demob?    (marathon.ces.unit/demobilizing? u)
+        unav?     (unavailable? u)
+        clength   (marathon.ces.unit/get-cyclelength u)
+        v  (if (or deployed? demob? unav?) 0 (/ 1.0 clength))
+        location (if (and deployed? (not unav?))
+                   (store/gete ctx (u :locationname) :region)
+                   :home)]
+    (-> (marathon.ces.unit/summary u)
+        (select-keys [:name :curstate #_:location :cycletime :src])
+        ;;normalized dwell is not a great indicator here.
+        ;;we can increase dwell while bogging since it's based on
+        ;;cycletime....kind of a misnomer :(
+        (assoc  :readiness (cond deployed? (marathon.ces.unit/normalized-dwell u
+                                                                               (u :cycle-time-when-deployed))
+                                 demob?    0
+                                 unav?     0
+                                 :else    (marathon.ces.unit/normalized-dwell u))
+                :compo     (u :component)
+                :location  location
+                :velocity  v
+                :unavailable unav?)
+        (update :cycletime + (u :dt)) ;;cycletime is not fresh.
+        ;;lame rekey to SRC because reasons...
+        (re-key {:name :id :curstate :state :src :SRC}))))
 
 (defn unit-entities [ctx]
   (->> (core/current-units ctx)
-       (map unit-entity)
+       (map #(unit-entity % ctx))
        (reduce (fn [acc r] (assoc acc (r :id) r)) {})))
 
 (defn compute-moves [ctx]
