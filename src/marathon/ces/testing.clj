@@ -44,6 +44,29 @@
             [marathon [analysis :as analysis]
                       [observers :as obs]]
            ))
+(defn run-tests-nout
+  "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
+  []
+  ;;turn printing test output off before running tests.
+  (defmethod report :fail [m]
+    (with-test-out
+      (inc-report-counter :fail)
+      (println "\nFAIL in" (testing-vars-str m))
+      (when (seq *testing-contexts*) (println (testing-contexts-str)))
+      (when-let [message (:message m)] (println message))
+      (println "expected: something else")
+      (println "  actual: not else")))
+  (let [res (run-tests)]
+    ;;turn printing test output back on for run-tests
+    (defmethod report :fail [m]
+      (with-test-out
+        (inc-report-counter :fail)
+        (println "\nFAIL in" (testing-vars-str m))
+        (when (seq *testing-contexts*) (println (testing-contexts-str)))
+        (when-let [message (:message m)] (println message))
+        (println "expected:" (pr-str (:expected m)))
+        (println "  actual:" (pr-str (:actual m)))))
+    res))
 
 ;;Some of our output is pretty 'uge, and trying to
 ;;print it all out kills emacs.
@@ -1105,3 +1128,56 @@
   
   )
 
+;;Forward station testing
+(defn get-demands
+[[t ctx :as frame]]
+  (let [actives (store/gete ctx :DemandStore  :activedemands)]
+    (->> actives
+         (keys)
+         (map #(store/get-entity ctx %)))))
+
+(defn forward-unit?  "Is a unit forward stationed?"
+  [u]
+  (= (:aligned u) :forward))
+
+(defn units-forward? "Are all units forward-stationed that are
+  assigned or overlapping in a demand?"
+  [ctx d]
+  (let [overlappers (keys (:units-overlapping d))
+        assigned (keys (:units-assigned d))]
+    (every? (fn [entity-name] (forward-unit? (store/get-entity ctx
+                                                               entity-name)))
+            (concat overlappers assigned))))
+
+(defn forward-demand? "Is a demand a forward stationed demand?"
+  [d]
+  (= (:region d) :forward))
+
+(defn forward-in-demands?  "Check that all of the forward stationed
+  demands are only filled by forward stationed units."
+  [[t ctx :as frame]]
+  (let [forward-demands (filter forward-demand? (get-demands frame))]
+    (every? (partial units-forward? ctx) forward-demands)))
+         
+
+
+(deftest forward-only
+  (let [project-fail (analysis/load-project (clojure.java.io/resource
+                                             "forward-stationing.xlsx"))
+        stream-fail (analysis/as-stream project-fail)
+        ;;Fix our category on the first demand record so that it only
+        ;;accepts units that are forward stationed.
+        Category-index (.indexOf (get-in project-fail [:tables
+                                                       :DemandRecords :fields])
+                                 :Category)
+        project-pass (assoc-in project-fail [:tables
+                                             :DemandRecords
+                                             :columns
+                                             Category-index
+                                             0] "Forward")
+        stream-pass (analysis/as-stream project-pass)]
+    (is (not (every? forward-in-demands? stream-fail)) "Just to check that
+our test fails properly, our first demand has a :region :forward but a
+category of NonBOG so it will accept a non-forward-stationed unit.")
+    (is (every? forward-in-demands? stream-pass) "Forward stationed demands
+  are only filled by forward stationed units.")))

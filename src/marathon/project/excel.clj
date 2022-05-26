@@ -153,8 +153,13 @@
                            (assoc acc nm
                                   [path
                                    (name nm)])) {} ts)]
-      (-> (make-project
-           (clojure.string/replace (io/fname path) (re-pattern
+    (-> (make-project
+         ;;Check if path is a string before calling fname in case it's
+         ;;a resource.
+           (clojure.string/replace (if (string? path)
+                                     (io/fname path)
+                                     path)
+                                   (re-pattern
                                                     file-extension) "")           
            (io/as-directory (io/fdir path)))
           (assoc :tables ts)
@@ -179,15 +184,15 @@
            :or {tables marathon-workbook-schema}
            :as m}]
   (let [ts    (marathon-book->marathon-tables path :tables tables)]
-      (-> (make-project
-           (clojure.string/replace (io/fname path) #".xlsm|.xlsx" "")
+    (-> (make-project
+         ;;Just name the project with path, because fname will throw
+         ;;an exception from within the uberjar.
+           (clojure.string/replace path #".xlsm|.xlsx" "")
                                    ;;no paths for a resource
                                    ;;since we'll be using the MARATHON
                                    ;;history directly with no i/o for now.
                                     "" :paths {}) 
-          (assoc :tables ts)))
-  
-  (apply load-workbook (apply concat [path ".xlsx"] m)))
+          (assoc :tables ts))))
 
 (defmethod save-project "xlsx" [proj path & options]
   (xl/tables->xlsx path
