@@ -533,15 +533,11 @@
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata
   [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-           Mod Tags unit-tags] :as r}]
+           Mod] :as r}]
   (-> (if (= Behavior "SRM")    ;;hackish way to go about things...
         (srm-record->unitdata r)
         (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin))
-      (assoc :mod (if (and Mod (pos? Mod)) Mod 3)) ;;TODO deprecate into tags?
-      ;;Tags don't get merged into the unit.  If we want tags to carry
-      ;;on from the supply records to the unit records, they must go
-      ;;in the :unit-tags field.
-      (merge (if unit-tags unit-tags {}))))
+      (assoc :mod (if (and Mod (pos? Mod)) Mod 3)))) ;;TODO deprecate into tags?))
 ;;Ideally, we'll unify this in the near future, for now it's srm specific.
 ;;we can have the unit behavior handle assigning policy.  From the start, we know
 ;;at least the start location, state, and duration.  We need policy to figure out
@@ -734,7 +730,7 @@
   associated with the record.  If all of the bins have been used up
   and there is still a remaining quantity, the remaining units are
   placed in a supply record with no alignment."
-  [{:keys [Quantity SRC Component unit-tags] :as supply-rec} bins]
+  [{:keys [Quantity SRC Component Tags] :as supply-rec} bins]
   (loop [remaining-quantity Quantity
          binned []
          remaining-bins (partition 2 bins)]
@@ -743,8 +739,7 @@
           new-rec (assoc supply-rec
                          :Quantity new-quantity)
           new-rec (if alignment
-                    (assoc new-rec :unit-tags
-                           (merge unit-tags {:aligned alignment})
+                    (assoc new-rec :aligned alignment
                            ;;In order to group units for each
                            ;;alignment and distribute their cycletimes
                            ;;separately, we can group by this key
