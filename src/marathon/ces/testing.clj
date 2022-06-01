@@ -1160,21 +1160,30 @@
     (every? (partial units-forward? ctx) forward-demands)))
          
 
+(defn record-assoc
+  "Assoc a value onto a record within a marathon project by specifying
+  the table keyword, the index of the record to update the value in,
+  the key to add to the record, and the value.
+  The key must already exist in the table so that this is a valid
+  table operation. Returns the proj with the update value."
+  [proj tbl-key rec-index rec-key value]
+  (let [col-index (.indexOf (get-in proj [:tables tbl-key :fields]) rec-key)
+        _ (assert (not (neg? col-index))
+                  (str [:column-doesnt-exist! rec-key]))]
+    (assoc-in proj [:tables
+                    tbl-key
+                    :columns
+                    col-index
+                    rec-index] value)))
 
 (deftest forward-only
   (let [project-fail (analysis/load-project (clojure.java.io/resource
                                              "forward-stationing.xlsx"))
-        stream-fail (analysis/as-stream project-fail)
+        stream-fail (analysis/as-stream project-fail)                        
         ;;Fix our category on the first demand record so that it only
         ;;accepts units that are forward stationed.
-        Category-index (.indexOf (get-in project-fail [:tables
-                                                       :DemandRecords :fields])
-                                 :Category)
-        project-pass (assoc-in project-fail [:tables
-                                             :DemandRecords
-                                             :columns
-                                             Category-index
-                                             0] "Forward")
+        project-pass (record-assoc project-fail :DemandRecords
+                                   0 :Category "Forward")
         stream-pass (analysis/as-stream project-pass)]
     (is (not (every? forward-in-demands? stream-fail)) "Just to check that
 our test fails properly, our first demand has a :region :forward but a
