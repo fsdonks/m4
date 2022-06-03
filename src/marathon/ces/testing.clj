@@ -37,7 +37,8 @@
                            [history :as history]]
             [spork.entitysystem.store :as store]
             [spork.util [reducers]
-                        [tags :as tags]]
+             [tags :as tags]
+             [table :as tbl]]
             [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]
@@ -1159,6 +1160,16 @@
   (let [forward-demands (filter forward-demand? (get-demands frame))]
     (every? (partial units-forward? ctx) forward-demands)))
          
+(defn get-col-index
+  "Given a marathon project, name of a table in :tables, and the name
+  of a field in the record, returns the column index of that field in
+  the spork table."
+  [proj tbl-key rec-key]
+  (let [col-index (.indexOf (get-in proj [:tables tbl-key :fields]) rec-key)
+        _ (assert (not (neg? col-index))
+                  (str [:column-doesnt-exist! rec-key]))]
+    col-index
+    ))
 
 (defn record-assoc
   "Assoc a value onto a record within a marathon project by specifying
@@ -1167,14 +1178,28 @@
   The key must already exist in the table so that this is a valid
   table operation. Returns the proj with the update value."
   [proj tbl-key rec-index rec-key value]
-  (let [col-index (.indexOf (get-in proj [:tables tbl-key :fields]) rec-key)
-        _ (assert (not (neg? col-index))
-                  (str [:column-doesnt-exist! rec-key]))]
+  (let [col-index (get-col-index proj tbl-key rec-key)]
     (assoc-in proj [:tables
                     tbl-key
                     :columns
                     col-index
                     rec-index] value)))
+
+(defn copy-row
+  "Copy the nth row in a table and add it to the end of the table."
+  [table n]
+  (let [row-values (tbl/nth-row table n)]
+    (assoc table :columns (tbl/conj-row (:columns table) row-values))))
+        
+(defn copy-row-in
+  "Copy a row within a marathon project by specifying
+  the table keyword and the index of the record to copy.
+  Returns the proj with the updated value."
+  [proj tbl-key rec-index]
+  (update-in proj
+             [:tables
+              tbl-key]
+             copy-row rec-index)  )           
 
 (deftest forward-only
   (let [project-fail (analysis/load-project (clojure.java.io/resource
