@@ -533,10 +533,14 @@
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata
   [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-           Mod] :as r}]
+           Mod aligned] :as r}]
   (-> (if (= Behavior "SRM")    ;;hackish way to go about things...
         (srm-record->unitdata r)
-        (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin))
+        (create-unit  Name SRC OITitle Component CycleTime Policy
+                      (find-behavior Behavior) :home Origin))
+      ;;Keep the alignment that we might have added to the supply
+      ;;record because we lose it in create-unit
+      (assoc :aligned aligned)
       (assoc :mod (if (and Mod (pos? Mod)) Mod 3)))) ;;TODO deprecate into tags?))
 ;;Ideally, we'll unify this in the near future, for now it's srm specific.
 ;;we can have the unit behavior handle assigning policy.  From the start, we know

@@ -26,7 +26,7 @@
                           [entityfactory :as ent]
                           [setup :as setup]
                           [query :as query]
-                          [deployment :as deployment]]
+             [deployment :as deployment]]
             [marathon.ces.fill [demand :as filld]]
             [marathon.data   [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
@@ -43,7 +43,8 @@
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]
             [marathon [analysis :as analysis]
-                      [observers :as obs]]
+             [observers :as obs]]
+            [marathon.analysis.tacmm.demo :as tacmm]
            ))
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
@@ -1150,6 +1151,12 @@
                                                                entity-name)))
             (concat overlappers assigned))))
 
+(defn get-units
+  [ctx d]
+  (let [overlappers (keys (:units-overlapping d))
+        assigned (keys (:units-assigned d))]
+            (concat overlappers assigned)))
+
 (defn forward-demand? "Is a demand a forward stationed demand?"
   [d]
   (= (:region d) :forward))
@@ -1159,6 +1166,17 @@
   [[t ctx :as frame]]
   (let [forward-demands (filter forward-demand? (get-demands frame))]
     (every? (partial units-forward? ctx) forward-demands)))
+
+(defn units-in-demands
+  [[t ctx :as frame]]
+  (let [demands (get-demands frame)]
+    (mapcat (partial get-units ctx) demands)))
+
+(defn num-units-in-demand
+  "Count the number of assigned and overlapping units for a particular
+  compo."
+  [])
+  
          
 (defn get-col-index
   "Given a marathon project, name of a table in :tables, and the name
@@ -1199,8 +1217,40 @@
   (update-in proj
              [:tables
               tbl-key]
-             copy-row rec-index)  )           
+             copy-row rec-index))           
 
+(defn update-params
+  "Given a marathon project, update a value in the parameters table
+  with a map of field name (keyword or string) to value."
+  [proj update-map]
+  (update-in proj [:tables :Parameters] tacmm/xform-records
+          #(tacmm/merge-parameters % update-map)))
+  
+(defn fence-project
+  "Return a project that is prepped to fun the fencing test where we
+  check that only forward stationed units fill forward stationed
+  demands, but those units can fill other demands if no forward
+  stationed units are available, and those units go back to filling
+  forward stationed demands after filling other demands and they don't
+  fill something else."
+  [project-pass]
+  (-> project-pass
+      (update-params {:DefaultACPolicy "MaxUtilization"})
+      (copy-row-in :DemandRecords 0)
+      ;;start day of second record=631 and category=Rotational,
+      ;;duration=5, remove alignment, quantity = 31
+      ;;verify that 11 AC fill this demand
+      (record-assoc :DemandRecords 1 :StartDay 631)
+      (record-assoc :DemandRecords 1 :Category "Rotational")
+      (record-assoc :DemandRecords 1 :Duration 5)
+      (record-assoc :DemandRecords 1 :Tags "")
+      (record-assoc :DemandRecords 1 :Quantity 31)
+      ;;last record duration=5, start-day=636, quantity = 32
+      (record-assoc :DemandRecords 2 :StartDay 636)
+      (record-assoc :DemandRecords 2 :Duration 5)
+      (record-assoc :DemandRecords 2 :Quantity 32)
+      (record-assoc :DemandRecords 2 :DemandIndex 2)))
+  
 (deftest forward-only
   (let [project-fail (analysis/load-project (clojure.java.io/resource
                                              "forward-stationing.xlsx"))
@@ -1209,9 +1259,12 @@
         ;;accepts units that are forward stationed.
         project-pass (record-assoc project-fail :DemandRecords
                                    0 :Category "Forward")
-        stream-pass (analysis/as-stream project-pass)]
+        stream-pass (analysis/as-stream project-pass)
+        stream-fence (analysis/as-stream (fence-project project-pass))]
     (is (not (every? forward-in-demands? stream-fail)) "Just to check that
 our test fails properly, our first demand has a :region :forward but a
 category of NonBOG so it will accept a non-forward-stationed unit.")
-    (is (every? forward-in-demands? stream-pass) "Forward stationed demands
-  are only filled by forward stationed units.")))
+    (is (every? forward-in-demands? stream-pass) "Check that
+  non forward-stationed units never fill demands.")
+    (is (every? forward-in-demands? stream-fence) "Forward stationed demands
+  are only filled by forward stationed units in a more complicated case.")))
