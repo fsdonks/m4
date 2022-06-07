@@ -1142,20 +1142,18 @@
   [u]
   (= (:aligned u) :forward))
 
-(defn units-forward? "Are all units forward-stationed that are
-  assigned or overlapping in a demand?"
-  [ctx d]
-  (let [overlappers (keys (:units-overlapping d))
-        assigned (keys (:units-assigned d))]
-    (every? (fn [entity-name] (forward-unit? (store/get-entity ctx
-                                                               entity-name)))
-            (concat overlappers assigned))))
-
 (defn get-units
   [ctx d]
   (let [overlappers (keys (:units-overlapping d))
         assigned (keys (:units-assigned d))]
-            (concat overlappers assigned)))
+    (concat overlappers assigned)))
+
+(defn units-forward? "Are all units forward-stationed that are
+  assigned or overlapping in a demand?"
+  [ctx d]
+    (every? (fn [entity-name] (forward-unit? (store/get-entity ctx
+                                                               entity-name)))
+            (get-units ctx d)))
 
 (defn forward-demand? "Is a demand a forward stationed demand?"
   [d]
@@ -1167,17 +1165,17 @@
   (let [forward-demands (filter forward-demand? (get-demands frame))]
     (every? (partial units-forward? ctx) forward-demands)))
 
+  (defn count-forwards  "Count the number of forward-staioned units
+  that are deployed."
+  [[t ctx :as frame]]
+  (let [forward-demands (filter forward-demand? (get-demands frame))]
+    (reduce + (map (fn [d] (count (get-units ctx d))) forward-demands))))
+
 (defn units-in-demands
   [[t ctx :as frame]]
   (let [demands (get-demands frame)]
     (mapcat (partial get-units ctx) demands)))
-
-(defn num-units-in-demand
-  "Count the number of assigned and overlapping units for a particular
-  compo."
-  [])
-  
-         
+        
 (defn get-col-index
   "Given a marathon project, name of a table in :tables, and the name
   of a field in the record, returns the column index of that field in
@@ -1276,5 +1274,31 @@ category of NonBOG so it will accept a non-forward-stationed unit.")
     (is (not (every? forward-in-demands? follow-stream))
         "If a demandgroup goes from non-aligned to aligned, we could
         have units non-aligned units filling the aligned demands with followon.")
-    (is (every? forward-in-demands? follow-on-fixed)) "Forward stationed demands
-  are only filled by forward stationed units in a more complicated case."))
+    (is (every? forward-in-demands? follow-on-fixed) "Forward stationed demands
+  are only filled by forward stationed units in a more complicated
+  case.")
+    (is (every? (fn [[t ctx :as frame]]
+                  (if (and (> t 0) (or (< t 631) (> t 635)))
+                    ;;only need to check when forward stationed
+                    ;;demands are active
+                    (= 3 (count-forwards frame))
+                    true))
+                ;;no demands are filled on the last day
+                (butlast follow-on-fixed))
+        "The three forward stationed units on max utilization should
+  always be filling the forward stationed demand."
+        )
+    (is (every? (fn [[t ctx :as frame]]
+                  (if (and (> t 630) (< t 636))
+                    ;;only need to check when forward stationed
+                    ;;demands are active
+                      (every? (set (units-in-demands frame))
+                              ["3_01205K000_AC"
+                               "2_01205K000_AC"
+                               "1_01205K000_AC"])
+                    true))
+                follow-on-fixed)
+        "The three forward stationed units on max utilization fill the
+  non-forward stationed demands if there aren't any forward stationed
+  demands to fill."
+    )))
