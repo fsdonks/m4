@@ -1245,6 +1245,8 @@
       (record-assoc :DemandRecords 1 :Duration 5)
       (record-assoc :DemandRecords 1 :Tags "")
       (record-assoc :DemandRecords 1 :Quantity 31)
+      
+      
       ;;last record duration=5, start-day=636, quantity = 32
       (record-assoc :DemandRecords 2 :StartDay 636)
       (record-assoc :DemandRecords 2 :Duration 5)
@@ -1260,11 +1262,19 @@
         project-pass (record-assoc project-fail :DemandRecords
                                    0 :Category "Forward")
         stream-pass (analysis/as-stream project-pass)
-        stream-fence (analysis/as-stream (fence-project project-pass))]
+        follow-on-fail (fence-project project-pass)
+        follow-stream (analysis/as-stream follow-on-fail)
+        follow-on-fixed (analysis/as-stream
+                         (record-assoc  follow-on-fail
+                                        :DemandRecords 1
+                                        :DemandGroup "Bacon"))]
     (is (not (every? forward-in-demands? stream-fail)) "Just to check that
 our test fails properly, our first demand has a :region :forward but a
 category of NonBOG so it will accept a non-forward-stationed unit.")
     (is (every? forward-in-demands? stream-pass) "Check that
   non forward-stationed units never fill demands.")
-    (is (every? forward-in-demands? stream-fence) "Forward stationed demands
-  are only filled by forward stationed units in a more complicated case.")))
+    (is (not (every? forward-in-demands? follow-stream))
+        "If a demandgroup goes from non-aligned to aligned, we could
+        have units non-aligned units filling the aligned demands with followon.")
+    (is (every? forward-in-demands? follow-on-fixed)) "Forward stationed demands
+  are only filled by forward stationed units in a more complicated case."))
