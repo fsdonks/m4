@@ -1302,3 +1302,10 @@ category of NonBOG so it will accept a non-forward-stationed unit.")
   non-forward stationed demands if there aren't any forward stationed
   demands to fill."
     )))
+
+;;When defining forward-stationed demands, we should check/assert that
+;;the demands have a :region :forward, a :Category Forward, so one
+;;of those shouldn't exist without the other.
+;;In most cases, we probably also want a forward stationed supply and
+;;we probably want forward stationed stuff to be highest priority, but
+;;this might not always be the case.
