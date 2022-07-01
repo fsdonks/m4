@@ -45,6 +45,7 @@
             [marathon [analysis :as analysis]
              [observers :as obs]]
             [marathon.analysis.tacmm.demo :as tacmm]
+            [marathon.spec :as spec]
            ))
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
@@ -1252,7 +1253,9 @@
       (record-assoc :DemandRecords 2 :DemandIndex 2)))
   
 (deftest forward-only
-  (let [project-fail (analysis/load-project (clojure.java.io/resource
+  (let [;;load a requirements project so that we can test requirements
+        ;;analysis later.
+        project-fail (analysis/load-requirements-project (clojure.java.io/resource
                                              "forward-stationing.xlsx"))
         stream-fail (analysis/as-stream project-fail)                        
         ;;Fix our category on the first demand record so that it only
@@ -1265,7 +1268,22 @@
         follow-on-fixed (analysis/as-stream
                          (record-assoc  follow-on-fail
                                         :DemandRecords 1
-                                        :DemandGroup "Bacon"))]
+                                        :DemandGroup "Bacon"))
+        ;;We can never grow enough AC supply if non are
+        ;;forward-stationed
+        no-grow 3
+        ;;for requirements analysis, need to assert that the forward
+        ;;stationed supply bin is >= the forward stationed demand so
+        ;;that we don't have an issue like previous.
+        ;;-----
+        ;;Next test:
+        ;;use project-pass (although, need the maxutilization of fence project)
+        ;;change forward to 13 and AC supply should grow to a quantity of
+        ;;13 from 11 
+        ]
+    (is (nil? (spec/validate-project follow-on-fixed))
+        "Check if this project passes spec project validation.  An
+  error would indicate that the spec failed.")
     (is (not (every? forward-in-demands? stream-fail)) "Just to check that
 our test fails properly, our first demand has a :region :forward but a
 category of NonBOG so it will accept a non-forward-stationed unit.")

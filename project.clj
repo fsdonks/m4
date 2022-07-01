@@ -32,7 +32,9 @@
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src"]
-  :profiles {:dev {:source-paths ["../spork/src" "../nightclub/src" "../proc/src"]}
+  :profiles {:dev {:source-paths ["../spork/src" "../nightclub/src"
+                                  "../proc/src"
+                                  "../marathon-schemas/src"]}
              :uberjar {;:aot  [marathon.main]
                        :aot [marathon.main];~aot-order
                        :main  marathon.main

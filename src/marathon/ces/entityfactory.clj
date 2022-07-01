@@ -726,6 +726,10 @@
 ;;specs:
 ;;each bin has two values (after it's partitioned by 2)
 ;;the second value in the bin must be a number
+;;If there is a preprocessing tag to align-units and the :Quantity of
+;;the supply record is 0, then one record will be returned with a
+;;quantity of 0 and the record will be :aligned :forward. That should
+;;result in the same behavior as if we didn't split the record at all
 (defn align-units
   "Given an initial supply record, split that record into multiple
   supply records according to a sequnce of [alignment quantity]
