@@ -104,7 +104,8 @@
                   :text  (fn [x] (if (number? x)
                                    ;;we need to coerce this mofo.
                                    (str (try-long x))
-                                   x))}]
+                                   x))
+                  :clojure clojure.edn/read-string}]
     (spork.util.table/conj-fields
      (for [[fld col] (tbl/enumerate-fields (tbl/table-fields tbl) (tbl/table-columns tbl))]
        (if-let [f (numtypes (s fld))]
