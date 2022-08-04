@@ -981,18 +981,28 @@
        (tbl/map-field :Quantity long)
        (tbl/order-fields-by supply-fields)))
 
-(defn requirements-run-table
-  "Computes requirements analysis table where inpath is either a path
-  to a workbook or a requirements project."
-  [inpath & {:keys [bound] :or {bound 0}}]
+(defn requirements-from-proj
+  "If we already have a requirements-project and we just want to
+  return the resulting requirements analysis SupplyRecords table, we
+  can call this function directly without the i/o from a project and
+  to a text file."
+  [proj & {:keys [bound] :or {bound 0} :as in-map}]
   (binding [*distance-function*   (if (> bound 0)
                                     contiguous-distance
                                     default-distance)
             *contiguity-threshold* bound]
-    (-> (a/load-requirements-project inpath)
-        (:tables)
-        (tables->requirements-async  :search bisecting-convergence)
-        (requirements->table))))
+  (-> proj       
+       (:tables)
+       (tables->requirements-async  :search bisecting-convergence)
+       (requirements->table))))
+       
+(defn requirements-run-table
+  "Computes requirements analysis table where inpath is either a path
+  to a workbook or a requirements project."
+  [inpath & {:keys [bound] :or {bound 0} :as in-map}]
+  (->> in-map
+       (apply requirements-from-proj
+              (a/load-requirements-project inpath))))
 
 (defn requirements-run
   "Primary function to compute  requirements analysis.  Reads requirements

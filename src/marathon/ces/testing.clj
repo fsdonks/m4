@@ -45,6 +45,7 @@
             [marathon [analysis :as analysis]
              [observers :as obs]]
             [marathon.analysis.tacmm.demo :as tacmm]
+            [marathon.analysis.requirements :as req]
             [marathon.spec :as spec]
            ))
 (defn run-tests-nout
@@ -1251,7 +1252,39 @@
       (record-assoc :DemandRecords 2 :Duration 5)
       (record-assoc :DemandRecords 2 :Quantity 32)
       (record-assoc :DemandRecords 2 :DemandIndex 2)))
-  
+
+(defn grow-forward
+  "Edit project pass so that requirements analysis has a feasible
+  solution and doesn't run forever when forward bin size is less than
+  the demand."
+  [project-pass]
+  (-> project-pass
+      (record-assoc :DemandRecords 0 :Quantity 1)
+      (record-assoc :DemandRecords 1 :Quantity 1)
+      (record-assoc :SupplyRecords 0 :Enabled false)
+      ))
+
+(defn single-record
+  "Check if multiple SRC, component records exist. If so, throw
+  exception.  Otherwise, return the first record."
+  [recs]
+  (if (> (count recs) 1)
+    (throw (Exception. (str "More than one record exists!")))
+    (first recs)))
+
+(defn supply-for
+  "Given a spork.util.table of supply records, return the Quantity of
+  the first supply record found for the SRC and Component specified."
+  [table src compo]
+  (let [;;create records from the table
+        recs (reduce conj [] table)]
+    (->> recs
+         (filter (fn [{:keys [SRC Component]}] (and (= SRC src)
+                                                    (= Component
+                                                       compo))))
+         (single-record)
+         (:Quantity))))
+            
 (deftest forward-only
   (let [;;load a requirements project so that we can test requirements
         ;;analysis later.
@@ -1265,21 +1298,27 @@
         stream-pass (analysis/as-stream project-pass)
         follow-on-fail (fence-project project-pass)
         follow-stream (analysis/as-stream follow-on-fail)
-        follow-on-fixed (analysis/as-stream
-                         (record-assoc  follow-on-fail
+        follow-on-proj (record-assoc  follow-on-fail
                                         :DemandRecords 1
-                                        :DemandGroup "Bacon"))
+                                        :DemandGroup "Bacon")
+        follow-on-fixed (analysis/as-stream follow-on-proj)
         ;;We can never grow enough AC supply if non are
-        ;;forward-stationed
-        no-grow 3
+        ;;forward-stationed (like in project-pass)
+        ;;probably want to assert
+        
         ;;for requirements analysis, need to assert that the forward
         ;;stationed supply bin is >= the forward stationed demand so
         ;;that we don't have an issue like previous.
         ;;-----
-        ;;Next test:
-        ;;use project-pass (although, need the maxutilization of fence project)
-        ;;change forward to 13 and AC supply should grow to a quantity of
-        ;;13 from 11 
+        forward-growth (grow-forward project-pass)
+        ;;we should have supply grow to cover the regular demands in
+        ;;addition to the forward stationed demands.
+        forward-and-regular (record-assoc (grow-forward
+                                           follow-on-proj)
+                                          :DemandRecords 2 :Tags "")
+        ac-growth (supply-for (req/requirements-from-proj
+                               forward-and-regular)
+                              "01205K000" "AC")
         ]
     (is (nil? (spec/validate-project follow-on-fixed))
         "Check if this project passes spec project validation.  An
@@ -1319,7 +1358,17 @@ category of NonBOG so it will accept a non-forward-stationed unit.")
         "The three forward stationed units on max utilization fill the
   non-forward stationed demands if there aren't any forward stationed
   demands to fill."
-    )))
+        )
+    (is (= (supply-for (req/requirements-from-proj forward-growth)
+                       "01205K000" "AC")
+           2)
+        "With three forward stationed units and two forward stationed
+demands, do we grow two units?")
+    (is (and (> ac-growth 11) (<= ac-growth 32)) "AC should grow
+beyond the 3 forward stationed units and existing 11 ac supply in
+order to meet the max of demand of 32 units for a
+non-forward-stationed demand.")
+    ))
 
 ;;When defining forward-stationed demands, we should check/assert that
 ;;the demands have a :region :forward, a :Category Forward, so one
