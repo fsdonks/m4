@@ -715,13 +715,19 @@
 ;;We now have a processing step that groups the unit records by :cycle-init-key
 ;;and defines cyclelengths for each unit.
 (defn initialize-cycle-times [xs]
-  (->> (for [[k us] (group-by :cycle-init-key xs)]
-         (if-not k
-           us
-           (let [;;[src compo p] k
-                 policy        (-> k meta :policy)]
-             (distribute-cycle-times us policy))))
-       (apply concat)))
+  (let [{:keys [constant variable]}
+        (group-by #(do #_(println [(select-keys % [:name :cycletime :cycle/initialized?])
+                                 (% :cycle/initialized?)])
+                       (if (% :cycle/initialized?)
+                         :constant :variable)) xs)]
+    (->> (for [[k us] (group-by :cycle-init-key variable)]
+           (if-not k
+             us
+             (let [;;[src compo p] k
+                   policy        (-> k meta :policy)]
+               (distribute-cycle-times us policy))))
+         (apply concat)
+         (concat constant))))
 
 ;;specs:
 ;;each bin has two values (after it's partitioned by 2)
