@@ -133,6 +133,7 @@
           (s :bogging)      :deployed
           (s :overlapping)  :deployed
           (s :demobilizing) :not-ready
+          (s :forward)      :deployed ;;forward-stationed (also :waiting)
           (= s :waiting)    :deployed ;;NonBOG corner case.
           :else (throw (ex-info (str "unknown state!" s)
                                 {:in (:state u) :name (:name u)})))))
