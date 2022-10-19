@@ -382,7 +382,7 @@
                   seed->randomizer (fn [_] identity)}}]
    (let [project->experiments *project->experiments*]
      (->> (assoc proj :phases phases :lower lower :upper upper :levels levels
-                 :gen gen  :seed->randomizer :seed->randomizer)
+                 :gen gen  :seed->randomizer seed->randomizer)
           (e/split-project)
           (reduce
            (fn [acc [src proj]]
