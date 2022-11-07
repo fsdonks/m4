@@ -253,11 +253,39 @@
                :NG-total        (reduce + (map :NG-total xs))
                :RC-total        (reduce + (map :RC-total xs))}))))
 
-(defn bound->bounds [n [lower upper]]
-  (if n
-    [(long (Math/floor (* lower n)))
-     (long (Math/ceil  (* upper n)))]
-    [0 0]))
+(defn min-samples
+  "If lower and upper result in only one inventory, for instance,
+  any upper times 0 is 0, we may want to explore some inventories
+  above 0 or around the interval.  Hence, we can expand our interval
+  to cover a minimum distance.  We try to split the distance evenly
+  around the original interval."
+  [[low-bound high-bound :as interval] min-distance]
+  (let [interval-size (inc (- high-bound low-bound))
+        ;;how far should we extend on either side?
+        extension-amount (- min-distance interval-size)
+        ;;more likely to cut than grow
+        low-delta (long (Math/ceil (/ extension-amount 2)))
+        new-low-bound (max (- low-bound low-delta) 0)
+        ;;how much do we have left to go above high-bound?
+        high-extension (- extension-amount
+                          (- low-bound new-low-bound))]
+  (if (< interval-size min-distance)
+    ;;expand-interval
+    [new-low-bound (+ high-bound high-extension)]
+    interval)))
+  
+(defn bound->bounds
+  "Return the lower and upper supply quantities given the initial
+  supply and lower and upper proportions of that supply, ensuring
+  that the returned lower and upper supply quantities
+  cover at least min-distance supply quantities."
+  [n [lower upper] & {:keys [min-distance] :or
+                                        {min-distance 0}}]
+  (let [bounds (if n
+                 [(long (Math/floor (* lower n)))
+                  (long (Math/ceil  (* upper n)))]
+                 [0 0])]
+    (min-samples bounds min-distance)))
 
 (defn compute-spread-descending
   [levels low high]
