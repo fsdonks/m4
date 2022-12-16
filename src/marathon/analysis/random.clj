@@ -391,19 +391,22 @@
                     ;;If we are distributed (like with pmap!), the error won't
                     ;;throw on the host computer,  so we catch the
                     ;;exception and print it.
-                    (catch Exception e :error)
-                           )]
-       (case res
-         :error (if (pos? n)
+                    (catch Exception e (.getMessage e))
+                    )]
+       ;;Should be a sequence of records, but will be a string if it
+       ;;was an error
+       (cond 
+         (string? res) (if (pos? n)
                   (do (util/log {:retrying n :src src :idx idx})
                       (recur (dec n)))
                   (let [err {:error (str "unable to compute fill " src)
                              :src   src
-                             :idx   idx}
+                             :idx   idx
+                             :reason res}
                          
                         _    (util/log err)]
                     err))
-         res)))))
+         :else res)))))
 
 (def ^:dynamic *project->experiments* marathon.analysis.random/project->experiments)
 
