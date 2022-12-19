@@ -9,7 +9,7 @@
 (def capsule-jar (str  capsule-name "-" version ".jar"))
 
 ;;project definition...
-(defproject marathon (str version "-SNAPSHOT")
+(defproject marathon "4.2.4-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [spork "0.2.1.5-SNAPSHOT"
