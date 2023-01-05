@@ -533,14 +533,13 @@
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata
   [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-           Mod aligned] :as r}]
+           Mod aligned Tags] :as r}]
   (-> (if (= Behavior "SRM")    ;;hackish way to go about things...
         (srm-record->unitdata r)
         (create-unit  Name SRC OITitle Component CycleTime Policy
                       (find-behavior Behavior) :home Origin))
-      ;;Keep the alignment that we might have added to the supply
-      ;;record because we lose it in create-unit
-      (assoc :aligned aligned)
+      ;;Merge Tags back into the supply record after we lost them with create-unit
+      (merge-tags Tags)
       (assoc :mod (if (and Mod (pos? Mod)) Mod 3)))) ;;TODO deprecate into tags?))
 ;;Ideally, we'll unify this in the near future, for now it's srm specific.
 ;;we can have the unit behavior handle assigning policy.  From the start, we know
@@ -753,11 +752,13 @@
           new-rec (assoc supply-rec
                          :Quantity new-quantity)
           new-rec (if alignment
-                    (assoc new-rec :aligned alignment
-                           ;;In order to group units for each
-                           ;;alignment and distribute their cycletimes
-                           ;;separately, we can group by this key
-                           :cycle-init-key [SRC Component alignment])
+                    (-> (update-in new-rec [:Tags] assoc
+                                   :aligned alignment)
+                        ;;In order to group units for each
+                        ;;alignment and distribute their cycletimes
+                        ;;separately, we can group by this key
+                        (assoc :cycle-init-key
+                               [SRC Component alignment]))
                     new-rec)
           leftovers (- remaining-quantity new-quantity)]
       (cond
