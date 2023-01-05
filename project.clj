@@ -1,17 +1,18 @@
+
 (require 'clojure.edn)
 (def aot-order (let [f (clojure.java.io/file "order.edn")]
                  (if (.exists f)
                    (clojure.edn/read-string (slurp "order.edn"))
                    '[marathon.main])))
-(def version "4.2.3")
+(def version "4.2.4")
 (def capsule-name "marathon")
 (def capsule-jar (str  capsule-name "-" version ".jar"))
 
 ;;project definition...
-(defproject marathon "4.2.3-SNAPSHOT"
+(defproject marathon "4.2.4-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [spork "0.2.1.4-SNAPSHOT"
+                 [spork "0.2.1.5-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
                  [marathon-schemas "4.1.7-SNAPSHOT"
@@ -31,7 +32,9 @@
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src"]
-  :profiles {:dev {:source-paths ["../spork/src" "../nightclub/src" "../proc/src"]}
+  :profiles {:dev {:source-paths ["../spork/src" "../nightclub/src"
+                                  "../proc/src"
+                                  "../marathon-schemas/src"]}
              :uberjar {;:aot  [marathon.main]
                        :aot [marathon.main];~aot-order
                        :main  marathon.main

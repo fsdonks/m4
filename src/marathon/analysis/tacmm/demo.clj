@@ -210,7 +210,7 @@
                :ToDay   (+ ToDay to-offset))))))
 
 (defn xform-records [t f]
-  (let [fields (tbl/table-fields t)]
+  (let [fields (vec (tbl/table-fields t))]
     (->> t
          tbl/table-records
          f

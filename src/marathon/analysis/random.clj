@@ -253,11 +253,39 @@
                :NG-total        (reduce + (map :NG-total xs))
                :RC-total        (reduce + (map :RC-total xs))}))))
 
-(defn bound->bounds [n [lower upper]]
-  (if n
-    [(long (Math/floor (* lower n)))
-     (long (Math/ceil  (* upper n)))]
-    [0 0]))
+(defn min-samples
+  "If lower and upper result in only one inventory, for instance,
+  any upper times 0 is 0, we may want to explore some inventories
+  above 0 or around the interval.  Hence, we can expand our interval
+  to cover a minimum distance.  We try to split the distance evenly
+  around the original interval."
+  [[low-bound high-bound :as interval] min-distance]
+  (let [interval-size (inc (- high-bound low-bound))
+        ;;how far should we extend on either side?
+        extension-amount (- min-distance interval-size)
+        ;;more likely to cut than grow
+        low-delta (long (Math/ceil (/ extension-amount 2)))
+        new-low-bound (max (- low-bound low-delta) 0)
+        ;;how much do we have left to go above high-bound?
+        high-extension (- extension-amount
+                          (- low-bound new-low-bound))]
+  (if (< interval-size min-distance)
+    ;;expand-interval
+    [new-low-bound (+ high-bound high-extension)]
+    interval)))
+  
+(defn bound->bounds
+  "Return the lower and upper supply quantities given the initial
+  supply and lower and upper proportions of that supply, ensuring
+  that the returned lower and upper supply quantities
+  cover at least min-distance supply quantities."
+  [n [lower upper] & {:keys [min-distance] :or
+                                        {min-distance 0}}]
+  (let [bounds (if n
+                 [(long (Math/floor (* lower n)))
+                  (long (Math/ceil  (* upper n)))]
+                 [0 0])]
+    (min-samples bounds min-distance)))
 
 (defn compute-spread-descending
   [levels low high]
@@ -358,18 +386,27 @@
            res (try (let [seed (:rep-seed proj)
                           fill (project->phase-fill (rand-proj proj) phases)]
                       (mapv #(assoc % :rep-seed seed)
-                            (e/summary-availability-records src proj fill)))
-                    (catch Exception e #_:error (throw e)))]
-       (case res
-         :error (if (pos? n)
+                            (e/summary-availability-records src proj
+                                                            fill)))
+                    ;;If we are distributed (like with pmap!), the error won't
+                    ;;throw on the host computer,  so we catch the
+                    ;;exception and print it.
+                    (catch Exception e (.getMessage e))
+                    )]
+       ;;Should be a sequence of records, but will be a string if it
+       ;;was an error
+       (cond 
+         (string? res) (if (pos? n)
                   (do (util/log {:retrying n :src src :idx idx})
                       (recur (dec n)))
                   (let [err {:error (str "unable to compute fill " src)
                              :src   src
-                             :idx   idx}
+                             :idx   idx
+                             :reason res}
+                         
                         _    (util/log err)]
                     err))
-         res)))))
+         :else res)))))
 
 (def ^:dynamic *project->experiments* marathon.analysis.random/project->experiments)
 
@@ -380,7 +417,7 @@
   [proj & {:keys [phases lower upper levels gen seed->randomizer]
            :or   {lower 0 upper 1 gen util/default-gen
                   seed->randomizer (fn [_] identity)}}]
-   (let [project->experiments *project->experiments*]
+  (let [project->experiments *project->experiments*]
      (->> (assoc proj :phases phases :lower lower :upper upper :levels levels
                  :gen gen  :seed->randomizer seed->randomizer)
           (e/split-project)
@@ -420,20 +457,29 @@
    :seed - integer, random seed to use for all the replications, default +default-seed+.
    :compo-lengths optional, map of {compo cyclelength} used for distribution
                   random initial cycletimes, default default-compo-lengths ."
-  [proj & {:keys [reps phases lower upper seed levels compo-lengths seed->randomizer]
+  [proj & {:keys [reps phases lower upper seed levels compo-lengths
+                  seed->randomizer]
            :or   {lower 0 upper 1 seed +default-seed+
                   compo-lengths default-compo-lengths}}]
   (let [seed->randomizer (or seed->randomizer #(default-randomizer % compo-lengths))
         gen              (util/->gen seed)
-        phases           (or phases (util/derive-phases proj))]
+        phases           (or phases (util/derive-phases proj))
+        ;;overwrite/create a new random run output file
+        _ (spit "random-out.txt" "")
+        _ (println "Printing status to random-out.txt")]
+    (with-open [w (clojure.java.io/writer
+                   "random-out.txt" :append false)]
+      ;;redirect printing to random-out.txt
+      ;;the logging will redirect to standard *out* once the writer closes.
+      (util/log-to w)
     ;;input validation, we probably should do more of this in general.
-    (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
-    (apply concat
-           (map (fn [n] (rand-target-model proj
-                            :phases phases :lower lower :upper upper
-                            :gen   gen     :seed->randomizer seed->randomizer
-                            :levels levels))
-                 (range reps)))))
+      (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
+      (apply concat
+             (map (fn [n] (rand-target-model proj
+                                             :phases phases :lower lower :upper upper
+                                             :gen   gen     :seed->randomizer seed->randomizer
+                                             :levels levels))
+                  (range reps))))))
 
 (def fields
   [:rep-seed :SRC :phase :AC-fill :NG-fill :RC-fill :AC-overlap :NG-overlap

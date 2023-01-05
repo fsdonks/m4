@@ -981,30 +981,47 @@
        (tbl/map-field :Quantity long)
        (tbl/order-fields-by supply-fields)))
 
+(defn requirements-from-proj
+  "If we already have a requirements-project and we just want to
+  return the resulting requirements analysis SupplyRecords table, we
+  can call this function directly without the i/o from a project and
+  to a text file."
+  [proj & {:keys [bound] :or {bound 0} :as in-map}]
+  (binding [*distance-function*   (if (> bound 0)
+                                    contiguous-distance
+                                    default-distance)
+            *contiguity-threshold* bound]
+  (-> proj       
+       (:tables)
+       (tables->requirements-async  :search bisecting-convergence)
+       (requirements->table))))
+       
+(defn requirements-run-table
+  "Computes requirements analysis table where inpath is either a path
+  to a workbook or a requirements project."
+  [inpath & {:keys [bound] :or {bound 0} :as in-map}]
+  (->> in-map
+       (apply requirements-from-proj
+              (a/load-requirements-project inpath))))
+
 (defn requirements-run
   "Primary function to compute  requirements analysis.  Reads requirements
    project from inpath, computes requirement, and spits results to a tsv
    table in the same root folder as inpath, requirements.txt.
    Caller may supply an argument, bound, to determine the amount of contiguous
    days that constitute a missed demand."
-  [inpath & {:keys [bound] :or {bound 0}}]
+  [inpath & {:keys [bound] :or {bound 0} :as in-map}]
   (let [inpath (clojure.string/replace inpath #"\\" "/")
         base (->> (clojure.string/split inpath #"/")
                   (butlast)
                   (clojure.string/join "/"))
         outpath (str base "/requirements.txt")]
-    (binding [*distance-function*   (if (> bound 0)
-                                       contiguous-distance
-                                       default-distance)
-              *contiguity-threshold* bound]
-      (do (println ["Analyzing requirements for" inpath])
-          (->> (-> (a/load-requirements-project inpath)
-                   (:tables)
-                   (tables->requirements-async  :search bisecting-convergence)
-                   (requirements->table)
-                   (tbl/table->tabdelimited))
-               (spit outpath))
-          (println ["Spit requirements to " outpath])))))
+    (do (println ["Analyzing requirements for" inpath])
+        (->> in-map
+             (apply requirements-run-table inpath) 
+             (tbl/table->tabdelimited)
+             (spit outpath))
+          (println ["Spit requirements to " outpath]))))
 
 (defn outer-to-inner [xs]
   (let [xs (vec xs)]

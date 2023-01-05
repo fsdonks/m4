@@ -27,7 +27,8 @@
             [spork.sim.simcontext :as sim]
             [marathon.ces.core :as core]
             [spork.util      [table :as tbl]]
-            [clojure.core    [reducers :as r]]))
+            [clojure.core    [reducers :as r]]
+            [clojure.test :refer [is]]))
 
 
 ;;*Entity Orders
@@ -123,7 +124,6 @@
     StartState
     EndState
     MissionLength])
-
 
 ;;Formal Tag parsing.
 ;;Tags are adopted from the old legacy type to allow for
@@ -533,13 +533,14 @@
 ;;determined at runtime via the legacy processes (by component).
 (defn record->unitdata
   [{:keys [Name SRC OITitle Component CycleTime Policy Command Origin Duration Behavior
-           Mod Tags] :as r}]
+           Mod aligned Tags] :as r}]
   (-> (if (= Behavior "SRM")    ;;hackish way to go about things...
         (srm-record->unitdata r)
-        (create-unit  Name SRC OITitle Component CycleTime Policy (find-behavior Behavior) :home Origin))
-      (assoc :mod (if (and Mod (pos? Mod)) Mod 3)) ;;TODO deprecate into tags? 
-      (merge-tags  Tags)))
-
+        (create-unit  Name SRC OITitle Component CycleTime Policy
+                      (find-behavior Behavior) :home Origin))
+      ;;Merge Tags back into the supply record after we lost them with create-unit
+      (merge-tags Tags)
+      (assoc :mod (if (and Mod (pos? Mod)) Mod 3)))) ;;TODO deprecate into tags?))
 ;;Ideally, we'll unify this in the near future, for now it's srm specific.
 ;;we can have the unit behavior handle assigning policy.  From the start, we know
 ;;at least the start location, state, and duration.  We need policy to figure out
@@ -620,6 +621,41 @@
 
 (defn pstore->params [pstore] (core/get-parameters (:ctx (meta pstore))))
 (defn index-unit     [idx  u] (assoc u :unit-index idx))
+  
+(defn metable?
+  "Can we attach meta data to this object? We should be able to attach
+  meta data to anything that implements IObj."
+  [x] 
+  (instance? clojure.lang.IObj x))
+
+(defn policy-from-record
+  "Return a vector of [policy policy-name] for the policy that will be used based on
+  what the value is in the Policy field of the supply record."
+  [{:keys [Policy Component SRC] :as supply-rec} pstore]
+  (let [policy (case Policy
+                 "Auto" (choose-policy Policy Component pstore
+                                       (pstore->params pstore) SRC)
+                 (plcy/find-policy Policy pstore))]
+    ;;return the policy
+    [policy
+     ;;return the policy-name
+     (marathon.data.protocols/policy-name policy)]))
+
+(defn compute-cycle-key
+  "We want to group units for initial cycle time distribution according to
+  a key.  Usually, we have a separate distribution for [SRC component
+  policy], but we can also have a custom cycle-init-key in the supply record."
+  [{:keys [Policy Component SRC cycle-init-key]
+    :as supply-rec} pstore]
+  (let [[policy p] (policy-from-record supply-rec pstore)]
+        (-> (if cycle-init-key
+              (if (metable? cycle-init-key)
+                cycle-init-key
+                ;;we can attach metadata to a vector
+                [cycle-init-key])
+              ;;our typical cycle key
+              [SRC Component p])
+            (with-meta {:policy policy}))))
 
 ;;Tom 15 Aug 2019
 ;;We need to decomplect cycle time distribution from
@@ -636,15 +672,9 @@
 (defn create-units
   [idx amount pstore base-record]
   (let [bound     (+ idx (quot amount 1))
-        pname     (:Policy base-record)
         compo     (:Component base-record)
         src       (:SRC base-record)
-        policy    (case pname
-                    "Auto" (choose-policy pname compo pstore
-                                          (pstore->params pstore) src)
-                    (plcy/find-policy pname pstore))
-        p         (marathon.data.protocols/policy-name policy)
-        k         (with-meta [src compo p] {:policy policy})]
+        k         (compute-cycle-key base-record pstore)]
     (when (pos? amount)
       (into [] (map (fn [idx]
                       (let [nm       (generate-name idx src compo)]
@@ -683,7 +713,6 @@
 ;;Tom added 19 Aug 2019
 ;;We now have a processing step that groups the unit records by :cycle-init-key
 ;;and defines cyclelengths for each unit.
-
 (defn initialize-cycle-times [xs]
   (let [{:keys [constant variable]}
         (group-by #(do #_(println [(select-keys % [:name :cycletime :cycle/initialized?])
@@ -699,6 +728,98 @@
          (apply concat)
          (concat constant))))
 
+;;specs:
+;;each bin has two values (after it's partitioned by 2)
+;;the second value in the bin must be a number
+;;If there is a preprocessing tag to align-units and the :Quantity of
+;;the supply record is 0, then one record will be returned with a
+;;quantity of 0 and the record will be :aligned :forward. That should
+;;result in the same behavior as if we didn't split the record at all
+(defn align-units
+  "Given an initial supply record, split that record into multiple
+  supply records according to a sequnce of [alignment quantity]
+  tuples.  Alignment continues until from left to right until all
+  units are used up.  If alignment is nil, then there is no alignment
+  associated with the record.  If all of the bins have been used up
+  and there is still a remaining quantity, the remaining units are
+  placed in a supply record with no alignment."
+  [{:keys [Quantity SRC Component Tags] :as supply-rec} bins]
+  (loop [remaining-quantity Quantity
+         binned []
+         remaining-bins (partition 2 bins)]
+    (let [[alignment quantity] (first remaining-bins)
+          new-quantity (min remaining-quantity quantity)
+          new-rec (assoc supply-rec
+                         :Quantity new-quantity)
+          new-rec (if alignment
+                    (-> (update-in new-rec [:Tags] assoc
+                                   :aligned alignment)
+                        ;;In order to group units for each
+                        ;;alignment and distribute their cycletimes
+                        ;;separately, we can group by this key
+                        (assoc :cycle-init-key
+                               [SRC Component alignment]))
+                    new-rec)
+          leftovers (- remaining-quantity new-quantity)]
+      (cond
+        ;;all units are used up
+        (= new-quantity remaining-quantity)
+        (conj binned new-rec)
+        ;;all bins used and quantity remains 
+        (empty? (rest remaining-bins))
+        (conj binned new-rec (assoc supply-rec :Quantity leftovers))
+        ;;bins remain and there is a leftover quantity
+        :else (recur leftovers (conj binned new-rec) (rest
+                                                        remaining-bins))))))
+
+;;This is where our supply record preprocessing functions reside so
+;;that we can resolve them at runtime.
+(def preprocessing-ns 'marathon.ces.entityfactory)
+
+(defn namespace-provided?
+  "Returns a string if there was a namespace provided for the symbol.
+  Else, returns nil."
+   {:test (fn []
+           (is (= "blah" (namespace-provided? 'blah/func)))
+           (is (nil? (namespace-provided? 'func))))}
+  [symbol]
+  {:pre [(symbol? symbol)]}
+  (namespace symbol))
+  
+(defn resolve-fn
+  "Given preprocessing functions in the Tags, use the supplied
+  namespace if it exists.  Otherwise, try to resolve the function in
+  our preprocessing-ns for now."
+  [func]
+  {:pre [(symbol? func)]
+   ;;make sure that our symbol resolved to something and isn't nil
+   :post [(not (nil? %))]}
+  (if (namespace-provided? func)
+    (resolve func)
+    (ns-resolve preprocessing-ns func)))
+    
+(defn preprocess-supply
+  "Given a supply record, apply each of the functions found under the
+  {:Tags {:preprocess [func1 [arg1 arg2] func2 [arg3 arg4]}} value
+  along with the associated arguments.  Note that the functions will
+  be evaluated from left to right.
+  The first arg of all of the functions should be a single supply
+  record and each function should return a sequnce of supply records."
+  [{:keys [preprocess] :as supply-rec}]
+  (if preprocess
+    (let [func-tuples (partition 2 preprocess)]
+      (reduce (fn [supply-recs [func args]]
+                (mapcat (fn [supply-record]
+                          ;;check func to make sure it's resolved
+                          ;;map a keyword to resolved function OR
+                          ;;as part of preprocessing at setups so
+                          ;;can use that function anywhere
+                          (apply (resolve-fn func)
+                                 supply-record
+                                 args))                   
+                   supply-recs)) [supply-rec] func-tuples))
+    [supply-rec]))
+                                         
 ;;Given a set of raw unit records, create a set of unitdata that has
 ;;all the information necessary for initialization, i.e. lifecycle,
 ;;policy, behavior, name, etc.  We want to name the units according
@@ -714,10 +835,13 @@
          initial-count @unit-count
          rassoc        (fn [k v m] (assoc m k v))]
      (->> recs
-       (into []
-         (comp (filter filter-func) ;;We need to add data validation,
-               ;;we'll do that later.. ..
-               (mapcat (fn [r]
+          ;;data validation
+          (filter filter-func)
+          ;;merge-tags now so that we can use any preprocessing
+          ;;functions if they were supplied in the Tags
+          (map (fn [{:keys [Tags] :as r}] (merge-tags r Tags)))
+          (mapcat preprocess-supply)
+          (mapcat (fn [r]
                          (let [qty (:Quantity r)
                                idx @unit-count
                                _  (reset! unit-count (+ idx qty))]
@@ -727,10 +851,10 @@
                                   (assoc r :Name)
                                   (record->unitdata) ;;assign-policy handles policy wrangling.
                                   (rassoc :unit-index idx) ;;Add UnitIndex 3/8/2017
-                                  vector)))))))
-       initialize-cycle-times
-       (mapv (fn [weight unit] ;;added random-weights
-               (assoc unit :unit-weight weight)) (weights-from initial-count)))))
+                                  vector)))))
+          initialize-cycle-times
+          (mapv (fn [weight unit] ;;added random-weights
+                  (assoc unit :unit-weight weight)) (weights-from initial-count)))))
   ([recs supply pstore]
    (units-from-records recs supply pstore valid-supply-record?)))
 

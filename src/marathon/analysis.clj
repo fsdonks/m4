@@ -468,7 +468,7 @@
   [x & {:keys [table-xform audit? audit-path events?]
                        :or {table-xform identity}}]
   (cond (core/context? x) x
-        (or (string? x) (map? x))
+        (or (string? x) (map? x) (instance? java.net.URL x))
             (if audit?
               (do (io/make-folders! audit-path ["audit.txt"])
                   (load-audited-context x :table-xform table-xform :root audit-path

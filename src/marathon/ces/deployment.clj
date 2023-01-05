@@ -97,7 +97,8 @@
 (def last-deploy (atom nil))
 ;;this is hacky; should be data-driven.
 (defn non-bog? [d]
-  (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC" "RC_Cannibalization"}
+  (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC"
+     "RC_Cannibalization" "Forward"}
    (:category d)))
 
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
