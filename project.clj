@@ -16,21 +16,4 @@
                  [demand_builder "0.1.1-SNAPSHOT"
                   :exclusions [spork]]]
   :jvm-opts ^:replace ["-Xmx4g" "-XX:NewSize=200m"]
-  :source-paths ["src"]
-  :profiles {:dev {:source-paths [;"../spork/src" "../nightclub/src"
-                                  ; "../proc/src"
-                                  ;"../marathon-schemas/src"
-                                  ]}
-             :uberjar {;:aot  [marathon.main]
-                       :aot [marathon.main];~aot-order
-                       :main  marathon.main
-                       :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
-                       :plugins [[lein-capsule "0.2.1"]]
-                       }
-             :uberjar-all {;:aot  [marathon.main]
-                           :aot [marathon.main marathon.core];~aot-order
-                           :main  marathon.main
-                           :jvm-opts ^:replace ["-Xmx1000m" "-XX:NewSize=200m" "-server"]
-                           :plugins [[lein-capsule "0.2.1"]]
-                           }}
-  )
+  :source-paths ["src"])
