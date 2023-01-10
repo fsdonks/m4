@@ -12,10 +12,10 @@
 (defproject marathon "4.2.4-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [spork "0.2.1.5-SNAPSHOT"
+                 [spork "0.2.1.6-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
-                 [marathon-schemas "4.1.7-SNAPSHOT"
+                 [marathon-schemas "4.1.8-SNAPSHOT"
                   :exclusions [spork]]
                  ;;post processing.
                  [proc  "0.2.9-SNAPSHOT"
@@ -32,9 +32,10 @@
                  ]
   :jvm-opts ^:replace ["-Xmx4g" #_"-Xmx1000m" "-XX:NewSize=200m"]
   :source-paths ["src"]
-  :profiles {:dev {:source-paths ["../spork/src" "../nightclub/src"
-                                  "../proc/src"
-                                  "../marathon-schemas/src"]}
+  :profiles {:dev {:source-paths [;"../spork/src" "../nightclub/src"
+                                 ; "../proc/src"
+                                  ;"../marathon-schemas/src"
+                                  ]}
              :uberjar {;:aot  [marathon.main]
                        :aot [marathon.main];~aot-order
                        :main  marathon.main
