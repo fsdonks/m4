@@ -1,4 +1,4 @@
-(defproject marathon "4.2.6-SNAPSHOT"
+(defproject marathon "4.2.7-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [spork "0.2.1.6-SNAPSHOT"
