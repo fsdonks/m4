@@ -295,31 +295,76 @@
       (range high (dec low) -1)
       (map long (range high (dec low) (- step))))))
 
-(defn ac-supply-reduction-experiments
+(defn ac-rc-supply-reduction-experiments  ;;new
   "This is a copy of this function from the marathon.analysis.experiment namespace.
   Upper and lower bounds have been modified so we can look at AC supply levels
-  above the current inventory."
-  [tables lower upper & {:keys [levels step] :or {step 1}}]
+  above the current inventory, and we account for RC supply levels as well."
+  [tables lower upper & {:keys [levels step min-distance
+                                lower-rc upper-rc] :or
+                         {step 1
+                          lower-rc lower
+                          upper-rc upper}}]
   (let [init         (-> tables :SupplyRecords)
         groups       (-> init e/grouped-supply)
-        [low high]   (bound->bounds (-> "AC" groups :Quantity) [lower upper])]
-    (if (not= low high)
-      (for [n (compute-spread-descending (or levels (inc high)) low high)]
-        (->> (assoc-in groups ["AC" :Quantity] n)
-             vals
-             tbl/records->table
-             (assoc tables :SupplyRecords)))
+        [lowAC highAC]   (bound->bounds (-> "AC" groups :Quantity)
+                                          [lower upper]
+                                          :min-distance min-distance)
+        [lowRC highRC]   (bound->bounds (-> "RC" groups :Quantity)
+                                          [lower-rc upper-rc]
+                                          :min-distance min-distance)]
+    (cond 
+      (and (not= lowAC highAC) (not= lowRC highRC))
+        (for [n (compute-spread-descending (or levels (inc highAC)) lowAC highAC)
+              m (compute-spread-descending (or levels (inc highRC)) lowRC highRC)
+              :let [groups2 (-> (assoc-in groups ["AC" :Quantity] n)
+                                (assoc-in ["RC" :Quantity] m))]]
+          (->> groups2
+               vals
+               tbl/records->table
+               (assoc tables :SupplyRecords)))
+      (not= lowAC highAC)
+        (for [n (compute-spread-descending (or levels (inc highAC)) lowAC highAC)]
+          (->> (assoc-in groups ["AC" :Quantity] n)
+               vals
+               tbl/records->table
+               (assoc tables :SupplyRecords)))
+      (not= lowRC highRC)
+        (for [n (compute-spread-descending (or levels (inc highRC)) lowRC highRC)]
+          (->> (assoc-in groups ["RC" :Quantity] n)
+               vals
+               tbl/records->table
+               (assoc tables :SupplyRecords)))
+      :else     
       [tables])))
 
+(defn ac-supply-reduction-experiments
+  "This was the original function before we generalized for the ac and
+  rc.  Now, it's a special case."
+  [tables lower upper & {:keys [levels step] :or {step 1}}]
+    (ac-rc-supply-reduction-experiments tables lower upper :levels
+                                        levels
+                                        :step step
+                                        :min-distance 0
+                                        :lower-rc 1
+                                        :upper-rc 1))
+
+(defn project->experiments-ac-rc  ;;new
+  "We bind this to the dynamic var *projects->experiments* with a
+  partial for the first three args so that we
+  can look at rc and ac supply variations.  lower and upper are for
+  the ac."
+  [min-distance lower-rc upper-rc prj lower upper]
+  (for [tbls (ac-rc-supply-reduction-experiments
+              (:tables prj) lower upper
+              :levels (:levels prj) :min-distance min-distance
+              :lower-rc lower-rc :upper-rc upper-rc)]
+    (assoc prj :tables tbls)))
 
 (defn project->experiments
-  "This is a copy of this function from the marathon.analysis.experiment namespace.
-  This function is modified so we can look at AC supply levels above the
-  current inventory."
+  "We bind this to the dynamic var *projects->experiments* so that we
+  can look at ac supply variations."
   [prj lower upper & {:keys [levels step] :or {step 1}}]
-  (for [tbls (ac-supply-reduction-experiments (:tables prj) lower upper
-                  :step step :levels (:levels prj))]
-    (assoc prj :tables tbls)))
+  (project->experiments-ac-rc 0 1 1 prj lower upper))
 
 (defn project->nolh-experiments
   "Constructs a series of supply variation experiments by using eithe a Nearly Orthogonal
@@ -480,6 +525,12 @@
                                              :gen   gen     :seed->randomizer seed->randomizer
                                              :levels levels))
                   (range reps))))))
+
+(defn rand-runs-ac-rc
+  [min-samples lower-rc upper-rc proj & {:as optional-args}]
+  (binding [*project->experiments* (partial project->experiments-ac-rc
+                                            min-samples lower-rc upper-rc)]
+    (rand-runs proj optional-args)))
 
 (def fields
   [:rep-seed :SRC :phase :AC-fill :NG-fill :RC-fill :AC-overlap :NG-overlap
