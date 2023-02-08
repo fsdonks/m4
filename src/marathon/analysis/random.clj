@@ -78,7 +78,8 @@
   args as the rest of the arguments."
   [{:keys [after-split-transform] :or
     {after-split-transform []} :as proj} f args]
-  (update proj after-split-transform conj f args))
+  (assoc proj :after-split-transform
+         (conj after-split-transform f args)))
 
 (defn adjust-rc ;;new
   [rc-demand rec]
@@ -151,6 +152,7 @@
   [{:keys [after-split-transform] :or
     {after-split-transform []} :as proj}]
   (let [func-tuples (partition 2 after-split-transform)]
+    (println func-tuples)
     (reduce (fn [proj [func args]]
               (apply func
                      proj
@@ -553,7 +555,7 @@
                                                 :supply-record-randomizer
                                                 supply-randomizer)
                                          (add-transform
-                                          random-initials supply-randomizer)
+                                          random-initials [supply-randomizer])
                                          (try-fill src idx phases))))
                                  (map-indexed vector experiments))))) [])
           (apply concat)
@@ -606,7 +608,7 @@
   [min-samples lower-rc upper-rc proj & {:as optional-args}]
   (binding [*project->experiments* (partial project->experiments-ac-rc
                                             min-samples lower-rc upper-rc)]
-    (rand-runs proj optional-args)))
+    (apply rand-runs proj (mapcat identity optional-args))))
 
 (def fields
   [:rep-seed :SRC :phase :AC-fill :NG-fill :RC-fill :AC-overlap :NG-overlap
