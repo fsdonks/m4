@@ -634,6 +634,12 @@
          [k (apply xform-records (tbls k) xform)])
        (into tbls)))
 
+(defn update-proj-tables
+  "Given the trans-map described in xform-tables, update :tables in
+  the marathon proj."
+  [trans-map proj]
+  (update proj :tables xform-tables trans-map))
+
 (defn isolate
   "Given a map of {k table}, such as the :tables value in
    an idiomatic M4 project, an SRC to isolate, and a

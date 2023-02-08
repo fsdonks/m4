@@ -64,26 +64,97 @@
   ([rec randomize] (record->records rec randomize))
   ([rec]           (rand-recs rec identity)))
 
-;;it probably makes sense to fence out a general scheme to apply this pipeline
-;;to demand records, policy records, etc.  There are probably many types of
-;;transformations (or compiler passes) we'd like to apply.
-;;this is really a random supply project.
-(defn rand-proj
+(defn change-records
+  "Takes a transducer, t, and updates the records from table-keyword,
+  returning the updated project."
+  [proj t table-keyword]
+  (a/update-proj-tables {table-keyword [t]} proj))
+
+(defn add-transform
+  "Add a project transformation to the project. The project will have
+  a :after-split-transforms key where the value is a vector that
+  contains a vector of [fn1 args-fn1 fn2 args-fn2 ... etc] where each
+  function takes a project as the first argument and the corresponding
+  args as the rest of the arguments."
+  [{:keys [after-split-transform] :or
+    {after-split-transform []} :as proj} f args]
+  (update proj after-split-transform conj f args))
+
+(defn adjust-rc ;;new
+  [rc-demand rec]
+  (if (= (:DemandGroup rec) "RC_NonBOG-War")
+    (assoc rec :Quantity rc-demand)
+    rec))	
+
+(defn rc-record
+  "Returns the rc-record in the project.  Throw an error if we don't
+  find an rc record because we need the rc record for
+  rc-unavailability so we should have 1 RC record for every SRC, even
+  if the quantity is 0.  The project has been filtered down to one SRC
+  only at this point."
+  [proj]
+  (let [rec (->> proj
+                 :tables
+                 :SupplyRecords
+                 tbl/table-records
+                 (filter #(= "RC" (:Component %)))
+                 first)]
+    (if rec
+      rec
+      (throw (Exception. (str "There was no RC record."))))))
+
+(defn get-rc-unavailable
+  "Returns the :rc-unavailable from the SupplyRecord Tags.  If
+  :rc-unavailable does not exist, throw an exception because we should
+  have set that beforehand during preprocessing when calling this."
+  [{:keys [rc-unavailable]}]
+  (if rc-unavailable
+    rc-unavailable
+    ;;Careful!! This won't throw 
+       (throw (Exception. (str ":rc-unavailable missing from
+  SupplyRecord Tags.")))))
+
+(defn adjust-cannibals
+  "Adjust the cannibalization demand based on a percentage of
+  uavailable RC supply."
+  [proj]
+  (let [{:keys [Quantity Tags]} (rc-record proj) 
+        percent (get-rc-unavailable Tags)
+        rc-demand (int (* Quantity percent))]
+    (change-records proj
+                    (map #(adjust-rc rc-demand %))
+                    :Demandrecords)))
+
+(defn random-initials
   "Takes a project and makes a new project with random unit initial cycle times.
    If the project supplies a:supply-record-randomizer key associated to a
    function of supply-record -> supply-record, that function will be supplied
    as a transformation when generating random records.  Otherwise, no transformation
    will occur beyond the normal expansion of a batch supply record into multiple records
    with custom names."
-  [proj]
-  (let [supply-record-randomizer (get proj :supply-record-randomizer identity)]
-    (->> proj
-         :tables
-         :SupplyRecords
-         tbl/table-records
-         (mapcat #(rand-recs % supply-record-randomizer))
-         tbl/records->table
-         (assoc-in proj [:tables :SupplyRecords]))))
+  [proj supply-record-randomizer]
+  (let [supply-record-randomizer (if supply-record-randomizer
+                                   supply-record-randomizer
+                                   identity)]
+    (change-records proj
+                    (mapcat #(rand-recs % supply-record-randomizer))
+                    :SupplyRecords)))
+
+;;it probably makes sense to fence out a general scheme to apply this pipeline
+;;to demand records, policy records, etc.  There are probably many types of
+;;transformations (or compiler passes) we'd like to apply.
+;;this is really a random supply project.
+(defn rand-proj
+  "Apply multiple project transforms on the project from the functions
+  and arguments supplied inside the project at the
+  :after-split-transforms key."
+  [{:keys [after-split-transform] :or
+    {after-split-transform []} :as proj}]
+  (let [func-tuples (partition 2 after-split-transform)]
+    (reduce (fn [proj [func args]]
+              (apply func
+                     proj
+                     args)) proj func-tuples)))
 
 ;;instead of adding fills and overlap and required, we just add
 ;;any fill information to not-ready. indicated units filling
@@ -473,11 +544,16 @@
                      (filter (fn blah [x] (not (:error x))))
                      (util/pmap! *threads*
                                  (fn [[idx proj]]
-                                   (let [rep-seed   (util/next-long gen)]
+                                   (let [rep-seed   (util/next-long
+                                                     gen)
+                                         supply-randomizer
+                                         (seed->randomizer rep-seed)]
                                      (-> proj
                                          (assoc :rep-seed rep-seed
                                                 :supply-record-randomizer
-                                                (seed->randomizer rep-seed))
+                                                supply-randomizer)
+                                         (add-transform
+                                          random-initials supply-randomizer)
                                          (try-fill src idx phases))))
                                  (map-indexed vector experiments))))) [])
           (apply concat)
