@@ -124,7 +124,7 @@
         rc-demand (int (* Quantity percent))]
     (change-records proj
                     (map #(adjust-rc rc-demand %))
-                    :Demandrecords)))
+                    :DemandRecords)))
 
 (defn random-initials
   "Takes a project and makes a new project with random unit initial cycle times.
@@ -152,7 +152,6 @@
   [{:keys [after-split-transform] :or
     {after-split-transform []} :as proj}]
   (let [func-tuples (partition 2 after-split-transform)]
-    (println func-tuples)
     (reduce (fn [proj [func args]]
               (apply func
                      proj
