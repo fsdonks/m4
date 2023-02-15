@@ -1380,7 +1380,8 @@ non-forward-stationed demand.")
 ;;this might not always be the case.
 
 
-
+;;_____________________________________________________
+;;marathon.analysis.random tests.
 (def previous-results
   (java.io/resource "runamc-testdata_results_before-m4-merge.txt"))
 (def new-results-book
@@ -1388,16 +1389,20 @@ non-forward-stationed demand.")
 
 (defn make-new-results
   [proj]
-  (let [p (analysis/load-project proj)
-        phases [["comp" 1 821] ["phase-1" 822 967]]]
-    (random/rand-runs-ac-rc 5 ;;min-distance
-                            0.5 ;;lower-rc
-                            0.7 ;;upper-rc
-                            (random/add-transform p random/adjust-cannibals
-                                                  []) :reps 2 :phases phases
-                            :lower 0 :upper 0.1
-                            :compo-lengths random/default-compo-lengths
-                            )))
+  ;;the old results were created with one thread to make sure that
+  ;;each inventory level for an src has the same seed given that
+  ;;the default seed was used in both cases.
+  (binding [random/*threads* 1]
+    (let [p (analysis/load-project proj)
+          phases [["comp" 1 821] ["phase-1" 822 967]]]
+      (random/rand-runs-ac-rc 5 ;;min-distance
+                              0.5 ;;lower-rc
+                              0.7 ;;upper-rc
+                              (random/add-transform p random/adjust-cannibals
+                                                    []) :reps 2 :phases phases
+                              :lower 0 :upper 0.1
+                              :compo-lengths random/default-compo-lengths
+                              ))))
         
 (defn set-tab-delim-tolerance
   "results.txt is still reading the rep-seed as scientific even with a
@@ -1406,31 +1411,20 @@ non-forward-stationed demand.")
   [{:keys [rep-seed] :as r}]
   (assoc r :rep-seed (long (/ rep-seed 1000000))))
 
-(defn rand-recs-seq
-  "For two compare two sequences of results, we first round the rep
-  seed to something that will match and then return a set of records
-  for comparison."
-  [results]
-  (let [no-seeds (map (fn [r] (dissoc r :rep-seed)) results)]
-    sort-by (apply juxt (keys (first no-seeds))) no-seeds))
-
 (defn compare-rand-recs
   "For two compare two sequences of results, we first round the rep
-  seed to something that will match and then return a set of records
+  seed to something that will match and then return the records
   for comparison."
   [results]
   (->> 
    results
-   (map (fn [r] (set-tab-delim-tolerance r)))
-   ;(map (fn [r] (dissoc r :rep-seed)))
-   (set)))
+   (map (fn [r] (set-tab-delim-tolerance r)))))
 
 (deftest runamc-merge-check
   (let [old-results (into [] (tbl/tabdelimited->records
                               (slurp previous-results)
                               :parsemode :no-science))
-        new-results (binding [random/*threads* 1]
-                      (make-new-results new-results-book))]
+        new-results (make-new-results new-results-book)]
     (is (apply = (map compare-rand-recs [old-results new-results]))
         "Make sure that the results are the same from when we ran them
 in the run-amc repo before we moved and refactored the code to
