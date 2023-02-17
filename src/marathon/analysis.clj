@@ -608,13 +608,18 @@
   ordering of fields as the input tbl (if applicable).
   TODO: migrate to spork.util.table and import in marathon.analysis"
   [tbl & xfs]
-  (let [fields (tbl/table-fields tbl)]
-    (->> (tbl/table-records tbl)
-         (conj (vec xfs))
-         (apply eduction)
-         (into [])
-         tbl/records->table
-         (tbl/order-fields-by fields))))
+  (let [fields (tbl/table-fields tbl)
+        xformed (->> (tbl/table-records tbl)
+                     (conj (vec xfs))
+                     (apply eduction)
+                     (into [])
+                     tbl/records->table)]
+    (if (= xformed tbl/empty-table)
+      ;;Our transformation may return an empty table. e.g. we removed
+      ;;all records or there was or there was an error during the
+      ;;transform.
+      xformed
+      (tbl/order-fields-by fields xformed))))
 
 (defn xform-tables
   "Given a map of tbls {k table} and a table-xform map of
@@ -633,6 +638,12 @@
              :when (tbls k)]
          [k (apply xform-records (tbls k) xform)])
        (into tbls)))
+
+(defn update-proj-tables
+  "Given the trans-map described in xform-tables, update :tables in
+  the marathon proj."
+  [trans-map proj]
+  (update proj :tables xform-tables trans-map))
 
 (defn isolate
   "Given a map of {k table}, such as the :tables value in

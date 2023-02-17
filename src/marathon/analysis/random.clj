@@ -64,26 +64,98 @@
   ([rec randomize] (record->records rec randomize))
   ([rec]           (rand-recs rec identity)))
 
-;;it probably makes sense to fence out a general scheme to apply this pipeline
-;;to demand records, policy records, etc.  There are probably many types of
-;;transformations (or compiler passes) we'd like to apply.
-;;this is really a random supply project.
-(defn rand-proj
+(defn change-records
+  "Takes a transducer, t, and updates the records from table-keyword,
+  returning the updated project."
+  [proj t table-keyword]
+  (a/update-proj-tables {table-keyword [t]} proj))
+
+(defn add-transform
+  "Add a project transformation to the project. The project will have
+  a :after-split-transforms key where the value is a vector that
+  contains a vector of [fn1 args-fn1 fn2 args-fn2 ... etc] where each
+  function takes a project as the first argument and the corresponding
+  args as the rest of the arguments."
+  [{:keys [after-split-transform] :or
+    {after-split-transform []} :as proj} f args]
+  (assoc proj :after-split-transform
+         (conj after-split-transform f args)))
+
+(defn adjust-rc ;;new
+  [rc-demand rec]
+  (if (= (:DemandGroup rec) "RC_NonBOG-War")
+    (assoc rec :Quantity rc-demand)
+    rec))	
+
+(defn rc-record
+  "Returns the rc-record in the project.  Throw an error if we don't
+  find an rc record because we need the rc record for
+  rc-unavailability so we should have 1 RC record for every SRC, even
+  if the quantity is 0.  The project has been filtered down to one SRC
+  only at this point."
+  [proj]
+  (let [rec (->> proj
+                 :tables
+                 :SupplyRecords
+                 tbl/table-records
+                 (filter #(= "RC" (:Component %)))
+                 first)]
+    (if rec
+      rec
+      (throw (Exception. (str "There was no RC record."))))))
+
+(defn get-rc-unavailable
+  "Returns the :rc-unavailable from the SupplyRecord Tags.  If
+  :rc-unavailable does not exist, throw an exception because we should
+  have set that beforehand during preprocessing when calling this."
+  [{:keys [rc-unavailable]}]
+  (if rc-unavailable
+    rc-unavailable
+    ;;Careful!! This won't throw 
+       (throw (Exception. (str ":rc-unavailable missing from
+  SupplyRecord Tags.")))))
+
+(defn adjust-cannibals
+  "Adjust the cannibalization demand based on a percentage of
+  uavailable RC supply."
+  [proj]
+  (let [{:keys [Quantity Tags]} (rc-record proj) 
+        percent (get-rc-unavailable Tags)
+        rc-demand (int (* Quantity percent))]
+    (change-records proj
+                    (map #(adjust-rc rc-demand %))
+                    :DemandRecords)))
+
+(defn random-initials
   "Takes a project and makes a new project with random unit initial cycle times.
    If the project supplies a:supply-record-randomizer key associated to a
    function of supply-record -> supply-record, that function will be supplied
    as a transformation when generating random records.  Otherwise, no transformation
    will occur beyond the normal expansion of a batch supply record into multiple records
    with custom names."
-  [proj]
-  (let [supply-record-randomizer (get proj :supply-record-randomizer identity)]
-    (->> proj
-         :tables
-         :SupplyRecords
-         tbl/table-records
-         (mapcat #(rand-recs % supply-record-randomizer))
-         tbl/records->table
-         (assoc-in proj [:tables :SupplyRecords]))))
+  [proj supply-record-randomizer]
+  (let [supply-record-randomizer (if supply-record-randomizer
+                                   supply-record-randomizer
+                                   identity)]
+    (change-records proj
+                    (mapcat #(rand-recs % supply-record-randomizer))
+                    :SupplyRecords)))
+
+;;it probably makes sense to fence out a general scheme to apply this pipeline
+;;to demand records, policy records, etc.  There are probably many types of
+;;transformations (or compiler passes) we'd like to apply.
+;;this is really a random supply project.
+(defn rand-proj
+  "Apply multiple project transforms on the project from the functions
+  and arguments supplied inside the project at the
+  :after-split-transforms key."
+  [{:keys [after-split-transform] :or
+    {after-split-transform []} :as proj}]
+  (let [func-tuples (partition 2 after-split-transform)]
+    (reduce (fn [proj [func args]]
+              (apply func
+                     proj
+                     args)) proj func-tuples)))
 
 ;;instead of adding fills and overlap and required, we just add
 ;;any fill information to not-ready. indicated units filling
@@ -295,31 +367,76 @@
       (range high (dec low) -1)
       (map long (range high (dec low) (- step))))))
 
-(defn ac-supply-reduction-experiments
+(defn ac-rc-supply-reduction-experiments  ;;new
   "This is a copy of this function from the marathon.analysis.experiment namespace.
   Upper and lower bounds have been modified so we can look at AC supply levels
-  above the current inventory."
-  [tables lower upper & {:keys [levels step] :or {step 1}}]
+  above the current inventory, and we account for RC supply levels as well."
+  [tables lower upper & {:keys [levels step min-distance
+                                lower-rc upper-rc] :or
+                         {step 1
+                          lower-rc lower
+                          upper-rc upper}}]
   (let [init         (-> tables :SupplyRecords)
         groups       (-> init e/grouped-supply)
-        [low high]   (bound->bounds (-> "AC" groups :Quantity) [lower upper])]
-    (if (not= low high)
-      (for [n (compute-spread-descending (or levels (inc high)) low high)]
-        (->> (assoc-in groups ["AC" :Quantity] n)
-             vals
-             tbl/records->table
-             (assoc tables :SupplyRecords)))
+        [lowAC highAC]   (bound->bounds (-> "AC" groups :Quantity)
+                                          [lower upper]
+                                          :min-distance min-distance)
+        [lowRC highRC]   (bound->bounds (-> "RC" groups :Quantity)
+                                          [lower-rc upper-rc]
+                                          :min-distance min-distance)]
+    (cond 
+      (and (not= lowAC highAC) (not= lowRC highRC))
+        (for [n (compute-spread-descending (or levels (inc highAC)) lowAC highAC)
+              m (compute-spread-descending (or levels (inc highRC)) lowRC highRC)
+              :let [groups2 (-> (assoc-in groups ["AC" :Quantity] n)
+                                (assoc-in ["RC" :Quantity] m))]]
+          (->> groups2
+               vals
+               tbl/records->table
+               (assoc tables :SupplyRecords)))
+      (not= lowAC highAC)
+        (for [n (compute-spread-descending (or levels (inc highAC)) lowAC highAC)]
+          (->> (assoc-in groups ["AC" :Quantity] n)
+               vals
+               tbl/records->table
+               (assoc tables :SupplyRecords)))
+      (not= lowRC highRC)
+        (for [n (compute-spread-descending (or levels (inc highRC)) lowRC highRC)]
+          (->> (assoc-in groups ["RC" :Quantity] n)
+               vals
+               tbl/records->table
+               (assoc tables :SupplyRecords)))
+      :else     
       [tables])))
 
+(defn ac-supply-reduction-experiments
+  "This was the original function before we generalized for the ac and
+  rc.  Now, it's a special case."
+  [tables lower upper & {:keys [levels step] :or {step 1}}]
+    (ac-rc-supply-reduction-experiments tables lower upper :levels
+                                        levels
+                                        :step step
+                                        :min-distance 0
+                                        :lower-rc 1
+                                        :upper-rc 1))
+
+(defn project->experiments-ac-rc  ;;new
+  "We bind this to the dynamic var *projects->experiments* with a
+  partial for the first three args so that we
+  can look at rc and ac supply variations.  lower and upper are for
+  the ac."
+  [min-distance lower-rc upper-rc prj lower upper]
+  (for [tbls (ac-rc-supply-reduction-experiments
+              (:tables prj) lower upper
+              :levels (:levels prj) :min-distance min-distance
+              :lower-rc lower-rc :upper-rc upper-rc)]
+    (assoc prj :tables tbls)))
 
 (defn project->experiments
-  "This is a copy of this function from the marathon.analysis.experiment namespace.
-  This function is modified so we can look at AC supply levels above the
-  current inventory."
+  "We bind this to the dynamic var *projects->experiments* so that we
+  can look at ac supply variations."
   [prj lower upper & {:keys [levels step] :or {step 1}}]
-  (for [tbls (ac-supply-reduction-experiments (:tables prj) lower upper
-                  :step step :levels (:levels prj))]
-    (assoc prj :tables tbls)))
+  (project->experiments-ac-rc 0 1 1 prj lower upper))
 
 (defn project->nolh-experiments
   "Constructs a series of supply variation experiments by using eithe a Nearly Orthogonal
@@ -428,11 +545,16 @@
                      (filter (fn blah [x] (not (:error x))))
                      (util/pmap! *threads*
                                  (fn [[idx proj]]
-                                   (let [rep-seed   (util/next-long gen)]
+                                   (let [rep-seed   (util/next-long
+                                                     gen)
+                                         supply-randomizer
+                                         (seed->randomizer rep-seed)]
                                      (-> proj
                                          (assoc :rep-seed rep-seed
                                                 :supply-record-randomizer
-                                                (seed->randomizer rep-seed))
+                                                supply-randomizer)
+                                         (add-transform
+                                          random-initials [supply-randomizer])
                                          (try-fill src idx phases))))
                                  (map-indexed vector experiments))))) [])
           (apply concat)
@@ -480,6 +602,12 @@
                                              :gen   gen     :seed->randomizer seed->randomizer
                                              :levels levels))
                   (range reps))))))
+
+(defn rand-runs-ac-rc
+  [min-samples lower-rc upper-rc proj & {:as optional-args}]
+  (binding [*project->experiments* (partial project->experiments-ac-rc
+                                            min-samples lower-rc upper-rc)]
+    (apply rand-runs proj (mapcat identity optional-args))))
 
 (def fields
   [:rep-seed :SRC :phase :AC-fill :NG-fill :RC-fill :AC-overlap :NG-overlap
