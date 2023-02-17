@@ -1,0 +1,10 @@
+file: runamc-testdata.xlsx
+copied from: run-amc/ac-rc_random-runs/testdata.xlsx
+shaid: run-amc 90cc881ac6da1c2eda6ff305d6a7ee8f6ae50fad
+
+file: runamc-testdata_results_before-m4-merge.txt
+generated from: m4 repl git tag 4.2.7-SNAPSHOT
+using commands in run-amc/ac-rc_random-runs/usage.clj, but
+also (binding [r/*threads* 1]) for consistent results
+across inventory levels.
+
