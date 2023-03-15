@@ -115,13 +115,22 @@
        (throw (Exception. (str ":rc-unavailable missing from
   SupplyRecord Tags.")))))
 
+(defn cannibal-quantity
+  "Given a percentage of RC unavailable as a ratio or decimal and the
+  RC supply, return the quantity for the cannibalization demand.
+  Current assumption is that if we have a fractional unit, we round
+  unavailability up.  Moved this to a function so that we can make
+  sure we are doing the same thing in taa.capacity and here."
+  [unavail-percent rc-supply]
+  (Math/ceil (* unavail-percent rc-supply)))
+
 (defn adjust-cannibals
   "Adjust the cannibalization demand based on a percentage of
   uavailable RC supply."
   [proj]
   (let [{:keys [Quantity Tags]} (rc-record proj) 
         percent (get-rc-unavailable Tags)
-        rc-demand (int (* Quantity percent))]
+        rc-demand (cannibal-quantity percent Quantity)]
     (change-records proj
                     (map #(adjust-rc rc-demand %))
                     :DemandRecords)))
