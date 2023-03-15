@@ -1,4 +1,5 @@
-(defproject marathon "4.2.9-SNAPSHOT"
+;;Go to marathon.core to update +version+ as well!
+(defproject marathon "4.2.10-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [spork "0.2.1.6-SNAPSHOT"
