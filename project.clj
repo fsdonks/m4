@@ -1,5 +1,5 @@
 ;;Go to marathon.core to update +version+ as well!
-(defproject marathon "4.2.11-SNAPSHOT"
+(defproject marathon "4.2.12-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [spork "0.2.1.7-SNAPSHOT"
@@ -14,7 +14,7 @@
                   :exclusions [spork]]
                  [helmet "0.1.1-SNAPSHOT"
                   :exclusions [spork]]
-                 [demand_builder "0.1.2-SNAPSHOT"
+                 [demand_builder "0.1.3-SNAPSHOT"
                   :exclusions [spork]]]
   :jvm-opts ^:replace ["-Xmx4g" "-XX:NewSize=200m"]
   :source-paths ["src"]
