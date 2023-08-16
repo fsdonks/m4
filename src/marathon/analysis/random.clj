@@ -81,11 +81,19 @@
   (assoc proj :after-split-transform
          (conj after-split-transform f args)))
 
-(defn adjust-rc ;;new
+(def cannibal-name "RC_NonBOG-War")
+
+(defn adjust-rc
   [rc-demand rec]
-  (if (= (:DemandGroup rec) "RC_NonBOG-War")
+  (if (= (:DemandGroup rec) cannibal-name)
     (assoc rec :Quantity rc-demand)
-    rec))	
+    rec))
+
+(defn adjust-priority
+  [priority demand-group rec]
+  (if (= (:DemandGroup rec) demand-group)
+    (assoc rec :Priority priority)
+    rec))
 
 (defn rc-record
   "Returns the rc-record in the project.  Throw an error if we don't
@@ -103,6 +111,19 @@
     (if rec
       rec
       (throw (Exception. (str "There was no RC record."))))))
+
+(defn group-record
+  "Return the demand record for a specified demand group."
+  [proj demand-group]
+  (let [recs (->> proj
+                  :tables
+                  :DemandRecords
+                  tbl/table-records
+                  (filter #(= demand-group (:DemandGroup %))))]
+    (if (> (count recs) 1)
+      (throw (Exception. (str "There were multiple records for demand
+  group " demand-group)))
+      (first recs))))     
 
 (defn get-rc-unavailable
   "Returns the :rc-unavailable from the SupplyRecord Tags.  If
@@ -124,16 +145,64 @@
   [unavail-percent rc-supply]
   (Math/ceil (* unavail-percent rc-supply)))
 
+(defn adjusted-cannibal
+  "If we are using cannibalized units for HLD, we need to reduce the
+  quantity of the cannibalization demand by the quantity of HLD."
+  [unavail-percent rc-supply cannibals-in-hld? hld-quantity]
+  (let [unavailable (cannibal-quantiy unavail-percent rc-supply)]
+    (if cannibals-in-hld?
+      (max 0 (- unavailable hld-quantity))
+      unavailable)))
+
+(defn change-priority
+  "Given a project, priority, and demand group name, set the priority
+  for that demand record."
+  [proj priority demand-group]
+  (change-records proj
+                  (map #(adjust-priority priority
+                                         demand-group %))
+                  :DemandRecords))
+
+(defn assign-priorities
+  "Assign the first priority to the HLD demand record and assign the
+  second priority to the cannibalization demand record."
+  [proj first-priority second-priority idaho-name]
+  (-> proj
+          (change-priority first-priority idaho-name)
+          (change-priority second-priority cannibal-name)))
+
+(defn swap-priorities
+  "If we are using cannibalized units in HLD, we need to make sure HLD
+  is a higher priority than the cannibalization demands.  If we aren't
+  using cannibalized units in HLD, the cannibalization demand should
+  be the highest priority."
+  [proj idaho-name cannibals-in-hld?]
+  (let [hld (:Quantity (group-record proj idaho-name))
+        hld (if hld hld 0)
+        cannibal (:Quantity (group-record proj cannibal-name))
+        max-priority (max hld cannibal)
+        min-priority (min hld cannibal)]
+    (if cannibals-in-hld?
+      (assign-priorities max-priority min-priority idaho-name)
+      (assign-priorities min-priority max-priority idaho-name))))
+       
+;;How we do this depends on cannibals-in-hld? now, and stopped here Mon.
 (defn adjust-cannibals
   "Adjust the cannibalization demand based on a percentage of
-  uavailable RC supply."
-  [proj]
+  uavailable RC supply, reducing by HLD quantity if necessary."
+  [proj cannibals-in-hld? idaho-name]
   (let [{:keys [Quantity Tags]} (rc-record proj) 
         percent (get-rc-unavailable Tags)
-        rc-demand (cannibal-quantity percent Quantity)]
-    (change-records proj
-                    (map #(adjust-rc rc-demand %))
-                    :DemandRecords)))
+        ;;Could be nil
+        hld-quantity (:Quantity (group-record proj idaho-name))
+        adjusted (adjusted-cannibal percent Quantity cannibals-in-hld?
+                                    hld-quantity)]
+    (-> 
+     (change-records (map #(adjust-rc adjusted %))
+                     :DemandRecords)
+     ;;Make sure the HLD is higher or lower priority than the
+     ;;cannibalization demand.
+     (swap-priorities idaho-name cannibals-in-hld?))))
 
 (defn random-initials
   "Takes a project and makes a new project with random unit initial cycle times.
