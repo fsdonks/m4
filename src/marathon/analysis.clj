@@ -831,7 +831,7 @@
 (defmacro with-all-outputs [& body]
   `(with-outputs ~all-outputs
      ~@body))
-
+#_
 (def w (atom nil))
 
 (defn spit-history!
@@ -877,6 +877,7 @@
                            #(store/gete % :DemandStore :tlastdeactivation))
         [tfinal tlastdemand]        (-> h first second end-points)
         end-time    (min tfinal tlastdemand)
+        #_#_
         _ (reset! w (some #(when (= (:name %) :event-log) (:saver %)) frame-state))]
     (with-open [savers (io/->closer (map :saver frame-state))]
       (doseq [frm h]

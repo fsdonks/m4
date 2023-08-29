@@ -7,7 +7,9 @@
             [marathon.ces.core :as c]
             [spork.util.table :as tbl]
             [spork.util.general :as gen]
-            [clojure.spec.alpha :as s]))
+            [clojure.spec.alpha :as s]
+            [com.climate.claypoole :as cp]
+            [ham-fisted.api :as hf]))
 
 ;;number of threads to use for pmap.
 (def ^:dynamic *threads* 4)
@@ -552,20 +554,22 @@
              (let [experiments (project->experiments proj lower upper)]
                (into acc
                      (filter (fn blah [x] (not (:error x))))
-                     (util/pmap! *threads*
+                     (#_cp/upmap #_hf/pmap util/pmap! *threads*
                                  (fn [[idx proj]]
-                                   (let [rep-seed   (util/next-long
+                                   (let [#_#_rep-seed   (util/next-long
                                                      gen)
                                          supply-randomizer
-                                         (seed->randomizer rep-seed)]
+                                         (seed->randomizer #_rep-seed (proj :rep-seed))]
                                      (-> proj
-                                         (assoc :rep-seed rep-seed
+                                         (assoc #_#_:rep-seed rep-seed
                                                 :supply-record-randomizer
                                                 supply-randomizer)
                                          (add-transform
                                           random-initials [supply-randomizer])
                                          (try-fill src idx phases))))
-                                 (map-indexed vector experiments))))) [])
+                                 (map-indexed (fn [idx {:keys [gen] :as proj}]
+                                                [idx (assoc proj :rep-seed (util/next-long gen))])
+                                              experiments))))) [])
           (apply concat)
           vec)))
 
@@ -602,6 +606,7 @@
                    "random-out.txt" :append false)]
       ;;redirect printing to random-out.txt
       ;;the logging will redirect to standard *out* once the writer closes.
+      #_
       (util/log-to w)
     ;;input validation, we probably should do more of this in general.
       (assert (s/valid? ::phases phases) (s/explain-str ::phases []))

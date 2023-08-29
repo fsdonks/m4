@@ -745,6 +745,7 @@
         req      (d/required demand)
         selected (->> (find-supply ctx rule)
                       (into []    (take req)))
+        #_#_
         _           (reset! last-sel selected)
         actual-fill (count selected)
         status      (cond (== actual-fill req) :filled
