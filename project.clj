@@ -23,3 +23,4 @@
   :repositories [["public-github" {:url "git://github.com"}]]
   :git-down {proc  {:coordinates  fsdonks/proc}
              demand_builder  {:coordinates  fsdonks/demand_builder}})
+

@@ -149,7 +149,7 @@
   "If we are using cannibalized units for HLD, we need to reduce the
   quantity of the cannibalization demand by the quantity of HLD."
   [unavail-percent rc-supply cannibals-in-hld? hld-quantity]
-  (let [unavailable (cannibal-quantiy unavail-percent rc-supply)]
+  (let [unavailable (cannibal-quantity unavail-percent rc-supply)]
     (if cannibals-in-hld?
       (max 0 (- unavailable hld-quantity))
       unavailable)))
@@ -175,18 +175,17 @@
   "If we are using cannibalized units in HLD, we need to make sure HLD
   is a higher priority than the cannibalization demands.  If we aren't
   using cannibalized units in HLD, the cannibalization demand should
-  be the highest priority."
+  be the highest priority.  These should both be the two highest
+  priority demand groups."
   [proj idaho-name cannibals-in-hld?]
-  (let [hld (:Quantity (group-record proj idaho-name))
-        hld (if hld hld 0)
-        cannibal (:Quantity (group-record proj cannibal-name))
+  (let [hld (get (group-record proj idaho-name) :Priority 2)
+        cannibal (get (group-record proj cannibal-name) :Priority 2)
         max-priority (max hld cannibal)
         min-priority (min hld cannibal)]
     (if cannibals-in-hld?
-      (assign-priorities max-priority min-priority idaho-name)
-      (assign-priorities min-priority max-priority idaho-name))))
+      (assign-priorities proj min-priority max-priority idaho-name)
+      (assign-priorities proj max-priority min-priority idaho-name))))
        
-;;How we do this depends on cannibals-in-hld? now, and stopped here Mon.
 (defn adjust-cannibals
   "Adjust the cannibalization demand based on a percentage of
   uavailable RC supply, reducing by HLD quantity if necessary."
@@ -194,10 +193,10 @@
   (let [{:keys [Quantity Tags]} (rc-record proj) 
         percent (get-rc-unavailable Tags)
         ;;Could be nil
-        hld-quantity (:Quantity (group-record proj idaho-name))
+        hld-quantity (get (group-record proj idaho-name) :Quantity 0)
         adjusted (adjusted-cannibal percent Quantity cannibals-in-hld?
                                     hld-quantity)]
-    (-> 
+    (-> proj
      (change-records (map #(adjust-rc adjusted %))
                      :DemandRecords)
      ;;Make sure the HLD is higher or lower priority than the

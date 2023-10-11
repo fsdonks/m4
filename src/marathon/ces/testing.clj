@@ -1399,7 +1399,7 @@ non-forward-stationed demand.")
                               0.5 ;;lower-rc
                               0.7 ;;upper-rc
                               (random/add-transform p random/adjust-cannibals
-                                                    []) :reps 2 :phases phases
+                                                    [false :no-hld]) :reps 2 :phases phases
                               :lower 0 :upper 0.1
                               :compo-lengths random/default-compo-lengths
                               ))))
