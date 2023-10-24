@@ -1039,7 +1039,7 @@
 ;;atomic policy.
 (def p2 (marathon.data.protocols/on-period-change p1 "Surge"))
 
-(def policy-change  
+(def policy-change
             {:cycletime 327
              :current-policy p1
              :next-policy    p2
@@ -1122,17 +1122,6 @@
 
 )
 
-
-(comment ;mutation testing
-  
-  (defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
-    (analysis/marathon-stream
-     (setup/default-simstate
-       (update init-ctx :state spork.entitysystem.store/mutate!))))
-    
-    
-  
-  )
 
 ;;Forward station testing
 (defn get-demands
@@ -1430,4 +1419,18 @@ non-forward-stationed demand.")
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
 
-  
+
+
+;;MUTABLE STORE
+;;=============
+(defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
+  (analysis/marathon-stream
+   (setup/default-simstate
+    (update init-ctx :state spork.entitysystem.store/mutate!))))
+
+(def base-ctx (setup/default-simstate core/debugsim))
+
+;;this is brittle.  We should eventually implement IMutable....
+;;we also have no way of distinguishing mutable vs immutable
+;;when things are embedded at this level...
+(def mctx (update-in base-ctx [:state :store] store/mutate!))
