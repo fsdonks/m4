@@ -18,6 +18,7 @@
                   :exclusions [spork]]]
   :jvm-opts ^:replace ["-Xmx4g" "-XX:NewSize=200m"]
   :source-paths ["src"]
+  :profiles {:dev {:source-paths ["src" "../spork/src/"]}} ;;temporary crossdev.
   :plugins [[reifyhealth/lein-git-down "0.4.1"]]
   :middleware [lein-git-down.plugin/inject-properties]
   :repositories [["public-github" {:url "git://github.com"}]]
