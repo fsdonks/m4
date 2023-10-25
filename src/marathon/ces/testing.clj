@@ -67,6 +67,7 @@
 (when-not (some-> (find-ns 'marathon.ces.testing.async)
                   ns-publics
                   (get 'get-demands))
+  (println [:first-time-loading 'marathon.ces.testing.async])
   (require 'marathon.ces.testing.async :reload))
 
 (defn all-tests []
