@@ -35,8 +35,10 @@
             [marathon.project :as proj]
             [spork.sim     [simcontext :as sim]
                            [history :as history]]
-            [spork.entitysystem.store :as store]
-            [spork.util [reducers]
+            [spork.entitysystem
+             [store :as store]
+              [diff :as entdiff]]
+            [spork.util [reducers] [diff :as diff]
              [tags :as tags]
              [table :as tbl]]
             [spork.sketch :as sketch]
@@ -49,7 +51,23 @@
             [marathon.analysis.random :as random]
             [marathon.spec :as spec]
             [clojure.java.io :as java.io]
+            [marathon.ces.testing [noasync :as noasync]]
            ))
+
+;;since core.async defines a global threadpool via defonce, and
+;;this is a reified protocol, if we reload-all on any ns that pulls it in
+;;(like this one), the old threadpool stays while technically a new protocol
+;;gets defined that doesn't extend to the original threadpool.  This is a
+;;work around, where we have a ns that excludes all the async depndent
+;;ones, and lets us invoke reload-all as if we were reloading every
+;;other non-async ns from marathon.ces.testing, as if by
+;;(require 'marathon.ces.testing :reload-all)
+;;This brings us back to the quick feedback loop for updating
+;;marathon and spork, debugging stuff, then reloading a consistent
+;;state in the testing ns.
+(defn reload-all []
+  (noasync/reload-all))
+
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
   []
@@ -1419,8 +1437,6 @@ non-forward-stationed demand.")
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
 
-
-
 ;;MUTABLE STORE
 ;;=============
 (defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
@@ -1433,4 +1449,19 @@ marathon.analysis.random and after we made that move.")))
 ;;this is brittle.  We should eventually implement IMutable....
 ;;we also have no way of distinguishing mutable vs immutable
 ;;when things are embedded at this level...
-(def mctx (update-in base-ctx [:state :store] store/mutate!))
+
+(defn mutate-ctx [ctx]
+  (update-in ctx [:state :store] store/mutate!))
+(defn persist-ctx [mutable-ctx]
+  (-> mutable-ctx
+      (update-in  [:state :store] store/persist!)
+      (store/drop-domain :spork.data.eav/name)))
+
+(def updated  (-> base-ctx mutate-ctx engine/sim-step persist-ctx))
+(def expected (-> base-ctx engine/sim-step))
+
+(defn entity-diff [l r]
+  (let [ls           (store/entities l)
+        rs           (store/entities r)
+        all-entities (into #{} (concat (keys l) (keys r)))]
+    (= (set (keys l)) (set (keys r)))))
