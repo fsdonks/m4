@@ -17,6 +17,15 @@
   ([ctx e msg] (step-entity! ctx e msg @default-behavior)))
 
 (in-ns 'marathon.analysis.random)
+
+(require '[spork.entitysystem.store :as store])
+
+(defn mutate-ctx [ctx]
+  (update-in ctx [:state :store] store/mutate!))
+(defn persist-ctx [mutable-ctx]
+  (-> mutable-ctx
+      (update-in  [:state :store] store/persist!)
+      (store/drop-domain :spork.data.eav/name)))
 (def path "~/repos/notional/base-testdata-v7.xlsx")
 (def phases [["comp" 1 821] ["phase-1" 822 967]])
 
@@ -73,8 +82,47 @@
                     err))
          :else res)))))
 
+  (defn mutable-fill
+  ([proj src idx phases]
+   (loop [n *retries*]
+     (let [_   (when (and *noisy*
+                          (not (zero? *noisy*))
+                          (or (= *noisy* 1.0)
+                              (< (rand) *noisy*)))
+                 (util/log [:trying src :level idx]))
+           res (try (let [seed (:rep-seed proj)]
+                      (do (-> (rand-proj proj)
+                              a/load-project
+                              a/as-context
+                              mutate-ctx
+                              a/as-stream
+                              count)
+                          [{:total-quantity 1}]))
+                    ;;If we are distributed (like with pmap!), the error won't
+                    ;;throw on the host computer,  so we catch the
+                    ;;exception and print it.
+                    (catch Exception e (.getMessage e))
+                    )]
+       ;;Should be a sequence of records, but will be a string if it
+       ;;was an error
+       (cond 
+         (string? res) (if (pos? n)
+                  (do (util/log {:retrying n :src src :idx idx})
+                      (recur (dec n)))
+                  (let [err {:error (str "unable to compute fill " src)
+                             :src   src
+                             :idx   idx
+                             :reason res}
+                         
+                        _    (util/log err)]
+                    err))
+         :else res)))))
+
   (defn simple-run []
     (simple-fill big src 110 phases))
+
+  (defn mutable-run []
+    (mutable-fill big src 110 phases))
 
 
   (defn n-runs [n & {:keys [f] :or {f big-run}}]
