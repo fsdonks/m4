@@ -19,7 +19,7 @@
                  ;;testing.
                  [org.clj-commons/claypoole "1.2.2"]
                  [com.cnuernber/ham-fisted "1.003"]]
-  :jvm-opts ^:replace ["-Xmx50g" "-Xms25g" "-XX:NewSize=2g" "-XX:TLABSize=200m"]
+  :jvm-opts ^:replace ["-Xmx700g" "-Xms100g" #_#_"-XX:NewSize=100g" "-XX:TLABSize=500m"]
   :source-paths ["src"]
   :plugins [[reifyhealth/lein-git-down "0.4.1"]]
   :middleware [lein-git-down.plugin/inject-properties]
