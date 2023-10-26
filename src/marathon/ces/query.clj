@@ -83,11 +83,11 @@
 
 (defn nands [x fs] (not (ands x fs)))
 (defn nors  [x fs] (not (ors x fs)))
-
+;;ELIMINATE SEQ?
 (defn filt-sort [f ord xs]
      (let [filtered      (if f (filter f xs) xs)]
        (if ord (sort ord filtered) filtered)))
-
+;;MEMOIZE?
 (defn eval-filter [xs]
   (cond (fn? xs) xs
         (vector? xs)
@@ -105,6 +105,7 @@
 (defn selection? [f]  (get (meta f) :selection))
 ;;#TODO flesh out the from key.  Maybe it makes sense to define a
 ;;protocol so we can have tabular queries.
+;;MEMOIZE?
 (defn selection [& {:keys [from where order-by]}]
    (let [filt  (if (fn? where) where (eval-filter where))
          order (if (ordering? order-by) order-by
@@ -163,6 +164,7 @@
 ;;Intended to compare [category src weight], convenience fn. 
 (def compare-fill-weight #(compare-nth 2 compare-double %1 %2))
 
+;;MEMOIZE....
 (defn ->ordering
   "Refactoring of the inner function originally defined in
   find-supply.  Given an ordering criteria, order-by:: v -> v,

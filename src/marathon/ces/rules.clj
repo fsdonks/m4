@@ -124,6 +124,7 @@
   (gen/memo-1 (fn [src] (marathon.ces.fill.fillgraph/sink-label src))))
 
 ;;Provides an ordered vector of suitable supply buckets to look.
+;;MEMOIZE
 (defn src->srcs [srcmap src]
   (->> (for [[rule cost] (get srcmap (src->fillrule src))]
          [(marathon.ces.fill.fillgraph/source-root rule) cost])
@@ -140,6 +141,8 @@
 
 ;;TODO: Do we want to memoize? Looks like we tried before.
 (defn src->prefs [srcmap src]  (srcs->prefs (src->srcs srcmap src)))
+;;minor savings
+(alter-var-root #'src->prefs gen/memo-2)
 
 
 ;;Common Entity comparisons
