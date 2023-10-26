@@ -360,6 +360,12 @@
 ;;marathon.ces.rules/categories
 
 ;;TODO# flesh this out, for now it fits with our match-supply expressions.
+;;TODO: PERFORMANCE HIT, MEMOIZE or PRECOMPUTE
+;;The only element here that is dynamic is :required, which changes
+;;as a function of the demand's current fill.  So we could have a
+;;base rule attribute on the demand.  Alternately, we can memoize
+;;the category based on a unique id for the demand, and update
+;;the varying fields after the fact via assoc.
 (defn demand->rule
   ([d supply-category-key]
    (let [category-key   (derive-category d supply-category-key)
@@ -381,25 +387,7 @@
           (assoc r :where  [(r :where) (has-transition? (:StartState d))]))))
   ([d] (demand->rule d :default)))
 
-#_
-(defn demand->rule
-  ([d supply-category]
-   (let [category (derive-category d supply-category)
-         r   {:src  (get d :src)
-              :cat   category ;;
-              :name (get d :name)
-              :order-by (resolve-source-first (get d :source-first "uniform"))
-              :required (d/required d)
-              :where    (get demand-filters category identity)
-              }]
-     (if  (or (= category :default) (nil? (:StartState d)))
-       r
-       ;;we have a preference for startstate...
-       (assoc r :where  (has-transition? (:StartState d))))))
-  ([d] (demand->rule d :default)))
-
-
-;;##Finding and Ordering Supply  
+;;##Finding and Ordering Supply
 
 ;#Legacy Means For Generating A Stream of Deployable Supply
 ;In the legacy implementation,  a SupplyGenerator object served as a poor man's 
@@ -595,8 +583,6 @@
 ;;It may be nice, for feature parity, to have then entire fillpath
 ;;relayed rather than the endpoint.
 
-
-
 ;;An element of supply has a quantity associated with it.
 ;;It also has a set of actions associated with delivering said supply.
 
@@ -725,7 +711,7 @@
 ;   amount of fill may impact the order of candidates.  For now, we assume that 
 ;   the ordering of candidates is independent of the demand fill.
 
-(def last-sel (atom nil))
+(def last-sel (atom nil)) ;;TODO possibl memory leak/thread contention.
 
 ;;Filling in batch now.  Should be mo betta.
 ;;We need to account for category values that are potentially

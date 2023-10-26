@@ -1,7 +1,7 @@
 ;;Go to marathon.core to update +version+ as well!
-(defproject marathon "4.2.12-SNAPSHOT"
+(defproject marathon "4.2.13-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.11.1"]
                  [spork "0.2.1.7-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
@@ -21,6 +21,7 @@
                  [com.cnuernber/ham-fisted "1.003"]]
   :jvm-opts ^:replace ["-Xmx700g" "-Xms100g" #_#_"-XX:NewSize=100g" "-XX:TLABSize=500m"]
   :source-paths ["src"]
+  :profiles {:dev {:source-paths ["src" "../spork/src/"]}} ;;temporary crossdev.
   :plugins [[reifyhealth/lein-git-down "0.4.1"]]
   :middleware [lein-git-down.plugin/inject-properties]
   :repositories [["public-github" {:url "git://github.com"}]]

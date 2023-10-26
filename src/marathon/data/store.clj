@@ -104,23 +104,35 @@
 
 (defrecord simstate [store width height notifier]
   IEntityStore
-  (add-entry [db id domain data] 
+  (add-entry [db id domain data]
     (simstate. (add-entry store id domain data)
                width height notifier))
-  (drop-entry [db id domain] 
-    (simstate. (drop-entry store id domain) width height notifier)) 
+  (drop-entry [db id domain]
+    (simstate. (drop-entry store id domain) width height notifier))
   (get-entry      [db id domain] (get-entry store id domain))
   (entities       [db]     (entities store))
   (domains        [db]     (domains  store))
   (domains-of     [db id]  (domains-of     store id))
   (components-of  [db id]  (components-of  store id))
   (get-entity     [db id]  (get-entity     store id))
-  (conj-entity    [db id components] 
+  (conj-entity    [db id components]
     (simstate. (conj-entity store id components) width height notifier))
   IColumnStore
-  (swap-domain [db c x]
-    (simstate. (swap-domain store c x)
+  (swap-domain- [db c x]
+    (simstate. (swap-domain- store c x)
                width height notifier))
+  (add-domain-   [db a m]
+    (simstate. (add-domain- store a m)
+               width height notifier))
+  (drop-domains- [db ds]
+    (simstate. (drop-domains- store ds)
+               width height notifier))
+  IRowOps
+  (row-store? [this] (row-store? store))
+  IEntityOps
+  (add-entity [s id r]  (simstate. (add-entity store id r)  width height notifier))
+  (add-entity [s e]     (simstate. (add-entity store e)     width height notifier))
+  (drop-entity   [s id] (simstate. (drop-entity store id)   width height notifier))
   INotification
   (notify! [obj e msg]
     (if (fn? notifier)

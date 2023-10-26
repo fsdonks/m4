@@ -423,13 +423,13 @@
                         (do (debug [:followon bucket])
                             (assoc components :followon bucket)))
          _ (debug [(:name unit) components :bucket bucket])
-         ]         
-   (->> ctx
-        (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] unit)
+         ]
+   (->> ctx ;;TOM Change 24 Oct 2023: store unit name as value instead of entity reference; compatible with mutable path..
+        (sim/merge-entity {:SupplyStore (assoc-in supply [:deployable-buckets bucket src (:name unit)] (:name unit) #_unit)
                            (:name unit) components ;;tacking on component data to help with queries.
                            })
         (update-availability unit supply))))
-  ([supply src unit ctx]                                                                  
+  ([supply src unit ctx]
    (add-deployable-supply supply
                           (derive-bucket unit) src unit ctx)))
 
