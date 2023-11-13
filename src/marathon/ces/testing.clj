@@ -1430,4 +1430,61 @@ non-forward-stationed demand.")
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
 
+;;Testing nonbog-with-cannibals. We want units available,
+;;nonbogabble, and cannibalized in this demand.
+;;Will want to prefer cannibalized, then nonboggable, then units
+;;available also.
+;;nonboggables are everything not in a demand.
+
+(def in-book (java.io/resource "with_cannibals.xlsx"))
+;;ctx at beginning of day 0
+(def ctx (analysis/load-context in-book))
+;;First looking to step forward to end of day and see that unit in
+;;cannibalization, not in HLD yet without the new rule.
+;;context at beginning of day 2
+(def ctx-1 (analysis/step-1 (analysis/step-1 ctx)))
+
+(defn unit-location
+  "Get a unit's location from the context"
+  [ctx u]
+  (->> u
+       (supply/get-unit ctx)
+       (unit/summary)
+       (:location)))
+
+;;Next, commit this and then work on new rule.
+(deftest nonbog-with-cannibal
+  (is (= (unit-location ctx-1 "1_01205K000_RC")
+         "1_Cannibalization_01205K000_[1...2]")
+      "Before adding the new rule, does the unit stay in the
+  cannibalization demand without switching to HLD?"))
   
+(comment
+;;Here are some examples of filtering units from a context.
+(defn filter-units
+	"Return the unit names from a context that return true from the
+	filter function, f"
+	[ctx f]
+  (->> (core/units ctx)
+       (filter f)
+       (map :name)))
+
+;;NonBOG testing and other supply categories...
+;;()
+(def can-deploy-names (filter-units ctx unit/can-deploy?))
+
+;;("1_01205K000_RC")
+(def can-nonbog-names (filter-units ctx unit/can-non-bog?))
+;;()
+(def deployed-0 (filter-units ctx unit/deployed?))
+;;("1_01205K000_RC")
+(def deployed-1 (filter-units ctx-1 unit/deployed?)))
+;;old method:
+;;(def tran (random/rand-proj (random/add-transform p random/adjust-cannibals
+                                                ;;    [false :no-hld])))
+
+;;(def ou (make-new-results p))
+
+
+
+

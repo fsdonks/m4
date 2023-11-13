@@ -329,7 +329,12 @@
 ;;can be handled synchronously.
 
 ;#Simulation Interface
-;sim.engine/event-step-marathon is the entry point for Marathon.
+                                        ;sim.engine/event-step-marathon is the entry point for Marathon.
+;;Craig note 11-11-2023: looks like analysis/marathon-stream is used
+;;as entry point for random runs and capacity analysis now as instead
+;;of this function.  Found out because initialize-sim actually
+;;requireds a keyword argument for last day now, so this function
+;;won't work as is.
 (defn event-step-marathon
   "Higher order simulation handling function.  Given an initial state and an 
    upper bound on simulated time, computes the resulting simulation context via

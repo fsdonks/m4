@@ -208,10 +208,16 @@
                       ctx]
   (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
         es      (store/select-entities ctx
+                                       ;;see if unit has cannibalized
+                                       ;;state data?
+                                       ;;don't need can-non-bog
+                                       ;;another parameter to pull a percentage.
                     :from   [:unit-entity]
                     :where #(and (where %)
                                  (src-map (:src %))
                                  (unit/can-non-bog? %)))]
+    ;;take half here.
+    ;;can you find the units that are cannibalized?
     (into {}
           (for [[src xs]  (group-by :src es)]
             [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))]))))
@@ -823,7 +829,27 @@
                                      :default])))
     :effects   {:wait-time   999999
                 :wait-state  :waiting}}
-
+   ;;deployable buckets
+   ;;computed first, then filter, then ordering rules
+   ;;
+   ;;HLD can-non-bog?  similar to is-cannibalization?
+   ;;effects: add
+   ;;cannibalized instead of compute-nonbog
+   ;;:filter is the hook site for :state (look in marathon.ces.unit
+   ;;for getting state data from a unit.
+   ;;HLD-all draw from units in a demand.
+   ;;compute-nonbog selecting all entities, filtering if can-non-bog?
+   ;;and will find out that they cant
+   ;;compute-cannibalized-hld
+   ;;another rule only draws half of the supply.  compute-non-bog
+   ;;returns a selection of entities. filter all entities substitutale
+   ;;for this src that are non bog and meet higher filters.  50% per
+   ;;SRC. group by src es
+   ;;OR HLD taps into default, nonbog
+   ;;src to entityname to entity (nested map) and then from there
+   ;;provided percentages for how many to supply
+   ;;use
+   
    "RC_Cannibalization" ;;new category for cannibalized demand, was NonBOG-RC-Only
    {:restricted  "NonBOG"
     :filter   (fn [u] (not= (:component u) "AC"))
@@ -837,7 +863,7 @@
                                      :deployable-buckets
                                      :default])))
     :effects   {:wait-time   999999
-                :wait-state  #{:waiting :unavailable}}}
+                :wait-state  #{:waiting :unavailable :cannibalized}}}
    ;;Added to provide a filtering criteria for modernized demands.
    ;;We never modernize mod 1, since that's considered the absolute
   ;;highest mod level.
