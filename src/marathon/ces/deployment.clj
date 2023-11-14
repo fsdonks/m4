@@ -7,9 +7,10 @@
   (:require [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as udata]]
             [marathon.ces    [core :as core] [demand :as dem] 
-                             [policy :as policy] [supply :as supply] 
-                             [unit :as u]
-                             [query :as query]]
+             [policy :as policy] [supply :as supply] 
+             [unit :as u]
+             [query :as query]
+             [rules :as rules]]
             [marathon.data   [protocols :as protocols]]
             [spork.entitysystem.store :as store]
             [spork.sim       [simcontext :as sim]]
@@ -96,11 +97,27 @@
 ;;not worried about collecting garbage.  Used in deploy-unit only.
 (def last-deploy (atom nil))
 ;;this is hacky; should be data-driven.
+;;Craig comment 14 Nov 2023:
+;; Maybe could be more data-driven by getting the category map from
+;;marathon.ces.rules/+default-categories.
+
 (defn non-bog? [d]
   (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC"
-     "RC_Cannibalization" "Forward"}
+     "RC_Cannibalization" "Forward" "nonbog_with_cannibals"}
    (:category d)))
 
+(defn changing-waits?
+  "Allow a unit to change from one waiting state to another waiting
+  state.  Otherwise, it would fail the valid-deployer check."
+  [unit demand]
+  (and
+   (u/waiting? unit)
+   (->> (:category demand)
+        (rules/+default-categories+)
+        (:effects)
+        (:wait-state)
+        (:waiting))))
+       
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
 (defn deploy-unit
@@ -109,7 +126,9 @@
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
   ([ctx unit t demand   followon?]
-   (if (not  (u/valid-deployer? unit nil (non-bog? demand) (:policy unit)))
+   (if (not  (or (u/valid-deployer? unit nil (non-bog? demand)
+                                    (:policy unit))
+                (changing-waits? unit demand)))
      (do (reset! last-deploy [unit ctx])
          (throw (Exception. (str [:unit (:name unit) :invalid-deployer "Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment"]))))

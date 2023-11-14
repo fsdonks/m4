@@ -1430,19 +1430,31 @@ non-forward-stationed demand.")
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
 
+
 ;;Testing nonbog-with-cannibals. We want units available,
 ;;nonbogabble, and cannibalized in this demand.
 ;;Will want to prefer cannibalized, then nonboggable, then units
 ;;available also.
 ;;nonboggables are everything not in a demand.
+(defn before-day-2
+  [wkbk]
+  (->> (analysis/load-context wkbk)
+       (analysis/step-1)
+       (analysis/step-1)))
 
-(def in-book (java.io/resource "with_cannibals.xlsx"))
-;;ctx at beginning of day 0
-(def ctx (analysis/load-context in-book))
+(def in-book (analysis/load-project (java.io/resource
+                                     "with_cannibals.xlsx")))
 ;;First looking to step forward to end of day and see that unit in
 ;;cannibalization, not in HLD yet without the new rule.
 ;;context at beginning of day 2
-(def ctx-1 (analysis/step-1 (analysis/step-1 ctx)))
+(def ctx-1 (before-day-2 in-book))
+(def hld-with-cannibals (record-assoc in-book
+                                      :DemandRecords 1
+                                      :Category
+                                      "nonbog_with_cannibals"))
+;;Unit should have switched from cannibalization demand to HLD demand
+;;while filling demands on day 1.
+(def ctx-1-new-rule (before-day-2 hld-with-cannibals))
 
 (defn unit-location
   "Get a unit's location from the context"
@@ -1452,12 +1464,21 @@ marathon.analysis.random and after we made that move.")))
        (unit/summary)
        (:location)))
 
-;;Next, commit this and then work on new rule.
 (deftest nonbog-with-cannibal
   (is (= (unit-location ctx-1 "1_01205K000_RC")
          "1_Cannibalization_01205K000_[1...2]")
       "Before adding the new rule, does the unit stay in the
-  cannibalization demand without switching to HLD?"))
+  cannibalization demand without switching to HLD?")
+  (is (unit/cannibalized? (supply/get-unit ctx-1  "1_01205K000_RC"))
+      "Ensure that the cannibalization rule inserts a :cannibalized
+key into state data now.")
+  (is (= (:locationhistory
+          (supply/get-unit ctx-1-new-rule "1_01205K000_RC")
+          ["Reset"
+          "1_Cannibalization_01205K000_[1...2]"
+          "2_HLD_01205K000_[1...2]"]))
+      "After adding the new rule, the unit should have moved from
+Cannibalization to HLD on day 1 during the fill process."))
   
 (comment
 ;;Here are some examples of filtering units from a context.
@@ -1484,7 +1505,6 @@ marathon.analysis.random and after we made that move.")))
                                                 ;;    [false :no-hld])))
 
 ;;(def ou (make-new-results p))
-
 
 
 

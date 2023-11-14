@@ -724,6 +724,10 @@
        (not (demobilizing? u))
        (not= (:positionpolicy u) :recovery)))
 
+(defn cannibalized?  "Return true if the unit is in a demand with the RC_cannibalization
+  demand category, which adds :cannibalized to the :state set."
+  [u]
+  (contains? (:state u) :cannibalized))
 
 ;;Added for unit behavior utility
 (defn add-traversal [u t from to]

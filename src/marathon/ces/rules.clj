@@ -179,6 +179,14 @@
 (doseq [c components]
   (eval `(def ~(symbol c) (compo-pref ~c))))
 
+(defn lazy-group-units
+  "Groups the units by {:src {:unit-name unit-record}} into a lazy
+  map.
+  This is the expected data type for the :computed field in a rule."
+  [units]
+  (into {}
+          (for [[src xs]  (group-by :src units)]
+            [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))])))
 ;;Computed Categories
 ;;====================
 ;;In addition to our categories of supply that are actively monitored and cached
@@ -216,11 +224,22 @@
                     :where #(and (where %)
                                  (src-map (:src %))
                                  (unit/can-non-bog? %)))]
-    ;;take half here.
-    ;;can you find the units that are cannibalized?
-    (into {}
-          (for [[src xs]  (group-by :src es)]
-            [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))]))))
+    (lazy-group-units es)))
+
+;;TODO: add another parameter for how many cannibals to take.
+(defn compute-nonbog-with-cannibals [{:keys [src cat order-by where collect-by] :or 
+                       {src :any cat :default where identity} :as env}
+                      ctx ]
+  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
+        es      (store/select-entities ctx
+                    :from   [:unit-entity]
+                    :where #(and (where %)
+                                 (src-map (:src %))
+                                 (or
+                                  (unit/cannibalized? %)
+                                  (unit/can-non-bog? %))))]
+    ;;take some units here maybe.
+        (lazy-group-units es)))
 
 ;;Reducer/seq that provides an abstraction layer for implementing queries over
 ;;deployable supply. I really wish I had more time to hack out a better macro
@@ -782,7 +801,20 @@
 ;;Tom Hack 26 May 2016
 ;;If we're not SRM demand, i.e. the category is something other than
 ;;SRM, we use the default category so as to not restrict our fill.
-
+(def rc-cannibalization-rule
+  {:restricted  "NonBOG"
+    :filter   (fn [u] (not= (:component u) "AC"))
+    :computed (fn [{:keys [where] :as env}  ctx]
+                (lazy-merge
+                 (compute-nonbog
+                  (assoc env :where
+                         (fn [u] (not= (:component u) "AC")))
+                  ctx) ;;<-merge these in
+                 (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                     :deployable-buckets
+                                     :default])))
+    :effects   {:wait-time   999999
+                :wait-state  #{:waiting :unavailable :cannibalized}}})
 (def +default-categories+
   {:default   {:filter (fn [u] (not (:fenced? u)))} ;;maybe filter not necessary?
    "SRM"      {:restricted "SRM"}
@@ -815,20 +847,11 @@
       (let [demand (*env* :demand)]
         (and (= (u :aligned)
                 (demand  :region)))))}
+   "RC_Cannibalization" ;;new category for cannibalized demand, was NonBOG-RC-Only
+   rc-cannibalization-rule
+   ;;Keeping here so that we can still work with legacy data.
   "NonBOG-RC-Only"
-   {:restricted  "NonBOG"
-    :filter   (fn [u] (not= (:component u) "AC"))
-    :computed (fn [{:keys [where] :as env}  ctx]
-                (lazy-merge
-                 (compute-nonbog
-                  (assoc env :where
-                         (fn [u] (not= (:component u) "AC")))
-                  ctx) ;;<-merge these in
-                 (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                                     :deployable-buckets
-                                     :default])))
-    :effects   {:wait-time   999999
-                :wait-state  :waiting}}
+   rc-cannibalization-rule
    ;;deployable buckets
    ;;computed first, then filter, then ordering rules
    ;;
@@ -849,21 +872,18 @@
    ;;src to entityname to entity (nested map) and then from there
    ;;provided percentages for how many to supply
    ;;use
-   
-   "RC_Cannibalization" ;;new category for cannibalized demand, was NonBOG-RC-Only
+
+   ;;HLD is NonBOG NOT-AC-MIN preference.
+   "nonbog_with_cannibals"
    {:restricted  "NonBOG"
-    :filter   (fn [u] (not= (:component u) "AC"))
-    :computed (fn [{:keys [where] :as env}  ctx]
-                (lazy-merge
-                 (compute-nonbog
-                  (assoc env :where
-                         (fn [u] (not= (:component u) "AC")))
-                  ctx) ;;<-merge these in
-                 (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                                     :deployable-buckets
-                                     :default])))
+    :computed (fn [env ctx]
+                 (lazy-merge
+                  (compute-nonbog-with-cannibals env ctx) ;;<-merge these in
+                  (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                                      :deployable-buckets
+                                      :default])))
     :effects   {:wait-time   999999
-                :wait-state  #{:waiting :unavailable :cannibalized}}}
+                :wait-state  #{:waiting :unavailable}}}
    ;;Added to provide a filtering criteria for modernized demands.
    ;;We never modernize mod 1, since that's considered the absolute
   ;;highest mod level.
