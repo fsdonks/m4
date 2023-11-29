@@ -48,6 +48,8 @@
             [marathon.analysis.requirements :as req]
             [marathon.analysis.random :as random]
             [marathon.spec :as spec]
+            [clojure.spec.alpha :as s]
+            [clojure.spec.gen.alpha :as gen]
             [clojure.java.io :as java.io]
            ))
 (defn run-tests-nout
@@ -1430,7 +1432,175 @@ non-forward-stationed demand.")
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
 
+;;Generative testing utilities-------------------------
+;;Define a map of table key to a vector of fields that you would like
+;;to replace existing records with generated test data.
+(def category-replacer {:DemandRecords [:Category]})
 
+(defn spec-id
+  "Given a marathon project table key and a key for one of the fields
+  in that table, return the namespaced spec keyword for the spec that
+  should exist in marathon.spec."
+  [table-key field]
+  (let [table-str (subs (str table-key) 1)
+        field-str (subs (str field) 1)]
+    (keyword table-str field-str)))
+
+(deftest spec-id-test
+  (is (= :DemandRecords/Category (spec-id :DemandRecords :Category))))
+
+
+(defn gen-value
+  "Given a table-key and a field, generate a random value based on the
+  predefined spec."
+  [table-key field]
+  (gen/generate (s/gen (spec-id table-key field))))
+
+(s/def :BooRecords/boo #{"boo you"})
+(deftest gen-value-test
+  (is (= "boo you" (gen-value :BooRecords :boo))))
+
+(defn replacer->xform
+  "Given a marathon project table key and a key for one of the fields
+  in that table, return a table transform for use in xform-tables and
+  generating random input data for the field."
+  [table-key field]
+  (map (fn [r] (assoc r field (gen-value table-key field)))))
+
+(defn fields->xforms
+  "Take a table-key and sequence of field keys for that table and
+  return a sequence of transforms for use in xform-tables to generate
+  random input data based on the predefined spec for each field key."
+  [table-key field-keys]
+  (map (fn [field] (replacer->xform table-key field)) field-keys))
+                                  
+(defn replacer-xforms
+  "Given a map where the keys are m4 project table keywords and the
+  values are vectors of fields to replace with generated specs,
+  turn this representation into an input for a/update-proj-tables,
+  which are
+  the same keys but the values are vectors of transforms now."
+  [replacer-map]
+  (reduce-kv (fn [acc table-key fields]
+               (assoc acc table-key
+                      (fields->xforms table-key fields)))
+             {} replacer-map))
+
+(defn project->random-data
+  "Takes a marathon project, proj, and uses the replacer-map to
+  replace specified fields in the specified tables with random test
+  data based on the existing spec in marathon.spec."
+  [proj replacer-map]
+  (analysis/update-proj-tables (replacer-xforms replacer-map) proj))
+
+;;Before we test project->random-data, we need some utility testing
+;;functions.
+
+(defn same-vals?
+  "Test if two sequences have the same number of items and the set of
+  items are the same."
+  [seqs]
+  (and (apply = (map count seqs))
+       (apply = (map set seqs))))
+
+(deftest same-vals?-test
+  (is (not (same-vals? [[1 2] [1 3]])))
+  (is (same-vals? [[1 2] [1 2]]))
+  (is (same-vals? [[1 2] [2 1]]))
+  (is (not (same-vals? [[1 2] [2 1 1]]))))
+      
+(defn table-keys
+  "Returns the project table keys."
+  [proj]
+  ((comp keys :tables) proj))
+
+(defn proj-table-keys-equal?
+  "Test if the projects all have the same number of tables and
+  are the set of all table keys equal?"
+  [projects]
+  (same-vals? (map table-keys projects)))
+
+(deftest proj-table-keys-equal?-test
+  (is (proj-table-keys-equal? [simple-in-project
+                              simple-out-project])))
+
+(defn table-recs-equal?
+  "Check if the records from multiple tables are the same."
+  [tables]
+  (same-vals? (map (fn [table] (tbl/table-records table))
+                   tables)))
+
+(def test-tbl (tbl/make-table {:eek ["eek you"]}))
+(def test-tbl-2 (tbl/make-table {:eek ["eek you" "2"]}))
+(def test-tbl-3 (tbl/make-table {:eek ["eek you"] :no [1]}))
+
+(deftest table-recs-equal?-test
+  (is (table-recs-equal? [test-tbl test-tbl]))
+  (is (not (table-recs-equal? [test-tbl test-tbl-2])))
+  (is (not (table-recs-equal? [test-tbl test-tbl-2]))))
+
+(defn proj-recs-equal?
+  "Test if the records of all project
+  tables are equal where they all have the same records and order
+  does't matter."
+  [projects]
+  (let [tables1 (table-keys (first projects))]
+    (every? identity (for [table tables1]
+                       (->> projects
+                            (map (comp tbl/table-records table :tables))
+                            (same-vals?))))))
+
+(defn proj-tables-equal?
+   "Test if the records of all project
+  tables are equal where they all have the same records and order
+  does't matter.  Also test if they have the same count and set of
+  columns."
+  [projects]
+  (and (proj-table-keys-equal? projects)
+       (proj-recs-equal? projects)))
+
+(s/def :BooRecords/foo #{"pho"})
+(s/def :ScaryRecords/biblo #{"baggins"})
+;;:bar should be untouched
+;;:eek should also be untouched
+(def simple-replacer {:BooRecords [:boo :foo]
+                      :ScaryRecords [:biblo]})
+(def simple-in-project
+  {:tables {:BooRecords (tbl/make-table
+                         {:bar ["bang1" "bang2"]
+                         :boo ["" "no1"]
+                         :foo ["no" "no2"]})
+            :ScaryRecords (tbl/make-table
+                           {:eek ["eek you"]
+                            :biblo ["changed"]})}})
+
+(deftest table-keys-test
+  (is (= (set (table-keys simple-in-project))
+         #{:BooRecords :ScaryRecords})
+      "I had used :keys intead of keys so this wasn't working
+  before."))
+
+
+(def simple-out-project
+  {:tables {:BooRecords (tbl/make-table
+                         {:bar ["bang1" "bang2"]
+                          :boo ["boo you" "boo you"]
+                          :foo ["pho" "pho"]})                       
+            :ScaryRecords (tbl/make-table
+                           {:eek ["eek you"]
+                            :biblo ["baggins"]})}})
+
+(deftest proj-tables-equal?-test
+  (is (not (proj-tables-equal? [simple-in-project
+                                simple-out-project])))
+  (is (proj-tables-equal? [(project->random-data simple-in-project
+                                                 simple-replacer)
+                           simple-out-project])
+      "Also testing if our
+  function to use random data in place of some existing test data is
+  working."))
+
+  
 ;;Testing nonbog-with-cannibals. We want units available,
 ;;nonbogabble, and cannibalized in this demand.
 ;;Will want to prefer cannibalized, then nonboggable, then units
@@ -1479,7 +1649,12 @@ key into state data now.")
           "2_HLD_01205K000_[1...2]"]))
       "After adding the new rule, the unit should have moved from
 Cannibalization to HLD on day 1 during the fill process."))
-  
+
+;;next, generate a random category in marathon-schemas.spec
+;;and map that into the records.
+;;anything not in computed categories defers to :default actually, so
+;;either any string, or one of the default-categories for now.
+
 (comment
 ;;Here are some examples of filtering units from a context.
 (defn filter-units

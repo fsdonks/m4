@@ -17,7 +17,7 @@
                  [demand_builder "0.1.3-SNAPSHOT"
                   :exclusions [spork]]]
   :jvm-opts ^:replace ["-Xmx4g" "-XX:NewSize=200m"]
-  :source-paths ["src"]
+  :source-paths ["src" "../marathon-schemas/src/"]
   :plugins [[reifyhealth/lein-git-down "0.4.1"]]
   :middleware [lein-git-down.plugin/inject-properties]
   :repositories [["public-github" {:url "git://github.com"}]]
