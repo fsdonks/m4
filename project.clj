@@ -5,7 +5,7 @@
                  [spork "0.2.1.7-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
-                 [marathon-schemas "4.1.8-SNAPSHOT"
+                 [marathon-schemas "4.1.10-SNAPSHOT"
                   :exclusions [spork]]
                  ;;post processing.
                  [proc  "0.3.4-SNAPSHOT"
@@ -17,9 +17,10 @@
                  [demand_builder "0.1.3-SNAPSHOT"
                   :exclusions [spork]]]
   :jvm-opts ^:replace ["-Xmx4g" "-XX:NewSize=200m"]
-  :source-paths ["src" "../marathon-schemas/src/"]
+  :source-paths ["src"]
   :plugins [[reifyhealth/lein-git-down "0.4.1"]]
   :middleware [lein-git-down.plugin/inject-properties]
   :repositories [["public-github" {:url "git://github.com"}]]
   :git-down {proc  {:coordinates  fsdonks/proc}
-             demand_builder  {:coordinates  fsdonks/demand_builder}})
+             demand_builder  {:coordinates  fsdonks/demand_builder}
+             marathon-schemas {:coordinates fsdonks/marathon-schemas}})
