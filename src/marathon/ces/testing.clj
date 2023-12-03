@@ -1432,6 +1432,81 @@ non-forward-stationed demand.")
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
 
+;;Testing nonbog-with-cannibals. We want units available,
+;;nonbogabble, and cannibalized in this demand.
+;;Will want to prefer cannibalized, then nonboggable, then units
+;;available also.
+;;nonboggables are everything not in a demand.
+(defn before-day-2
+  [wkbk]
+  (->> (analysis/load-context wkbk)
+       (analysis/step-1)
+       (analysis/step-1)))
+
+(def in-book (analysis/load-project (java.io/resource
+                                     "with_cannibals.xlsx")))
+;;First looking to step forward to end of day and see that unit in
+;;cannibalization, not in HLD yet without the new rule.
+;;context at beginning of day 2
+(def ctx-1 (before-day-2 in-book))
+(def hld-with-cannibals (record-assoc in-book
+                                      :DemandRecords 1
+                                      :Category
+                                      "nonbog_with_cannibals"))
+;;Unit should have switched from cannibalization demand to HLD demand
+;;while filling demands on day 1.
+(def ctx-1-new-rule (before-day-2 hld-with-cannibals))
+
+(defn unit-location
+  "Get a unit's location from the context"
+  [ctx u]
+  (->> u
+       (supply/get-unit ctx)
+       (unit/summary)
+       (:location)))
+
+(deftest nonbog-with-cannibal
+  (is (= (unit-location ctx-1 "1_01205K000_RC")
+         "1_Cannibalization_01205K000_[1...2]")
+      "Before adding the new rule, does the unit stay in the
+  cannibalization demand without switching to HLD?")
+  (is (unit/cannibalized? (supply/get-unit ctx-1  "1_01205K000_RC"))
+      "Ensure that the cannibalization rule inserts a :cannibalized
+key into state data now.")
+  (is (= (:locationhistory
+          (supply/get-unit ctx-1-new-rule "1_01205K000_RC")
+          ["Reset"
+          "1_Cannibalization_01205K000_[1...2]"
+          "2_HLD_01205K000_[1...2]"]))
+      "After adding the new rule, the unit should have moved from
+Cannibalization to HLD on day 1 during the fill process."))
+
+(comment
+;;Here are some examples of filtering units from a context.
+(defn filter-units
+	"Return the unit names from a context that return true from the
+	filter function, f"
+	[ctx f]
+  (->> (core/units ctx)
+       (filter f)
+       (map :name)))
+
+;;NonBOG testing and other supply categories...
+;;()
+(def can-deploy-names (filter-units ctx unit/can-deploy?))
+
+;;("1_01205K000_RC")
+(def can-nonbog-names (filter-units ctx unit/can-non-bog?))
+;;()
+(def deployed-0 (filter-units ctx unit/deployed?))
+;;("1_01205K000_RC")
+(def deployed-1 (filter-units ctx-1 unit/deployed?)))
+;;old method:
+;;(def tran (random/rand-proj (random/add-transform p random/adjust-cannibals
+                                                ;;    [false :no-hld])))
+
+;;(def ou (make-new-results p))
+
 ;;Generative testing utilities-------------------------
 ;;Define a map of table key to a vector of fields that you would like
 ;;to replace existing records with generated test data.
@@ -1448,7 +1523,6 @@ marathon.analysis.random and after we made that move.")))
 
 (deftest spec-id-test
   (is (= :DemandRecords/Category (spec-id :DemandRecords :Category))))
-
 
 (defn gen-value
   "Given a table-key and a field, generate a random value based on the
@@ -1520,10 +1594,6 @@ marathon.analysis.random and after we made that move.")))
   [projects]
   (same-vals? (map table-keys projects)))
 
-(deftest proj-table-keys-equal?-test
-  (is (proj-table-keys-equal? [simple-in-project
-                              simple-out-project])))
-
 (defn table-recs-equal?
   "Check if the records from multiple tables are the same."
   [tables]
@@ -1580,7 +1650,6 @@ marathon.analysis.random and after we made that move.")))
       "I had used :keys intead of keys so this wasn't working
   before."))
 
-
 (def simple-out-project
   {:tables {:BooRecords (tbl/make-table
                          {:bar ["bang1" "bang2"]
@@ -1589,6 +1658,10 @@ marathon.analysis.random and after we made that move.")))
             :ScaryRecords (tbl/make-table
                            {:eek ["eek you"]
                             :biblo ["baggins"]})}})
+
+(deftest proj-table-keys-equal?-test
+  (is (proj-table-keys-equal? [simple-in-project
+                              simple-out-project])))
 
 (deftest proj-tables-equal?-test
   (is (not (proj-tables-equal? [simple-in-project
@@ -1600,86 +1673,13 @@ marathon.analysis.random and after we made that move.")))
   function to use random data in place of some existing test data is
   working."))
 
-  
-;;Testing nonbog-with-cannibals. We want units available,
-;;nonbogabble, and cannibalized in this demand.
-;;Will want to prefer cannibalized, then nonboggable, then units
-;;available also.
-;;nonboggables are everything not in a demand.
-(defn before-day-2
-  [wkbk]
-  (->> (analysis/load-context wkbk)
-       (analysis/step-1)
-       (analysis/step-1)))
-
-(def in-book (analysis/load-project (java.io/resource
-                                     "with_cannibals.xlsx")))
-;;First looking to step forward to end of day and see that unit in
-;;cannibalization, not in HLD yet without the new rule.
-;;context at beginning of day 2
-(def ctx-1 (before-day-2 in-book))
-(def hld-with-cannibals (record-assoc in-book
-                                      :DemandRecords 1
-                                      :Category
-                                      "nonbog_with_cannibals"))
-;;Unit should have switched from cannibalization demand to HLD demand
-;;while filling demands on day 1.
-(def ctx-1-new-rule (before-day-2 hld-with-cannibals))
-
-(defn unit-location
-  "Get a unit's location from the context"
-  [ctx u]
-  (->> u
-       (supply/get-unit ctx)
-       (unit/summary)
-       (:location)))
-
-(deftest nonbog-with-cannibal
-  (is (= (unit-location ctx-1 "1_01205K000_RC")
-         "1_Cannibalization_01205K000_[1...2]")
-      "Before adding the new rule, does the unit stay in the
-  cannibalization demand without switching to HLD?")
-  (is (unit/cannibalized? (supply/get-unit ctx-1  "1_01205K000_RC"))
-      "Ensure that the cannibalization rule inserts a :cannibalized
-key into state data now.")
-  (is (= (:locationhistory
-          (supply/get-unit ctx-1-new-rule "1_01205K000_RC")
-          ["Reset"
-          "1_Cannibalization_01205K000_[1...2]"
-          "2_HLD_01205K000_[1...2]"]))
-      "After adding the new rule, the unit should have moved from
-Cannibalization to HLD on day 1 during the fill process."))
-
+;;end of day 29 Nov 23:
 ;;next, generate a random category in marathon-schemas.spec
 ;;and map that into the records.
 ;;anything not in computed categories defers to :default actually, so
 ;;either any string, or one of the default-categories for now.
 
-(comment
-;;Here are some examples of filtering units from a context.
-(defn filter-units
-	"Return the unit names from a context that return true from the
-	filter function, f"
-	[ctx f]
-  (->> (core/units ctx)
-       (filter f)
-       (map :name)))
 
-;;NonBOG testing and other supply categories...
-;;()
-(def can-deploy-names (filter-units ctx unit/can-deploy?))
-
-;;("1_01205K000_RC")
-(def can-nonbog-names (filter-units ctx unit/can-non-bog?))
-;;()
-(def deployed-0 (filter-units ctx unit/deployed?))
-;;("1_01205K000_RC")
-(def deployed-1 (filter-units ctx-1 unit/deployed?)))
-;;old method:
-;;(def tran (random/rand-proj (random/add-transform p random/adjust-cannibals
-                                                ;;    [false :no-hld])))
-
-;;(def ou (make-new-results p))
 
 
 
