@@ -1509,8 +1509,8 @@ Cannibalization to HLD on day 1 during the fill process."))
 
 ;;Generative testing utilities-------------------------
 ;;Define a map of table key to a vector of fields that you would like
-;;to replace existing records with generated test data.
-(def category-replacer {:DemandRecords [:Category]})
+;;to replace existing records with generated test data like
+;;(def category-replacer {:DemandRecords [:Category]})
 
 (defn spec-id
   "Given a marathon project table key and a key for one of the fields
@@ -1679,7 +1679,16 @@ Cannibalization to HLD on day 1 during the fill process."))
 ;;anything not in computed categories defers to :default actually, so
 ;;either any string, or one of the default-categories for now.
 
+(def category-replacer {:DemandRecords [:Category]})
 
-
-
+(def test-categories-proj (atom nil))
+(defn test-categories
+  "Continuously run the test data with random demand categories."
+  []
+  (let [p (analysis/load-project new-results-book)
+        new-categories (reset! test-categories-proj
+                               (project->random-data p
+                                                     category-replacer))]
+    (while true
+     (marathon.run/do-audited-run new-categories "test_categories_output/"))))
 
