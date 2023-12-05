@@ -1684,11 +1684,12 @@ Cannibalization to HLD on day 1 during the fill process."))
 (def test-categories-proj (atom nil))
 (defn test-categories
   "Continuously run the test data with random demand categories."
-  []
-  (let [p (analysis/load-project new-results-book)
+  [workbook-path]
+  (let [p (analysis/load-project workbook-path)
         new-categories (reset! test-categories-proj
                                (project->random-data p
                                                      category-replacer))]
     (while true
      (marathon.run/do-audited-run new-categories "test_categories_output/"))))
 
+;;(test-categories new-results-book)
