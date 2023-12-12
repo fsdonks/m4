@@ -5,7 +5,7 @@
                  [spork "0.2.1.7-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
-                 [marathon-schemas "4.1.10-SNAPSHOT"
+                 [marathon-schemas "4.1.11-SNAPSHOT"
                   :exclusions [spork]]
                  ;;post processing.
                  [proc  "0.3.4-SNAPSHOT"

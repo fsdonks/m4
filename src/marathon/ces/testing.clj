@@ -51,6 +51,7 @@
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.java.io :as java.io]
+            [clojure.math.combinatorics :as combo]
            ))
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
@@ -1635,6 +1636,7 @@ Cannibalization to HLD on day 1 during the fill process."))
 ;;:eek should also be untouched
 (def simple-replacer {:BooRecords [:boo :foo]
                       :ScaryRecords [:biblo]})
+
 (def simple-in-project
   {:tables {:BooRecords (tbl/make-table
                          {:bar ["bang1" "bang2"]
@@ -1693,3 +1695,98 @@ Cannibalization to HLD on day 1 during the fill process."))
      (marathon.run/do-audited-run new-categories "test_categories_output/"))))
 
 ;;(test-categories new-results-book)
+;;Keeping this here for now, but this was an example of a unit
+;;following on to a :waiting demand, which threw an error, so I wrote
+;;a spec to catch that before runs and make our random category and
+;;demand group generator more realistic.
+(require '[marathon.analysis :as a])
+(def prior (a/day-before-error (a/marathon-stream
+                                "/home/craig/workspace/m4/test_categories_output/base-testdata-v7_broken.xlsx")))
+(def e (supply/get-unit (second prior) "36_19476K000_NG"))
+(def active (:activepolicy (:policy e)))
+(marathon.data.protocols/get-position active 2190)
+(comment
+  :last-update 337
+  :cycle-time-when-deployed 2127,
+  :dwell-time-when-deployed 2003,
+  :cycletime 2190,
+  :curstate #{:bogging},
+  :t 365,
+  :locationhistory
+  ["Available"
+   "11771_Pebbles_19476K000_[1...92]"
+   "Available"
+   "11806_Burrito_19476K000_[274...365]"],
+  )
+
+(defn unpack-demand
+  [{:keys [SRC DemandGroup StartDay Duration Category]}]
+  (let [end-day (if (and StartDay Duration)
+                  (+ StartDay Duration))]
+  [SRC DemandGroup StartDay end-day Category]))
+
+(defn follow-on-waits?
+  "Check to see if we have a case where units may follow on into a
+  wait state, which could throw an error if their cycletime is greater
+  than the policy cycle length. This wouldn't cover a substitution if
+  a unit can follow-on from one SRC demand to another. Returns nil or
+  the effects of the waiting category."
+  [[demand-rec-1 demand-rec-2]]
+  (let [[src1 demand-group-1 start-day-1 end-day-1 cat-1]
+        (unpack-demand demand-rec-1)
+        [src2 demand-group-2 start-day-2 end-day-2 cat-2]
+        (unpack-demand demand-rec-2)]
+    (when (and (= src1 src2) (= demand-group-1 demand-group-2))
+      (cond (= end-day-1 start-day-2)
+            (deployment/demand-effect-categories cat-2)
+            (= end-day-2 start-day-1)
+            (deployment/demand-effect-categories cat-1)))))
+;;Could test with the current tripping case and then with a non tripping
+;;case because the category isn't a waiting one.   
+
+;;This goes into the ::DemandRecords spec.
+(defn check-follow-waits
+  "Check all pairs of DemandRecords to see if units can follow on to a
+  :waiting demand category."
+  [demand-recs]
+  (not-any? follow-on-waits? (combo/combinations demand-recs 2)))
+
+(defn grouped-check-waits
+  "check-folow-waits was too slow for TAA-size run at 2 minutes and 30
+  seconds.  Only check combinations when grouped by src and
+  demand-group. This one is only 1.6 seconds..."
+  [demand-recs]
+  (not-any? (map (fn [[[src demand-group] recs]]
+                   (check-follow-waits recs)))
+            (group-by (juxt :SRC :DemandGroup) demand-recs)))
+  
+(def random-groups
+  (for [i (range)]
+    (gen/generate (s/gen :DemandRecords/DemandGroup))))
+
+(s/def ::group-to-category
+  (set (zipmap random-groups spec/default-categories )))
+
+(def group-to-category-gen
+  (gen/fmap #(hash-map :DemandGroup (first %)
+                       :Category (second %))
+            (s/gen ::group-to-category)))
+
+;;For now, we don't want to allow data where units can follow on to a
+;;waiting demand category, so we'll assign the same category to all of
+;;the records with the same DemandGroups but randomize the DemandGroup
+;;string.
+(s/def :DemandRecords/DemandGroup_Category
+  (s/with-gen (s/keys :req-un [:DemandRecords/DemandGroup
+                            :DemandRecords/Category])
+    (fn [] group-to-category-gen)))
+
+;;As we define additional sub-maps of interdependent fields, we merge
+;;them here.
+(s/def :DemandRecords/DemandRecord
+  (s/merge :DemandRecords/DemandGroup_Category))
+
+;;Check follow on weights requirements should go here.
+(s/def ::DemandRecords (s/and (s/+ :DemandRecords/DemandRecord)
+                              grouped-check-waits))
+
