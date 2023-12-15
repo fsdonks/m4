@@ -1721,19 +1721,24 @@ Cannibalization to HLD on day 1 during the fill process."))
   still the same though."))
 
 (def category-replacer {:DemandRecords [:Category]})
+(defn cat-field-replacer
+  [proj]
+  (project->random-data proj category-replacer))
 
-(def test-categories-proj (atom nil))
-(defn test-categories
-  "Continuously run the test data with random demand categories."
-  [workbook-path]
+(def random-proj (atom nil))
+(defn run-random-tests
+  "Continuously run the test data with random input data using
+  random values for each field based on the defined spec
+  OR passing a spec for each table
+  depending on the proj-replacer-fn."
+  [workbook-path proj-replacer-fn]
   (let [p (analysis/load-project workbook-path)
-        new-categories (reset! test-categories-proj
-                               (project->random-data p
-                                                     category-replacer))]
+        rand-proj (reset! random-proj
+                               (proj-replacer-fn p))]
     (while true
-     (marathon.run/do-audited-run new-categories "test_categories_output/"))))
+     (marathon.run/do-audited-run rand-proj "random_output/"))))
 
-;;(test-categories new-results-book)
+;;(run-random-tests new-results-book cat-field-replacer)
 ;;Keeping this here for now, but this was an example of a unit
 ;;following on to a :waiting demand, which threw an error, so I wrote
 ;;a spec to catch that before runs and make our random category and
@@ -1829,3 +1834,8 @@ Cannibalization to HLD on day 1 during the fill process."))
 (s/def ::DemandRecords (s/and (s/+ :DemandRecords/DemandRecord)
                               grouped-check-waits))
 
+ (def category-replacer-alt {:DemandRecords :DemandRecords/DemandGroup_Category})
+ (defn cat-replacer-alt
+   [proj]
+   (project->random-specs proj category-replacer-alt))
+;;(run-random-tests new-results-book cat-replacer-alt)

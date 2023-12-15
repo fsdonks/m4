@@ -648,9 +648,7 @@
                           upper  1.5
                           reps   1
                           seed +default-seed+}}]
-  (let [proj    (if (string? proj-or-path)
-                  (a/load-project proj-or-path)
-                  proj-or-path)
+  (let [proj    (a/load-project proj-or-path)
         t0      (System/currentTimeMillis)
         results (rand-runs proj :reps reps :phases phases :lower lower :upper upper
                            :levels levels :compo-lengths compo-lengths)
