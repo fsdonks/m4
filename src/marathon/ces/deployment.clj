@@ -105,18 +105,14 @@
   (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC"
      "RC_Cannibalization" "Forward" "nonbog_with_cannibals"}
    (:category d)))
-
+  
 (defn changing-waits?
   "Allow a unit to change from one waiting state to another waiting
   state.  Otherwise, it would fail the valid-deployer check."
   [unit demand]
   (and
    (u/waiting? unit)
-   (->> (:category demand)
-        (rules/+default-categories+)
-        (:effects)
-        (:wait-state)
-        (:waiting))))
+   (demand-effect-categories (:category demand))))
        
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..

@@ -149,7 +149,7 @@
     (change-records proj
                     (mapcat #(rand-recs % supply-record-randomizer))
                     :SupplyRecords)))
-
+  
 ;;it probably makes sense to fence out a general scheme to apply this pipeline
 ;;to demand records, policy records, etc.  There are probably many types of
 ;;transformations (or compiler passes) we'd like to apply.
@@ -536,6 +536,8 @@
 
 (def ^:dynamic *project->experiments* marathon.analysis.random/project->experiments)
 
+
+
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
   namespace as a base. This function is modified to perform a random run for
@@ -571,6 +573,14 @@
 
 (defn default-randomizer [seed compo-lengths]
   (->cycletime-randomizer (util/->gen seed) compo-lengths))
+
+(defn rand-cycles
+  "Takes a project and make a new project with random unit initial
+  cycle times and sets the seed."
+  [proj & {:keys [seed compo-lengths] :or {seed (rand Long/MAX_VALUE)
+                             compo-lengths default-compo-lengths}}]
+  (let [seed->randomizer #(default-randomizer % compo-lengths)]
+    (random-initials proj (seed->randomizer seed))))
 
 ;;specs to catch an error I ran into with empty phases..
 (s/def ::phase  (s/tuple string? int? int?))

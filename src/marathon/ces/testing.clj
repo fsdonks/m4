@@ -1726,17 +1726,18 @@ Cannibalization to HLD on day 1 during the fill process."))
   (project->random-data proj category-replacer))
 
 (def random-proj (atom nil))
+
 (defn run-random-tests
   "Continuously run the test data with random input data using
   random values for each field based on the defined spec
   OR passing a spec for each table
   depending on the proj-replacer-fn."
   [workbook-path proj-replacer-fn]
-  (let [p (analysis/load-project workbook-path)
-        rand-proj (reset! random-proj
-                               (proj-replacer-fn p))]
-    (while true
-     (marathon.run/do-audited-run rand-proj "random_output/"))))
+  (while true
+    (let [p (analysis/load-project workbook-path)]
+      (marathon.run/do-audited-run (reset! random-proj
+                                           (proj-replacer-fn p))
+                                   "random_output/"))))
 
 ;;(run-random-tests new-results-book cat-field-replacer)
 ;;Keeping this here for now, but this was an example of a unit
@@ -1764,27 +1765,34 @@ Cannibalization to HLD on day 1 during the fill process."))
   )
 
 (defn unpack-demand
-  [{:keys [SRC DemandGroup StartDay Duration Category]}]
+  [{:keys [StartDay Duration Category]}]
   (let [end-day (if (and StartDay Duration)
                   (+ StartDay Duration))]
-  [SRC DemandGroup StartDay end-day Category]))
+  [StartDay end-day Category]))
 
-(defn follow-on-waits?
+(defn wait-from-non-wait? [cat1 cat2]
+  (and (nil? (deployment/demand-effect-categories cat1))
+       (deployment/demand-effect-categories cat2)))
+
+(defn no-follow-on-waits?
   "Check to see if we have a case where units may follow on into a
-  wait state, which could throw an error if their cycletime is greater
-  than the policy cycle length. This wouldn't cover a substitution if
-  a unit can follow-on from one SRC demand to another. Returns nil or
-  the effects of the waiting category."
+  wait state after their cycle time has progressed in a non-waiting
+  demand with the same demand group, which could throw an error if
+  their cycletime is greater than the policy cycle length.  This
+  will only happen in the rare case
+  that one DemandGroup has multiple Categories.
+  This wouldn't cover a substitution if
+  a unit can follow-on from one SRC demand to another SRC's demand.
+  Returns nil or the effects of the waiting category."
   [[demand-rec-1 demand-rec-2]]
-  (let [[src1 demand-group-1 start-day-1 end-day-1 cat-1]
+  (let [[start-day-1 end-day-1 cat1]
         (unpack-demand demand-rec-1)
-        [src2 demand-group-2 start-day-2 end-day-2 cat-2]
+        [start-day-2 end-day-2 cat2]
         (unpack-demand demand-rec-2)]
-    (when (and (= src1 src2) (= demand-group-1 demand-group-2))
-      (cond (= end-day-1 start-day-2)
-            (deployment/demand-effect-categories cat-2)
+      (not (cond (= end-day-1 start-day-2)
+            (wait-from-non-wait? cat1 cat2)
             (= end-day-2 start-day-1)
-            (deployment/demand-effect-categories cat-1)))))
+            (wait-from-non-wait? cat2 cat1)))))
 ;;Could test with the current tripping case and then with a non tripping
 ;;case because the category isn't a waiting one.   
 
@@ -1793,15 +1801,19 @@ Cannibalization to HLD on day 1 during the fill process."))
   "Check all pairs of DemandRecords to see if units can follow on to a
   :waiting demand category."
   [demand-recs]
-  (not-any? follow-on-waits? (combo/combinations demand-recs 2)))
+  (every? no-follow-on-waits? (combo/combinations demand-recs 2)))
 
 (defn grouped-check-waits
   "check-folow-waits was too slow for TAA-size run at 2 minutes and 30
   seconds.  Only check combinations when grouped by src and
   demand-group. This one is only 1.6 seconds..."
   [demand-recs]
-  (not-any? (map (fn [[[src demand-group] recs]]
-                   (check-follow-waits recs)))
+  (every? (fn [[[src demand-group] recs]]
+                   (let [res (check-follow-waits recs)]
+                     (when (not res) (println "src: " src " dgroup: "
+                                        demand-group))
+                     res
+                   ))
             (group-by (juxt :SRC :DemandGroup) demand-recs)))
   
 (def random-groups
@@ -1834,8 +1846,53 @@ Cannibalization to HLD on day 1 during the fill process."))
 (s/def ::DemandRecords (s/and (s/+ :DemandRecords/DemandRecord)
                               grouped-check-waits))
 
+(s/def ::DemandRecordss (s/and grouped-check-waits
+                               (s/+ :DemandRecords/DemandRecord)))
+
  (def category-replacer-alt {:DemandRecords :DemandRecords/DemandGroup_Category})
  (defn cat-replacer-alt
    [proj]
    (project->random-specs proj category-replacer-alt))
 ;;(run-random-tests new-results-book cat-replacer-alt)
+
+;;(def test-path "/home/craig/runs/big_test/m4-book-with-peak-hold.xlsx")
+;;(run-random-tests test-path cat-replacer-alt)
+
+(defn sample-supply [proj prob]
+  (analysis/update-proj-tables
+   {:SupplyRecords [(random-sample prob)]} proj))
+
+(def big-compo-lengths {"AC" 1095 "RC" 2190 "NG" 2190})
+
+(defn rand-cat-cycles
+  [workbook-path]
+
+    (-> (analysis/load-project workbook-path)
+        ;(sample-supply 0.5)
+        (random/rand-cycles :compo-lengths big-compo-lengths)
+        ;;(cat-field-replacer)
+        (#(reset! random-proj %))
+        (marathon.run/do-audited-run "random_output/")))
+
+(def test-path "/home/craig/runs/big_test/m4-book-with-peak-hold.xlsx")
+;;(rand-cat-cycles test-path)
+
+(defn follow-waits?
+  [path]
+  (->> path
+       (analysis/load-project)
+       (:tables)
+       (:DemandRecords)
+       (tbl/table-records)
+       (grouped-check-waits)))
+
+
+
+
+(def lots
+  "/home/craig/runs/big_test/m4-book-with-peak-hold_test.xlsx")
+(require '[proc.util :as putil])
+(def drecs (putil/demand-records "/home/craig/runs/big_test/m4-book-with-peak-hold_test.xlsx"))
+(s/valid? ::DemandRecords drecs)
+
+;;why is that valid but individual ands aren't?
