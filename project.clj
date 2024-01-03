@@ -5,7 +5,7 @@
                  [spork "0.2.1.7-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
-                 [marathon-schemas "4.1.8-SNAPSHOT"
+                 [marathon-schemas "4.1.11-SNAPSHOT"
                   :exclusions [spork]]
                  ;;post processing.
                  [proc  "0.3.4-SNAPSHOT"
@@ -22,4 +22,5 @@
   :middleware [lein-git-down.plugin/inject-properties]
   :repositories [["public-github" {:url "git://github.com"}]]
   :git-down {proc  {:coordinates  fsdonks/proc}
-             demand_builder  {:coordinates  fsdonks/demand_builder}})
+             demand_builder  {:coordinates  fsdonks/demand_builder}
+             marathon-schemas {:coordinates fsdonks/marathon-schemas}})

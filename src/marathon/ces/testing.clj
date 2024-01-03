@@ -48,7 +48,10 @@
             [marathon.analysis.requirements :as req]
             [marathon.analysis.random :as random]
             [marathon.spec :as spec]
+            [clojure.spec.alpha :as s]
+            [clojure.spec.gen.alpha :as gen]
             [clojure.java.io :as java.io]
+            [clojure.math.combinatorics :as combo]
            ))
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
@@ -1430,4 +1433,409 @@ non-forward-stationed demand.")
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
 
+;;Testing nonbog-with-cannibals. We want units available,
+;;nonbogabble, and cannibalized in this demand.
+;;Will want to prefer cannibalized, then nonboggable, then units
+;;available also.
+;;nonboggables are everything not in a demand.
+(defn before-day-2
+  [wkbk]
+  (->> (analysis/load-context wkbk)
+       (analysis/step-1)
+       (analysis/step-1)))
+
+(def in-book (analysis/load-project (java.io/resource
+                                     "with_cannibals.xlsx")))
+;;First looking to step forward to end of day and see that unit in
+;;cannibalization, not in HLD yet without the new rule.
+;;context at beginning of day 2
+(def ctx-1 (before-day-2 in-book))
+(def hld-with-cannibals (record-assoc in-book
+                                      :DemandRecords 1
+                                      :Category
+                                      "nonbog_with_cannibals"))
+;;Unit should have switched from cannibalization demand to HLD demand
+;;while filling demands on day 1.
+(def ctx-1-new-rule (before-day-2 hld-with-cannibals))
+
+(defn unit-location
+  "Get a unit's location from the context"
+  [ctx u]
+  (->> u
+       (supply/get-unit ctx)
+       (unit/summary)
+       (:location)))
+
+(deftest nonbog-with-cannibal
+  (is (= (unit-location ctx-1 "1_01205K000_RC")
+         "1_Cannibalization_01205K000_[1...2]")
+      "Before adding the new rule, does the unit stay in the
+  cannibalization demand without switching to HLD?")
+  (is (unit/cannibalized? (supply/get-unit ctx-1  "1_01205K000_RC"))
+      "Ensure that the cannibalization rule inserts a :cannibalized
+key into state data now.")
+  (is (= (:locationhistory
+          (supply/get-unit ctx-1-new-rule "1_01205K000_RC")
+          ["Reset"
+          "1_Cannibalization_01205K000_[1...2]"
+          "2_HLD_01205K000_[1...2]"]))
+      "After adding the new rule, the unit should have moved from
+Cannibalization to HLD on day 1 during the fill process."))
+
+(comment
+;;Here are some examples of filtering units from a context.
+(defn filter-units
+	"Return the unit names from a context that return true from the
+	filter function, f"
+	[ctx f]
+  (->> (core/units ctx)
+       (filter f)
+       (map :name)))
+
+;;NonBOG testing and other supply categories...
+;;()
+(def can-deploy-names (filter-units ctx unit/can-deploy?))
+
+;;("1_01205K000_RC")
+(def can-nonbog-names (filter-units ctx unit/can-non-bog?))
+;;()
+(def deployed-0 (filter-units ctx unit/deployed?))
+;;("1_01205K000_RC")
+(def deployed-1 (filter-units ctx-1 unit/deployed?)))
+;;old method:
+;;(def tran (random/rand-proj (random/add-transform p random/adjust-cannibals
+                                                ;;    [false :no-hld])))
+
+;;(def ou (make-new-results p))
+
+;;Generative testing utilities-------------------------
+;;Define a map of table key to a vector of fields that you would like
+;;to replace existing records with generated test data like
+;;(def category-replacer {:DemandRecords [:Category]})
+
+(defn spec-id
+  "Given a marathon project table key and a key for one of the fields
+  in that table, return the namespaced spec keyword for the spec that
+  should exist in marathon.spec."
+  [table-key field]
+  (let [table-str (subs (str table-key) 1)
+        field-str (subs (str field) 1)]
+    (keyword table-str field-str)))
+
+(deftest spec-id-test
+  (is (= :DemandRecords/Category (spec-id :DemandRecords :Category))))
+
+(defn gen-value
+  "Given a table-key and a field, generate a random value based on the
+  predefined spec."
+  [table-key field]
+  (gen/generate (s/gen (spec-id table-key field))))
+
+(s/def :BooRecords/boo #{"boo you"})
+(deftest gen-value-test
+  (is (= "boo you" (gen-value :BooRecords :boo))))
+
+(defn replacer->xform
+  "Given a marathon project table key and a key for one of the fields
+  in that table, return a table transform for use in xform-tables and
+  generating random input data for the field."
+  [table-key field]
+  (map (fn [r] (assoc r field (gen-value table-key field)))))
+
+(defn fields->xforms
+  "Take a table-key and sequence of field keys for that table and
+  return a sequence of transforms for use in xform-tables to generate
+  random input data based on the predefined spec for each field key."
+  [table-key field-keys]
+  (map (fn [field] (replacer->xform table-key field)) field-keys))
+                                  
+(defn replacer-xforms
+  "Given a map where the keys are m4 project table keywords and the
+  values are vectors of fields to replace with generated specs,
+  turn this representation into an input for a/update-proj-tables,
+  which are
+  the same keys but the values are vectors of transforms now."
+  [replacer-map]
+  (reduce-kv (fn [acc table-key fields]
+               (assoc acc table-key
+                      (fields->xforms table-key fields)))
+             {} replacer-map))
+
+(defn random-merger
+  [table-spec]
+  (map (fn [r] (merge r (gen/generate (s/gen table-spec))))))
+
+(defn spec-xforms
+  [spec-replacer-map]
+  (reduce-kv (fn [acc table-key table-spec]
+               (assoc acc
+                      table-key
+                      [(random-merger table-spec)]))
+             {}
+             spec-replacer-map))
+
+(defn project->random
+    "General version of two below functions."
+  [proj replacer-map xform-f]
+  (analysis/update-proj-tables (xform-f replacer-map) proj))
   
+(defn project->random-data
+  "Takes a marathon project, proj, and uses the replacer-map to
+  replace specified fields in the specified tables with random test
+  data based on the existing spec in marathon.spec."
+  [proj replacer-map]
+  (project->random proj replacer-map replacer-xforms))
+
+(defn project->random-specs
+    "Does the same thing as project->random-data, but the replacer map
+  looks different and is now simply a map of the table key to a map
+  spec to generate a random record and merge with existing test data."
+  [proj spec-replacer-map]
+  (project->random proj spec-replacer-map spec-xforms))
+
+;;Before we test project->random-data, we need some utility testing
+;;functions.
+(defn same-vals?
+  "Test if two sequences have the same number of items and the set of
+  items are the same."
+  [seqs]
+  (and (apply = (map count seqs))
+       (apply = (map set seqs))))
+
+(deftest same-vals?-test
+  (is (not (same-vals? [[1 2] [1 3]])))
+  (is (same-vals? [[1 2] [1 2]]))
+  (is (same-vals? [[1 2] [2 1]]))
+  (is (not (same-vals? [[1 2] [2 1 1]]))))
+      
+(defn table-keys
+  "Returns the project table keys."
+  [proj]
+  ((comp keys :tables) proj))
+
+(defn proj-table-keys-equal?
+  "Test if the projects all have the same number of tables and
+  are the set of all table keys equal?"
+  [projects]
+  (same-vals? (map table-keys projects)))
+
+(defn table-recs-equal?
+  "Check if the records from multiple tables are the same."
+  [tables]
+  (same-vals? (map (fn [table] (tbl/table-records table))
+                   tables)))
+
+(def test-tbl (tbl/make-table {:eek ["eek you"]}))
+(def test-tbl-2 (tbl/make-table {:eek ["eek you" "2"]}))
+(def test-tbl-3 (tbl/make-table {:eek ["eek you"] :no [1]}))
+
+(deftest table-recs-equal?-test
+  (is (table-recs-equal? [test-tbl test-tbl]))
+  (is (not (table-recs-equal? [test-tbl test-tbl-2])))
+  (is (not (table-recs-equal? [test-tbl test-tbl-2]))))
+
+(defn proj-recs-equal?
+  "Test if the records of all project
+  tables are equal where they all have the same records and order
+  does't matter."
+  [projects]
+  (let [tables1 (table-keys (first projects))]
+    (every? identity (for [table tables1]
+                       (->> projects
+                            (map (comp tbl/table-records table :tables))
+                            (same-vals?))))))
+
+(defn proj-tables-equal?
+   "Test if the records of all project
+  tables are equal where they all have the same records and order
+  does't matter.  Also test if they have the same count and set of
+  columns."
+  [projects]
+  (and (proj-table-keys-equal? projects)
+       (proj-recs-equal? projects)))
+
+(s/def :BooRecords/foo #{"pho"})
+(s/def :ScaryRecords/biblo #{"baggins"})
+;;:bar should be untouched
+;;:eek should also be untouched
+(def simple-replacer {:BooRecords [:boo :foo]
+                      :ScaryRecords [:biblo]})
+
+;;Alternate method:
+;;Instead of indicating which fields to replace in the table, let's
+;;use a spec to generate random data and merge that with each record
+;;of existing test data.  That pushes the definition of the random
+;;data spec outside of this pipeline and sticks with the standard way
+;;of composing a record using a spec.
+(s/def ::BooRecords (s/keys :req-un [:BooRecords/foo
+                                     :BooRecords/boo]))
+(s/def ::ScaryRecords (s/keys :req-un [:ScaryRecords/biblo]))
+(def simple-replacer-alt
+  {:BooRecords ::BooRecords
+   :ScaryRecords ::ScaryRecords})
+
+(def simple-in-project
+  {:tables {:BooRecords (tbl/make-table
+                         {:bar ["bang1" "bang2"]
+                         :boo ["" "no1"]
+                         :foo ["no" "no2"]})
+            :ScaryRecords (tbl/make-table
+                           {:eek ["eek you"]
+                            :biblo ["changed"]})}})
+
+(deftest table-keys-test
+  (is (= (set (table-keys simple-in-project))
+         #{:BooRecords :ScaryRecords})
+      "I had used :keys intead of keys so this wasn't working
+  before."))
+
+(def simple-out-project
+  {:tables {:BooRecords (tbl/make-table
+                         {:bar ["bang1" "bang2"]
+                          :boo ["boo you" "boo you"]
+                          :foo ["pho" "pho"]})                       
+            :ScaryRecords (tbl/make-table
+                           {:eek ["eek you"]
+                            :biblo ["baggins"]})}})
+
+(deftest proj-table-keys-equal?-test
+  (is (proj-table-keys-equal? [simple-in-project
+                              simple-out-project])))
+
+(deftest proj-tables-equal?-test
+  (is (not (proj-tables-equal? [simple-in-project
+                                simple-out-project])))
+  (is (proj-tables-equal? [(project->random-data simple-in-project
+                                                 simple-replacer)
+                           simple-out-project])
+      "Also testing if our
+  function to use random data in place of some existing test data is
+  working."))
+
+(deftest random-spec-test
+  (is (proj-tables-equal? [(project->random-specs simple-in-project
+                                                 simple-replacer-alt)
+                           simple-out-project])
+   "Transistioned to using records with random values generated by a
+  space instead of a sequence of fields.  Make sure that the output is
+  still the same though."))
+
+(def category-replacer {:DemandRecords [:Category]})
+(defn cat-field-replacer
+  [proj]
+  (project->random-data proj category-replacer))
+
+(def random-proj (atom nil))
+(defn run-random-tests
+  "Continuously run the test data with random input data using
+  random values for each field based on the defined spec
+  OR passing a spec for each table
+  depending on the proj-replacer-fn."
+  [workbook-path proj-replacer-fn]
+  (let [p (analysis/load-project workbook-path)
+        rand-proj (reset! random-proj
+                               (proj-replacer-fn p))]
+    (while true
+     (marathon.run/do-audited-run rand-proj "random_output/"))))
+
+;;(run-random-tests new-results-book cat-field-replacer)
+;;Keeping this here for now, but this was an example of a unit
+;;following on to a :waiting demand, which threw an error, so I wrote
+;;a spec to catch that before runs and make our random category and
+;;demand group generator more realistic.
+(require '[marathon.analysis :as a])
+(def prior (a/day-before-error (a/marathon-stream
+                                "/home/craig/workspace/m4/test_categories_output/base-testdata-v7_broken.xlsx")))
+(def e (supply/get-unit (second prior) "36_19476K000_NG"))
+(def active (:activepolicy (:policy e)))
+(marathon.data.protocols/get-position active 2190)
+(comment
+  :last-update 337
+  :cycle-time-when-deployed 2127,
+  :dwell-time-when-deployed 2003,
+  :cycletime 2190,
+  :curstate #{:bogging},
+  :t 365,
+  :locationhistory
+  ["Available"
+   "11771_Pebbles_19476K000_[1...92]"
+   "Available"
+   "11806_Burrito_19476K000_[274...365]"],
+  )
+
+(defn unpack-demand
+  [{:keys [SRC DemandGroup StartDay Duration Category]}]
+  (let [end-day (if (and StartDay Duration)
+                  (+ StartDay Duration))]
+  [SRC DemandGroup StartDay end-day Category]))
+
+(defn follow-on-waits?
+  "Check to see if we have a case where units may follow on into a
+  wait state, which could throw an error if their cycletime is greater
+  than the policy cycle length. This wouldn't cover a substitution if
+  a unit can follow-on from one SRC demand to another. Returns nil or
+  the effects of the waiting category."
+  [[demand-rec-1 demand-rec-2]]
+  (let [[src1 demand-group-1 start-day-1 end-day-1 cat-1]
+        (unpack-demand demand-rec-1)
+        [src2 demand-group-2 start-day-2 end-day-2 cat-2]
+        (unpack-demand demand-rec-2)]
+    (when (and (= src1 src2) (= demand-group-1 demand-group-2))
+      (cond (= end-day-1 start-day-2)
+            (deployment/demand-effect-categories cat-2)
+            (= end-day-2 start-day-1)
+            (deployment/demand-effect-categories cat-1)))))
+;;Could test with the current tripping case and then with a non tripping
+;;case because the category isn't a waiting one.   
+
+;;This goes into the ::DemandRecords spec.
+(defn check-follow-waits
+  "Check all pairs of DemandRecords to see if units can follow on to a
+  :waiting demand category."
+  [demand-recs]
+  (not-any? follow-on-waits? (combo/combinations demand-recs 2)))
+
+(defn grouped-check-waits
+  "check-folow-waits was too slow for TAA-size run at 2 minutes and 30
+  seconds.  Only check combinations when grouped by src and
+  demand-group. This one is only 1.6 seconds..."
+  [demand-recs]
+  (not-any? (map (fn [[[src demand-group] recs]]
+                   (check-follow-waits recs)))
+            (group-by (juxt :SRC :DemandGroup) demand-recs)))
+  
+(def random-groups
+  (for [i (range)]
+    (gen/generate (s/gen :DemandRecords/DemandGroup))))
+
+(s/def ::group-to-category
+  (set (zipmap random-groups spec/default-categories )))
+
+(def group-to-category-gen
+  (gen/fmap #(hash-map :DemandGroup (first %)
+                       :Category (second %))
+            (s/gen ::group-to-category)))
+
+;;For now, we don't want to allow data where units can follow on to a
+;;waiting demand category, so we'll assign the same category to all of
+;;the records with the same DemandGroups but randomize the DemandGroup
+;;string.
+(s/def :DemandRecords/DemandGroup_Category
+  (s/with-gen (s/keys :req-un [:DemandRecords/DemandGroup
+                            :DemandRecords/Category])
+    (fn [] group-to-category-gen)))
+
+;;As we define additional sub-maps of interdependent fields, we merge
+;;them here.
+(s/def :DemandRecords/DemandRecord
+  (s/merge :DemandRecords/DemandGroup_Category))
+
+;;Check follow on weights requirements should go here.
+(s/def ::DemandRecords (s/and (s/+ :DemandRecords/DemandRecord)
+                              grouped-check-waits))
+
+ (def category-replacer-alt {:DemandRecords :DemandRecords/DemandGroup_Category})
+ (defn cat-replacer-alt
+   [proj]
+   (project->random-specs proj category-replacer-alt))
+;;(run-random-tests new-results-book cat-replacer-alt)
