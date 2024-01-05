@@ -652,12 +652,19 @@
 ;;predicate equality.  The inversion/flipping stuff is potentially awkward.
 (def not-ac #(is-not (:component %) "AC"))
 (def not-rc #(is (:component %) "AC"))
+(def cannibalized #(is (unit/cannibalized? %)))
 
 ;;implies max dwell.
 ;;shifting to capitalizing compound rules...
+;;when-fenced checks to see if the units is fenced for the demand.
+;;min-unit-weight ensures that we always have a deterministic ordering
+;;of units by sorting by unit ID at the end.
+;;Rules defined here must be added to the +default-rules+ map for
+;;registering.
 (def NOT-AC      [when-fenced not-ac max-proportional-dwell min-unit-weight])
 (def NOT-AC-MIN  [when-fenced not-ac min-proportional-dwell min-unit-weight])
-
+(def cannibalized-not-ac-min [when-fenced cannibalized not-ac
+                      min-proportional-dwell min-unit-weight])
 ;;max dwell
 (def NOT-RC      [when-fenced not-rc max-proportional-dwell min-unit-weight])
 ;;Added for forward stationed/assigned units
@@ -746,7 +753,7 @@
                          (register-sourcing-rule! (name k) rule))
         :else (throw (ex-info "expected string or keyword for source-first rule key!"
                               {:k k :rule rule}))))
-
+;;These are not case sensititve.
 (def +default-rules+
   {"AC-FIRST"   ac-first
    "AC"         ac-first
@@ -759,6 +766,7 @@
    "UNIFORM"    uniform
    "MIN-DWELL"  min-dwell
    "NOT-AC-MIN" NOT-AC-MIN
+   "CANNIBALIZED-NOT-AC-MIN" cannibalized-not-ac-min
    "NOT-AC"     NOT-AC
    "NOT-RC"     NOT-RC
    "NOT-RC-MIN" NOT-RC-MIN
@@ -874,6 +882,11 @@
    ;;use
 
    ;;HLD is NonBOG NOT-AC-MIN preference.
+   ;;Use this rule for using cannibalized units in some other demand.
+   ;;We now allow units to change waiting demands, even if they filled
+   ;;one waiting demand earlier in the filling process on the same day.
+   ;;Note that units won't be back filled on the same day after a unit
+   ;;leaves the cannibalized demand for this demand.
    "nonbog_with_cannibals"
    {:restricted  "NonBOG"
     :computed (fn [env ctx]

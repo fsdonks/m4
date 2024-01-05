@@ -1198,7 +1198,7 @@
     col-index
     ))
 
-(defn record-assoc
+(defn record-assoc-kv
   "Assoc a value onto a record within a marathon project by specifying
   the table keyword, the index of the record to update the value in,
   the key to add to the record, and the value.
@@ -1211,6 +1211,14 @@
                     :columns
                     col-index
                     rec-index] value)))
+
+(defn record-assoc
+  [proj tbl-key rec-index & key-vals]
+  (reduce (fn [p [k v]]
+               (record-assoc-kv
+                p tbl-key rec-index
+                k v))
+          proj (partition 2 key-vals)))
 
 (defn copy-row
   "Copy the nth row in a table and add it to the end of the table."
@@ -1470,6 +1478,11 @@ marathon.analysis.random and after we made that move.")))
        (unit/summary)
        (:location)))
 
+(defn get-locations [ctx unit-name]
+  (-> ctx
+      (supply/get-unit unit-name)
+      (:locationhistory)))
+
 (deftest nonbog-with-cannibal
   (is (= (unit-location ctx-1 "1_01205K000_RC")
          "1_Cannibalization_01205K000_[1...2]")
@@ -1478,13 +1491,62 @@ marathon.analysis.random and after we made that move.")))
   (is (unit/cannibalized? (supply/get-unit ctx-1  "1_01205K000_RC"))
       "Ensure that the cannibalization rule inserts a :cannibalized
 key into state data now.")
-  (is (= (:locationhistory
-          (supply/get-unit ctx-1-new-rule "1_01205K000_RC")
+  (is (= (get-locations ctx-1-new-rule "1_01205K000_RC")
           ["Reset"
           "1_Cannibalization_01205K000_[1...2]"
           "2_HLD_01205K000_[1...2]"]))
       "After adding the new rule, the unit should have moved from
-Cannibalization to HLD on day 1 during the fill process."))
+Cannibalization to HLD on day 1 during the fill process.")
+
+(def cannibal-sourcing-proj
+  (-> hld-with-cannibals
+      (record-assoc 
+       :DemandRecords 1
+       :StartDay 2
+       :SourceFirst "min-dwell")
+      (record-assoc 
+       :DemandRecords 0
+       :Duration 2)
+      (copy-row-in :SupplyRecords 0)
+      (record-assoc 
+       :SupplyRecords 0
+       :CycleTime 1)))
+
+(defn before-day
+  [wkbk day]
+  (->> (analysis/load-context wkbk)
+       (iterate analysis/step-1)
+       (#(nth % day))))
+
+(deftest cannibal-sourcing-before
+  (let [sourcing-day-3 (before-day cannibal-sourcing-proj 3)]
+    (is (= (get-locations sourcing-day-3 "1_01205K000_RC")
+           ["Reset"
+            "1_Cannibalization_01205K000_[1...3]"])
+        "Unit 2 should be chosen for HLD instead since its CycleTime is
+  lower and the HLD record wasn't min-dwell.")
+    (is (= (get-locations sourcing-day-3 "2_01205K000_RC")
+           ["Reset"
+            "2_HLD_01205K000_[2...3]"]))))
+
+(def new-cannibal-sourcing-proj
+  (-> cannibal-sourcing-proj
+      (record-assoc 
+       :DemandRecords 1
+       :StartDay 2
+       :SourceFirst "cannibalized-not-ac-min")))
+
+(deftest cannibal-sourcing-after
+  (let [sourcing-day-3-new (before-day new-cannibal-sourcing-proj 3)]
+    (is (= (get-locations sourcing-day-3-new "1_01205K000_RC")
+          ["Reset"
+          "1_Cannibalization_01205K000_[1...3]"
+          "2_HLD_01205K000_[2...3]"])
+      "After adding the new rule, the unit should have moved from
+Cannibalization to HLD on day 2 since the SourceFirst rule prefers
+  cannibalized units over minimum dwell.")
+    (is (= (get-locations sourcing-day-3-new "2_01205K000_RC")
+           ["Reset"]))))
 
 (comment
 ;;Here are some examples of filtering units from a context.
@@ -1851,33 +1913,24 @@ Cannibalization to HLD on day 1 during the fill process."))
   (analysis/update-proj-tables
    {:SupplyRecords [(random-sample prob)]} proj))
 
+;;Brittle, especially if the initial policy length varies for policies
+;;in supply records.  To make this data driven, we should specify the
+;;cycletime distribution in SupplyRecord Tags and handle that in
+;;marathon.ces.entityfactory.
+
 (def big-compo-lengths {"AC" 1095 "RC" 2190 "NG" 2190})
 (defn rand-cat-cycles
   "Example of chaining some test methods such as sampling the supply,
   randomizing initial unit lifecycles, and randomizing the demand Category
   and DemandGroup of an existing project.."
-  [workbook-path]
-  (while true
+  [workbook-path & {:keys [supply-portion
+                           num-runs] :or
+                    ;;12% of the supply records
+                    {supply-portion 0.12}}]
+  (doseq [i (if num-runs (range num-runs) (range))]
     (-> (analysis/load-project workbook-path)
-        (sample-supply 0.5)
+        (sample-supply supply-portion)
         (random/rand-cycles :compo-lengths big-compo-lengths)
         (cat-replacer-alt)
         (#(reset! random-proj %))
         (marathon.run/do-audited-run "random_output/"))))
-
-;;do final fuzz testing for the new rule here.
-;;(rand-cat-cycles new-results-book)
-(def t "/home/craig/runs/big_test/m4-book-with-peak-hold_test.xlsx")
-(def trecs (putil/demand-records t))
-
-;;first: see bottom of marathon.ces.entityfactory to load a pstore
-;;from a ctx and then can I get the cyclelength of a policy?  This
-;;should be the same that initialize-cycle-times pulls the cycle length.
-;;idea:1
-;;use preprocess supply to do random-cycles by
-;;make preprocess functions require a pstore too
-;;so the new preprocess function takes 1 args and it called
-;;init-cycles "uniform"
-
-(def pstore (marathon.ces.core/get-policystore
-                                   (analysis/load-context new-results-book)))
