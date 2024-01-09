@@ -1450,25 +1450,25 @@ marathon.analysis.random and after we made that move.")))
 ;;Will want to prefer cannibalized, then nonboggable, then units
 ;;available also.
 ;;nonboggables are everything not in a demand.
-(defn before-day-2
-  [wkbk]
+(defn before-day
+  [wkbk day]
   (->> (analysis/load-context wkbk)
-       (analysis/step-1)
-       (analysis/step-1)))
+       (iterate analysis/step-1)
+       (#(nth % day))))
 
 (def in-book (analysis/load-project (java.io/resource
                                      "with_cannibals.xlsx")))
 ;;First looking to step forward to end of day and see that unit in
 ;;cannibalization, not in HLD yet without the new rule.
 ;;context at beginning of day 2
-(def ctx-1 (before-day-2 in-book))
+(def ctx-1 (before-day in-book 2))
 (def hld-with-cannibals (record-assoc in-book
                                       :DemandRecords 1
                                       :Category
                                       "nonbog_with_cannibals"))
 ;;Unit should have switched from cannibalization demand to HLD demand
 ;;while filling demands on day 1.
-(def ctx-1-new-rule (before-day-2 hld-with-cannibals))
+(def ctx-1-new-rule (before-day hld-with-cannibals 2))
 
 (defn unit-location
   "Get a unit's location from the context"
@@ -1512,12 +1512,6 @@ Cannibalization to HLD on day 1 during the fill process.")
        :SupplyRecords 0
        :CycleTime 1)))
 
-(defn before-day
-  [wkbk day]
-  (->> (analysis/load-context wkbk)
-       (iterate analysis/step-1)
-       (#(nth % day))))
-
 (deftest cannibal-sourcing-before
   (let [sourcing-day-3 (before-day cannibal-sourcing-proj 3)]
     (is (= (get-locations sourcing-day-3 "1_01205K000_RC")
@@ -1536,6 +1530,8 @@ Cannibalization to HLD on day 1 during the fill process.")
        :StartDay 2
        :SourceFirst "cannibalized-not-ac-min")))
 
+
+  
 (deftest cannibal-sourcing-after
   (let [sourcing-day-3-new (before-day new-cannibal-sourcing-proj 3)]
     (is (= (get-locations sourcing-day-3-new "1_01205K000_RC")
@@ -1547,6 +1543,38 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
   cannibalized units over minimum dwell.")
     (is (= (get-locations sourcing-day-3-new "2_01205K000_RC")
            ["Reset"]))))
+
+(def cannibal-backfill-proj
+  ;;Just extending demands to another day.
+  (-> new-cannibal-sourcing-proj
+      (record-assoc 
+       :DemandRecords 0
+       :Duration 3)
+      (record-assoc 
+       :DemandRecords 1
+       :Duration 2)))
+
+(defn num-assigned [ctx demand-name]
+  (->> demand-name
+       (store/get-entity ctx)
+       (:units-assigned)
+       (count)))
+       
+(deftest cannibal-backfill
+  (let [backfill-ctx (before-day cannibal-backfill-proj 4)]
+    (is (= (get-locations backfill-ctx "2_01205K000_RC")
+           ["Reset"])
+        "This unit should not backfill the cannibalization demand
+  since the cannibalization demand should be fully filled on the first
+  day and any units that leave the cannibalization demand for HLD
+  leave via computed supply.  Therefore, the cannibalization demand
+  does not get put back on the unfilled queue.")
+    (is (= (num-assigned backfill-ctx
+                         "1_Cannibalization_01205K000_[1...4]")
+           0)
+        "In addition to not backfilling cannibalization, we should
+  be removing the other unit from the cannibalization demand when it
+  leaves based on the marathon.ces.unit/donor-deploy function.")))
 
 (comment
 ;;Here are some examples of filtering units from a context.
