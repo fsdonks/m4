@@ -946,6 +946,11 @@
         (increment-deployments)
         (wait-at info ctx))))
 
+(defn donor-deploy [unit info t ctx]
+  ;;pseudo-deploy and remove-unit-from-demand buuut
+  ;;ces.demand depends on this namespace!
+  ;;check current git changes.
+  )
 
 ;;TBD
 ;;casting modernization as  location-based deployment.
