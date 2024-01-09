@@ -226,6 +226,52 @@
                                  (unit/can-non-bog? %)))]
     (lazy-group-units es)))
 
+(defn first-day? "Is this the first day the demand is active?"
+  [{:keys [startday] :as demand} ctx]
+  (= startday (spork.sim.simcontext/get-time ctx)))
+
+(defn add-donor "Add the demand name to a set of :donors for a
+  unit."
+  [demand unit-e]
+  (let [demand-name (:name demand)]      
+    (update unit-e :donors #(conj (into #{} %) demand-name))))
+
+(defn can-return? "Can the unit return to this demand on any day after
+  the activation day of the demand after being donated to another demand?"
+  [{:keys [donors] :as unit-e} demand ctx start?]
+  (let [demand-name (:name demand)]
+    (if start?
+      ;;
+      true
+      (contains? donors demand-name))))
+
+(defn tag-donors
+  [demand es]
+  (for [u es]
+    (add-donor demand u)))
+      
+(defn nonbog-donor-return
+  "There may be a case where we want units to donate to another
+  demand and then be able to return to the original demand if the
+  recipient demand deactivates before the original demand. Untested
+  for now, but left as a concept."
+  [{:keys [src cat order-by where collect-by
+                                    demand] :or 
+                       {src :any cat :default where identity} :as env}
+                      ctx ]
+  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab
+        ;;prefs we want.
+        start? (first-day? demand ctx)
+        es      (store/select-entities
+                 ctx
+                 :from   [:unit-entity]
+                 :where #(and (where %)
+                              (src-map (:src %))
+                              (unit/can-non-bog? %)
+                              (can-return? % demand ctx start?)))]
+    ;;take some units here maybe.
+        (lazy-group-units (tag-donors es))))
+  
 ;;TODO: add another parameter for how many cannibals to take.
 (defn compute-nonbog-with-cannibals [{:keys [src cat order-by where collect-by] :or 
                        {src :any cat :default where identity} :as env}
@@ -812,7 +858,7 @@
 (def rc-cannibalization-rule
   {:restricted  "NonBOG"
     :filter   (fn [u] (not= (:component u) "AC"))
-    :computed (fn [{:keys [where] :as env}  ctx]
+   :computed (fn [{:keys [where] :as env}  ctx]
                 (lazy-merge
                  (compute-nonbog
                   (assoc env :where

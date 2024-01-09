@@ -1569,6 +1569,11 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
   day and any units that leave the cannibalization demand for HLD
   leave via computed supply.  Therefore, the cannibalization demand
   does not get put back on the unfilled queue.")
+    (is (not (unit/cannibalized? (supply/get-unit backfill-ctx
+                                                  "1_01205K000_RC")))
+        "Make sure we clear our state when we leave the
+  cannibalization demand, even though we are pulling a unit from a
+  demand via computed supply.")
     (is (= (num-assigned backfill-ctx
                          "1_Cannibalization_01205K000_[1...4]")
            0)
