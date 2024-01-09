@@ -62,6 +62,19 @@
   (when-let [fx (demand-effect-categories (:category d))]
     (assoc fx :demand d)))
 
+(defn deploying-from-demand?
+  "Is a unit deploying from one demand to another? Usually not
+  allowed, except in the case of a donor-deploy."
+  []
+  ;;Does the unit's location exist in the entity store?
+  ;;Is the unit's location a demand entity?
+  )
+
+(defn valid-donor?
+  "If a unit is deploying-from-demand, does the :effects map of the
+  demand it's deploying from have a :donor key with a true value?"
+  [])
+
 ;;These seem like lower level concerns.....
 ;;Can we push this down to the unit entity behavior?
 ;;Let that hold more of the complexity?  The unit can be responsible
