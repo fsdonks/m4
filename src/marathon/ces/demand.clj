@@ -949,16 +949,6 @@
  ([demandstore unit demandname ctx] ;hack....
   (disengage demandstore unit demandname ctx false)))
 
-(defn remove-donor-from-demand
-  "Shifts the unit from being actively assigned to the demand, to passively 
-   overlapping at the demand.   Does not update the unit or fill status."
-  [unit demandname ctx]
-   (let [demand    (d/send-home (store/get-entity  ctx demandname)
-                                unit)
-         nextstore (register-change (store/get-entity ctx :DemandStore) demandname)]
-     (-> (store/add-entity ctx demand)
-         (store/add-entity ctx :DemandStore nextstore))))
-  
 ;; sword of verboseness +1 
 (defn remove-unit-from-demand
   "Shifts the unit from being actively assigned to the demand, to passively 

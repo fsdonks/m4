@@ -62,19 +62,47 @@
   (when-let [fx (demand-effect-categories (:category d))]
     (assoc fx :demand d)))
 
+(defn in-demand?
+  "Check if a unit is current in a demand, meaning that it's location
+  exists in the :DemandStore."
+  [unit ctx]
+  (core/demand? ctx (:locationname unit)))
+    
 (defn deploying-from-demand?
   "Is a unit deploying from one demand to another? Usually not
   allowed, except in the case of a donor-deploy."
-  []
-  ;;Does the unit's location exist in the entity store?
-  ;;Is the unit's location a demand entity?
-  )
+  [ctx unit newlocation]
+  (and (in-demand? unit ctx)
+       (core/demand? ctx newlocation)))
 
 (defn valid-donor?
   "If a unit is deploying-from-demand, does the :effects map of the
   demand it's deploying from have a :donor key with a true value?"
-  [])
+  [ctx unit]
+  (let [old-demand (store/get-entity ctx (:locationname unit))
+        effects (wait-based-policy? old-demand)]
+    (contains? (:wait-state effects) :donor)))
 
+(defn donator?
+  [ctx unit newlocation]
+  (and (deploying-from-demand? ctx unit newlocation)
+       (valid-donor? ctx unit)))
+    
+(defn remove-donor-from-demand
+  "Shifts the unit from being actively assigned to the demand, to passively 
+   overlapping at the demand.   Does not update the unit or fill status."
+  [unit ctx]
+  (let [demandname (:locationname unit)
+        demand    (d/send-home (store/get-entity  ctx demandname)
+                                unit)
+         nextstore (dem/register-change
+                    (store/get-entity ctx :DemandStore) demandname)]
+     (-> (store/add-entity ctx demand)
+         (store/add-entity :DemandStore nextstore))))
+
+(defn donor-deploy [unit info t ctx]
+  (->> (remove-donor-from-demand unit ctx)
+  (u/pseudo-deploy unit info t)))
 ;;These seem like lower level concerns.....
 ;;Can we push this down to the unit entity behavior?
 ;;Let that hold more of the complexity?  The unit can be responsible
@@ -89,9 +117,12 @@
 (defn deploy!  [followon? unit demand t ctx]
   (let [supply (core/get-supplystore ctx)
         newlocation (:name demand)
-        effects (wait-based-policy? demand)
-        ]
-    (cond (location-based-policy? demand)  (u/location-based-deployment unit demand ctx) ;;allow location to override policy.
+        donator (donator? ctx unit newlocation)
+        effects (wait-based-policy? demand)]
+    (cond (location-based-policy? demand)
+  (u/location-based-deployment unit demand ctx) ;;allow location to
+  ;;override policy.
+          donator (donor-deploy unit effects t ctx)
           effects      (u/pseudo-deploy unit effects t ctx) ;;nonbog and the like.
           followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
                              newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
