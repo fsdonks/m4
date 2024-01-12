@@ -187,6 +187,21 @@
   (into {}
           (for [[src xs]  (group-by :src units)]
             [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))])))
+
+(defn nonbog-where [{:keys [src where] :or 
+                     {src :any where identity} :as
+                     env} ctx & {:keys [unit-pred-or
+                                        unit-pred-and] :or
+                                 {unit-pred-or (fn [u] false)
+                                  unit-pred-and identity}}]
+  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab
+        ;;prefs we want.
+        ]
+    #(and (where %)
+          (src-map (:src %))
+          (unit-pred-and %)
+          (or (unit/can-non-bog? %)
+              (unit-pred-or %)))))
 ;;Computed Categories
 ;;====================
 ;;In addition to our categories of supply that are actively monitored and cached
@@ -210,21 +225,26 @@
 ;;only entities in the category of "NonBOG", i.e. entities tagged as nonbog
 ;;eligible, are able to engage in non-bog relations. We need to specifically
 ;;exclude followon-eligible demands from this query, since that will
-;;unintentionally drag additional supply into the mix that we don't want.
-(defn compute-nonbog [{:keys [src cat order-by where collect-by] :or 
-                       {src :any cat :default where identity} :as env}
-                      ctx]
-  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
-        es      (store/select-entities ctx
-                                       ;;see if unit has cannibalized
-                                       ;;state data?
-                                       ;;don't need can-non-bog
-                                       ;;another parameter to pull a percentage.
-                    :from   [:unit-entity]
-                    :where #(and (where %)
-                                 (src-map (:src %))
-                                 (unit/can-non-bog? %)))]
-    (lazy-group-units es)))
+;;unintentionally drag additional supply into the mix that we don't
+  ;;want.
+(defn compute-nonbog [env ctx & {:keys [unit-pred-or
+                                         unit-pred-and
+                                         change-units] :or
+                                 {change-units identity
+                                  unit-pred-or (fn [u] false)
+                                  unit-pred-and identity}
+                                 :as unit-fns}]
+  (let [es      (store/select-entities ctx
+                                       :from   [:unit-entity]
+                                       :where (apply nonbog-where env ctx
+                                                     (mapcat seq unit-fns)))]
+    ;;take some units here maybe.
+    (lazy-group-units (change-units es))))
+
+;;need to ensure that the other donating demand is tagged with a :donor
+;;TODO: add another parameter for how many cannibals to take.
+(defn compute-nonbog-with-cannibals [env ctx]
+  (compute-nonbog env ctx :unit-pred-or #(unit/cannibalized? %)))
 
 (defn first-day? "Is this the first day the demand is active?"
   [{:keys [startday] :as demand} ctx]
@@ -249,43 +269,22 @@
   [demand es]
   (for [u es]
     (add-donor demand u)))
-      
+
 (defn nonbog-donor-return
   "There may be a case where we want units to donate to another
   demand and then be able to return to the original demand if the
-  recipient demand deactivates before the original demand. Untested
+  recipient demand deactivates before the original demand. The unit
+  would progress through any transitive donations on the day it's
+  released from the deactivated demand.  Untested
   for now, but left as a concept."
   [{:keys [src cat order-by where collect-by
-                                    demand] :or 
-                       {src :any cat :default where identity} :as env}
-                      ctx ]
-  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab
-        ;;prefs we want.
-        start? (first-day? demand ctx)
-        es      (store/select-entities
-                 ctx
-                 :from   [:unit-entity]
-                 :where #(and (where %)
-                              (src-map (:src %))
-                              (unit/can-non-bog? %)
-                              (can-return? % demand ctx start?)))]
-    ;;take some units here maybe.
-        (lazy-group-units (tag-donors es))))
-  
-;;TODO: add another parameter for how many cannibals to take.
-(defn compute-nonbog-with-cannibals [{:keys [src cat order-by where collect-by] :or 
-                       {src :any cat :default where identity} :as env}
-                      ctx ]
-  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
-        es      (store/select-entities ctx
-                    :from   [:unit-entity]
-                    :where #(and (where %)
-                                 (src-map (:src %))
-                                 (or
-                                  (unit/cannibalized? %)
-                                  (unit/can-non-bog? %))))]
-    ;;take some units here maybe.
-        (lazy-group-units es)))
+           demand] :or 
+    {src :any cat :default where identity} :as env}
+   ctx ]
+  (let [start? (first-day? demand ctx)]
+    (compute-nonbog env ctx :unit-pred-and
+                    #(can-return? % demand ctx start?)
+                    :change-units tag-donors)))
 
 ;;Reducer/seq that provides an abstraction layer for implementing queries over
 ;;deployable supply. I really wish I had more time to hack out a better macro
