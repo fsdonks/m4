@@ -633,6 +633,12 @@
 
 (defn waiting? [u]  (has-state? u :waiting))
 
+(defn cannibalized?  "Return :cannibalized if the unit is in a
+  demand with the RC_cannibalization
+  demand category, which adds :cannibalized to the :state set."
+  [u]               
+  (has-state? u :cannibalized))
+
 ;;added :overlapping...
 (defn deployed-state? [s]
   (case s 
@@ -723,15 +729,6 @@
        (not (recovering? u))
        (not (demobilizing? u))
        (not= (:positionpolicy u) :recovery)))
-
-(defn cannibalized?  "Return true if the unit is in a demand with the RC_cannibalization
-  demand category, which adds :cannibalized to the :state set."
-  [u]
-  (let [state (:state u)
-        states (if (set? state)
-                 state
-                 #{state})]                
-  (contains? states :cannibalized)))
 
 ;;Added for unit behavior utility
 (defn add-traversal [u t from to]

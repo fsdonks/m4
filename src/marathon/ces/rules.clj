@@ -241,10 +241,35 @@
     ;;take some units here maybe.
     (lazy-group-units (change-units es))))
 
+(defn has-states?
+  "Does a unit have each of the states in wait-states?"
+  [u wait-states]
+  (->> wait-states
+       (map (fn [state] (unit/has-state? u state)))
+       (every? identity)))
+
+(defn computed-with
+  [wait-states]
+  (fn [env ctx]
+    (let [nonbogs (compute-nonbog env ctx
+                                  :unit-pred-or
+                                  #(has-states? % wait-states))]
+      (lazy-merge
+       nonbogs
+       (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                           :deployable-buckets
+                           :default])))))
+
 ;;need to ensure that the other donating demand is tagged with a :donor
 ;;TODO: add another parameter for how many cannibals to take.
-(defn compute-nonbog-with-cannibals [env ctx]
-  (compute-nonbog env ctx :unit-pred-or #(unit/cannibalized? %)))
+(defn nonbog-rule-with
+  "For packing in a :donors value to the category so that we can spec this."
+  [wait-states]
+    {:donors wait-states
+     :restricted  "NonBOG"
+     :computed (computed-with wait-states)
+     :effects   {:wait-time   999999
+                 :wait-state  #{:waiting :unavailable}}})
 
 (defn first-day? "Is this the first day the demand is active?"
   [{:keys [startday] :as demand} ctx]
@@ -933,15 +958,7 @@
    ;;Note that units won't be back filled on the same day after a unit
    ;;leaves the cannibalized demand for this demand.
    "nonbog_with_cannibals"
-   {:restricted  "NonBOG"
-    :computed (fn [env ctx]
-                 (lazy-merge
-                  (compute-nonbog-with-cannibals env ctx) ;;<-merge these in
-                  (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                                      :deployable-buckets
-                                      :default])))
-    :effects   {:wait-time   999999
-                :wait-state  #{:waiting :unavailable}}}
+   (nonbog-rule-with [:cannibalized])
    ;;Added to provide a filtering criteria for modernized demands.
    ;;We never modernize mod 1, since that's considered the absolute
   ;;highest mod level.

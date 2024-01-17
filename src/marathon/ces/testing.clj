@@ -1530,8 +1530,6 @@ Cannibalization to HLD on day 1 during the fill process.")
        :StartDay 2
        :SourceFirst "cannibalized-not-ac-min")))
 
-
-  
 (deftest cannibal-sourcing-after
   (let [sourcing-day-3-new (before-day new-cannibal-sourcing-proj 3)]
     (is (= (get-locations sourcing-day-3-new "1_01205K000_RC")
