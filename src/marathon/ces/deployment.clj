@@ -76,12 +76,14 @@
        (core/demand? ctx newlocation)))
 
 (defn valid-donor?
-  "If a unit is deploying-from-demand, does the :effects map of the
-  demand it's deploying from have a :donor key with a true value?"
+  "If a unit is deploying-from-demand, the previous demand should be a
+  wait-based-policy.  If it wasn't a wait-based-policy, we wouldn't go
+  through the normal deployment checks and current cycle may exceed
+  policy cycle length."
   [ctx unit]
-  (let [old-demand (store/get-entity ctx (:locationname unit))
-        effects (wait-based-policy? old-demand)]
-    (contains? (:wait-state effects) :donor)))
+  (let [old-demand (store/get-entity ctx (:locationname unit))]
+    ;;Should be a map.  otherwise, nil.
+    (wait-based-policy? old-demand)))
 
 (defn donator?
   [ctx unit newlocation]

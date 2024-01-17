@@ -892,7 +892,7 @@
                                      :deployable-buckets
                                      :default])))
     :effects   {:wait-time   999999
-                :wait-state  #{:waiting :unavailable :cannibalized :donor}}})
+                :wait-state  #{:waiting :unavailable :cannibalized}}})
 (def +default-categories+
   {:default   {:filter (fn [u] (not (:fenced? u)))} ;;maybe filter not necessary?
    "SRM"      {:restricted "SRM"}
