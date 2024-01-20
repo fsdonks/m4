@@ -75,13 +75,31 @@
   (and (in-demand? unit ctx)
        (core/demand? ctx newlocation)))
 
+(defn unit-location
+  [unit ctx]
+  (store/get-entity ctx (:locationname unit)))
+
+(defn check-in-demand
+  [unit ctx followon?]
+  (when (and (in-demand? unit ctx) (not followon?))           
+    (throw (Exception.
+            (str [:unit (:name unit) :invalid-pseudo-deployer
+                  "Trying to pseudo deploy, but is
+  currently in a demand, so the unit won't be cleared from the
+  previous demand like it would have in donor-deploy." ])))))
+
+(defn pseudo-deployment
+  [unit effects t ctx followon?]
+  (check-in-demand unit ctx followon?)
+  (u/pseudo-deploy unit effects t ctx))
+  
 (defn valid-donor?
   "If a unit is deploying-from-demand, the previous demand should be a
   wait-based-policy.  If it wasn't a wait-based-policy, we wouldn't go
   through the normal deployment checks and current cycle may exceed
   policy cycle length."
   [ctx unit]
-  (let [old-demand (store/get-entity ctx (:locationname unit))]
+  (let [old-demand (unit-location unit ctx)]
     ;;Should be a map.  otherwise, nil.
     (wait-based-policy? old-demand)))
 
@@ -124,13 +142,14 @@
     (cond (location-based-policy? demand)
   (u/location-based-deployment unit demand ctx) ;;allow location to
   ;;override policy.
-          donator (donor-deploy unit effects t ctx)
-          effects      (u/pseudo-deploy unit effects t ctx) ;;nonbog and the like.
-          followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
-                             newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
-                         (u/re-deploy-unit  newunit  demand t newctx))
-          :else 
-          (u/deploy-unit unit demand  t ctx))))
+  donator (donor-deploy unit effects t ctx)
+  ;;Units may followon to a peseudo-deployment through here.
+  effects      (pseudo-deployment unit effects t ctx followon? ) ;;nonbog and the like.
+  followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
+                     newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
+                 (u/re-deploy-unit  newunit  demand t newctx))
+  :else 
+  (u/deploy-unit unit demand  t ctx))))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  

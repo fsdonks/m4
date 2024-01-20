@@ -26,7 +26,8 @@
                           [entityfactory :as ent]
                           [setup :as setup]
                           [query :as query]
-             [deployment :as deployment]]
+             [deployment :as deployment]
+             [util :as util]]
             [marathon.ces.fill [demand :as filld]]
             [marathon.data   [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
@@ -1965,3 +1966,19 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
         (cat-replacer-alt)
         (#(reset! random-proj %))
         (marathon.run/do-audited-run "random_output/"))))
+
+
+
+(def ctx1 (before-day new-results-book 20))
+(def es (store/select-entities ctx1 :from [:unit-entity]))
+(def es (map (fn [r] (assoc-in r [:statedata
+                                  :curstate]
+                               (rand-nth [:cannibalized nil])))
+             es))
+(def sorter {:order-by marathon.ces.rules/cannibalized-not-ac-min})
+(defn interesting [unit-r]
+  (assoc (select-keys unit-r [:component :cycletime])
+         :cannibalized (unit/cannibalized? unit-r)))
+(def not-sorted (map interesting (take 10 es)))
+;;try marathon.ces.query/select to order
+(def sorted (map interesting (util/select sorter (take 10 es))))

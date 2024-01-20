@@ -9,9 +9,10 @@
               key-pref  key-valuations flip only-keys-from change-if
               is? is-not is]]
             [marathon.ces  [core   :as core]
-                           [unit   :as unit]
-                           [supply :as supply]
-                           [rules  :as rules]]
+             [unit   :as unit]
+             [supply :as supply]
+             [rules  :as rules]
+             [util :as util]]
             [marathon.ces.fill.fillgraph]
             [spork.entitysystem.store :as store]
             [spork.data [lazymap :as lm]]
@@ -240,6 +241,28 @@
                                                      (mapcat seq unit-fns)))]
     ;;take some units here maybe.
     (lazy-group-units (change-units es))))
+
+(defn filter-sort-take
+  "Filter a subset of records matching a predicate, sort those records
+  according to sorter, and then take n of
+  those records, concatenating the result with the rest of the records
+  that were untouched."
+  [f sorter n xs]
+  (let [groups (group-by f xs)
+        trues (groups true)
+        falses (groups false)
+        sort-map {:order-by sorter}]
+    (->> (util/select sort-map trues)
+         (take n)
+         (concat falses))))
+
+(defn take-units
+  "Intended to be use with compute-nonbog :change-units. Take a
+  portion of units matching a unit predicate, rounded down, after
+  sorting. "
+  [portion pred sorter units]
+  (let [n (int (* portion (count units)))]
+    (filter-sort-take pred sorter n units)))
 
 (defn has-states?
   "Does a unit have each of the states in wait-states?"
