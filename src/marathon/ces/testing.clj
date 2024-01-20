@@ -1956,13 +1956,15 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
   randomizing initial unit lifecycles, and randomizing the demand Category
   and DemandGroup of an existing project.."
   [workbook-path & {:keys [supply-portion
-                           num-runs] :or
+                           num-runs
+                           compo-lengths] :or
                     ;;12% of the supply records
-                    {supply-portion 0.12}}]
+                    {supply-portion 0.12
+                     compo-lengths random/default-compo-lengths}}]
   (doseq [i (if num-runs (range num-runs) (range))]
     (-> (analysis/load-project workbook-path)
         (sample-supply supply-portion)
-        (random/rand-cycles :compo-lengths big-compo-lengths)
+        (random/rand-cycles :compo-lengths compo-lengths)
         (cat-replacer-alt)
         (#(reset! random-proj %))
         (marathon.run/do-audited-run "random_output/"))))
