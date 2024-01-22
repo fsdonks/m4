@@ -1971,16 +1971,78 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
 
 
 
-(def ctx1 (before-day new-results-book 20))
+(def ctx1 (before-day new-results-book 2))
 (def es (store/select-entities ctx1 :from [:unit-entity]))
-(def es (map (fn [r] (assoc-in r [:statedata
+(def can-states
+[nil
+ :cannibalized
+ :cannibalized
+ :cannibalized
+ :cannibalized
+ :cannibalized
+ nil
+ nil
+ nil
+ nil])
+
+(def es (map (fn [u s] (assoc-in u [:statedata
                                   :curstate]
-                               (rand-nth [:cannibalized nil])))
-             es))
-(def sorter {:order-by marathon.ces.rules/cannibalized-not-ac-min})
+                               s))
+             es can-states))
+(require '[marathon.ces.rules :as rules])
 (defn interesting [unit-r]
   (assoc (select-keys unit-r [:component :cycletime])
          :cannibalized (unit/cannibalized? unit-r)))
-(def not-sorted (map interesting (take 10 es)))
-;;try marathon.ces.query/select to order
-(def sorted (map interesting (util/select sorter (take 10 es))))
+(def not-sorted (mapv interesting es))
+(def not-sorted-out
+  [{:component "AC", :cycletime 950, :cannibalized nil}
+   {:component "RC", :cycletime 1368, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 730, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 298, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 292, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 0, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 657, :cannibalized nil}
+   {:component "AC", :cycletime 421, :cannibalized nil}
+   {:component "RC", :cycletime 0, :cannibalized nil}
+   {:component "RC", :cycletime 462, :cannibalized nil}])
+
+(def sorter {:order-by rules/cannibalized-not-ac-min})
+(def sorted (mapv interesting (util/select sorter es)))
+(def sorted-out
+  [{:component "RC", :cycletime 0, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 730, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 1368, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 292, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 298, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 0, :cannibalized nil}
+   {:component "RC", :cycletime 462, :cannibalized nil}
+   {:component "AC", :cycletime 421, :cannibalized nil}
+   {:component "AC", :cycletime 657, :cannibalized nil}
+   {:component "AC", :cycletime 950, :cannibalized nil}])
+
+(def take-in
+  (mapv interesting (rules/filter-sort-take
+                    unit/cannibalized?
+                    rules/cannibalized-not-ac-min 0.75
+                    es)))
+(def take-out
+  [{:component "AC", :cycletime 950, :cannibalized nil}
+   {:component "AC", :cycletime 657, :cannibalized nil}
+   {:component "AC", :cycletime 421, :cannibalized nil}
+   {:component "RC", :cycletime 0, :cannibalized nil}
+   {:component "RC", :cycletime 462, :cannibalized nil}
+   {:component "RC", :cycletime 0, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 730, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 1368, :cannibalized :cannibalized}])
+
+(deftest sorting-rules
+  (is (= not-sorted not-sorted-out)
+      "Make sure our assumption that test data didn't change remains
+  true.")
+  (is (= sorted sorted-out)
+      "Can we use util/select along with sorting vectors from
+  marathon.ces.rules to sort units?")
+  (is (= take-in take-out)
+      "Does filter-sort-take return 3 cannibalized units and returns
+  the other units untouched?"))
+

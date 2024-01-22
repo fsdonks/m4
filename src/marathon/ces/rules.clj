@@ -242,27 +242,24 @@
     ;;take some units here maybe.
     (lazy-group-units (change-units es))))
 
+(defn falsey? [v]
+  (or (nil? v) (false? v)))
+
 (defn filter-sort-take
   "Filter a subset of records matching a predicate, sort those records
-  according to sorter, and then take n of
-  those records, concatenating the result with the rest of the records
-  that were untouched."
-  [f sorter n xs]
-  (let [groups (group-by f xs)
-        trues (groups true)
-        falses (groups false)
+  according to sorter, and then take a portion of
+  those records, rounded down, concatenating the result with the rest
+  of the records that were untouched. Intended to be used with
+  compute-nonbog :change-units."  
+  [f sorter portion xs]
+  (let [groups (group-by (comp falsey? f) xs)        
+        falses (groups true)
+        trues (groups false)
+        n (int (* portion (count trues)))
         sort-map {:order-by sorter}]
     (->> (util/select sort-map trues)
          (take n)
          (concat falses))))
-
-(defn take-units
-  "Intended to be use with compute-nonbog :change-units. Take a
-  portion of units matching a unit predicate, rounded down, after
-  sorting. "
-  [portion pred sorter units]
-  (let [n (int (* portion (count units)))]
-    (filter-sort-take pred sorter n units)))
 
 (defn has-states?
   "Does a unit have each of the states in wait-states?"
@@ -272,11 +269,12 @@
        (every? identity)))
 
 (defn computed-with
-  [wait-states]
+  [wait-states & {:keys [change-units] :or {change-units identity}}]
   (fn [env ctx]
     (let [nonbogs (compute-nonbog env ctx
                                   :unit-pred-or
-                                  #(has-states? % wait-states))]
+                                  #(has-states? % wait-states)
+                                  :change-units change-units)]
       (lazy-merge
        nonbogs
        (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
@@ -287,10 +285,10 @@
 ;;TODO: add another parameter for how many cannibals to take.
 (defn nonbog-rule-with
   "For packing in a :donors value to the category so that we can spec this."
-  [wait-states]
+  [wait-states & {:keys [change-units] :or {change-units identity}}]
     {:donors wait-states
      :restricted  "NonBOG"
-     :computed (computed-with wait-states)
+     :computed (computed-with wait-states :change-units change-units)
      :effects   {:wait-time   999999
                  :wait-state  #{:waiting :unavailable}}})
 
@@ -980,8 +978,19 @@
    ;;one waiting demand earlier in the filling process on the same day.
    ;;Note that units won't be back filled on the same day after a unit
    ;;leaves the cannibalized demand for this demand.
+   ;;This allows all cannibalized units to fill demands matching this
+   ;;rule.
    "nonbog_with_cannibals"
    (nonbog-rule-with [:cannibalized])
+   ;;This allows 50% of the cannibalized units to fill demands
+   ;;matching this rule.
+   "nonbog_with_0.5_cannibals"
+   (nonbog-rule-with [:cannibalized]
+                     :change-units
+                     (partial filter-sort-take
+                              unit/cannibalized?
+                              cannibalized-not-ac-min
+                              0.5))
    ;;Added to provide a filtering criteria for modernized demands.
    ;;We never modernize mod 1, since that's considered the absolute
   ;;highest mod level.
