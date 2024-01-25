@@ -1,5 +1,5 @@
 ;;Go to marathon.core to update +version+ as well!
-(defproject marathon "4.2.12-SNAPSHOT"
+(defproject marathon "4.2.13-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [spork "0.2.1.7-SNAPSHOT"
@@ -8,7 +8,7 @@
                  [marathon-schemas "4.1.11-SNAPSHOT"
                   :exclusions [spork]]
                  ;;post processing.
-                 [proc  "0.3.4-SNAPSHOT"
+                 [proc  "0.3.5-SNAPSHOT"
                   :exclusions [spork]]
                  [stoke "0.1.1-SNAPSHOT"
                   :exclusions [spork]]
