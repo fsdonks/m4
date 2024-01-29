@@ -1,6 +1,7 @@
 (ns marathon.ces.util
   (:require [marathon.ces.query.primitive :refer
-             [ord-fn ordering ordering?]]))
+             [ord-fn ordering ordering?]]
+            [spork.util [general :as gen]]))
 
 ;;Query parsing combinators
 ;;=========================
@@ -32,6 +33,8 @@
         (nil? xs)    nil
         :else (throw (Exception. (str "Unknown ordering expression: "
                                       xs)))))
+
+(alter-var-root #'eval-order gen/memo-1)
 
 (defn eval-filter [xs]
   (cond (fn? xs) xs

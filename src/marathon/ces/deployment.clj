@@ -79,34 +79,20 @@
   [unit ctx]
   (store/get-entity ctx (:locationname unit)))
 
-(defn check-in-demand
+(defn invalid-pseudo?
   [unit ctx followon?]
-  (when (and (in-demand? unit ctx) (not followon?))           
-    (throw (Exception.
-            (str [:unit (:name unit) :invalid-pseudo-deployer
-                  "Trying to pseudo deploy, but is
-  currently in a demand, so the unit won't be cleared from the
-  previous demand like it would have in donor-deploy." ])))))
+  (and (in-demand? unit ctx) (not followon?)))
 
-(defn pseudo-deployment
-  [unit effects t ctx followon?]
-  (check-in-demand unit ctx followon?)
-  (u/pseudo-deploy unit effects t ctx))
-  
-(defn valid-donor?
+(defn donor?
   "If a unit is deploying-from-demand, the previous demand should be a
   wait-based-policy.  If it wasn't a wait-based-policy, we wouldn't go
   through the normal deployment checks and current cycle may exceed
   policy cycle length."
-  [ctx unit]
-  (let [old-demand (unit-location unit ctx)]
-    ;;Should be a map.  otherwise, nil.
-    (wait-based-policy? old-demand)))
-
-(defn donator?
   [ctx unit newlocation]
-  (and (deploying-from-demand? ctx unit newlocation)
-       (valid-donor? ctx unit)))
+  (let [old-demand (unit-location unit ctx)]
+    (and (deploying-from-demand? ctx unit newlocation)
+         ;;Should be a map.  otherwise, nil.
+         (wait-based-policy? old-demand))))
     
 (defn remove-donor-from-demand
   "Shifts the unit from being actively assigned to the demand, to passively 
@@ -122,7 +108,7 @@
 
 (defn donor-deploy [unit info t ctx]
   (->> (remove-donor-from-demand unit ctx)
-  (u/pseudo-deploy unit info t)))
+       (u/pseudo-deploy unit info t)))
 ;;These seem like lower level concerns.....
 ;;Can we push this down to the unit entity behavior?
 ;;Let that hold more of the complexity?  The unit can be responsible
@@ -137,14 +123,21 @@
 (defn deploy!  [followon? unit demand t ctx]
   (let [supply (core/get-supplystore ctx)
         newlocation (:name demand)
-        donator (donator? ctx unit newlocation)
+        donor (donor? ctx unit newlocation)
         effects (wait-based-policy? demand)]
     (cond (location-based-policy? demand)
   (u/location-based-deployment unit demand ctx) ;;allow location to
   ;;override policy.
-  donator (donor-deploy unit effects t ctx)
+  donor (donor-deploy unit effects t ctx)
   ;;Units may followon to a peseudo-deployment through here.
-  effects      (pseudo-deployment unit effects t ctx followon? ) ;;nonbog and the like.
+  effects      (if (invalid-pseudo? unit ctx followon?)
+                 (throw (Exception.
+                         (str [:unit (:name unit) :invalid-pseudo-deployer
+                               "Trying to pseudo deploy, but is
+  currently in a demand, so the unit won't be cleared from the
+  previous demand like it would have in donor-deploy." ])))
+                 ;;nonbog and the like.
+                 (u/pseudo-deploy unit effects t ctx))                               
   followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
                      newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
                  (u/re-deploy-unit  newunit  demand t newctx))

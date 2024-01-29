@@ -9,7 +9,7 @@
              [unit   :as unit]
              [supply :as supply]
              [rules :as rules]
-             [util :refer :all]]
+             [util :as util]]
             [marathon.ces.fill.fillgraph]
             [marathon.ces.query.primitive :refer [ord-fn ordering ordering?]]
             [spork.util [general :as gen] [metaprogramming :as m]]))
@@ -65,9 +65,6 @@
 (defmacro with-query-env [env & expr]
   `(binding [~'marathon.ces.rules/*env* ~env]
      ~@expr))
-
-
-(alter-var-root #'eval-order gen/memo-1)
 
 (defn selection? [f]  (get (meta f) :selection))
 
@@ -130,14 +127,14 @@
 ;;Find all deployable units that match the category "SRC=SRC3"
 (defn find-supply [{:keys [src cat order-by where collect-by] :or
                     {src :any cat :default} :as env} ctx]
-    (let [order-by (eval-order    order-by)
-          where    (eval-filter   where)
+    (let [order-by (util/eval-order    order-by)
+          where    (util/eval-filter   where)
           t        (core/get-time ctx)]
       (with-query-env env
         (as-> (->> (rules/find-feasible-supply (rules/compute-supply env ctx) (core/get-fillmap ctx)
                       cat src  (fn [nm]
                                  (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
-                   (select {:where    (when where   (fn wherf [kv] (where (second kv))))
+                   (util/select {:where    (when where   (fn wherf [kv] (where (second kv))))
                             :order-by (when order-by (->ordering order-by))}))
               res
              (if collect-by (core/collect collect-by (map second res))
