@@ -1,7 +1,7 @@
 ;;Go to marathon.core to update +version+ as well!
 (defproject marathon "4.2.13-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.11.1"]
                  [spork "0.2.1.7-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs

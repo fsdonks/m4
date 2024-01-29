@@ -237,24 +237,22 @@
                                  :as unit-fns}]
   (let [es      (store/select-entities ctx
                                        :from   [:unit-entity]
-                                       :where (apply nonbog-where env ctx
-                                                     (mapcat seq unit-fns)))]
+                                       :where (nonbog-where env ctx
+                                                            unit-fns))]
     ;;take some units here maybe.
     (lazy-group-units (change-units es))))
 
-(defn falsey? [v]
-  (or (nil? v) (false? v)))
-
 (defn filter-sort-take
-  "Filter a subset of records matching a predicate, sort those records
+  "Filter a subset of records matching a predicate (or a function that
+  returns logically true values), sort the logically true records
   according to sorter, and then take a portion of
   those records, rounded down, concatenating the result with the rest
-  of the records that were untouched. Intended to be used with
-  compute-nonbog :change-units."  
+  of the records that were logically false according to f.
+  Intended to be used with compute-nonbog :change-units."  
   [f sorter portion xs]
-  (let [groups (group-by (comp falsey? f) xs)        
-        falses (groups true)
-        trues (groups false)
+  (let [groups (group-by (comp #(boolean %) f) xs)        
+        trues (groups true)
+        falses (groups false)
         n (int (* portion (count trues)))
         sort-map {:order-by sorter}]
     (->> (util/select sort-map trues)
