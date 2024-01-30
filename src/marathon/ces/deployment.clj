@@ -126,23 +126,23 @@
         donor (donor? ctx unit newlocation)
         effects (wait-based-policy? demand)]
     (cond (location-based-policy? demand)
-  (u/location-based-deployment unit demand ctx) ;;allow location to
-  ;;override policy.
-  donor (donor-deploy unit effects t ctx)
-  ;;Units may followon to a peseudo-deployment through here.
-  effects      (if (invalid-pseudo? unit ctx followon?)
-                 (throw (Exception.
-                         (str [:unit (:name unit) :invalid-pseudo-deployer
-                               "Trying to pseudo deploy, but is
+          (u/location-based-deployment unit demand ctx) ;;allow location to
+          ;;override policy.
+          donor (donor-deploy unit effects t ctx)
+          ;;Units may followon to a peseudo-deployment through here.
+          effects      (if (invalid-pseudo? unit ctx followon?)
+                         (throw (Exception.
+                                 (str [:unit (:name unit) :invalid-pseudo-deployer
+                                       "Trying to pseudo deploy, but is
   currently in a demand, so the unit won't be cleared from the
   previous demand like it would have in donor-deploy." ])))
-                 ;;nonbog and the like.
-                 (u/pseudo-deploy unit effects t ctx))                               
-  followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
-                     newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
-                 (u/re-deploy-unit  newunit  demand t newctx))
-  :else 
-  (u/deploy-unit unit demand  t ctx))))
+                         ;;nonbog and the like.
+                         (u/pseudo-deploy unit effects t ctx))                               
+          followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
+                             newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
+                         (u/re-deploy-unit  newunit  demand t newctx))
+          :else 
+          (u/deploy-unit unit demand  t ctx))))
 
 (defn check-first-deployer!   [store unitname ctx]
   (let [unit (supply/get-unit store unitname)]  
@@ -163,7 +163,7 @@
   (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC"
      "RC_Cannibalization" "Forward" "nonbog_with_cannibals"}
    (:category d)))
-  
+
 (defn changing-waits?
   "Allow a unit to change from one waiting state to another waiting
   state.  Otherwise, it would fail the valid-deployer check."
@@ -171,7 +171,7 @@
   (and
    (u/waiting? unit)
    (demand-effect-categories (:category demand))))
-       
+
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
 (defn deploy-unit
