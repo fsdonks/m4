@@ -126,16 +126,17 @@
         donor (donor? ctx unit newlocation)
         effects (wait-based-policy? demand)]
     (cond (location-based-policy? demand)
-          (u/location-based-deployment unit demand ctx) ;;allow location to
-          ;;override policy.
+          ;;allow location to override policy.
+          (u/location-based-deployment unit demand ctx) 
+          ;;Will clear unit from previous demand.
           donor (donor-deploy unit effects t ctx)
           ;;Units may followon to a peseudo-deployment through here.
           effects      (if (invalid-pseudo? unit ctx followon?)
-                         (throw (Exception.
-                                 (str [:unit (:name unit) :invalid-pseudo-deployer
-                                       "Trying to pseudo deploy, but is
-  currently in a demand, so the unit won't be cleared from the
-  previous demand like it would have in donor-deploy." ])))
+                         (throw (ex-info
+                                 "Invalid pseudo deployer"
+                                  [:unit (:name unit)
+                                   :currently-in-demand
+                                   {:cleared-from-prev-demand false}]))
                          ;;nonbog and the like.
                          (u/pseudo-deploy unit effects t ctx))                               
           followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)

@@ -2021,7 +2021,7 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
    {:component "AC", :cycletime 950, :cannibalized nil}])
 
 (def take-in
-  (mapv interesting (rules/filter-sort-take
+  (mapv interesting (rules/subset-sort-take
                     unit/cannibalized?
                     rules/cannibalized-not-ac-min 0.75
                     es)))
@@ -2043,6 +2043,6 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
       "Can we use util/select along with sorting vectors from
   marathon.ces.rules to sort units?")
   (is (= take-in take-out)
-      "Does filter-sort-take return 3 cannibalized units and returns
+      "Does subset-sort-take return 3 cannibalized units and returns
   the other units untouched?"))
 

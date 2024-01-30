@@ -242,7 +242,7 @@
     ;;take some units here maybe.
     (lazy-group-units (change-units es))))
 
-(defn filter-sort-take
+(defn subset-sort-take
   "Filter a subset of records matching a predicate (or a function that
   returns logically true values), sort the logically true records
   according to sorter, and then take a portion of
@@ -267,6 +267,9 @@
        (every? identity)))
 
 (defn computed-with
+  "Auxillary function for nonbog-rule-with.  Creates the :computed
+  supply function if we have multiple wait-states that we want to pull
+  units from."
   [wait-states & {:keys [change-units] :or {change-units identity}}]
   (fn [env ctx]
     (let [nonbogs (compute-nonbog env ctx
@@ -290,6 +293,8 @@
      :effects   {:wait-time   999999
                  :wait-state  #{:waiting :unavailable}}})
 
+;;Pending work on NonBOG return.
+#_#_#_#_#_
 (defn first-day? "Is this the first day the demand is active?"
   [{:keys [startday] :as demand} ctx]
   (= startday (spork.sim.simcontext/get-time ctx)))
@@ -985,7 +990,7 @@
    "nonbog_with_0.5_cannibals"
    (nonbog-rule-with [:cannibalized]
                      :change-units
-                     (partial filter-sort-take
+                     (partial subset-sort-take
                               unit/cannibalized?
                               cannibalized-not-ac-min
                               0.5))
