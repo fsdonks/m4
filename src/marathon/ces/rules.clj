@@ -9,9 +9,10 @@
               key-pref  key-valuations flip only-keys-from change-if
               is? is-not is]]
             [marathon.ces  [core   :as core]
-                           [unit   :as unit]
-                           [supply :as supply]
-                           [rules  :as rules]]
+             [unit   :as unit]
+             [supply :as supply]
+             [rules  :as rules]
+             [util :as util]]
             [marathon.ces.fill.fillgraph]
             [spork.entitysystem.store :as store]
             [spork.data [lazymap :as lm]]
@@ -187,6 +188,21 @@
   (into {}
           (for [[src xs]  (group-by :src units)]
             [src (lm/lazy-map (into {} (map (juxt :name identity)) xs))])))
+
+(defn nonbog-where [{:keys [src where] :or 
+                     {src :any where identity} :as
+                     env} ctx & {:keys [unit-pred-or
+                                        unit-pred-and] :or
+                                 {unit-pred-or (fn [u] false)
+                                  unit-pred-and identity}}]
+  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab
+        ;;prefs we want.
+        ]
+    #(and (where %)
+          (src-map (:src %))
+          (unit-pred-and %)
+          (or (unit/can-non-bog? %)
+              (unit-pred-or %)))))
 ;;Computed Categories
 ;;====================
 ;;In addition to our categories of supply that are actively monitored and cached
@@ -210,36 +226,114 @@
 ;;only entities in the category of "NonBOG", i.e. entities tagged as nonbog
 ;;eligible, are able to engage in non-bog relations. We need to specifically
 ;;exclude followon-eligible demands from this query, since that will
-;;unintentionally drag additional supply into the mix that we don't want.
-(defn compute-nonbog [{:keys [src cat order-by where collect-by] :or 
-                       {src :any cat :default where identity} :as env}
-                      ctx]
-  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
-        es      (store/select-entities ctx
-                                       ;;see if unit has cannibalized
-                                       ;;state data?
-                                       ;;don't need can-non-bog
-                                       ;;another parameter to pull a percentage.
-                    :from   [:unit-entity]
-                    :where #(and (where %)
-                                 (src-map (:src %))
-                                 (unit/can-non-bog? %)))]
-    (lazy-group-units es)))
-
-;;TODO: add another parameter for how many cannibals to take.
-(defn compute-nonbog-with-cannibals [{:keys [src cat order-by where collect-by] :or 
-                       {src :any cat :default where identity} :as env}
-                      ctx ]
-  (let [src-map (src->prefs (core/get-fillmap ctx) src) ;;only grab prefs we want.
-        es      (store/select-entities ctx
-                    :from   [:unit-entity]
-                    :where #(and (where %)
-                                 (src-map (:src %))
-                                 (or
-                                  (unit/cannibalized? %)
-                                  (unit/can-non-bog? %))))]
+;;unintentionally drag additional supply into the mix that we don't
+  ;;want.
+(defn compute-nonbog [env ctx & {:keys [unit-pred-or
+                                         unit-pred-and
+                                         change-units] :or
+                                 {change-units identity
+                                  unit-pred-or (fn [u] false)
+                                  unit-pred-and identity}
+                                 :as unit-fns}]
+  (let [es      (store/select-entities ctx
+                                       :from   [:unit-entity]
+                                       :where (nonbog-where env ctx
+                                                            unit-fns))]
     ;;take some units here maybe.
-        (lazy-group-units es)))
+    (lazy-group-units (change-units es))))
+
+(defn subset-sort-take
+  "Filter a subset of records matching a predicate (or a function that
+  returns logically true values), sort the logically true records
+  according to sorter, and then take a portion of
+  those records, rounded down, concatenating the result with the rest
+  of the records that were logically false according to f.
+  Intended to be used with compute-nonbog :change-units."  
+  [f sorter portion xs]
+  (let [groups (group-by (comp #(boolean %) f) xs)        
+        trues (groups true)
+        falses (groups false)
+        n (int (* portion (count trues)))
+        sort-map {:order-by sorter}]
+    (->> (util/select sort-map trues)
+         (take n)
+         (concat falses))))
+
+(defn has-states?
+  "Does a unit have each of the states in wait-states?"
+  [u wait-states]
+  (->> wait-states
+       (map (fn [state] (unit/has-state? u state)))
+       (every? identity)))
+
+(defn computed-with
+  "Auxillary function for nonbog-rule-with.  Creates the :computed
+  supply function if we have multiple wait-states that we want to pull
+  units from."
+  [wait-states & {:keys [change-units] :or {change-units identity}}]
+  (fn [env ctx]
+    (let [nonbogs (compute-nonbog env ctx
+                                  :unit-pred-or
+                                  #(has-states? % wait-states)
+                                  :change-units change-units)]
+      (lazy-merge
+       nonbogs
+       (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
+                           :deployable-buckets
+                           :default])))))
+
+;;need to ensure that the other donating demand is tagged with a :donor
+;;TODO: add another parameter for how many cannibals to take.
+(defn nonbog-rule-with
+  "For packing in a :donors value to the category so that we can spec this."
+  [wait-states & {:keys [change-units] :or {change-units identity}}]
+    {:donors wait-states
+     :restricted  "NonBOG"
+     :computed (computed-with wait-states :change-units change-units)
+     :effects   {:wait-time   999999
+                 :wait-state  #{:waiting :unavailable}}})
+
+;;Pending work on NonBOG return.
+#_#_#_#_#_
+(defn first-day? "Is this the first day the demand is active?"
+  [{:keys [startday] :as demand} ctx]
+  (= startday (spork.sim.simcontext/get-time ctx)))
+
+(defn add-donor "Add the demand name to a set of :donors for a
+  unit."
+  [demand unit-e]
+  (let [demand-name (:name demand)]      
+    (update unit-e :donors #(conj (into #{} %) demand-name))))
+
+(defn can-return? "Can the unit return to this demand on any day after
+  the activation day of the demand after being donated to another demand?"
+  [{:keys [donors] :as unit-e} demand ctx start?]
+  (let [demand-name (:name demand)]
+    (if start?
+      ;;
+      true
+      (contains? donors demand-name))))
+
+(defn tag-donors
+  [demand es]
+  (for [u es]
+    (add-donor demand u)))
+
+(defn nonbog-donor-return
+  "There may be a case where we want units to donate to another
+  demand and then be able to return to the original demand if the
+  recipient demand deactivates before the original demand. The unit
+  would progress through any transitive donations on the day it's
+  released from the deactivated demand.  Untested
+  for now, but left as a concept."
+  [{:keys [src cat order-by where collect-by
+           demand] :or 
+    {src :any cat :default where identity} :as env}
+   ctx ]
+  (let [start? (first-day? demand ctx)]
+    (compute-nonbog env ctx :unit-pred-and
+                    #(can-return? % demand ctx start?)
+                    :change-units tag-donors)))
 
 ;;Reducer/seq that provides an abstraction layer for implementing queries over
 ;;deployable supply. I really wish I had more time to hack out a better macro
@@ -652,12 +746,19 @@
 ;;predicate equality.  The inversion/flipping stuff is potentially awkward.
 (def not-ac #(is-not (:component %) "AC"))
 (def not-rc #(is (:component %) "AC"))
+(def cannibalized #(is (unit/cannibalized? %)))
 
 ;;implies max dwell.
 ;;shifting to capitalizing compound rules...
+;;when-fenced checks to see if the units is fenced for the demand.
+;;min-unit-weight ensures that we always have a deterministic ordering
+;;of units by sorting by unit ID at the end.
+;;Rules defined here must be added to the +default-rules+ map for
+;;registering.
 (def NOT-AC      [when-fenced not-ac max-proportional-dwell min-unit-weight])
 (def NOT-AC-MIN  [when-fenced not-ac min-proportional-dwell min-unit-weight])
-
+(def cannibalized-not-ac-min [when-fenced cannibalized not-ac
+                      min-proportional-dwell min-unit-weight])
 ;;max dwell
 (def NOT-RC      [when-fenced not-rc max-proportional-dwell min-unit-weight])
 ;;Added for forward stationed/assigned units
@@ -746,7 +847,7 @@
                          (register-sourcing-rule! (name k) rule))
         :else (throw (ex-info "expected string or keyword for source-first rule key!"
                               {:k k :rule rule}))))
-
+;;These are not case sensititve.
 (def +default-rules+
   {"AC-FIRST"   ac-first
    "AC"         ac-first
@@ -759,6 +860,7 @@
    "UNIFORM"    uniform
    "MIN-DWELL"  min-dwell
    "NOT-AC-MIN" NOT-AC-MIN
+   "CANNIBALIZED-NOT-AC-MIN" cannibalized-not-ac-min
    "NOT-AC"     NOT-AC
    "NOT-RC"     NOT-RC
    "NOT-RC-MIN" NOT-RC-MIN
@@ -804,7 +906,7 @@
 (def rc-cannibalization-rule
   {:restricted  "NonBOG"
     :filter   (fn [u] (not= (:component u) "AC"))
-    :computed (fn [{:keys [where] :as env}  ctx]
+   :computed (fn [{:keys [where] :as env}  ctx]
                 (lazy-merge
                  (compute-nonbog
                   (assoc env :where
@@ -874,16 +976,24 @@
    ;;use
 
    ;;HLD is NonBOG NOT-AC-MIN preference.
+   ;;Use this rule for using cannibalized units in some other demand.
+   ;;We now allow units to change waiting demands, even if they filled
+   ;;one waiting demand earlier in the filling process on the same day.
+   ;;Note that units won't be back filled on the same day after a unit
+   ;;leaves the cannibalized demand for this demand.
+   ;;This allows all cannibalized units to fill demands matching this
+   ;;rule.
    "nonbog_with_cannibals"
-   {:restricted  "NonBOG"
-    :computed (fn [env ctx]
-                 (lazy-merge
-                  (compute-nonbog-with-cannibals env ctx) ;;<-merge these in
-                  (store/get-ine ctx [:SupplyStore   ;;<-iff like-keys exist here
-                                      :deployable-buckets
-                                      :default])))
-    :effects   {:wait-time   999999
-                :wait-state  #{:waiting :unavailable}}}
+   (nonbog-rule-with [:cannibalized])
+   ;;This allows 50% of the cannibalized units to fill demands
+   ;;matching this rule.
+   "nonbog_with_0.5_cannibals"
+   (nonbog-rule-with [:cannibalized]
+                     :change-units
+                     (partial subset-sort-take
+                              unit/cannibalized?
+                              cannibalized-not-ac-min
+                              0.5))
    ;;Added to provide a filtering criteria for modernized demands.
    ;;We never modernize mod 1, since that's considered the absolute
   ;;highest mod level.

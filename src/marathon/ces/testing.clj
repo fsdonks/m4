@@ -26,7 +26,8 @@
                           [entityfactory :as ent]
                           [setup :as setup]
                           [query :as query]
-             [deployment :as deployment]]
+             [deployment :as deployment]
+             [util :as util]]
             [marathon.ces.fill [demand :as filld]]
             [marathon.data   [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
@@ -52,6 +53,10 @@
             [clojure.spec.gen.alpha :as gen]
             [clojure.java.io :as java.io]
             [clojure.math.combinatorics :as combo]
+            [proc.demandanalysis :as dalysis]
+            [proc.util :as putil] ;;Useful to load demand records for
+            ;;debugging
+            
            ))
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
@@ -1194,7 +1199,7 @@
     col-index
     ))
 
-(defn record-assoc
+(defn record-assoc-kv
   "Assoc a value onto a record within a marathon project by specifying
   the table keyword, the index of the record to update the value in,
   the key to add to the record, and the value.
@@ -1207,6 +1212,14 @@
                     :columns
                     col-index
                     rec-index] value)))
+
+(defn record-assoc
+  [proj tbl-key rec-index & key-vals]
+  (reduce (fn [p [k v]]
+               (record-assoc-kv
+                p tbl-key rec-index
+                k v))
+          proj (partition 2 key-vals)))
 
 (defn copy-row
   "Copy the nth row in a table and add it to the end of the table."
@@ -1438,25 +1451,25 @@ marathon.analysis.random and after we made that move.")))
 ;;Will want to prefer cannibalized, then nonboggable, then units
 ;;available also.
 ;;nonboggables are everything not in a demand.
-(defn before-day-2
-  [wkbk]
+(defn before-day
+  [wkbk day]
   (->> (analysis/load-context wkbk)
-       (analysis/step-1)
-       (analysis/step-1)))
+       (iterate analysis/step-1)
+       (#(nth % day))))
 
 (def in-book (analysis/load-project (java.io/resource
                                      "with_cannibals.xlsx")))
 ;;First looking to step forward to end of day and see that unit in
 ;;cannibalization, not in HLD yet without the new rule.
 ;;context at beginning of day 2
-(def ctx-1 (before-day-2 in-book))
+(def ctx-1 (before-day in-book 2))
 (def hld-with-cannibals (record-assoc in-book
                                       :DemandRecords 1
                                       :Category
                                       "nonbog_with_cannibals"))
 ;;Unit should have switched from cannibalization demand to HLD demand
 ;;while filling demands on day 1.
-(def ctx-1-new-rule (before-day-2 hld-with-cannibals))
+(def ctx-1-new-rule (before-day hld-with-cannibals 2))
 
 (defn unit-location
   "Get a unit's location from the context"
@@ -1466,6 +1479,11 @@ marathon.analysis.random and after we made that move.")))
        (unit/summary)
        (:location)))
 
+(defn get-locations [ctx unit-name]
+  (-> ctx
+      (supply/get-unit unit-name)
+      (:locationhistory)))
+
 (deftest nonbog-with-cannibal
   (is (= (unit-location ctx-1 "1_01205K000_RC")
          "1_Cannibalization_01205K000_[1...2]")
@@ -1474,13 +1492,93 @@ marathon.analysis.random and after we made that move.")))
   (is (unit/cannibalized? (supply/get-unit ctx-1  "1_01205K000_RC"))
       "Ensure that the cannibalization rule inserts a :cannibalized
 key into state data now.")
-  (is (= (:locationhistory
-          (supply/get-unit ctx-1-new-rule "1_01205K000_RC")
+  (is (= (get-locations ctx-1-new-rule "1_01205K000_RC")
           ["Reset"
           "1_Cannibalization_01205K000_[1...2]"
           "2_HLD_01205K000_[1...2]"]))
       "After adding the new rule, the unit should have moved from
-Cannibalization to HLD on day 1 during the fill process."))
+Cannibalization to HLD on day 1 during the fill process.")
+
+(def cannibal-sourcing-proj
+  (-> hld-with-cannibals
+      (record-assoc 
+       :DemandRecords 1
+       :StartDay 2
+       :SourceFirst "min-dwell")
+      (record-assoc 
+       :DemandRecords 0
+       :Duration 2)
+      (copy-row-in :SupplyRecords 0)
+      (record-assoc 
+       :SupplyRecords 0
+       :CycleTime 1)))
+
+(deftest cannibal-sourcing-before
+  (let [sourcing-day-3 (before-day cannibal-sourcing-proj 3)]
+    (is (= (get-locations sourcing-day-3 "1_01205K000_RC")
+           ["Reset"
+            "1_Cannibalization_01205K000_[1...3]"])
+        "Unit 2 should be chosen for HLD instead since its CycleTime is
+  lower and the HLD record wasn't min-dwell.")
+    (is (= (get-locations sourcing-day-3 "2_01205K000_RC")
+           ["Reset"
+            "2_HLD_01205K000_[2...3]"]))))
+
+(def new-cannibal-sourcing-proj
+  (-> cannibal-sourcing-proj
+      (record-assoc 
+       :DemandRecords 1
+       :StartDay 2
+       :SourceFirst "cannibalized-not-ac-min")))
+
+(deftest cannibal-sourcing-after
+  (let [sourcing-day-3-new (before-day new-cannibal-sourcing-proj 3)]
+    (is (= (get-locations sourcing-day-3-new "1_01205K000_RC")
+          ["Reset"
+          "1_Cannibalization_01205K000_[1...3]"
+          "2_HLD_01205K000_[2...3]"])
+      "After adding the new rule, the unit should have moved from
+Cannibalization to HLD on day 2 since the SourceFirst rule prefers
+  cannibalized units over minimum dwell.")
+    (is (= (get-locations sourcing-day-3-new "2_01205K000_RC")
+           ["Reset"]))))
+
+(def cannibal-backfill-proj
+  ;;Just extending demands to another day.
+  (-> new-cannibal-sourcing-proj
+      (record-assoc 
+       :DemandRecords 0
+       :Duration 3)
+      (record-assoc 
+       :DemandRecords 1
+       :Duration 2)))
+
+(defn num-assigned [ctx demand-name]
+  (->> demand-name
+       (store/get-entity ctx)
+       (:units-assigned)
+       (count)))
+       
+(deftest cannibal-backfill
+  (let [backfill-ctx (before-day cannibal-backfill-proj 4)]
+    (is (= (get-locations backfill-ctx "2_01205K000_RC")
+           ["Reset"])
+        "This unit should not backfill the cannibalization demand
+  since the cannibalization demand should be fully filled on the first
+  day and any units that leave the cannibalization demand for HLD
+  leave via computed supply.  Therefore, the cannibalization demand
+  does not get put back on the unfilled queue.")
+    (is (not (unit/cannibalized? (supply/get-unit backfill-ctx
+                                                  "1_01205K000_RC")))
+        "Make sure we clear our state when we leave the
+  cannibalization demand, even though we are pulling a unit from a
+  demand via computed supply.")
+    (is (= (num-assigned backfill-ctx
+                         "1_Cannibalization_01205K000_[1...4]")
+           0)
+        "In addition to not backfilling cannibalization, we should
+  be removing the other unit from the cannibalization demand when it
+  leaves based on the marathon.ces.unit/donor-deploy function.")))
 
 (comment
 ;;Here are some examples of filtering units from a context.
@@ -1717,7 +1815,7 @@ Cannibalization to HLD on day 1 during the fill process."))
                                                  simple-replacer-alt)
                            simple-out-project])
    "Transistioned to using records with random values generated by a
-  space instead of a sequence of fields.  Make sure that the output is
+  spec instead of a sequence of fields.  Make sure that the output is
   still the same though."))
 
 (def category-replacer {:DemandRecords [:Category]})
@@ -1732,84 +1830,85 @@ Cannibalization to HLD on day 1 during the fill process."))
   OR passing a spec for each table
   depending on the proj-replacer-fn."
   [workbook-path proj-replacer-fn]
-  (let [p (analysis/load-project workbook-path)
-        rand-proj (reset! random-proj
-                               (proj-replacer-fn p))]
-    (while true
-     (marathon.run/do-audited-run rand-proj "random_output/"))))
-
-;;(run-random-tests new-results-book cat-field-replacer)
-;;Keeping this here for now, but this was an example of a unit
-;;following on to a :waiting demand, which threw an error, so I wrote
-;;a spec to catch that before runs and make our random category and
-;;demand group generator more realistic.
-(require '[marathon.analysis :as a])
-(def prior (a/day-before-error (a/marathon-stream
-                                "/home/craig/workspace/m4/test_categories_output/base-testdata-v7_broken.xlsx")))
-(def e (supply/get-unit (second prior) "36_19476K000_NG"))
-(def active (:activepolicy (:policy e)))
-(marathon.data.protocols/get-position active 2190)
-(comment
-  :last-update 337
-  :cycle-time-when-deployed 2127,
-  :dwell-time-when-deployed 2003,
-  :cycletime 2190,
-  :curstate #{:bogging},
-  :t 365,
-  :locationhistory
-  ["Available"
-   "11771_Pebbles_19476K000_[1...92]"
-   "Available"
-   "11806_Burrito_19476K000_[274...365]"],
-  )
+  (while true
+    (let [p (analysis/load-project workbook-path)]
+      (marathon.run/do-audited-run (reset! random-proj
+                                           (proj-replacer-fn p))
+                                   "random_output/"))))
 
 (defn unpack-demand
-  [{:keys [SRC DemandGroup StartDay Duration Category]}]
+  [{:keys [StartDay Duration Category]}]
   (let [end-day (if (and StartDay Duration)
                   (+ StartDay Duration))]
-  [SRC DemandGroup StartDay end-day Category]))
+  [StartDay end-day Category]))
 
-(defn follow-on-waits?
+(defn wait-from-non-wait? [cat1 cat2]
+  (and (nil? (deployment/demand-effect-categories cat1))
+       (deployment/demand-effect-categories cat2)))
+
+(defn no-follow-on-waits?
   "Check to see if we have a case where units may follow on into a
-  wait state, which could throw an error if their cycletime is greater
-  than the policy cycle length. This wouldn't cover a substitution if
-  a unit can follow-on from one SRC demand to another. Returns nil or
-  the effects of the waiting category."
+  wait state after their cycle time has progressed in a non-waiting
+  demand with the same demand group, which could throw an error if
+  their cycletime is greater than the policy cycle length.  This
+  will only happen in the rare case
+  that one DemandGroup has multiple Categories.
+  This wouldn't cover a substitution if
+  a unit can follow-on from one SRC demand to another SRC's demand.
+  Returns nil or the effects of the waiting category."
   [[demand-rec-1 demand-rec-2]]
-  (let [[src1 demand-group-1 start-day-1 end-day-1 cat-1]
+  (let [[start-day-1 end-day-1 cat1]
         (unpack-demand demand-rec-1)
-        [src2 demand-group-2 start-day-2 end-day-2 cat-2]
+        [start-day-2 end-day-2 cat2]
         (unpack-demand demand-rec-2)]
-    (when (and (= src1 src2) (= demand-group-1 demand-group-2))
-      (cond (= end-day-1 start-day-2)
-            (deployment/demand-effect-categories cat-2)
-            (= end-day-2 start-day-1)
-            (deployment/demand-effect-categories cat-1)))))
-;;Could test with the current tripping case and then with a non tripping
-;;case because the category isn't a waiting one.   
+      (not (cond (>= end-day-1 start-day-2)
+            (wait-from-non-wait? cat1 cat2)
+            (>= end-day-2 start-day-1)
+            (wait-from-non-wait? cat2 cat1)))))
 
-;;This goes into the ::DemandRecords spec.
+(defn intersecting-demands?
+  "Check two demands to see if they are both active at the same time
+  or if the start day of one equalst he end day of the other."
+  [[demand-rec-1 demand-rec-2]]
+   (let [[start-day-1 end-day-1]
+        (unpack-demand demand-rec-1)
+        [start-day-2 end-day-2]
+         (unpack-demand demand-rec-2)]
+     (dalysis/intersect? start-day-1 end-day-1
+                         start-day-2 end-day-2)))
+     
 (defn check-follow-waits
   "Check all pairs of DemandRecords to see if units can follow on to a
   :waiting demand category."
   [demand-recs]
-  (not-any? follow-on-waits? (combo/combinations demand-recs 2)))
+  (->> (combo/combinations demand-recs 2)
+       (filter intersecting-demands?)
+       (every? no-follow-on-waits? )))
 
 (defn grouped-check-waits
   "check-folow-waits was too slow for TAA-size run at 2 minutes and 30
   seconds.  Only check combinations when grouped by src and
   demand-group. This one is only 1.6 seconds..."
   [demand-recs]
-  (not-any? (map (fn [[[src demand-group] recs]]
-                   (check-follow-waits recs)))
+  (every? (fn [[[src demand-group] recs]]
+            (let [res (check-follow-waits recs)]
+              (when (not res) (println "Potential for error
+  when unit follows on from a non-waiting category to a waiting
+  category in the same demand group. src: " src
+                                       " dgroup: "
+                                       demand-group))
+                     res))
             (group-by (juxt :SRC :DemandGroup) demand-recs)))
   
 (def random-groups
   (for [i (range)]
     (gen/generate (s/gen :DemandRecords/DemandGroup))))
 
-(s/def ::group-to-category
+(def groups-to-categories
   (set (zipmap random-groups spec/default-categories )))
+
+(s/def ::group-to-category
+  groups-to-categories)
 
 (def group-to-category-gen
   (gen/fmap #(hash-map :DemandGroup (first %)
@@ -1817,8 +1916,9 @@ Cannibalization to HLD on day 1 during the fill process."))
             (s/gen ::group-to-category)))
 
 ;;For now, we don't want to allow data where units can follow on to a
-;;waiting demand category, so we'll assign the same category to all of
-;;the records with the same DemandGroups but randomize the DemandGroup
+;;waiting demand category from a non-waiting demand category,
+;;so we'll assign the same category to all of
+;;the records with the same DemandGroup but randomize the DemandGroup
 ;;string.
 (s/def :DemandRecords/DemandGroup_Category
   (s/with-gen (s/keys :req-un [:DemandRecords/DemandGroup
@@ -1830,12 +1930,119 @@ Cannibalization to HLD on day 1 during the fill process."))
 (s/def :DemandRecords/DemandRecord
   (s/merge :DemandRecords/DemandGroup_Category))
 
-;;Check follow on weights requirements should go here.
-(s/def ::DemandRecords (s/and (s/+ :DemandRecords/DemandRecord)
-                              grouped-check-waits))
+;;The conformed value is passed through s/and so we must put
+;;grouped-check-waits first unless we wrapped the DemandRecord
+;;in s/nonconforming
+(s/def ::DemandRecords (s/and grouped-check-waits
+                              (s/+ :DemandRecords/DemandRecord)))
 
- (def category-replacer-alt {:DemandRecords :DemandRecords/DemandGroup_Category})
- (defn cat-replacer-alt
-   [proj]
-   (project->random-specs proj category-replacer-alt))
-;;(run-random-tests new-results-book cat-replacer-alt)
+(def category-replacer-alt {:DemandRecords :DemandRecords/DemandGroup_Category})
+(defn cat-replacer-alt
+  [proj]
+  (project->random-specs proj category-replacer-alt))
+
+(defn sample-supply [proj prob]
+  (analysis/update-proj-tables
+   {:SupplyRecords [(random-sample prob)]} proj))
+
+;;Brittle, especially if the initial policy length varies for policies
+;;in supply records.  To make this data driven, we should specify the
+;;cycletime distribution in SupplyRecord Tags and handle that in
+;;marathon.ces.entityfactory.
+
+(def big-compo-lengths {"AC" 1095 "RC" 2190 "NG" 2190})
+(defn rand-cat-cycles
+  "Example of chaining some test methods such as sampling the supply,
+  randomizing initial unit lifecycles, and randomizing the demand Category
+  and DemandGroup of an existing project.."
+  [workbook-path & {:keys [supply-portion
+                           num-runs
+                           compo-lengths] :or
+                    ;;12% of the supply records
+                    {supply-portion 0.12
+                     compo-lengths random/default-compo-lengths}}]
+  (doseq [i (if num-runs (range num-runs) (range))]
+    (-> (analysis/load-project workbook-path)
+        (sample-supply supply-portion)
+        (random/rand-cycles :compo-lengths compo-lengths)
+        (cat-replacer-alt)
+        (#(reset! random-proj %))
+        (marathon.run/do-audited-run "random_output/"))))
+
+
+
+(def ctx1 (before-day new-results-book 2))
+(def es (store/select-entities ctx1 :from [:unit-entity]))
+(def can-states
+[nil
+ :cannibalized
+ :cannibalized
+ :cannibalized
+ :cannibalized
+ :cannibalized
+ nil
+ nil
+ nil
+ nil])
+
+(def es (map (fn [u s] (assoc-in u [:statedata
+                                  :curstate]
+                               s))
+             es can-states))
+(require '[marathon.ces.rules :as rules])
+(defn interesting [unit-r]
+  (assoc (select-keys unit-r [:component :cycletime])
+         :cannibalized (unit/cannibalized? unit-r)))
+(def not-sorted (mapv interesting es))
+(def not-sorted-out
+  [{:component "AC", :cycletime 950, :cannibalized nil}
+   {:component "RC", :cycletime 1368, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 730, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 298, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 292, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 0, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 657, :cannibalized nil}
+   {:component "AC", :cycletime 421, :cannibalized nil}
+   {:component "RC", :cycletime 0, :cannibalized nil}
+   {:component "RC", :cycletime 462, :cannibalized nil}])
+
+(def sorter {:order-by rules/cannibalized-not-ac-min})
+(def sorted (mapv interesting (util/select sorter es)))
+(def sorted-out
+  [{:component "RC", :cycletime 0, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 730, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 1368, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 292, :cannibalized :cannibalized}
+   {:component "AC", :cycletime 298, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 0, :cannibalized nil}
+   {:component "RC", :cycletime 462, :cannibalized nil}
+   {:component "AC", :cycletime 421, :cannibalized nil}
+   {:component "AC", :cycletime 657, :cannibalized nil}
+   {:component "AC", :cycletime 950, :cannibalized nil}])
+
+(def take-in
+  (mapv interesting (rules/subset-sort-take
+                    unit/cannibalized?
+                    rules/cannibalized-not-ac-min 0.75
+                    es)))
+(def take-out
+  [{:component "AC", :cycletime 950, :cannibalized nil}
+   {:component "AC", :cycletime 657, :cannibalized nil}
+   {:component "AC", :cycletime 421, :cannibalized nil}
+   {:component "RC", :cycletime 0, :cannibalized nil}
+   {:component "RC", :cycletime 462, :cannibalized nil}
+   {:component "RC", :cycletime 0, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 730, :cannibalized :cannibalized}
+   {:component "RC", :cycletime 1368, :cannibalized :cannibalized}])
+
+(deftest sorting-rules
+  (is (= not-sorted not-sorted-out)
+      "Make sure our assumption that test data didn't change remains
+  true.")
+  (is (= sorted sorted-out)
+      "Can we use util/select along with sorting vectors from
+  marathon.ces.rules to sort units?")
+  (is (= take-in take-out)
+      "Does subset-sort-take return 3 cannibalized units and returns
+  the other units untouched?"))
+

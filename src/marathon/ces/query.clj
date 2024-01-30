@@ -6,9 +6,10 @@
 ;;querying.
 (ns marathon.ces.query
   (:require [marathon.ces  [core   :as core]
-                           [unit   :as unit]
-                           [supply :as supply]
-                           [rules :as rules]]
+             [unit   :as unit]
+             [supply :as supply]
+             [rules :as rules]
+             [util :as util]]
             [marathon.ces.fill.fillgraph]
             [marathon.ces.query.primitive :refer [ord-fn ordering ordering?]]
             [spork.util [general :as gen] [metaprogramming :as m]]))
@@ -65,57 +66,7 @@
   `(binding [~'marathon.ces.rules/*env* ~env]
      ~@expr))
 
-;;Query parsing combinators
-;;=========================
-
-;;TODO# move these generic functions into a more general namespace.
-(defn ands [x fs]
-  (reduce (fn [acc f]
-            (if (f acc)
-              acc
-              (reduced nil))) x fs))
-
-(defn ors [x fs]
-  (reduce (fn [acc f]
-            (if (f x)
-              (reduced x)
-              acc)) nil fs))
-
-(defn nands [x fs] (not (ands x fs)))
-(defn nors  [x fs] (not (ors x fs)))
-
-(defn filt-sort [f ord xs]
-     (let [filtered      (if f (filter f xs) xs)]
-       (if ord (sort ord filtered) filtered)))
-
-(defn eval-filter [xs]
-  (cond (fn? xs) xs
-        (vector? xs)
-           (let [fs (reduce (fn [acc f] (conj acc (eval-filter f))) [] xs)]
-             #(ands % fs))
-        (nil? xs) nil))
-
-(defn eval-order [xs]
-  (cond (or (fn? xs) (keyword? xs))      (ordering  xs)
-        (vector? xs)  (apply ordering (reduce (fn [acc f] (conj acc (eval-order f))) [] xs))
-        (nil? xs)    nil
-        :else (throw (Exception. (str "Unknown ordering expression: " xs)))))
-(alter-var-root #'eval-order gen/memo-1)
-
 (defn selection? [f]  (get (meta f) :selection))
-;;#TODO flesh out the from key.  Maybe it makes sense to define a
-;;protocol so we can have tabular queries.
-(defn selection [& {:keys [from where order-by]}]
-   (let [filt  (if (fn? where) where (eval-filter where))
-         order (if (ordering? order-by) order-by
-                   (eval-order order-by))]
-     (with-meta (fn [xs] (filt-sort filt order xs))
-       {:where filt
-        :order-by order})))
-
-;;#TODO think about composing selections....
-(defn select [{:keys [where order-by]} xs]
-  ((selection :where where :order-by order-by) xs))
 
 ;;This is where our ordering is falling down. We need to have the option to
 ;;expose the weight here. By default, all weight is the same. So, if we alter
@@ -176,14 +127,14 @@
 ;;Find all deployable units that match the category "SRC=SRC3"
 (defn find-supply [{:keys [src cat order-by where collect-by] :or
                     {src :any cat :default} :as env} ctx]
-    (let [order-by (eval-order    order-by)
-          where    (eval-filter   where)
+    (let [order-by (util/eval-order    order-by)
+          where    (util/eval-filter   where)
           t        (core/get-time ctx)]
       (with-query-env env
         (as-> (->> (rules/find-feasible-supply (rules/compute-supply env ctx) (core/get-fillmap ctx)
                       cat src  (fn [nm]
                                  (core/current-entity ctx nm t))) ;;NOTE: Possible updated entity here..
-                   (select {:where    (when where   (fn wherf [kv] (where (second kv))))
+                   (util/select {:where    (when where   (fn wherf [kv] (where (second kv))))
                             :order-by (when order-by (->ordering order-by))}))
               res
              (if collect-by (core/collect collect-by (map second res))
