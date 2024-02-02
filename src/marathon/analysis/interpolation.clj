@@ -30,7 +30,9 @@
               rb (Math/pow d (/ beta 2.0))]
           (swap! num   + (* rb 0.5 (pow2 (- (aget y i) (aget y j)))))
           (swap! denom + (* rb rb)))))
-    (/ @num @denom)))
+    (if (zero? @denom)
+      0
+      (/ @num @denom))))
 
 (defn variogram ^double [^double alpha ^double beta ^double r]
   (* alpha (Math/pow r  (/ beta 2.0))))
@@ -90,95 +92,98 @@
     (m/mset! v n n 0.0)
     (->kriging2d x1 x2 (lin/least-squares v yv) alpha beta)))
 
+(defn bounds [keyfs xs]
+  (let [keyfs (if (vector? keyfs)
+                (zipmap keyfs keyfs)
+                keyfs)]
+    (reduce (fn [acc x]
+              (reduce-kv (fn blah [acc k f]
+                           (let [res (f x)]
+                             (if-let [bnd (acc k)]
+                               (let [newbnd (if (< res (bnd 0)) (assoc bnd 0 res) bnd)
+                                     newbnd (if (> res (bnd 1)) (assoc bnd 1 res) newbnd)]
+                                 (if (identical? newbnd bnd)
+                                   acc
+                                   (assoc acc k newbnd)))
+                               (assoc acc k [res res]))))
+                         acc keyfs)) (zipmap (keys keyfs) (repeat
+                                                           nil)) xs)))
 
-(comment ;;simple testing..
+(defn grid [data x-key y-key z-key & {:keys [bnds] :or
+                                      {bnds (bounds [x-key
+                                                     y-key]
+                                                    data)}}]  
+  (let [[xmin xmax] (bnds x-key)
+        [ymin ymax] (bnds y-key)
+        lerper (->interpolator2d
+                (double-array (map x-key data))
+                (double-array (map y-key data))
+                (double-array (map z-key data))
+                1.5)]
+    (for [i (range xmin (inc xmax))
+          j (range ymin (inc ymax))]
+      {x-key i y-key j z-key (interpolate2d lerper i j)})))
 
-  (def data
-    [{:x 0, :y 7, :z 0.353944544}
-     {:x 0, :y 8, :z 0.290257918}
-     {:x 1, :y 6, :z 0.34257919}
-     {:x 1, :y 8, :z 0.39724104}
-     {:x 1, :y 11, :z 0.518849521}
-     {:x 2, :y 3, :z 0.29061109}
-     {:x 2, :y 4, :z 0.378298823}
-     {:x 2, :y 8, :z 0.462225179}
-     {:x 2, :y 9, :z 0.571473099}
-     {:x 3, :y 3, :z 0.316451056}
-     {:x 3, :y 5, :z 0.441681637}
-     {:x 3, :y 12, :z 0.706440131}
-     {:x 4, :y 7, :z 0.592229147}
-     {:x 4, :y 8, :z 0.668243659}
-     {:x 4, :y 11, :z 0.786585298}
-     {:x 5, :y 3, :z 0.467315354}
-     {:x 5, :y 6, :z 0.709651935}
-     {:x 5, :y 13, :z 0.876288708}
-     {:x 5, :y 15, :z 0.923932882}
-     {:x 6, :y 2, :z 0.577013776}
-     {:x 6, :y 3, :z 0.56227162}
-     {:x 6, :y 12, :z 0.89387339}
-     {:x 7, :y 1, :z 0.575226827}
-     {:x 7, :y 4, :z 0.597366133}
-     {:x 7, :y 9, :z 0.840845889}
-     {:x 7, :y 11, :z 0.920962668}
-     {:x 8, :y 3, :z 0.695241283}
-     {:x 8, :y 8, :z 0.913048969}
-     {:x 8, :y 12, :z 0.94290986}
-     {:x 9, :y 4, :z 0.601671403}
-     {:x 9, :y 6, :z 0.849695586}
-     {:x 9, :y 11, :z 0.994671133}
-     {:x 9, :y 12, :z 0.990560292}
-     {:x 10, :y 3, :z 0.835806697}
-     {:x 10, :y 12, :z 0.978310502}
-     {:x 10, :y 13, :z 1.0}
-     {:x 10, :y 14, :z 1.0}
-     {:x 11, :y 0, :z 0.7825653}
-     {:x 11, :y 4, :z 0.89318489}
-     {:x 11, :y 9, :z 1.0}
-     {:x 11, :y 12, :z 1.0}
-     {:x 12, :y 2, :z 0.861296272}
-     {:x 12, :y 4, :z 0.908295282}
-     {:x 12, :y 7, :z 0.951026563}
-     {:x 12, :y 8, :z 1.0}
-     {:x 13, :y 3, :z 0.883247636}
-     {:x 13, :y 8, :z 1.0}
-     {:x 13, :y 10, :z 1.0}
-     {:x 13, :y 12, :z 1.0}
-     {:x 14, :y 3, :z 0.96122522}
-     {:x 14, :y 6, :z 1.0}
-     {:x 14, :y 7, :z 1.0}
-     {:x 14, :y 11, :z 1.0}
-     {:x 15, :y 4, :z 0.994292237}
-     {:x 15, :y 7, :z 1.0}
-     {:x 15, :y 9, :z 1.0}
-     {:x 15, :y 12, :z 1.0}
-     {:x 16, :y 7, :z 1.0}
-     {:x 16, :y 8, :z 1.0}
-     {:x 16, :y 9, :z 1.0}])
-
-  (defn bounds [keyfs xs]
-    (let [keyfs (if (vector? keyfs)
-                  (zipmap keyfs keyfs)
-                  keyfs)]
-      (reduce (fn [acc x]
-                (reduce-kv (fn blah [acc k f]
-                             (let [res (f x)]
-                               (if-let [bnd (acc k)]
-                                 (let [newbnd (if (< res (bnd 0)) (assoc bnd 0 res) bnd)
-                                       newbnd (if (> res (bnd 1)) (assoc bnd 1 res) newbnd)]
-                                   (if (identical? newbnd bnd)
-                                     acc
-                                     (assoc acc k newbnd)))
-                                 (assoc acc k [res res]))))
-                         acc keyfs)) (zipmap (keys keyfs) (repeat nil)) xs)))
-    (defn grid [data]
-      (let [{:keys [x y]} (bounds [:x :y] data)
-            [xmin xmax] x
-            [ymin ymax] y
-            lerper (->interpolator2d
-                    (double-array (map :x data))
-                    (double-array (map :y data))
-                    (double-array (map :z data))
-                    1.5)]
-        (for [i (range xmin (inc xmax))
-              j (range ymin (inc ymax))]
-          {:x i :y j :z (interpolate2d lerper i j)}))))
+;;simple testing..
+(comment
+(def data
+  [{:x 0, :y 7, :z 0.353944544}
+   {:x 0, :y 8, :z 0.290257918}
+   {:x 1, :y 6, :z 0.34257919}
+   {:x 1, :y 8, :z 0.39724104}
+   {:x 1, :y 11, :z 0.518849521}
+   {:x 2, :y 3, :z 0.29061109}
+   {:x 2, :y 4, :z 0.378298823}
+   {:x 2, :y 8, :z 0.462225179}
+   {:x 2, :y 9, :z 0.571473099}
+   {:x 3, :y 3, :z 0.316451056}
+   {:x 3, :y 5, :z 0.441681637}
+   {:x 3, :y 12, :z 0.706440131}
+   {:x 4, :y 7, :z 0.592229147}
+   {:x 4, :y 8, :z 0.668243659}
+   {:x 4, :y 11, :z 0.786585298}
+   {:x 5, :y 3, :z 0.467315354}
+   {:x 5, :y 6, :z 0.709651935}
+   {:x 5, :y 13, :z 0.876288708}
+   {:x 5, :y 15, :z 0.923932882}
+   {:x 6, :y 2, :z 0.577013776}
+   {:x 6, :y 3, :z 0.56227162}
+   {:x 6, :y 12, :z 0.89387339}
+   {:x 7, :y 1, :z 0.575226827}
+   {:x 7, :y 4, :z 0.597366133}
+   {:x 7, :y 9, :z 0.840845889}
+   {:x 7, :y 11, :z 0.920962668}
+   {:x 8, :y 3, :z 0.695241283}
+   {:x 8, :y 8, :z 0.913048969}
+   {:x 8, :y 12, :z 0.94290986}
+   {:x 9, :y 4, :z 0.601671403}
+   {:x 9, :y 6, :z 0.849695586}
+   {:x 9, :y 11, :z 0.994671133}
+   {:x 9, :y 12, :z 0.990560292}
+   {:x 10, :y 3, :z 0.835806697}
+   {:x 10, :y 12, :z 0.978310502}
+   {:x 10, :y 13, :z 1.0}
+   {:x 10, :y 14, :z 1.0}
+   {:x 11, :y 0, :z 0.7825653}
+   {:x 11, :y 4, :z 0.89318489}
+   {:x 11, :y 9, :z 1.0}
+   {:x 11, :y 12, :z 1.0}
+   {:x 12, :y 2, :z 0.861296272}
+   {:x 12, :y 4, :z 0.908295282}
+   {:x 12, :y 7, :z 0.951026563}
+   {:x 12, :y 8, :z 1.0}
+   {:x 13, :y 3, :z 0.883247636}
+   {:x 13, :y 8, :z 1.0}
+   {:x 13, :y 10, :z 1.0}
+   {:x 13, :y 12, :z 1.0}
+   {:x 14, :y 3, :z 0.96122522}
+   {:x 14, :y 6, :z 1.0}
+   {:x 14, :y 7, :z 1.0}
+   {:x 14, :y 11, :z 1.0}
+   {:x 15, :y 4, :z 0.994292237}
+   {:x 15, :y 7, :z 1.0}
+   {:x 15, :y 9, :z 1.0}
+   {:x 15, :y 12, :z 1.0}
+   {:x 16, :y 7, :z 1.0}
+   {:x 16, :y 8, :z 1.0}
+   {:x 16, :y 9, :z 1.0}]))
