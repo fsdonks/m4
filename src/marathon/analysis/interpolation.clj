@@ -115,14 +115,22 @@
                                                     data)}}]  
   (let [[xmin xmax] (bnds x-key)
         [ymin ymax] (bnds y-key)
+        response (map z-key data)
+        ;;If all responses are equal, the interpolation is too easy.
+        equal-vals? (apply = response)
+        first-z (first response)
         lerper (->interpolator2d
                 (double-array (map x-key data))
                 (double-array (map y-key data))
                 (double-array (map z-key data))
-                1.5)]
+                1.5)
+        ]
     (for [i (range xmin (inc xmax))
           j (range ymin (inc ymax))]
-      {x-key i y-key j z-key (interpolate2d lerper i j)})))
+      {x-key i y-key j z-key
+       (if equal-vals?
+         first-z
+         (interpolate2d lerper i j))})))
 
 ;;simple testing..
 (comment
