@@ -136,6 +136,16 @@
   fill-function [:FillStore :fillfunction]
   fillmap       [:FillStore :fillmap])
 
+;;mutable context
+;;===============
+
+(defn mutate-ctx [ctx]
+  (update-in ctx [:state :store] store/mutate!))
+(defn persist-ctx [mutable-ctx]
+  (-> mutable-ctx
+      (update-in  [:state :store] store/persist!)
+      (store/drop-domain :spork.data.eav/name)))
+
 ;;probably not useful.
 (defn get-behaviors   [ctx] (get-entity ctx :behaviormanager))
 (defn get-demand-tags [ctx] (get (get-demandstore ctx) :tags))
