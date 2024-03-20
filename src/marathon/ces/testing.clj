@@ -37,10 +37,11 @@
                            [history :as history]]
             [spork.entitysystem
              [store :as store]
-              [diff :as entdiff]]
-            [spork.util [reducers] [diff :as diff]
-             [tags :as tags]
-             [table :as tbl]]
+             [diff :as entdiff]]
+            [spork.util [reducers] ;;OBE
+                        [diff :as diff]
+                        [tags :as tags]
+                        [table :as tbl]]
             [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]
@@ -53,15 +54,6 @@
             [clojure.java.io :as java.io]
             [spork.util.require]
            ))
-
-;;since core.async defines a global threadpool via defonce, and
-;;this is a reified protocol, if we reload-all on any ns that pulls it in
-;;(like this one), the old threadpool stays while technically a new protocol
-;;gets defined that doesn't extend to the original threadpool.  As a work-around,
-;;we can use spork.util.require/require to prevent loading core.async more than 1x.
-
-;;convenience function.
-(defn reload-all [] (spork.util.require/require 'marathon.ces.testing :exclude '[clojure.core.async]))
 
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
@@ -1052,7 +1044,7 @@
 ;;atomic policy.
 (def p2 (marathon.data.protocols/on-period-change p1 "Surge"))
 
-(def policy-change
+(def policy-change  
             {:cycletime 327
              :current-policy p1
              :next-policy    p2
@@ -1086,6 +1078,7 @@
 ;;at their next available opportunity.
 ;;[WIP]
 (defn policy-schedules? [h] )
+
 
 (comment ;original policy debugging session, ephemeral 
 (def application {:cycletimeA 332
@@ -1133,6 +1126,18 @@
 ;;We're working now.  Let's verify our policy changes work..
 
 )
+
+
+(comment ;mutation testing
+  
+  (defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
+    (analysis/marathon-stream
+     (setup/default-simstate
+       (update init-ctx :state spork.entitysystem.store/mutate!))))
+    
+    
+  
+  )
 
 ;;Forward station testing
 (defn get-demands
@@ -1372,6 +1377,65 @@ order to meet the max of demand of 32 units for a
 non-forward-stationed demand.")
     ))
 
+
+;;When defining forward-stationed demands, we should check/assert that
+;;the demands have a :region :forward, a :Category Forward, so one
+;;of those shouldn't exist without the other.
+;;In most cases, we probably also want a forward stationed supply and
+;;we probably want forward stationed stuff to be highest priority, but
+;;this might not always be the case.
+
+
+;;_____________________________________________________
+;;marathon.analysis.random tests.
+(def previous-results
+  (java.io/resource "runamc-testdata_results_before-m4-merge.txt"))
+(def new-results-book
+  (java.io/resource "runamc-testdata.xlsx"))
+
+(defn make-new-results
+  [proj]
+  ;;the old results were created with one thread to make sure that
+  ;;each inventory level for an src has the same seed given that
+  ;;the default seed was used in both cases.
+  (binding [random/*threads* 1]
+    (let [p (analysis/load-project proj)
+          phases [["comp" 1 821] ["phase-1" 822 967]]]
+      (random/rand-runs-ac-rc 5 ;;min-distance
+                              0.5 ;;lower-rc
+                              0.7 ;;upper-rc
+                              (random/add-transform p random/adjust-cannibals
+                                                    []) :reps 2 :phases phases
+                              :lower 0 :upper 0.1
+                              :compo-lengths random/default-compo-lengths
+                              ))))
+        
+(defn set-tab-delim-tolerance
+  "results.txt is still reading the rep-seed as scientific even with a
+  no scientific parse mode.  Not sure why, but for now, this will make
+  the old and new rep seeds equal."
+  [{:keys [rep-seed] :as r}]
+  (assoc r :rep-seed (long (/ rep-seed 1000000))))
+
+(defn compare-rand-recs
+  "For two compare two sequences of results, we first round the rep
+  seed to something that will match and then return the records
+  for comparison."
+  [results]
+  (->> 
+   results
+   (map (fn [r] (set-tab-delim-tolerance r)))))
+
+(deftest runamc-merge-check
+  (let [old-results (into [] (tbl/tabdelimited->records
+                              (slurp previous-results)
+                              :parsemode :no-science))
+        new-results (make-new-results new-results-book)]
+    (is (apply = (map compare-rand-recs [old-results new-results]))
+        "Make sure that the results are the same from when we ran them
+in the run-amc repo before we moved and refactored the code to
+marathon.analysis.random and after we made that move.")))
+
 ;;When defining forward-stationed demands, we should check/assert that
 ;;the demands have a :region :forward, a :Category Forward, so one
 ;;of those shouldn't exist without the other.
@@ -1440,18 +1504,8 @@ marathon.analysis.random and after we made that move.")))
 
 (def base-ctx (setup/default-simstate core/debugsim))
 
-;;this is brittle.  We should eventually implement IMutable....
-;;we also have no way of distinguishing mutable vs immutable
-;;when things are embedded at this level...
-
-(defn mutate-ctx [ctx]
-  (update-in ctx [:state :store] store/mutate!))
-(defn persist-ctx [mutable-ctx]
-  (-> mutable-ctx
-      (update-in  [:state :store] store/persist!)
-      (store/drop-domain :spork.data.eav/name)))
-
-(def updated  (-> base-ctx mutate-ctx engine/sim-step persist-ctx))
+;;mutate/persistc-ctx defined in core now.
+(def updated  (-> base-ctx core/mutate-ctx engine/sim-step core/persist-ctx))
 (def expected (-> base-ctx engine/sim-step))
 
 ;;
