@@ -195,11 +195,28 @@
                                     "" :paths {}) 
           (assoc :tables ts))))
 
+(defn stringify-tables [tables]
+  (reduce-kv (fn [tables table-key table]
+               (assoc tables table-key
+                      (tbl/stringify-field-names
+                       table)))
+             {} tables))
+
+(ns dk.ative.docjure.spreadsheet)
+;;covers clojure datatypes like clojure.lang.Keyword and
+;;clojure.lang.Symbol
+(defmethod set-cell! :default [^Cell cell val]
+  (set-cell! cell (str val)))
+(ns marathon.project.excel)
+
 (defmethod save-project "xlsx" [proj path & options]
-  (xl/tables->xlsx path
-     (project->tables
-        (add-path proj :project-path
-            (io/as-directory (io/fdir path))))))
+  (->> proj
+       (:tables)
+       ;;Need to stringify if we reuse the workbook for another
+       ;;marathon run, because the field names in the input workbook
+       ;;are expected to be stringified.
+       (stringify-tables)
+       (xl/tables->xlsx path)))
 
 ;;this should probably go in docjure..
 (defn copy-sheet! [sheetname wb1 wb2]

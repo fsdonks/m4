@@ -4,7 +4,9 @@
             [clojure.set]
             [clojure.string]
             [marathon     [analysis :as a]]
-            [marathon.ces [core :as c] [query :as query]]
+            [marathon.ces [core :as c]
+             [query :as query]
+             [unit :as unit]]
             [spork.entitysystem [store :as store]]
             [spork.util [io :as io] [table :as tbl] [diff :as diff]]))
 
@@ -126,15 +128,15 @@
 ;;some generic stuff migrated from the tacmm scripting..
 ;;formerly tacmm-key
 (defn state-key [u]
-  (let [s (:state u)]
-    (cond (s :deployable)   :deployable
-          (s :modernizing)  :modernizing
-          (s :dwelling)     :not-ready
-          (s :bogging)      :deployed
-          (s :overlapping)  :deployed
-          (s :demobilizing) :not-ready
-          (s :forward)      :deployed ;;forward-stationed (also :waiting)
-          (= s :waiting)    :deployed ;;NonBOG corner case.
+  (let [s (unit/unit-state u)]
+    (cond (unit/has? s :deployable)   :deployable
+          (unit/has? s :modernizing)  :modernizing
+          (unit/has? s :dwelling)     :not-ready
+          (unit/has? s :bogging)      :deployed
+          (unit/has? s :overlapping)  :deployed
+          (unit/has? s :demobilizing) :not-ready
+          (unit/has? s :forward)      :deployed ;;forward-stationed (also :waiting)
+          (unit/has? s :waiting)      :deployed ;;NonBOG corner case.
           :else (throw (ex-info (str "unknown state!" s)
                                 {:in (:state u) :name (:name u)})))))
 

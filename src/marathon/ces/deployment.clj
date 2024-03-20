@@ -7,9 +7,10 @@
   (:require [marathon.demand [demanddata :as d]]
             [marathon.supply [unitdata :as udata]]
             [marathon.ces    [core :as core] [demand :as dem] 
-                             [policy :as policy] [supply :as supply] 
-                             [unit :as u]
-                             [query :as query]]
+             [policy :as policy] [supply :as supply] 
+             [unit :as u]
+             [query :as query]
+             [rules :as rules]]
             [marathon.data   [protocols :as protocols]]
             [spork.entitysystem.store :as store]
             [spork.sim       [simcontext :as sim]]
@@ -61,6 +62,53 @@
   (when-let [fx (demand-effect-categories (:category d))]
     (assoc fx :demand d)))
 
+(defn in-demand?
+  "Check if a unit is current in a demand, meaning that it's location
+  exists in the :DemandStore."
+  [unit ctx]
+  (core/demand? ctx (:locationname unit)))
+    
+(defn deploying-from-demand?
+  "Is a unit deploying from one demand to another? Usually not
+  allowed, except in the case of a donor-deploy."
+  [ctx unit newlocation]
+  (and (in-demand? unit ctx)
+       (core/demand? ctx newlocation)))
+
+(defn unit-location
+  [unit ctx]
+  (store/get-entity ctx (:locationname unit)))
+
+(defn invalid-pseudo?
+  [unit ctx followon?]
+  (and (in-demand? unit ctx) (not followon?)))
+
+(defn donor?
+  "If a unit is deploying-from-demand, the previous demand should be a
+  wait-based-policy.  If it wasn't a wait-based-policy, we wouldn't go
+  through the normal deployment checks and current cycle may exceed
+  policy cycle length."
+  [ctx unit newlocation]
+  (let [old-demand (unit-location unit ctx)]
+    (and (deploying-from-demand? ctx unit newlocation)
+         ;;Should be a map.  otherwise, nil.
+         (wait-based-policy? old-demand))))
+    
+(defn remove-donor-from-demand
+  "Shifts the unit from being actively assigned to the demand, to passively 
+   overlapping at the demand.   Does not update the unit or fill status."
+  [unit ctx]
+  (let [demandname (:locationname unit)
+        demand    (d/send-home (store/get-entity  ctx demandname)
+                                unit)
+         nextstore (dem/register-change
+                    (store/get-entity ctx :DemandStore) demandname)]
+     (-> (store/add-entity ctx demand)
+         (store/add-entity :DemandStore nextstore))))
+
+(defn donor-deploy [unit info t ctx]
+  (->> (remove-donor-from-demand unit ctx)
+       (u/pseudo-deploy unit info t)))
 ;;These seem like lower level concerns.....
 ;;Can we push this down to the unit entity behavior?
 ;;Let that hold more of the complexity?  The unit can be responsible
@@ -75,10 +123,22 @@
 (defn deploy!  [followon? unit demand t ctx]
   (let [supply (core/get-supplystore ctx)
         newlocation (:name demand)
-        effects (wait-based-policy? demand)
-        ]
-    (cond (location-based-policy? demand)  (u/location-based-deployment unit demand ctx) ;;allow location to override policy.
-          effects      (u/pseudo-deploy unit effects t ctx) ;;nonbog and the like.
+        donor (donor? ctx unit newlocation)
+        effects (wait-based-policy? demand)]
+    (cond (location-based-policy? demand)
+          ;;allow location to override policy.
+          (u/location-based-deployment unit demand ctx) 
+          ;;Will clear unit from previous demand.
+          donor (donor-deploy unit effects t ctx)
+          ;;Units may followon to a peseudo-deployment through here.
+          effects      (if (invalid-pseudo? unit ctx followon?)
+                         (throw (ex-info
+                                 "Invalid pseudo deployer"
+                                  [:unit (:name unit)
+                                   :currently-in-demand
+                                   {:cleared-from-prev-demand false}]))
+                         ;;nonbog and the like.
+                         (u/pseudo-deploy unit effects t ctx))                               
           followon?    (let [newctx  (supply/record-followon supply unit newlocation ctx)
                              newunit (store/get-entity newctx (:name unit))] ;;we've updated the unit at this point...               
                          (u/re-deploy-unit  newunit  demand t newctx))
@@ -96,10 +156,22 @@
 ;;not worried about collecting garbage.  Used in deploy-unit only.
 (def last-deploy (atom nil))
 ;;this is hacky; should be data-driven.
+;;Craig comment 14 Nov 2023:
+;; Maybe could be more data-driven by getting the category map from
+;;marathon.ces.rules/+default-categories.
+
 (defn non-bog? [d]
   (#{"NonBOG" "NonBOG-RC-Only" "Modernization" "Modernization-AC"
-     "RC_Cannibalization" "Forward"}
+     "RC_Cannibalization" "Forward" "nonbog_with_cannibals"}
    (:category d)))
+
+(defn changing-waits?
+  "Allow a unit to change from one waiting state to another waiting
+  state.  Otherwise, it would fail the valid-deployer check."
+  [unit demand]
+  (and
+   (u/waiting? unit)
+   (demand-effect-categories (:category demand))))
 
 ;;TODO# fix bog arg here, we may not need it.  Also drop the followon?
 ;;arg, at least make it non-variadic..
@@ -109,7 +181,9 @@
    scheduled for the unit.  Propogates logging information about the context 
    of the deployment."
   ([ctx unit t demand   followon?]
-   (if (not  (u/valid-deployer? unit nil (non-bog? demand) (:policy unit)))
+   (if (not  (or (u/valid-deployer? unit nil (non-bog? demand)
+                                    (:policy unit))
+                (changing-waits? unit demand)))
      (do (reset! last-deploy [unit ctx])
          (throw (Exception. (str [:unit (:name unit) :invalid-deployer "Must have bogbudget > 0, 
      cycletime in deployable window, or be eligible or a followon  deployment"]))))
