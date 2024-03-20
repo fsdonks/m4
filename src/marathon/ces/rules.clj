@@ -10,8 +10,7 @@
               is? is-not is]]
             [marathon.ces  [core   :as core]
                            [unit   :as unit]
-                           [supply :as supply]
-                           [rules  :as rules]]
+                           [supply :as supply]]
             [marathon.ces.fill.fillgraph]
             [spork.entitysystem.store :as store]
             [spork.data [lazymap :as lm]]
@@ -345,7 +344,7 @@
          ]
      (if (and any-category?  any-src?) ;if both category and src are unconstrained, we  can pull any unit.
            (do ;(println [:any :any])
-               (rules/->deployers supply :src src-selector :nm->unit nm->unit ))
+               (->deployers supply :src src-selector :nm->unit nm->unit ))
              ;;if category is constrained, but src is not, then we can pull any unit within the category.
            (let [
                  prefs (src->prefs  srcmap src)
@@ -353,7 +352,7 @@
                                   prefs)
                  ;- (println category-selector)
                  ]
-             (->>  (rules/->deployers supply :src src-selector :cat category-selector
+             (->>  (->deployers supply :src src-selector :cat category-selector
                                 :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
                                 :nm->unit nm->unit)
                ;  (r/map (fn [[k v]]

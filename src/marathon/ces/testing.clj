@@ -53,7 +53,32 @@
             [marathon.spec :as spec]
             [clojure.java.io :as java.io]
             [spork.util.require]
-           ))
+            [marathon.ces.testing.reload :as relo]))
+
+
+;; Given the expansion of testing to include paths that hit clojure.core.async, we cannot
+;; use (require 'marathon.ces.testing :reload-all) naively any more.  marathon.analysis.util
+;; maintains some global state around some async logging functions running in core.async go
+;; routine.  The catch is, core.async has its own singleton thread executor, upon which the
+;; reified protocols are defined.  When we naively reload-all, and traverese core.async, we
+;; end up creating a protocol version mismatch, where legacy running executor cannot apply
+;; the newly defined/reloaded protocol function, despite being semantically identical.
+
+;; This greatly interrupts a dynamic workflow where we are deriving new tests and reloading
+;; other namespaces, most recently when cross-developing libraries like spork for mutable
+;; stores.  The solution is to either hack the require functionality as in spork.util.require,
+;; and preclude reloading of specific namespaces like core.async, or leverage some reload
+;; workflow tools like clojure.tools.namespace, or clj-reload.  We currently leverage
+;; clj-reload and provide the convenience function marathon.ces.testing/reload.  This
+;; will reload only changed namespaces (to wit, source files that have changed since last
+;; reload).  So we get more efficient reloads (no need for :reload-all), and we work around
+;; the problem with core.async.
+
+(defn reload
+  "Reloads any namespaces that have changed source files, and only them.  Designed to
+   work around dev-time reloads and incompatibility with core.async's singleton thread
+   executor."
+  [] (relo/reload))
 
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
@@ -1128,17 +1153,6 @@
 )
 
 
-(comment ;mutation testing
-  
-  (defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
-    (analysis/marathon-stream
-     (setup/default-simstate
-       (update init-ctx :state spork.entitysystem.store/mutate!))))
-    
-    
-  
-  )
-
 ;;Forward station testing
 (defn get-demands
 [[t ctx :as frame]]
@@ -1508,6 +1522,8 @@ marathon.analysis.random and after we made that move.")))
 (def updated  (-> base-ctx core/mutate-ctx engine/sim-step core/persist-ctx))
 (def expected (-> base-ctx engine/sim-step))
 
+
+;;some random comment 7.
 ;;
 (comment ;testing mutable stuff, migrate these into deftests.
   (let [mctx (-> base-ctx mutate-ctx)]
