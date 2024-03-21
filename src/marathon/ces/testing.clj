@@ -26,8 +26,9 @@
                           [entityfactory :as ent]
                           [setup :as setup]
                           [query :as query]
-             [deployment :as deployment]
-             [util :as util]]
+                          [rules :as rules]
+                          [deployment :as deployment]
+                          [util :as util]]
             [marathon.ces.fill [demand :as filld]]
             [marathon.data   [protocols :as generic]]
             [marathon.demand [demanddata :as dem]]
@@ -36,10 +37,13 @@
             [marathon.project :as proj]
             [spork.sim     [simcontext :as sim]
                            [history :as history]]
-            [spork.entitysystem.store :as store]
-            [spork.util [reducers]
-             [tags :as tags]
-             [table :as tbl]]
+            [spork.entitysystem
+             [store :as store]
+             [diff :as entdiff]]
+            [spork.util [reducers] ;;OBE
+                        [diff :as diff]
+                        [tags :as tags]
+                        [table :as tbl]]
             [spork.sketch :as sketch]
             [clojure.core [reducers :as r]]
             [clojure.test :as test :refer :all]
@@ -52,12 +56,38 @@
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.java.io :as java.io]
+            [spork.util.require]
+            [marathon.ces.testing.reload :as relo]
             [clojure.math.combinatorics :as combo]
             [proc.demandanalysis :as dalysis]
             [proc.util :as putil] ;;Useful to load demand records for
             ;;debugging
-            
-           ))
+            ))
+
+;; Given the expansion of testing to include paths that hit clojure.core.async, we cannot
+;; use (require 'marathon.ces.testing :reload-all) naively any more.  marathon.analysis.util
+;; maintains some global state around some async logging functions running in core.async go
+;; routine.  The catch is, core.async has its own singleton thread executor, upon which the
+;; reified protocols are defined.  When we naively reload-all, and traverese core.async, we
+;; end up creating a protocol version mismatch, where legacy running executor cannot apply
+;; the newly defined/reloaded protocol function, despite being semantically identical.
+
+;; This greatly interrupts a dynamic workflow where we are deriving new tests and reloading
+;; other namespaces, most recently when cross-developing libraries like spork for mutable
+;; stores.  The solution is to either hack the require functionality as in spork.util.require,
+;; and preclude reloading of specific namespaces like core.async, or leverage some reload
+;; workflow tools like clojure.tools.namespace, or clj-reload.  We currently leverage
+;; clj-reload and provide the convenience function marathon.ces.testing/reload.  This
+;; will reload only changed namespaces (to wit, source files that have changed since last
+;; reload).  So we get more efficient reloads (no need for :reload-all), and we work around
+;; the problem with core.async.
+
+(defn reload
+  "Reloads any namespaces that have changed source files, and only them.  Designed to
+   work around dev-time reloads and incompatibility with core.async's singleton thread
+   executor."
+  [] (relo/reload))
+
 (defn run-tests-nout
   "When you don't want to have the expected and actual outputs printed to the REPL, you can use this instead of run-tests"
   []
@@ -1131,17 +1161,6 @@
 )
 
 
-(comment ;mutation testing
-  
-  (defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
-    (analysis/marathon-stream
-     (setup/default-simstate
-       (update init-ctx :state spork.entitysystem.store/mutate!))))
-    
-    
-  
-  )
-
 ;;Forward station testing
 (defn get-demands
 [[t ctx :as frame]]
@@ -1388,6 +1407,7 @@ order to meet the max of demand of 32 units for a
 non-forward-stationed demand.")
     ))
 
+
 ;;When defining forward-stationed demands, we should check/assert that
 ;;the demands have a :region :forward, a :Category Forward, so one
 ;;of those shouldn't exist without the other.
@@ -1445,6 +1465,43 @@ non-forward-stationed demand.")
         "Make sure that the results are the same from when we ran them
 in the run-amc repo before we moved and refactored the code to
 marathon.analysis.random and after we made that move.")))
+
+;;MUTABLE STORE
+;;=============
+
+(defn mutable-stream [& {:keys [init-ctx] :or {init-ctx core/debugsim}}]
+  (analysis/marathon-stream
+   (setup/default-simstate
+    (update init-ctx :state spork.entitysystem.store/mutate!))))
+
+(def base-ctx (setup/default-simstate core/debugsim))
+
+;;mutate/persistc-ctx defined in core now.
+(def updated  (-> base-ctx core/mutate-ctx engine/sim-step core/persist-ctx))
+(def expected (-> base-ctx engine/sim-step))
+
+
+;;
+(comment ;testing mutable stuff, migrate these into deftests.
+  (let [mctx (-> base-ctx mutate-ctx)]
+    (println [:persistent])
+    (time (do (engine/sim-step base-ctx) nil))
+    (println [:mutable])
+    (time (do (engine/sim-step mctx) nil)))
+
+  (diff/diff-map (-> expected (store/get-entity :SupplyStore) :deployable-buckets)
+                 (-> updated  (store/get-entity :SupplyStore) :deployable-buckets))
+;;  {:dropped #{}, :changed [], :added ()}
+  )
+
+(defn entity-diff [l r]
+  (let [ls           (store/entities l)
+        rs           (store/entities r)
+        all-entities (into #{} (concat (keys l) (keys r)))]
+    (= (set (keys l)) (set (keys r)))))
+
+;;CANNIBALIZATION DEMANDS
+;;=======================
 
 ;;Testing nonbog-with-cannibals. We want units available,
 ;;nonbogabble, and cannibalized in this demand.
@@ -1600,6 +1657,7 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
 (def deployed-0 (filter-units ctx unit/deployed?))
 ;;("1_01205K000_RC")
 (def deployed-1 (filter-units ctx-1 unit/deployed?)))
+
 ;;old method:
 ;;(def tran (random/rand-proj (random/add-transform p random/adjust-cannibals
                                                 ;;    [false :no-hld])))
@@ -1610,6 +1668,8 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
 ;;Define a map of table key to a vector of fields that you would like
 ;;to replace existing records with generated test data like
 ;;(def category-replacer {:DemandRecords [:Category]})
+
+;;TODO Move all these utility functions out of the test namespace.
 
 (defn spec-id
   "Given a marathon project table key and a key for one of the fields
@@ -1972,27 +2032,22 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
 
 
 (def ctx1 (before-day new-results-book 2))
+;;duplicate es, shadowed below immediately. TODO 
 (def es (store/select-entities ctx1 :from [:unit-entity]))
+
 (def can-states
-[nil
- :cannibalized
- :cannibalized
- :cannibalized
- :cannibalized
- :cannibalized
- nil
- nil
- nil
- nil])
+  [nil :cannibalized :cannibalized :cannibalized :cannibalized :cannibalized nil
+   nil nil nil])
 
 (def es (map (fn [u s] (assoc-in u [:statedata
                                   :curstate]
                                s))
              es can-states))
-(require '[marathon.ces.rules :as rules])
+
 (defn interesting [unit-r]
   (assoc (select-keys unit-r [:component :cycletime])
          :cannibalized (unit/cannibalized? unit-r)))
+
 (def not-sorted (mapv interesting es))
 (def not-sorted-out
   [{:component "AC", :cycletime 950, :cannibalized nil}
@@ -2045,4 +2100,3 @@ Cannibalization to HLD on day 2 since the SourceFirst rule prefers
   (is (= take-in take-out)
       "Does subset-sort-take return 3 cannibalized units and returns
   the other units untouched?"))
-

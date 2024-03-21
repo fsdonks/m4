@@ -8,10 +8,10 @@
              [predicate same-val? defcomparison ord-fn key-compare
               key-pref  key-valuations flip only-keys-from change-if
               is? is-not is]]
-            [marathon.ces  [core   :as core]
+            [marathon.ces
+             [core   :as core]
              [unit   :as unit]
              [supply :as supply]
-             [rules  :as rules]
              [util :as util]]
             [marathon.ces.fill.fillgraph]
             [spork.entitysystem.store :as store]
@@ -125,6 +125,7 @@
   (gen/memo-1 (fn [src] (marathon.ces.fill.fillgraph/sink-label src))))
 
 ;;Provides an ordered vector of suitable supply buckets to look.
+;;MEMOIZE
 (defn src->srcs [srcmap src]
   (->> (for [[rule cost] (get srcmap (src->fillrule src))]
          [(marathon.ces.fill.fillgraph/source-root rule) cost])
@@ -141,6 +142,8 @@
 
 ;;TODO: Do we want to memoize? Looks like we tried before.
 (defn src->prefs [srcmap src]  (srcs->prefs (src->srcs srcmap src)))
+;;minor savings
+(alter-var-root #'src->prefs gen/memo-2)
 
 
 ;;Common Entity comparisons
@@ -461,7 +464,7 @@
          ]
      (if (and any-category?  any-src?) ;if both category and src are unconstrained, we  can pull any unit.
            (do ;(println [:any :any])
-               (rules/->deployers supply :src src-selector :nm->unit nm->unit ))
+               (->deployers supply :src src-selector :nm->unit nm->unit ))
              ;;if category is constrained, but src is not, then we can pull any unit within the category.
            (let [
                  prefs (src->prefs  srcmap src)
@@ -469,7 +472,7 @@
                                   prefs)
                  ;- (println category-selector)
                  ]
-             (->>  (rules/->deployers supply :src src-selector :cat category-selector
+             (->>  (->deployers supply :src src-selector :cat category-selector
                                 :weight (fn [_ src] (get prefs src Long/MAX_VALUE))
                                 :nm->unit nm->unit)
                ;  (r/map (fn [[k v]]

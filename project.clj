@@ -2,7 +2,7 @@
 (defproject marathon "4.2.15-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.11.1"]
-                 [spork "0.2.1.7-SNAPSHOT"
+                 [spork "0.2.1.8-SNAPSHOT"
                   :exclusions [org.clojure/tools.reader]]
                  ;;schemas / specs
                  [marathon-schemas "4.1.11-SNAPSHOT"
@@ -15,9 +15,17 @@
                  [helmet "0.1.1-SNAPSHOT"
                   :exclusions [spork]]
                  [demand_builder "0.1.3-SNAPSHOT"
-                  :exclusions [spork]]]
+                  :exclusions [spork]]
+                 [com.cnuernber/ham-fisted "1.003"]
+                 [io.github.tonsky/clj-reload "0.4.1"]
+                 [djblue/portal "0.52.2"]]
   :jvm-opts ^:replace ["-Xmx4g" "-XX:NewSize=200m"]
-  :source-paths ["src" "../proc/src/"]
+  :source-paths ["src"]
+  :profiles {:dev {:source-paths ["src" "../spork/src/" "../proc/src/"]}
+             :large {:jvm-opts ^:replace ["-Xmx700g" "-Xms100g"
+                                          #_#_"-XX:NewSize=100g"
+                                          "-XX:TLABSize=500m"]
+                     :source-paths ["src" "../spork/src/"]}}
   :plugins [[reifyhealth/lein-git-down "0.4.1"]]
   :middleware [lein-git-down.plugin/inject-properties]
   :repositories [["public-github" {:url "git://github.com"}]]

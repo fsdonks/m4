@@ -114,6 +114,7 @@
 ;;Intended to compare [category src weight], convenience fn. 
 (def compare-fill-weight #(compare-nth 2 compare-double %1 %2))
 
+;;MEMOIZE....
 (defn ->ordering
   "Refactoring of the inner function originally defined in
   find-supply.  Given an ordering criteria, order-by:: v -> v,

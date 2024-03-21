@@ -3,7 +3,8 @@
 ;;The general sampling bits could be moved outside of m4 if another
 ;;use case pops up.
 (ns marathon.analysis.sparse
-  (:require [marathon.analysis.nolh :as nolh])
+  (:require [marathon.analysis.nolh :as nolh]
+            [spork.util.table :as tbl])
   (:import [org.apache.commons.math3.random
             SobolSequenceGenerator]))
 
