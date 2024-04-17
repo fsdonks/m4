@@ -115,6 +115,7 @@
        (throw (Exception. (str ":rc-unavailable missing from
   SupplyRecord Tags.")))))
 
+;;If RC supply is 1, RC available should be 1.
 (defn cannibal-quantity
   "Given a percentage of RC unavailable as a ratio or decimal and the
   RC supply, return the quantity for the cannibalization demand.
@@ -122,7 +123,9 @@
   unavailability up.  Moved this to a function so that we can make
   sure we are doing the same thing in taa.capacity and here."
   [unavail-percent rc-supply]
-  (Math/ceil (* unavail-percent rc-supply)))
+  (if (= rc-supply 1)
+    0  ;;cannibalize none
+    (Math/ceil (* unavail-percent rc-supply))))
 
 (defn adjust-cannibals
   "Adjust the cannibalization demand based on a percentage of
@@ -521,7 +524,7 @@
                     )]
        ;;Should be a sequence of records, but will be a string if it
        ;;was an error
-       (cond 
+       (cond
          (string? res) (if (pos? n)
                   (do (util/log {:retrying n :src src :idx idx})
                       (recur (dec n)))
@@ -529,14 +532,45 @@
                              :src   src
                              :idx   idx
                              :reason res}
-                         
                         _    (util/log err)]
                     err))
          :else res)))))
 
 (def ^:dynamic *project->experiments* marathon.analysis.random/project->experiments)
 
+(defn total-supply [proj]
+  (->> proj
+       (:tables)
+       (:SupplyRecords)
+       (tbl/table-records)
+       (map :Quantity)
+       (reduce +)))
 
+;;Number of reps are based on Sarah's rep analysis
+(defn rep-count [ra+rc]
+  (cond 
+    (> ra+rc 100) 10
+    (> ra+rc 46) 20
+    (> ra+rc 12) 30
+    (> ra+rc 5) 80
+    (> ra+rc 0) 100
+    (zero? ra+rc) 1))
+
+(defn portion-of-reps [portion proj]
+  (->> (total-supply proj)
+       (rep-count)
+       (* portion)))
+
+;;A replicator takes a proj and returns multiple projects for multiple reps.
+(defn repeat-proj [proj]
+  (let [replicator (:replicator proj)
+        replicator (if replicator
+                     replicator
+                     (fn [proj] (:reps proj)))]
+    (repeat (replicator proj) proj)))
+
+(defn repeat-projects [projects]
+  (mapcat repeat-proj projects))
 
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
@@ -551,7 +585,8 @@
           (e/split-project)
           (reduce
            (fn [acc [src proj]]
-             (let [experiments (project->experiments proj lower upper)]
+             (let [experiments 
+                   (repeat-projects (project->experiments proj lower upper))] ;;CHANGED
                (into acc
                      (filter (fn blah [x] (not (:error x))))
                      (util/pmap! *threads*
@@ -602,7 +637,7 @@
                   seed->randomizer]
            :or   {lower 0 upper 1 seed +default-seed+
                   compo-lengths default-compo-lengths}}]
-  (let [seed->randomizer (or seed->randomizer #(default-randomizer % compo-lengths))
+  (let [seed->randomizer (or seed->randomizer (fn [x] (default-randomizer x compo-lengths)))
         gen              (util/->gen seed)
         phases           (or phases (util/derive-phases proj))
         ;;overwrite/create a new random run output file
@@ -616,11 +651,11 @@
     ;;input validation, we probably should do more of this in general.
       (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
       (apply concat
-             (map (fn [n] (rand-target-model proj
+             (map (fn [n] (rand-target-model (assoc proj :reps reps)  ;;CHANGED
                                              :phases phases :lower lower :upper upper
                                              :gen   gen     :seed->randomizer seed->randomizer
                                              :levels levels))
-                  (range reps))))))
+                  (range 1))))))  ;;;CHANGED.
 
 (defn rand-runs-ac-rc
   [min-samples lower-rc upper-rc proj & {:as optional-args}]

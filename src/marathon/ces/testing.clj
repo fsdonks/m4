@@ -1452,7 +1452,7 @@ non-forward-stationed demand.")
   seed to something that will match and then return the records
   for comparison."
   [results]
-  (->> 
+  (->>
    results
    (map (fn [r] (set-tab-delim-tolerance r)))))
 

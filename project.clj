@@ -18,7 +18,7 @@
                   :exclusions [spork]]
                  [com.cnuernber/ham-fisted "1.003"]
                  [io.github.tonsky/clj-reload "0.4.1"]
-                 [djblue/portal "0.52.2"]]
+                 [djblue/portal "0.53.0"]]
   :jvm-opts ^:replace ["-Xmx4g" "-XX:NewSize=200m"]
   :source-paths ["src"]
   :profiles {:dev {:source-paths ["src" "../spork/src/" "../proc/src/"]}
