@@ -219,17 +219,26 @@
   (next-long   [g] (.nextLong   g))
   (next-double [g] (.nextDouble g)))
 
+;;replaced reify implmentation with record, serializes
+;;better.
+(defrecord generator [^java.util.Random gen]
+  clojure.lang.IFn
+  (invoke [this]    (.nextDouble gen))
+  (invoke [this n]  (* (.nextDouble gen) n))
+  (applyTo [this args]
+    (if-let [n (some-> args seq first)]
+      (.invoke this n)
+      (.invoke this)))
+  IGen
+  (next-long   [g] (.nextLong gen))
+  (next-double [g] (.nextDouble gen)))
+
 (defn ->gen [seed]
   (let [^java.util.Random gen (java.util.Random. (long seed))]
-    (reify
-      clojure.lang.IFn
-      (invoke [this]    (.nextDouble gen))
-      (invoke [this n]  (* (.nextDouble gen) n))
-      IGen
-      (next-long   [g] (.nextLong gen))
-      (next-double [g] (.nextDouble gen)))))
+    (->generator gen)))
 
 (def default-gen (->gen 42))
+
 (defn gen-rand-int
   ([gen n] (long (* ^double (next-double gen) ^long n)))
   ([n]     (long (* ^double (next-double default-gen) ^long n))))

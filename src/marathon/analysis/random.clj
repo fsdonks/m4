@@ -572,6 +572,50 @@
 (defn repeat-projects [projects]
   (mapcat repeat-proj projects))
 
+;;slight api change, we were just inlining this runnnig locally
+;;because no serialization.  Now we compute the rep-seed outside
+;;and pass it along as data.  Also we now take a map to simplify life
+;;vs vector args (simpler for the cluster side too).
+(defn supply-experiment [{:keys [src phases seed->randomizer idx rep-seed] :as proj}]
+  (-> proj
+      (assoc :supply-record-randomizer (seed->randomizer rep-seed))
+      (add-transform random-initials [supply-randomizer])
+      (try-fill src idx phases)))
+
+;;defines a hook for us to wire in cluster execution or local without
+;;m4 knowing about it.  by default, we excute our pmap replacement
+;;and return a lazy sequence of the results.
+(def ^:dynamic *exec-experiments*
+  (fn [xs] (util/pmap *threads* supply-expriment xs)))
+
+#_ ;;pending, move to m4peer.
+(defn exec-experiments [xs]
+  (case *run-site*
+    :local   (util/pmap! *threads* supply-experiment xs)
+    :cluster (hd/fmap marathon.analysis.random/supply-experiment xs) ;;naive
+    (throw (ex-info "unknown *run-site*" {:in *run-site*}))))
+
+;;added exec-experiments hook to allow dry runs.  defaults to *exec-experiments*
+;;binding.
+(defn rand-target-model
+  "Uses the target-model-par-av function from the marathon.analysis.experiment
+  namespace as a base. This function is modified to perform a random run for
+  each level of supply."
+  [proj & {:keys [phases lower upper levels gen seed->randomizer exec-experiments]
+           :or   {lower 0 upper 1 gen util/default-gen
+                  seed->randomizer (constantly identity)}}]
+  (let [project->experiments *project->experiments*
+        exec-experiments     (or exec-experiments *exec-experiments*)]
+     (->> (assoc proj :phases phases :lower lower :upper upper :levels levels
+                 :gen gen  :seed->randomizer seed->randomizer)
+          (e/split-project)
+          (mapcat (fn [[src proj]] ;;generates seeded projects now with src info.
+                    (->> (project->experiments (assoc proj :src src) lower upper)
+                         repeat-projects
+                         (map #(assoc % :rep-seed (util/next-long gen))))))
+          (map-indexed (fn [idx proj] (assoc proj :idx idx)))
+          exec-experiments)))
+#_
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
   namespace as a base. This function is modified to perform a random run for
@@ -585,7 +629,7 @@
           (e/split-project)
           (reduce
            (fn [acc [src proj]]
-             (let [experiments 
+             (let [experiments
                    (repeat-projects (project->experiments proj lower upper))] ;;CHANGED
                (into acc
                      (filter (fn blah [x] (not (:error x))))
