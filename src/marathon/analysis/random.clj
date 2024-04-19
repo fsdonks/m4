@@ -548,7 +548,7 @@
 
 ;;Number of reps are based on Sarah's rep analysis
 (defn rep-count [ra+rc]
-  (cond 
+  (cond
     (> ra+rc 100) 10
     (> ra+rc 46) 20
     (> ra+rc 12) 30
@@ -577,16 +577,17 @@
 ;;and pass it along as data.  Also we now take a map to simplify life
 ;;vs vector args (simpler for the cluster side too).
 (defn supply-experiment [{:keys [src phases seed->randomizer idx rep-seed] :as proj}]
-  (-> proj
-      (assoc :supply-record-randomizer (seed->randomizer rep-seed))
-      (add-transform random-initials [supply-randomizer])
-      (try-fill src idx phases)))
+  (let [supply-randomizer (seed->randomizer rep-seed)]
+    (-> proj
+        (assoc :supply-record-randomizer supply-randomizer )
+        (add-transform random-initials [supply-randomizer])
+        (try-fill src idx phases))))
 
 ;;defines a hook for us to wire in cluster execution or local without
 ;;m4 knowing about it.  by default, we excute our pmap replacement
 ;;and return a lazy sequence of the results.
 (def ^:dynamic *exec-experiments*
-  (fn [xs] (util/pmap *threads* supply-expriment xs)))
+  (fn [xs] (util/pmap *threads* supply-experiment xs)))
 
 #_ ;;pending, move to m4peer.
 (defn exec-experiments [xs]
@@ -614,7 +615,8 @@
                          repeat-projects
                          (map #(assoc % :rep-seed (util/next-long gen))))))
           (map-indexed (fn [idx proj] (assoc proj :idx idx)))
-          exec-experiments)))
+          exec-experiments
+          (apply concat))))
 #_
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
@@ -691,15 +693,13 @@
                    "random-out.txt" :append false)]
       ;;redirect printing to random-out.txt
       ;;the logging will redirect to standard *out* once the writer closes.
-      (util/log-to w)
+      #_(util/log-to w)
     ;;input validation, we probably should do more of this in general.
       (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
-      (apply concat
-             (map (fn [n] (rand-target-model (assoc proj :reps reps)  ;;CHANGED
-                                             :phases phases :lower lower :upper upper
-                                             :gen   gen     :seed->randomizer seed->randomizer
-                                             :levels levels))
-                  (range 1))))))  ;;;CHANGED.
+      (rand-target-model (assoc proj :reps reps)  ;;CHANGED
+                         :phases phases :lower lower :upper upper
+                         :gen   gen     :seed->randomizer seed->randomizer
+                         :levels levels))))  ;;;CHANGED.
 
 (defn rand-runs-ac-rc
   [min-samples lower-rc upper-rc proj & {:as optional-args}]
