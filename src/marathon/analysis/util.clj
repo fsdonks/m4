@@ -279,6 +279,14 @@
       (do (println msg)
           (recur)))))
 
+;;need some capabilities:
+;;normal logging      (log to stdout)
+;;file logging        (echo to file)
+;;file-only           (log to file, not stdout)
+;;distributed logging (send message to cluster topic)
+
+;;also sparse logging options.
+
 (defn log-to
   "Redirects logging to a new out, which may have not been
    captured originally."

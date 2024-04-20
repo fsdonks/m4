@@ -511,7 +511,7 @@
                           (not (zero? *noisy*))
                           (or (= *noisy* 1.0)
                               (< (rand) *noisy*)))
-                 (util/log [:trying src :level idx]))
+                 (util/log [:trying src :level idx :rep (proj :rep)]))
            res (try (let [seed (:rep-seed proj)
                           fill (project->phase-fill (rand-proj proj) phases)]
                       (mapv #(assoc % :rep-seed seed)
@@ -562,15 +562,26 @@
        (* portion)))
 
 ;;A replicator takes a proj and returns multiple projects for multiple reps.
-(defn repeat-proj [proj]
-  (let [replicator (:replicator proj)
-        replicator (if replicator
-                     replicator
-                     (fn [proj] (:reps proj)))]
-    (repeat (replicator proj) proj)))
+;;Shifting a lot of these ops to eductions since that retains reducible
+;;and seqable paths.
+(defn repeat-proj
+  "Examines the input project map for (in order of preference) a
+   :replicator :: (proj->int), or :reps :: int to determine
+   replications of proj.  Yields an eduction where the project
+   (stripped of the replicator for ease of serialization)
+   is repeated with an associated :rep entry corresponding to
+   the replication count."
+  [proj]
+  (let [reps      (if-let [replicator (:replicator proj)]
+                    (replicator proj)
+                    (:reps proj))]
+    (assert (number? reps)
+            "expected reps produced by :reps or :replicator to be a number!")
+    (->> (repeat reps (dissoc proj :replicator)) ;don't want to serialize replicator if distributed.
+         (eduction (map-indexed (fn [idx proj] (assoc proj :rep idx)))))))
 
 (defn repeat-projects [projects]
-  (mapcat repeat-proj projects))
+  (eduction (mapcat repeat-proj) projects))
 
 ;;slight api change, we were just inlining this runnnig locally
 ;;because no serialization.  Now we compute the rep-seed outside
@@ -612,9 +623,9 @@
           (e/split-project)
           (mapcat (fn [[src proj]] ;;generates seeded projects now with src info.
                     (->> (project->experiments (assoc proj :src src) lower upper)
+                         (map-indexed (fn [idx proj] (assoc proj :idx idx)))
                          repeat-projects
                          (map #(assoc % :rep-seed (util/next-long gen))))))
-          (map-indexed (fn [idx proj] (assoc proj :idx idx)))
           exec-experiments
           (apply concat))))
 #_
