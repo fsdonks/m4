@@ -286,6 +286,15 @@
 ;;distributed logging (send message to cluster topic)
 
 ;;also sparse logging options.
+;;want lower level api to be log, then some logging context
+;;determines how loggin progresses.
+
+;;need api to determine statefulness with writers...
+;;naively
+
+;; (log-to "random-out.txt" ;;
+;;         ;;body
+;;         )
 
 (defn log-to
   "Redirects logging to a new out, which may have not been
