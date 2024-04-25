@@ -594,11 +594,17 @@
         (add-transform random-initials [supply-randomizer])
         (try-fill src idx phases))))
 
+(defn parallel-exec
+  "Given a collection of supply designs of
+   {:keys [src phases seed->randomizere idx rep-seed]}
+   map supply-experiment in parallel.  Default binding for
+   *exec-experiments* for simulation runs."
+  [xs]  (util/pmap *threads* supply-experiment xs))
+
 ;;defines a hook for us to wire in cluster execution or local without
 ;;m4 knowing about it.  by default, we excute our pmap replacement
 ;;and return a lazy sequence of the results.
-(def ^:dynamic *exec-experiments*
-  (fn [xs] (util/pmap *threads* supply-experiment xs)))
+(def ^:dynamic *exec-experiments* parallel-exec)
 
 #_ ;;pending, move to m4peer.
 (defn exec-experiments [xs]

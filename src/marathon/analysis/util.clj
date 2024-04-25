@@ -272,11 +272,17 @@
        (drop-while number?)
        (first)))
 
+(defonce log-fn (atom println))
+
+(defn writeln [^java.io.BufferedWriter w x]
+  (.write w (str x))
+  (.newLine w))
+
 (def log-chan (async/chan (async/sliding-buffer  1000)))
 (def logger
   (async/go-loop []
     (when-let [msg (async/<! log-chan)]
-      (do (println msg)
+      (do (@log-fn msg)
           (recur)))))
 
 ;;need some capabilities:
@@ -292,10 +298,38 @@
 ;;need api to determine statefulness with writers...
 ;;naively
 
-;; (log-to "random-out.txt" ;;
-;;         ;;body
-;;         )
+(defn logging-to
+  "Defines a transducer that, given a path, will manage to log every
+   item in the input reduction that passes by, effectively echoing
+   the items to a writer opened on path via out."
+  [path]
+  (fn [rf]
+    (let [w (clojure.java.io/writer path)]
+      (fn
+        ([] (rf))
+        ([result]
+         (.close w)
+         (rf result))
+        ([result input]
+         (writeln w input)
+         (rf result input))))))
 
+#_
+(defn log-to
+  "Redirects logging to a new out, which may have not been
+   captured originally."
+  ([out]
+   (binding [*out* out]
+     ;;resets log-chan
+     (def log-chan (async/chan (async/sliding-buffer  1000)))
+     (def logger   (async/go-loop []
+                     (when-let [msg (async/<! log-chan)]
+                       (do (println msg)
+                           (recur)))))
+     (println [:logging-to *out*])
+     (println [:from-thread (str (Thread/currentThread))])))
+  ([] (log-to *out*)))
+#_
 (defn log-to
   "Redirects logging to a new out, which may have not been
    captured originally."
