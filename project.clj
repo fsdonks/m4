@@ -14,7 +14,7 @@
                   :exclusions [spork]]
                  [helmet "0.1.1-SNAPSHOT"
                   :exclusions [spork]]
-                 [demand_builder "0.1.3-SNAPSHOT"
+                 [demand_builder "0.1.4-SNAPSHOT"
                   :exclusions [spork]]
                  [com.cnuernber/ham-fisted "1.003"]
                  [io.github.tonsky/clj-reload "0.4.1"]
