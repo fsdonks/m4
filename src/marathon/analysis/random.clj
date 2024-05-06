@@ -700,23 +700,16 @@
                   seed->randomizer]
            :or   {lower 0 upper 1 seed +default-seed+
                   compo-lengths default-compo-lengths}}]
-  (let [seed->randomizer (or seed->randomizer (fn [x] (default-randomizer x compo-lengths)))
+  ;;input validation, we probably should do more of this in general.
+  (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
+  (let [seed->randomizer (or seed->randomizer
+                             (fn [x] (default-randomizer x compo-lengths)))
         gen              (util/->gen seed)
-        phases           (or phases (util/derive-phases proj))
-        ;;overwrite/create a new random run output file
-        _ (spit "random-out.txt" "")
-        _ (println "Printing status to random-out.txt")]
-    (with-open [w (clojure.java.io/writer
-                   "random-out.txt" :append false)]
-      ;;redirect printing to random-out.txt
-      ;;the logging will redirect to standard *out* once the writer closes.
-      #_(util/log-to w)
-    ;;input validation, we probably should do more of this in general.
-      (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
-      (rand-target-model (assoc proj :reps reps)  ;;CHANGED
-                         :phases phases :lower lower :upper upper
-                         :gen   gen     :seed->randomizer seed->randomizer
-                         :levels levels))))  ;;;CHANGED.
+        phases           (or phases (util/derive-phases proj))]
+    (rand-target-model (assoc proj :reps reps)  ;;CHANGED
+                       :phases phases :lower lower :upper upper
+                       :gen   gen     :seed->randomizer seed->randomizer
+                       :levels levels)))  ;;;CHANGED.
 
 (defn rand-runs-ac-rc
   [min-samples lower-rc upper-rc proj & {:as optional-args}]

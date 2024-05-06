@@ -8,7 +8,8 @@
              [query :as query]
              [unit :as unit]]
             [spork.entitysystem [store :as store]]
-            [spork.util [io :as io] [table :as tbl] [diff :as diff]]))
+            [spork.util [io :as io] [table :as tbl] [diff :as diff]]
+            [clojure.java.io :as jio]))
 
 ;;https://gist.github.com/stathissideris/8659706
 (defn seq!! 
@@ -276,7 +277,8 @@
 
 (defn writeln [^java.io.BufferedWriter w x]
   (.write w (str x))
-  (.newLine w))
+  (.newLine w)
+  (.flush w))
 
 (def log-chan (async/chan (async/sliding-buffer  1000)))
 (def logger
@@ -284,6 +286,18 @@
     (when-let [msg (async/<! log-chan)]
       (do (@log-fn msg)
           (recur)))))
+
+(defmacro with-log-fn [f & body]
+  `(let [old# @marathon.analysis.util/log-fn
+         ~'_ (reset! marathon.analysis.util/log-fn ~f)]
+     (try ~@body
+          (finally (reset! marathon.analysis.util/log-fn old#)))))
+
+(defmacro log-to [path & body]
+  `(with-open [w# (jio/writer ~path)]
+     (marathon.analysis.util/with-log-fn
+       (fn logger# [x#] (writeln w# x#))
+       ~@body)))
 
 ;;need some capabilities:
 ;;normal logging      (log to stdout)
@@ -298,6 +312,7 @@
 ;;need api to determine statefulness with writers...
 ;;naively
 
+#_
 (defn logging-to
   "Defines a transducer that, given a path, will manage to log every
    item in the input reduction that passes by, effectively echoing
@@ -313,38 +328,6 @@
         ([result input]
          (writeln w input)
          (rf result input))))))
-
-#_
-(defn log-to
-  "Redirects logging to a new out, which may have not been
-   captured originally."
-  ([out]
-   (binding [*out* out]
-     ;;resets log-chan
-     (def log-chan (async/chan (async/sliding-buffer  1000)))
-     (def logger   (async/go-loop []
-                     (when-let [msg (async/<! log-chan)]
-                       (do (println msg)
-                           (recur)))))
-     (println [:logging-to *out*])
-     (println [:from-thread (str (Thread/currentThread))])))
-  ([] (log-to *out*)))
-#_
-(defn log-to
-  "Redirects logging to a new out, which may have not been
-   captured originally."
-  ([out]
-   (binding [*out* out]
-     ;;resets log-chan
-     (def log-chan (async/chan (async/sliding-buffer  1000)))
-     (def logger   (async/go-loop []
-                     (when-let [msg (async/<! log-chan)]
-                       (do (println msg)
-                           (recur)))))
-     (println [:logging-to *out*])
-     (println [:from-thread (str (Thread/currentThread))])))
-  ([] (log-to *out*)))
-
 
 (defn log
   "Logs messages asynchronously, prints synchronously.
