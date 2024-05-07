@@ -8,7 +8,8 @@
              [query :as query]
              [unit :as unit]]
             [spork.entitysystem [store :as store]]
-            [spork.util [io :as io] [table :as tbl] [diff :as diff]]))
+            [spork.util [io :as io] [table :as tbl] [diff :as diff]]
+            [clojure.java.io :as jio]))
 
 ;;https://gist.github.com/stathissideris/8659706
 (defn seq!! 
@@ -219,17 +220,26 @@
   (next-long   [g] (.nextLong   g))
   (next-double [g] (.nextDouble g)))
 
+;;replaced reify implmentation with record, serializes
+;;better.
+(defrecord generator [^java.util.Random gen]
+  clojure.lang.IFn
+  (invoke [this]    (.nextDouble gen))
+  (invoke [this n]  (* (.nextDouble gen) n))
+  (applyTo [this args]
+    (if-let [n (some-> args seq first)]
+      (.invoke this n)
+      (.invoke this)))
+  IGen
+  (next-long   [g] (.nextLong gen))
+  (next-double [g] (.nextDouble gen)))
+
 (defn ->gen [seed]
   (let [^java.util.Random gen (java.util.Random. (long seed))]
-    (reify
-      clojure.lang.IFn
-      (invoke [this]    (.nextDouble gen))
-      (invoke [this n]  (* (.nextDouble gen) n))
-      IGen
-      (next-long   [g] (.nextLong gen))
-      (next-double [g] (.nextDouble gen)))))
+    (->generator gen)))
 
 (def default-gen (->gen 42))
+
 (defn gen-rand-int
   ([gen n] (long (* ^double (next-double gen) ^long n)))
   ([n]     (long (* ^double (next-double default-gen) ^long n))))
@@ -263,28 +273,61 @@
        (drop-while number?)
        (first)))
 
+(defonce log-fn (atom println))
+
+(defn writeln [^java.io.BufferedWriter w x]
+  (.write w (str x))
+  (.newLine w)
+  (.flush w))
+
 (def log-chan (async/chan (async/sliding-buffer  1000)))
 (def logger
   (async/go-loop []
     (when-let [msg (async/<! log-chan)]
-      (do (println msg)
+      (do (@log-fn msg)
           (recur)))))
 
-(defn log-to
-  "Redirects logging to a new out, which may have not been
-   captured originally."
-  ([out]
-   (binding [*out* out]
-     ;;resets log-chan
-     (def log-chan (async/chan (async/sliding-buffer  1000)))
-     (def logger   (async/go-loop []
-                     (when-let [msg (async/<! log-chan)]
-                       (do (println msg)
-                           (recur)))))
-     (println [:logging-to *out*])
-     (println [:from-thread (str (Thread/currentThread))])))
-  ([] (log-to *out*)))
+(defmacro with-log-fn [f & body]
+  `(let [old# @marathon.analysis.util/log-fn
+         ~'_ (reset! marathon.analysis.util/log-fn ~f)]
+     (try ~@body
+          (finally (reset! marathon.analysis.util/log-fn old#)))))
 
+(defmacro log-to [path & body]
+  `(with-open [w# (jio/writer ~path)]
+     (marathon.analysis.util/with-log-fn
+       (fn logger# [x#] (writeln w# x#))
+       ~@body)))
+
+;;need some capabilities:
+;;normal logging      (log to stdout)
+;;file logging        (echo to file)
+;;file-only           (log to file, not stdout)
+;;distributed logging (send message to cluster topic)
+
+;;also sparse logging options.
+;;want lower level api to be log, then some logging context
+;;determines how loggin progresses.
+
+;;need api to determine statefulness with writers...
+;;naively
+
+#_
+(defn logging-to
+  "Defines a transducer that, given a path, will manage to log every
+   item in the input reduction that passes by, effectively echoing
+   the items to a writer opened on path via out."
+  [path]
+  (fn [rf]
+    (let [w (clojure.java.io/writer path)]
+      (fn
+        ([] (rf))
+        ([result]
+         (.close w)
+         (rf result))
+        ([result input]
+         (writeln w input)
+         (rf result input))))))
 
 (defn log
   "Logs messages asynchronously, prints synchronously.

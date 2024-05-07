@@ -115,6 +115,7 @@
        (throw (Exception. (str ":rc-unavailable missing from
   SupplyRecord Tags.")))))
 
+;;If RC supply is 1, RC available should be 1.
 (defn cannibal-quantity
   "Given a percentage of RC unavailable as a ratio or decimal and the
   RC supply, return the quantity for the cannibalization demand.
@@ -122,7 +123,9 @@
   unavailability up.  Moved this to a function so that we can make
   sure we are doing the same thing in taa.capacity and here."
   [unavail-percent rc-supply]
-  (Math/ceil (* unavail-percent rc-supply)))
+  (if (= rc-supply 1)
+    0  ;;cannibalize none
+    (Math/ceil (* unavail-percent rc-supply))))
 
 (defn adjust-cannibals
   "Adjust the cannibalization demand based on a percentage of
@@ -508,7 +511,7 @@
                           (not (zero? *noisy*))
                           (or (= *noisy* 1.0)
                               (< (rand) *noisy*)))
-                 (util/log [:trying src :level idx]))
+                 (util/log [:trying src :level idx :rep (proj :rep)]))
            res (try (let [seed (:rep-seed proj)
                           fill (project->phase-fill (rand-proj proj) phases)]
                       (mapv #(assoc % :rep-seed seed)
@@ -521,7 +524,7 @@
                     )]
        ;;Should be a sequence of records, but will be a string if it
        ;;was an error
-       (cond 
+       (cond
          (string? res) (if (pos? n)
                   (do (util/log {:retrying n :src src :idx idx})
                       (recur (dec n)))
@@ -529,15 +532,109 @@
                              :src   src
                              :idx   idx
                              :reason res}
-                         
                         _    (util/log err)]
                     err))
          :else res)))))
 
 (def ^:dynamic *project->experiments* marathon.analysis.random/project->experiments)
 
+(defn total-supply [proj]
+  (->> proj
+       (:tables)
+       (:SupplyRecords)
+       (tbl/table-records)
+       (map :Quantity)
+       (reduce +)))
 
+;;Number of reps are based on Sarah's rep analysis
+(defn rep-count [ra+rc]
+  (cond
+    (> ra+rc 100) 10
+    (> ra+rc 46) 20
+    (> ra+rc 12) 30
+    (> ra+rc 5) 80
+    (> ra+rc 0) 100
+    (zero? ra+rc) 1))
 
+(defn portion-of-reps [portion proj]
+  (->> (total-supply proj)
+       (rep-count)
+       (* portion)))
+
+;;A replicator takes a proj and returns multiple projects for multiple reps.
+;;Shifting a lot of these ops to eductions since that retains reducible
+;;and seqable paths.
+(defn repeat-proj
+  "Examines the input project map for (in order of preference) a
+   :replicator :: (proj->int), or :reps :: int to determine
+   replications of proj.  Yields an eduction where the project
+   (stripped of the replicator for ease of serialization)
+   is repeated with an associated :rep entry corresponding to
+   the replication count."
+  [proj]
+  (let [reps      (if-let [replicator (:replicator proj)]
+                    (replicator proj)
+                    (:reps proj))]
+    (assert (number? reps)
+            "expected reps produced by :reps or :replicator to be a number!")
+    (->> (repeat reps (dissoc proj :replicator)) ;don't want to serialize replicator if distributed.
+         (eduction (map-indexed (fn [idx proj] (assoc proj :rep idx)))))))
+
+(defn repeat-projects [projects]
+  (eduction (mapcat repeat-proj) projects))
+
+;;slight api change, we were just inlining this runnnig locally
+;;because no serialization.  Now we compute the rep-seed outside
+;;and pass it along as data.  Also we now take a map to simplify life
+;;vs vector args (simpler for the cluster side too).
+(defn supply-experiment [{:keys [src phases seed->randomizer idx rep-seed] :as proj}]
+  (let [supply-randomizer (seed->randomizer rep-seed)]
+    (-> proj
+        (assoc :supply-record-randomizer supply-randomizer )
+        (add-transform random-initials [supply-randomizer])
+        (try-fill src idx phases))))
+
+(defn parallel-exec
+  "Given a collection of supply designs of
+   {:keys [src phases seed->randomizere idx rep-seed]}
+   map supply-experiment in parallel.  Default binding for
+   *exec-experiments* for simulation runs."
+  [xs]  (util/pmap *threads* supply-experiment xs))
+
+;;defines a hook for us to wire in cluster execution or local without
+;;m4 knowing about it.  by default, we excute our pmap replacement
+;;and return a lazy sequence of the results.
+(def ^:dynamic *exec-experiments* parallel-exec)
+
+#_ ;;pending, move to m4peer.
+(defn exec-experiments [xs]
+  (case *run-site*
+    :local   (util/pmap! *threads* supply-experiment xs)
+    :cluster (hd/fmap marathon.analysis.random/supply-experiment xs) ;;naive
+    (throw (ex-info "unknown *run-site*" {:in *run-site*}))))
+
+;;added exec-experiments hook to allow dry runs.  defaults to *exec-experiments*
+;;binding.
+(defn rand-target-model
+  "Uses the target-model-par-av function from the marathon.analysis.experiment
+  namespace as a base. This function is modified to perform a random run for
+  each level of supply."
+  [proj & {:keys [phases lower upper levels gen seed->randomizer exec-experiments]
+           :or   {lower 0 upper 1 gen util/default-gen
+                  seed->randomizer (constantly identity)}}]
+  (let [project->experiments *project->experiments*
+        exec-experiments     (or exec-experiments *exec-experiments*)]
+     (->> (assoc proj :phases phases :lower lower :upper upper :levels levels
+                 :gen gen  :seed->randomizer seed->randomizer)
+          (e/split-project)
+          (mapcat (fn [[src proj]] ;;generates seeded projects now with src info.
+                    (->> (project->experiments (assoc proj :src src) lower upper)
+                         (map-indexed (fn [idx proj] (assoc proj :idx idx)))
+                         repeat-projects
+                         (map #(assoc % :rep-seed (util/next-long gen))))))
+          exec-experiments
+          (apply concat))))
+#_
 (defn rand-target-model
   "Uses the target-model-par-av function from the marathon.analysis.experiment
   namespace as a base. This function is modified to perform a random run for
@@ -551,7 +648,8 @@
           (e/split-project)
           (reduce
            (fn [acc [src proj]]
-             (let [experiments (project->experiments proj lower upper)]
+             (let [experiments
+                   (repeat-projects (project->experiments proj lower upper))] ;;CHANGED
                (into acc
                      (filter (fn blah [x] (not (:error x))))
                      (util/pmap! *threads*
@@ -602,25 +700,16 @@
                   seed->randomizer]
            :or   {lower 0 upper 1 seed +default-seed+
                   compo-lengths default-compo-lengths}}]
-  (let [seed->randomizer (or seed->randomizer #(default-randomizer % compo-lengths))
+  ;;input validation, we probably should do more of this in general.
+  (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
+  (let [seed->randomizer (or seed->randomizer
+                             (fn [x] (default-randomizer x compo-lengths)))
         gen              (util/->gen seed)
-        phases           (or phases (util/derive-phases proj))
-        ;;overwrite/create a new random run output file
-        _ (spit "random-out.txt" "")
-        _ (println "Printing status to random-out.txt")]
-    (with-open [w (clojure.java.io/writer
-                   "random-out.txt" :append false)]
-      ;;redirect printing to random-out.txt
-      ;;the logging will redirect to standard *out* once the writer closes.
-      (util/log-to w)
-    ;;input validation, we probably should do more of this in general.
-      (assert (s/valid? ::phases phases) (s/explain-str ::phases []))
-      (apply concat
-             (map (fn [n] (rand-target-model proj
-                                             :phases phases :lower lower :upper upper
-                                             :gen   gen     :seed->randomizer seed->randomizer
-                                             :levels levels))
-                  (range reps))))))
+        phases           (or phases (util/derive-phases proj))]
+    (rand-target-model (assoc proj :reps reps)  ;;CHANGED
+                       :phases phases :lower lower :upper upper
+                       :gen   gen     :seed->randomizer seed->randomizer
+                       :levels levels)))  ;;;CHANGED.
 
 (defn rand-runs-ac-rc
   [min-samples lower-rc upper-rc proj & {:as optional-args}]
