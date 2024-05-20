@@ -120,12 +120,16 @@
   "Given a percentage of RC unavailable as a ratio or decimal and the
   RC supply, return the quantity for the cannibalization demand.
   Current assumption is that if we have a fractional unit, we round
-  unavailability up.  Moved this to a function so that we can make
+  unavailability up.  If the ratio says we should cannibalized all
+  units, then cannibalize all but one.
+  Moved this to a function so that we can make
   sure we are doing the same thing in taa.capacity and here."
   [unavail-percent rc-supply]
-  (if (= rc-supply 1)
-    0  ;;cannibalize none
-    (Math/ceil (* unavail-percent rc-supply))))
+  (let [num-cannibals (* unavail-percent rc-supply)]
+    (if (< (- rc-supply num-cannibals) 1)
+      ;;cannibalize all but one
+      (- rc-supply 1)
+      (Math/ceil num-cannibals))))
 
 (defn adjust-cannibals
   "Adjust the cannibalization demand based on a percentage of
