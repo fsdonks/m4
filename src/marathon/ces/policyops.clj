@@ -449,26 +449,24 @@
          (swap! templates assoc ~(str name) ~name)
          (quote ~name))))
 
-  
+
 ;;It may be easier to just push a base policy through multiple
 ;;transforms, that constitutes a "template"...
 
-(defmacro simple-template 
+(defn simple-template
   ([name doc routes positions base-stats & optional-stats]
-     `{:name (quote ~name) :doc ~doc :routes (quote ~routes) :positions ~positions :stats (and-stats ~base-stats ~@optional-stats)})
+     `{:name ~name :doc ~doc :routes ~routes :positions ~positions :stats ~(apply and-stats base-stats optional-stats)})
   ([[name doc routes positions base-stats & optional-stats]]  
-     `{:name (quote ~name) :doc ~doc :routes (quote ~routes)  :positions ~positions :stats (and-stats ~base-stats ~@optional-stats)}))
-
-(defn eval-template [td]
-  (eval `(deftemplate ~(:name td) ~@(unzip (dissoc td :name)))))
+     `{:name ~name :doc ~doc :routes ~routes  :positions ~positions :stats ~(apply and-stats base-stats optional-stats)}))
 
 (defmacro deftemplates [base-stats & xs]
   (let [positions (or (:positions base-stats) default-positions)]
-    (doseq [x xs]
-      (if (vector? x) 
-        (let [[name doc routes & optional-stats] x]
-          (eval-template (eval `(simple-template ~name ~doc ~routes ~positions ~base-stats ~@optional-stats))))
-        (eval-template x)))))
+    `(do ~@(for [x xs]
+             (if (vector? x)
+               (let [[name doc routes & optional-stats] x
+                     template (apply simple-template name doc routes positions base-stats optional-stats)]
+                 `(deftemplate ~(template :name) ~template))
+               `(deftemplate ~(:name x) ~@(unzip (dissoc x :name))))))))
 
 ;;__SRM Policies__
 (deftemplate SRMAC
