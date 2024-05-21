@@ -1,5 +1,5 @@
 ;;Go to marathon.core to update +version+ as well!
-(defproject marathon "4.2.16-SNAPSHOT"
+(defproject marathon "4.2.17-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [spork "0.2.1.8-SNAPSHOT"
@@ -25,7 +25,8 @@
              :large {:jvm-opts ^:replace ["-Xmx700g" "-Xms100g"
                                           #_#_"-XX:NewSize=100g"
                                           "-XX:TLABSize=500m"]
-                     :source-paths ["src" "../spork/src/"]}}
+                     :source-paths ["src" "../spork/src/"]}
+             :aot {:aot [marathon.analysis.random]}}
   :plugins [[reifyhealth/lein-git-down "0.4.1"]]
   :middleware [lein-git-down.plugin/inject-properties]
   :repositories [["public-github" {:url "git://github.com"}]]
