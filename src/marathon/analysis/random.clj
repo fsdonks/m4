@@ -126,10 +126,12 @@
   sure we are doing the same thing in taa.capacity and here."
   [unavail-percent rc-supply]
   (let [num-cannibals (* unavail-percent rc-supply)]
-    (if (< (- rc-supply num-cannibals) 1)
-      ;;cannibalize all but one
-      (- rc-supply 1)
-      (Math/ceil num-cannibals))))
+    ;;when rc-supply is 1, we cannibalize none
+    (cond (= rc-supply 1) 0
+          (and (pos? rc-supply) (< (- rc-supply num-cannibals) 1))
+          ;;cannibalize all but one
+          (- rc-supply 1)
+          :else (Math/ceil num-cannibals))))
 
 (defn adjust-cannibals
   "Adjust the cannibalization demand based on a percentage of
