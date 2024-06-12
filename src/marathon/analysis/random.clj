@@ -64,12 +64,6 @@
   ([rec randomize] (record->records rec randomize))
   ([rec]           (rand-recs rec identity)))
 
-(defn change-records
-  "Takes a transducer, t, and updates the records from table-keyword,
-  returning the updated project."
-  [proj t table-keyword]
-  (a/update-proj-tables {table-keyword [t]} proj))
-
 (defn add-transform
   "Add a project transformation to the project. The project will have
   a :after-split-transforms key where the value is a vector that
@@ -140,7 +134,7 @@
   (let [{:keys [Quantity Tags]} (rc-record proj) 
         percent (get-rc-unavailable Tags)
         rc-demand (cannibal-quantity percent Quantity)]
-    (change-records proj
+    (a/change-records proj
                     (map #(adjust-rc rc-demand %))
                     :DemandRecords)))
 
@@ -155,7 +149,7 @@
   (let [supply-record-randomizer (if supply-record-randomizer
                                    supply-record-randomizer
                                    identity)]
-    (change-records proj
+    (a/change-records proj
                     (mapcat #(rand-recs % supply-record-randomizer))
                     :SupplyRecords)))
   
