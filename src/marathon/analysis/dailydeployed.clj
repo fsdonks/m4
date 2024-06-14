@@ -19,10 +19,14 @@
   "Given a marathon stream with potential sparse times, return
   frames for all times to make post processing easy."
   [stream]
-  (let [tmin (ffirst stream)
-        tmax (first (last stream))]
-    (map #(vector % (a/frame-at % stream)) (range tmin (inc tmax)))))
-          
+  (let [parts (partition 2 1 stream)
+        last-frame (last stream)]
+    (->  (mapcat (fn [[[t1 ctx1 :as frame1] [t2 ctx2]]]
+                   (repeat (- t2 t1) frame1)) parts)
+         ;;because the partition doesn't include the last frame as
+         ;;frame1         
+         (concat [last-frame]))))
+                 
 (defn unit->location [u ctx]
   (let [location (:locationname u)
         demand-map (:demandmap (c/get-demandstore ctx))
@@ -32,33 +36,45 @@
           :else :not-deployable)))
       
 (defn unit->record [u ctx t]
-  {:day t
-   :state-or-demand (unit->location u ctx)})
-    
+  (let [{:keys [src name policy]} u
+        policy-name (get-in policy [:activepolicy :name])]
+    {:name name
+     :src src
+     :day t
+     :state-or-demand (unit->location u ctx)}))
+  
 (defn frame->dailydeployed [[t ctx]]
   (let [units (c/units ctx)]
     (map #(unit->record % ctx t) units)))
-          
+
+;;Add a readiness rank, so among the same src and compo, was it the
+;;most ready (1) or less ready.
+;;group units by src, compo, sort the groups, each unit gets a rank
+
 (defn daily-deployed
   "Returns a table with keys
   [:src :demand-group :day :unit-or-demand :deployed-c-level] where
-  :unit-or-demand is always the unit id
-  :deployed-c-level is always the deployed c-level derived from
+  :state-or-demand is :deployable, :not-deployable, or a
+  demand group.
+  :unit-or-demand is always a unit name (index_src_compo).
+  :deployed-t-level is always the deployed t-level derived from
   cycletime and from the
   name of the policy with days to T1 from T3 and days to T1 from
   T2. We'll assume T4 were cannibalized."
   [proj]
   (let [stream (lerp-stream (a/marathon-stream proj))]
     (mapcat frame->dailydeployed stream)))
-    
-(def dailys (daily-deployed
-          "/home/craig/runs/test-run/testdata-v7-bog.xlsx"))
+
+(def test-path "/home/craig/runs/test-run/testdata-v7-bog.xlsx")
+(def dailys (daily-deployed test-path))
+(def ctx1 (second (second (a/marathon-stream test-path))))
+(def unit1 (first (c/units ctx1)))
 
 (defn daily-demand
     "Returns records with keys
-  [:src :demand-group :day :unit-or-demand :deployed-c-level] where
+  [:src :demand-group :day :unit-or-demand :deployed-t-level] where
   :unit-or-demand is always :demand
-  :deployed-c-level is always :demand
+  :deployed-t-level is always :demand
   This will allow a post-processed rollup of the daily number of units
     in each c-level and how large the demand is."
   [])
