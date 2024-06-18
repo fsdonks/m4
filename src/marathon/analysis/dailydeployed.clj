@@ -35,21 +35,67 @@
           (:deployable u) :deployable
           :else :not-deployable)))
       
-(defn unit->record [u ctx t]
+(defn unit->record [u ctx t rankings]
   (let [{:keys [src name policy]} u
-        policy-name (get-in policy [:activepolicy :name])]
+        policy-name (get-in policy [:activepolicy :name])
+        position (unit->location u ctx)]
     {:name name
      :src src
      :day t
-     :state-or-demand (unit->location u ctx)}))
-  
-(defn frame->dailydeployed [[t ctx]]
-  (let [units (c/units ctx)]
-    (map #(unit->record % ctx t) units)))
+     :position position
+     :rank (rankings name)
+     :unit-or-demand :unit
+     :demand-group (if (contains? #{:deployable :not-deployable}
+                                  position)
+                     nil
+                     position)}))
 
+(defn start-deployable [u]
+  (get-in u [:policy :activepolicy :startdeployable]))
 ;;Add a readiness rank, so among the same src and compo, was it the
 ;;most ready (1) or less ready.
+;;All conflict policies have an effectively infinite cycle length.
+;;Instead of using cycle length, we determine the most ready units by
+;;cycletime/startdeployable to determine how close they are to start
+;;deployable.  
+(defn deployable-portion
+  [unit]
+  (let [startdeployable (start-deployable unit)
+        cycletime (:cycletime unit)]    
+    (if (zero? startdeployable)
+      ;;If startdeployable=0,
+      ;;cycletime goes from 0 to to cyclelength-1
+      ;;proportion=100% on day 0, 200% on day 1, so
+      ;;proportion=(cycletime+1)/1
+      (inc cycletime)
+      (/ cycletime startdeployable))))
+
+(defn grouped-rank
+  [[group recs]]
+  (let [sorted (sort-by deployable-portion recs)]
+          (for [i (range (count sorted))]
+            [(:name (nth sorted i)) i])))
+
 ;;group units by src, compo, sort the groups, each unit gets a rank
+(defn rank-units
+  "Given a sequence of unit entities, returns a map of the unit's name
+  to it's rank among the the units grouped by group-fn and sorted by
+  rank-fn."
+  [units group-fn rank-fn]
+  (let [groups (group-by group-fn units)]
+    (into {} (mapcat #(grouped-rank %) groups))))
+
+(defn src-compo
+  [unit]
+  ((juxt :src :component) unit))
+
+;;Per vstats, after calling current-units to add a dt to the unit,
+;;need to update unit cycletime.
+(defn frame->dailydeployed [[t ctx]]
+  (let [units (map #(update % :cycletime + (% :dt))
+                   (c/current-units ctx))
+        rankings (rank-units units src-compo deployable-portion)]
+    (map #(unit->record % ctx t rankings) units)))
 
 (defn daily-deployed
   "Returns a table with keys
@@ -67,8 +113,10 @@
 
 (def test-path "/home/craig/runs/test-run/testdata-v7-bog.xlsx")
 (def dailys (daily-deployed test-path))
-(def ctx1 (second (second (a/marathon-stream test-path))))
+(def frame1 (second (a/marathon-stream test-path)))
+(def ctx1 (second frame1))
 (def unit1 (first (c/units ctx1)))
+(def policy1 1)
 
 (defn daily-demand
     "Returns records with keys
