@@ -15,17 +15,36 @@
 ;; Group-by src and readiness function
 ;; analysis.util/readiness
 
-(defn lerp-stream
+(defn sample
+  "Given a sequence with potential sparse times, return
+  a sequence with the previous value repeated for all times.
+  The new t is assoced into the position, which should be an index or
+  key in a map."
+  [xs position]
+  (let [parts (partition 2 1 xs)
+        last-x (last xs)]
+    (->  (mapcat (fn [[item-1 item-2]]
+                   ;;Need to update time in the item, too.
+                   (for [t (range (item-1 position)
+                                  (item-2 position))]
+                     (assoc item-1 position t)))
+                 parts)
+         ;;because the partition doesn't include the last item as
+         ;;item-1         
+         (concat [last-x]))))
+
+
+(defn sample-stream
   "Given a marathon stream with potential sparse times, return
   frames for all times to make post processing easy."
   [stream]
-  (let [parts (partition 2 1 stream)
-        last-frame (last stream)]
-    (->  (mapcat (fn [[[t1 ctx1 :as frame1] [t2 ctx2]]]
-                   (repeat (- t2 t1) frame1)) parts)
-         ;;because the partition doesn't include the last frame as
-         ;;frame1         
-         (concat [last-frame]))))
+  (sample stream 0))
+
+(defn sample-trends
+  "Given demand trend records with potentiall sparse times, return
+  record for all times to make post processing easy."
+  [trends]
+  (sample trends :t))
                  
 (defn unit->location [u ctx]
   (let [location (:locationname u)
@@ -35,6 +54,8 @@
           (:deployable u) :deployable
           :else :not-deployable)))
 
+;;----------ranking to t-level stuff that we probably don't need
+;;because we currently assume a high level of readiness when deployed.
 (defn t-level
   [src rank trainings]
   (let [indices (trainings src)
@@ -46,23 +67,6 @@
        (ex-info "Inventory might be greater than the number of units in
   training-days."
                 {:src src :rank rank :indices indices})))))
-
-(defn unit->record [u ctx t rankings trainings]
-  (let [{:keys [src name policy]} u
-        policy-name (get-in policy [:activepolicy :name])
-        position (unit->location u ctx)
-        rank (rankings name)]
-    {:name name
-     :src src
-     :day t
-     :position position
-     :rank rank
-     :unit-or-demand :unit
-     :demand-group (if (contains? #{:deployable :not-deployable}
-                                  position)
-                     nil
-                     position)
-     :t-level (t-level src rank trainings)}))
 
 (defn start-deployable [u]
   (get-in u [:policy :activepolicy :startdeployable]))
@@ -100,7 +104,7 @@
     (into {} (mapcat #(grouped-rank %) groups))))
 
 (defn training-indices
-  [train-days]
+  [training-days]
   (reduce-kv (fn [acc src train-days]
                (assoc acc src
                       (map-indexed vector
@@ -108,14 +112,43 @@
                {}
                training-days))
 
-;;Per vstats, after calling current-units to add a dt to the unit,
-;;need to update unit cycletime.
-(defn frame->dailydeployed [[t ctx] training-days]
-  (let [units (map #(update % :cycletime + (% :dt))
-                   (c/current-units ctx))
-        rankings (rank-units units deployable-portion)
-        trainings (training-indices training-days)]
-    (map #(unit->record % ctx t rankings trainings) units)))
+(def training-days
+  {"77202K000" [1 2 3 200]
+   "01205K000" [20 40 1 200]})
+
+;;-----end of rank to training level stuff
+
+(defn unit->record [u ctx t ;rankings trainings
+                    ]
+  (let [{:keys [src name policy]} u
+        policy-name (get-in policy [:activepolicy :name])
+        position (unit->location u ctx)
+        ;rank (rankings name)
+        ]
+    {:name name
+     :src src
+     :day t
+     :position position
+     ;:rank rank
+     :unit-or-demand :unit
+     :demand-group (if (contains? #{:deployable :not-deployable}
+                                  position)
+                     nil
+                     position)
+     ;:t-level (t-level src rank trainings)
+     }))
+
+(defn frame->dailydeployed [[t ctx] ;training-days
+                            ]
+  (let [;;Per vstats, after calling current-units to add a dt to the unit,
+        ;;need to update unit cycletime.
+        ;;units (map #(update % :cycletime + (% :dt))
+        ;;         (c/current-units ctx))
+        ;;rankings (rank-units units deployable-portion)
+        ;;trainings (training-indices training-days)
+        ]
+    (map #(unit->record % ctx t ;rankings trainings
+                        ) (c/current-units ctx))))
 
 (defn daily-deployed
   "Returns a table with keys
@@ -129,26 +162,27 @@
   :deployable.
   :rank is the unit's position in a sequence when grouped by [src
   compo] and sorted by cycletime/startdeployable"
-  [proj training-days]
-  (let [stream (lerp-stream (a/marathon-stream proj))]
-    (mapcat #(frame->dailydeployed % training-days) stream)))
-
-(def training-days
-  {"77202K000" [1 2 3 200]
-   "01205K000" [20 40 1 200]})
+  [proj ;training-days
+   ]
+  (let [stream (sample-stream (a/marathon-stream proj))]
+    (mapcat #(frame->dailydeployed % ;training-days
+                                   ) stream)))
 
 (def test-path "/home/craig/runs/test-run/testdata-v7-bog.xlsx")
-(def dailys (daily-deployed test-path training-days))
+(def dailys (daily-deployed test-path))
 (def frame1 (second (a/marathon-stream test-path)))
 (def ctx1 (second frame1))
 (def unit1 (first (c/units ctx1)))
 (def policy1 1)
+(def trends (a/->demand-trends (a/marathon-stream test-path)))
+;;sample that with sampling library
 
 (defn daily-demand
     "Returns records with keys
-  [:src :demand-group :day :unit-or-demand :deployed-t-level] where
+  [:src :demand-group :day :unit-or-demand :rank] where
   :unit-or-demand is always :demand
-  :deployed-t-level is always :demand
+  :rank is always nil
+  :demand-group represents the demand group of the demand
   This will allow a post-processed rollup of the daily number of units
     in each c-level and how large the demand is."
   [])
