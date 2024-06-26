@@ -3,7 +3,8 @@
   (:require [marathon.analysis :as a]
             [marathon.analysis.util :as util]
             [marathon.ces.core :as c]
-            [spork.util.table :as tbl]))
+            [spork.util.table :as tbl]
+            [proc.core :as pcore]))
 
 ;;check marathon.analysis.vstats or
 ;;marathon.analysis.tacmm for examples
@@ -164,7 +165,7 @@
   compo] and sorted by cycletime/startdeployable"
   [proj ;training-days
    ]
-  (let [stream (sample-stream (a/marathon-stream proj))]
+  (let [stream (a/marathon-stream proj)]
     (mapcat #(frame->dailydeployed % ;training-days
                                    ) stream)))
 
@@ -174,8 +175,18 @@
 (def ctx1 (second frame1))
 (def unit1 (first (c/units ctx1)))
 (def policy1 1)
-(def trends (a/->demand-trends (a/marathon-stream test-path)))
-;;sample that with sampling library
+
+(defn project->demandtrends [proj-or-path]
+  (->> (a/marathon-stream proj-or-path)
+       (a/->demand-trends)
+       (pcore/sample-demand-trends-correct)
+       ;;keys are demand names and vals are maps of time to demand
+       ;;record.      
+       (vals)
+       ;;get the demand record for each time for each demand name
+       (mapcat vals)))
+
+(def dtrends (project->demandtrends test-path))
 
 (defn daily-demand
     "Returns records with keys
