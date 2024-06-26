@@ -58,16 +58,17 @@
 ;;----------ranking to t-level stuff that we probably don't need
 ;;because we currently assume a high level of readiness when deployed.
 (defn t-level
-  [src rank trainings]
-  (let [indices (trainings src)
+  [unit-name rank trainings]
+  (let [src (second (clojure.string/split unit-name #"_"))
+        indices (trainings src)
         [idx limit :as indexed]
         (first (filter #(> (second %) rank) indices))]
     (if indexed
-      (inc idx)
+      [unit-name (inc idx)]
       (throw 
        (ex-info "Inventory might be greater than the number of units in
   training-days."
-                {:src src :rank rank :indices indices})))))
+                {:unit-name unit-name :rank rank :indices indices})))))
 
 (defn start-deployable [u]
   (get-in u [:policy :activepolicy :startdeployable]))
@@ -81,17 +82,15 @@
   [unit]
   (let [startdeployable (start-deployable unit)
         cycletime (:cycletime unit)]    
-    (if (zero? startdeployable)
-      ;;If startdeployable=0,
-      ;;cycletime goes from 0 to to cyclelength-1
-      ;;proportion=100% on day 0, 200% on day 1, so
-      ;;proportion=(cycletime+1)/1
-      (inc cycletime)
-      (/ cycletime startdeployable))))
+    (if (< cycletime startdeployable)
+      (/ cycletime startdeployable)
+      ;;faster policy probably doesn't do anything after
+      ;;startdeployable
+      (+ 1 (- cycletime startdeployable)))))
 
 (defn grouped-rank
   [[group recs]]
-  (let [sorted (sort-by deployable-portion recs)]
+  (let [sorted (sort-by (comp - deployable-portion) recs)]
           (for [i (range (count sorted))]
             [(:name (nth sorted i)) i])))
 
@@ -113,66 +112,69 @@
                {}
                training-days))
 
-(def training-days
-  {"77202K000" [1 2 3 200]
-   "01205K000" [20 40 1 200]})
-
 ;;-----end of rank to training level stuff
 
-(defn unit->record [u ctx t rankings trainings
-                    ]
+(defn unit->record [u ctx t t-levels training-start]
   (let [{:keys [src name policy]} u
         policy-name (get-in policy [:activepolicy :name])
-        position (unit->location u ctx)
-        rank (rankings name)
-        ]
+        position (unit->location u ctx)]
     {:name name
      :src src
      :day t
      :position position
-     :rank rank
      :unit-or-demand :unit
      :demand-group (if (contains? #{:deployable :not-deployable}
                                   position)
                      nil
                      position)
-     :t-level (t-level src rank trainings)
+     :t-level (when (>= t training-start)
+                (t-levels name))
      }))
 
-(defn frame->dailydeployed [[t ctx] training-days]
-  (let [;;Per vstats, after calling current-units to add a dt to the unit,
-        ;;need to update unit cycletime.
-        units (map #(update % :cycletime + (% :dt))
-                 (c/current-units ctx))
-        rankings (rank-units units deployable-portion)
-        trainings (training-indices training-days)
-        ]
-    (map #(unit->record % ctx t rankings trainings
+;;Per vstats, after calling current-units to add a dt to the unit,
+;;need to update unit cycletime.
+(defn updated-units
+  [ctx]
+  (map #(update % :cycletime + (% :dt))
+       (c/current-units ctx)))
+
+(defn frame->dailydeployed [[t ctx] t-levels training-start]
+  (let [units (updated-units ctx)]
+    (map #(unit->record % ctx t t-levels training-start
                         ) (c/current-units ctx))))
 
+(defn stream->t-levels
+  "Returns a map of unit to t-level after marathon readiness is ranked
+  and matched to a number of units in each t-level bucket."
+  [stream t training-days]
+  (let [ctx (a/day-before (inc t) stream)
+        units (updated-units ctx)
+        rankings (rank-units units deployable-portion)
+        trainings (training-indices training-days)]
+    (into {} (map (fn [[unit-name rank]]
+                    (t-level unit-name rank trainings))
+                  rankings))))
+     
 (defn daily-deployed
   "Returns a table with keys
-  [:src :demand-group :day :unit-or-demand :position] where
+  [:src :name :demand-group :day :unit-or-demand :position :t-level] where
   :state-or-demand is :deployable, :not-deployable, or a
   demand group.
+  :name is the unit name
   :unit-or-demand is always :unit.
   :demand-group is the demand group if the unit is deployed.
   Otherwise, it is nil.
   :position is either the demand-group, :not-deployable, or
   :deployable.
-  :rank is the unit's position in a sequence when grouped by [src
-  compo] and sorted by cycletime/startdeployable"
-  [proj training-days]
-  (let [stream (a/marathon-stream proj)]
-    (mapcat #(frame->dailydeployed % training-days
+  :t-level is 1, 2, 3, or 4 based on a ranking of units by
+  deployable-portion and then mapped to a number of units in each
+  training level, mapping to t1 first, then t2, etc."
+  [proj training-days training-start]
+  (let [stream (a/marathon-stream proj)
+        t-levels (stream->t-levels stream training-start
+                                   training-days)]
+    (mapcat #(frame->dailydeployed % t-levels training-start
                                    ) stream)))
-
-(def test-path "/home/craig/runs/test-run/testdata-v7-bog.xlsx")
-(def dailys (daily-deployed test-path training-days))
-(def frame1 (second (a/marathon-stream test-path)))
-(def ctx1 (second frame1))
-(def unit1 (first (c/units ctx1)))
-(def policy1 1)
 
 (defn project->demandtrends [proj-or-path]
   (->> (a/as-stream proj-or-path)
@@ -184,14 +186,15 @@
        ;;get the demand record for each time for each demand name
        (mapcat vals)))
 
-(def dtrends (project->demandtrends test-path))
-
 (defn daily-demand
   "Returns records with keys
-  [:src :demand-group :day :unit-or-demand :rank :position] where
+  [:src :demand-group :day :unit-or-demand :rank :position :name
+  :t-level] where
   :unit-or-demand is always :demand
   :position is always :demand
   :rank is always nil
+  :name is always nil
+  :t-level is always nil
   :demand-group represents the demand group of the demand
   This will allow a post-processed rollup of the daily number of units
     in each c-level and how large the demand is."
@@ -199,19 +202,27 @@
   (let [trends (project->demandtrends proj-or-path)
         groups (group-by (juxt :SRC :DemandGroup :t) trends)]
     (for [[[src demand-group day] d-trends] groups
-          trend d-trends]
+          trend (range (reduce + (map :TotalRequired d-trends)))]
       {:src src :demand-group demand-group :day day
        :unit-or-demand :demand
        :position :demand
-       :rank nil}
+       :name nil
+       :t-level :demand}
       )))
 
-(def daily-demands (daily-demand test-path))
-
 (defn deployed-demand
-  "Concat daily-deployed and daily-demand. Filter results for only the
-  peak demand between t-start and t-end."
-  [proj t-start t-end])
+  "Concat daily-deployed and daily-demand"
+  [proj-or-path training-days training-start]
+  (concat
+   (daily-demand proj-or-path)
+   (daily-deployed proj-or-path training-days training-start))
+  )
+
+(defn daily->file
+  [proj-or-path out-path training-days training-start]
+  (tbl/records->file
+   (deployed-demand proj-or-path training-days training-start)
+   out-path))                  
 
 (defn later-demand
    "Takes a project and removes demand records that start before time, t"
@@ -219,5 +230,18 @@
   )
 
 
+;; (def training-days
+;;   {"77202K000" [1 2 3 200]
+;;    "01205K000" [20 40 1 200]})
+;; (def test-path "/home/craig/runs/test-run/testdata-v7-bog.xlsx")
+;; (def out-path "/home/craig/runs/test-run/dailys.txt")
+;; (def dailys (daily-deployed test-path training-days 1650))
+;; (def frame1 (second (a/marathon-stream test-path)))
+;; (def ctx1 (second frame1))
+;; (def unit1 (first (c/units ctx1)))
+;; (def policy1 1)
+;; (def dtrends (project->demandtrends test-path))
+;; (def daily-demands (daily-demand test-path))
+;; (daily->file test-path out-path training-days 1650)
 
                        
