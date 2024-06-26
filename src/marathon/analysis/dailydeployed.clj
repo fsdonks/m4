@@ -119,36 +119,35 @@
 
 ;;-----end of rank to training level stuff
 
-(defn unit->record [u ctx t ;rankings trainings
+(defn unit->record [u ctx t rankings trainings
                     ]
   (let [{:keys [src name policy]} u
         policy-name (get-in policy [:activepolicy :name])
         position (unit->location u ctx)
-        ;rank (rankings name)
+        rank (rankings name)
         ]
     {:name name
      :src src
      :day t
      :position position
-     ;:rank rank
+     :rank rank
      :unit-or-demand :unit
      :demand-group (if (contains? #{:deployable :not-deployable}
                                   position)
                      nil
                      position)
-     ;:t-level (t-level src rank trainings)
+     :t-level (t-level src rank trainings)
      }))
 
-(defn frame->dailydeployed [[t ctx] ;training-days
-                            ]
+(defn frame->dailydeployed [[t ctx] training-days]
   (let [;;Per vstats, after calling current-units to add a dt to the unit,
         ;;need to update unit cycletime.
-        ;;units (map #(update % :cycletime + (% :dt))
-        ;;         (c/current-units ctx))
-        ;;rankings (rank-units units deployable-portion)
-        ;;trainings (training-indices training-days)
+        units (map #(update % :cycletime + (% :dt))
+                 (c/current-units ctx))
+        rankings (rank-units units deployable-portion)
+        trainings (training-indices training-days)
         ]
-    (map #(unit->record % ctx t ;rankings trainings
+    (map #(unit->record % ctx t rankings trainings
                         ) (c/current-units ctx))))
 
 (defn daily-deployed
@@ -163,14 +162,13 @@
   :deployable.
   :rank is the unit's position in a sequence when grouped by [src
   compo] and sorted by cycletime/startdeployable"
-  [proj ;training-days
-   ]
+  [proj training-days]
   (let [stream (a/marathon-stream proj)]
-    (mapcat #(frame->dailydeployed % ;training-days
+    (mapcat #(frame->dailydeployed % training-days
                                    ) stream)))
 
 (def test-path "/home/craig/runs/test-run/testdata-v7-bog.xlsx")
-(def dailys (daily-deployed test-path))
+(def dailys (daily-deployed test-path training-days))
 (def frame1 (second (a/marathon-stream test-path)))
 (def ctx1 (second frame1))
 (def unit1 (first (c/units ctx1)))
