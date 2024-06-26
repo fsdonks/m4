@@ -177,7 +177,7 @@
 (def policy1 1)
 
 (defn project->demandtrends [proj-or-path]
-  (->> (a/marathon-stream proj-or-path)
+  (->> (a/as-stream proj-or-path)
        (a/->demand-trends)
        (pcore/sample-demand-trends-correct)
        ;;keys are demand names and vals are maps of time to demand
@@ -189,14 +189,26 @@
 (def dtrends (project->demandtrends test-path))
 
 (defn daily-demand
-    "Returns records with keys
-  [:src :demand-group :day :unit-or-demand :rank] where
+  "Returns records with keys
+  [:src :demand-group :day :unit-or-demand :rank :position] where
   :unit-or-demand is always :demand
+  :position is always :demand
   :rank is always nil
   :demand-group represents the demand group of the demand
   This will allow a post-processed rollup of the daily number of units
     in each c-level and how large the demand is."
-  [])
+  [proj-or-path]
+  (let [trends (project->demandtrends proj-or-path)
+        groups (group-by (juxt :SRC :DemandGroup :t) trends)]
+    (for [[[src demand-group day] d-trends] groups
+          trend d-trends]
+      {:src src :demand-group demand-group :day day
+       :unit-or-demand :demand
+       :position :demand
+       :rank nil}
+      )))
+
+(def daily-demands (daily-demand test-path))
 
 (defn deployed-demand
   "Concat daily-deployed and daily-demand. Filter results for only the
