@@ -78,7 +78,7 @@
 ;;this actually does really well...compresses from 200+ mb down to 5...
 (defn freeze-table [t target]
   (let [m {:fields  (tbl/table-fields t)
-           :columns (tbl/table-columns t)}]           
+           :columns (tbl/table-columns t)}]
     (freeze-to m target)))
 
 (defn thaw-table [target]
@@ -89,6 +89,22 @@
                           col))
                       (:columns res))]
     (merge tbl/empty-table {:fields res :columns columns})))
+
+(nippy/extend-freeze spork.util.table.column-table :spork/table
+    [x data-output]
+    (let [m {:fields  (tbl/table-fields x)
+             :columns (tbl/table-columns x)}]
+    (nippy/freeze-to-out!  data-output m)))
+
+(nippy/extend-thaw :spork/table ; Same type id
+    [data-input]
+    (let [res (nippy/thaw-from-in! data-input)
+          columns (mapv (fn [col]
+                          (if-let [t (primitives (col-type col))]
+                            (into (typed-col t) col)
+                            col))
+                        (:columns res))]
+      (merge tbl/empty-table res {:columns columns})))
 
 ;;If we used records instead of deftype, we'd be able to
 ;;serialize these a bit mo easily, since all the clojure
@@ -118,7 +134,7 @@
 ;;the identities when we thaw.
 
 (defn as-reference [x])
-  
+
 ;;i.e. {:class atom :val 2}
 (defn thaw-reference [x references]
   (let [h (:hash x)]
@@ -139,7 +155,7 @@
       (let [new-ref (->reference (class r) h @r)
             _ (swap! references assoc h new-ref)]
         new-ref))))
-    
+
 (nippy/extend-freeze clojure.lang.Atom :clojure/atom
   [x data-output]
   (nippy/freeze-to-out!  data-output (->reference clojure.lang.Atom (hash x) @x)))

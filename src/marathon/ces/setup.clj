@@ -194,9 +194,3 @@
      (default-simstate ctx)))
   ([tables] (simstate-from tables core/emptysim)))
 
-          
-          
-         
-         
-         
-      
