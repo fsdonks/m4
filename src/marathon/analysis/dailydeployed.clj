@@ -55,9 +55,10 @@
           (:deployable u) :deployable
           :else :not-deployable)))
 
-;;----------ranking to t-level stuff that we probably don't need
-;;because we currently assume a high level of readiness when deployed.
+
+(def ^:dynamic *force-t-days* false)
 (defn t-level
+  "Determine ranking to t-level."
   [unit-name rank trainings]
   (let [src (second (clojure.string/split unit-name #"_"))
         indices (trainings src)
@@ -65,10 +66,13 @@
         (first (filter #(> (second %) rank) indices))]
     (if indexed
       [unit-name (inc idx)]
-      (throw 
-       (ex-info "Inventory might be greater than the number of units in
+      (if *force-t-days*
+        (throw 
+         (ex-info "Inventory might be greater than the number of units in
   training-days."
-                {:unit-name unit-name :rank rank :indices indices})))))
+                  {:unit-name unit-name :rank rank :indices indices}))
+        ;;assume t4 by default
+        [unit-name 4]))))
 
 (defn start-deployable [u]
   (get-in u [:policy :activepolicy :startdeployable]))
@@ -156,7 +160,14 @@
                   rankings))))
      
 (defn daily-deployed
-  "Returns a table with keys
+  "Given a MARATHON proj, map of src string to a sequence of number
+  of units
+  in each t-level where [1 4] indicates 1 unit in t1 and 4 units in
+  t2.
+  An empty map of training-days forces everything to t4.  Units get
+  tagged with a t-level based on their readiness ranking on the
+  day of training-start.
+  Returns a table with keys
   [:src :name :demand-group :day :unit-or-demand :position :t-level] where
   :state-or-demand is :deployable, :not-deployable, or a
   demand group.
@@ -229,17 +240,15 @@
   [proj t]
   )
 
-
+;;testing
+;;One of these srcs doesn't exist so I wanted to see if default
+;;t-level of 4 would kick in.
 ;; (def training-days
-;;   {"77202K000" [1 2 3 200]
+;;   {"77202K00" [1 2 3 200]
 ;;    "01205K000" [20 40 1 200]})
 ;; (def test-path "/home/craig/runs/test-run/testdata-v7-bog.xlsx")
 ;; (def out-path "/home/craig/runs/test-run/dailys.txt")
 ;; (def dailys (daily-deployed test-path training-days 1650))
-;; (def frame1 (second (a/marathon-stream test-path)))
-;; (def ctx1 (second frame1))
-;; (def unit1 (first (c/units ctx1)))
-;; (def policy1 1)
 ;; (def dtrends (project->demandtrends test-path))
 ;; (def daily-demands (daily-demand test-path))
 ;; (daily->file test-path out-path training-days 1650)
