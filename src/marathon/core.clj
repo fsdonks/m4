@@ -18,7 +18,7 @@
             [proc [demandanalysis :as da]])
   (:use    [marathon.project] [clojure.repl]))
 
-(def +version+ "4.2.18-SNAPSHOT")
+(def +version+ "4.2.19-SNAPSHOT")
 
 (def noisy (atom true))
 (defn toggle-noisy [] (swap! noisy (fn [n] (not n))))
