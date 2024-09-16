@@ -645,6 +645,13 @@
   [trans-map proj]
   (update proj :tables xform-tables trans-map))
 
+(defn change-records
+  "Takes a transducer, t, and updates the records from table-keyword,
+  returning the updated project. Slightly more concise than
+  update-proj-tables."
+  [proj t table-keyword]
+  (update-proj-tables {table-keyword [t]} proj))
+
 (defn isolate
   "Given a map of {k table}, such as the :tables value in
    an idiomatic M4 project, an SRC to isolate, and a

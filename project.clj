@@ -1,5 +1,5 @@
 ;;Go to marathon.core to update +version+ as well!
-(defproject marathon "4.2.19-SNAPSHOT"
+(defproject marathon "4.2.20-SNAPSHOT"
   :description "An Integrated Suite of Rotational Analysis Tools."
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [spork "0.2.1.8-SNAPSHOT"
@@ -14,7 +14,7 @@
                   :exclusions [spork]]
                  [helmet "0.1.1-SNAPSHOT"
                   :exclusions [spork]]
-                 [demand_builder "0.1.4-SNAPSHOT"
+                 [demand_builder "0.1.5-SNAPSHOT"
                   :exclusions [spork]]
                  [com.cnuernber/ham-fisted "1.003"]
                  [io.github.tonsky/clj-reload "0.4.1"]

@@ -26,17 +26,24 @@
   [n rec]
   (assoc rec :Quantity 1 :Name (str n "_" (:SRC rec))))
 
+(def ^:dynamic *expand-supply?* true)
+
 (defn record->records
   "Given a base supply record rec, and an optional transformation function f,
   expands the supply record into n records, where n is in [0 ... Quantity]
-  relative to the SupplyRecord's quantity. Each reord is supplied to the
+  relative to the SupplyRecord's quantity. Each record is supplied to the
   transformation f to allow for custom processing of each generated record.
   Defaults to a transformation where quantity and unit names are altered to
   coerce a batch record into a sequence of individual unit records, but
   no other fields are changed.."
   ([rec f]
-   (for [i (range (:Quantity rec))]
-     (f (individual-record i rec))))
+   (if *expand-supply?*
+     (for [i (range (:Quantity rec))]
+       (f (individual-record i rec)))
+     ;;This was the easiest way to do an even lifecycle distribution
+     ;;in the current pipeline.  This ignores f and just returns the
+     ;;record.
+     [rec]))
   ([rec] (record->records rec identity)))
 
 ;;this is brittle, but conforms to the original proof of concept.
@@ -63,12 +70,6 @@
    function, of the type record -> record."
   ([rec randomize] (record->records rec randomize))
   ([rec]           (rand-recs rec identity)))
-
-(defn change-records
-  "Takes a transducer, t, and updates the records from table-keyword,
-  returning the updated project."
-  [proj t table-keyword]
-  (a/update-proj-tables {table-keyword [t]} proj))
 
 (defn add-transform
   "Add a project transformation to the project. The project will have
@@ -140,7 +141,7 @@
   (let [{:keys [Quantity Tags]} (rc-record proj) 
         percent (get-rc-unavailable Tags)
         rc-demand (cannibal-quantity percent Quantity)]
-    (change-records proj
+    (a/change-records proj
                     (map #(adjust-rc rc-demand %))
                     :DemandRecords)))
 
@@ -155,7 +156,7 @@
   (let [supply-record-randomizer (if supply-record-randomizer
                                    supply-record-randomizer
                                    identity)]
-    (change-records proj
+    (a/change-records proj
                     (mapcat #(rand-recs % supply-record-randomizer))
                     :SupplyRecords)))
   
